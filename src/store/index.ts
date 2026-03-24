@@ -1,3 +1,8 @@
+// client/src/store/index.ts
+//
+// УДАЛЕНО: theme из partialize — тема больше не хранится в localStorage.
+//          Zustand persist оставлен для возможного использования в будущем.
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createAuthSlice, AuthSlice } from './slices/authSlice';
@@ -7,13 +12,14 @@ import { createServersSlice, ServersSlice } from './slices/serversSlice';
 import { createPresenceSlice, PresenceSlice } from './slices/presenceSlice';
 import { createUISlice, UISlice } from './slices/uiSlice';
 import { createChannelsSlice, ChannelsSlice } from './slices/channelsSlice';
-import { createAudioSlice, AudioSlice } from "./slices/audioSlice";
+import { createAudioSlice, AudioSlice } from './slices/audioSlice';
 
-export type RootState = AuthSlice & 
-  MessagesSlice & 
-  RoomsSlice & 
-  ServersSlice & 
-  PresenceSlice & 
+export type RootState =
+  AuthSlice &
+  MessagesSlice &
+  RoomsSlice &
+  ServersSlice &
+  PresenceSlice &
   UISlice &
   ChannelsSlice &
   AudioSlice;
@@ -32,9 +38,8 @@ export const useAppStore = create<RootState>()(
     }),
     {
       name: 'vetra-storage',
-      partialize: (state) => ({
-        theme: state.theme,
-      }),
+      // theme удалён — нет состояния для персистенции
+      partialize: (_state) => ({}),
     }
   )
 );
