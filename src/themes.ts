@@ -1,16 +1,17 @@
 // client/src/themes.ts
-export type Theme = 'dark' | 'light' | 'amoled' | 'midnight'
+//
+// Динамическое переключение тем удалено.
+// Приложение использует единую светлую тему, заданную через CSS-переменные в styles.css.
+//
+// Этот файл оставлен как заглушка, чтобы не ломать компилятор импортами,
+// которые ещё не убраны. После удаления всех мест, где импортируется Theme,
+// этот файл можно удалить целиком.
+//
+// ИНСТРУКЦИЯ: запусти `npx tsc --noEmit` — каждая ошибка укажет на
+// живой импорт { Theme } или { themeLabels }, который нужно вычистить.
 
-export const themes: Record<Theme, string> = {
-  dark: 'dark',
-  light: 'light',
-  amoled: 'amoled',
-  midnight: 'midnight',
-}
+/** @deprecated Переключение тем удалено. Не использовать. */
+export type Theme = 'light';
 
-export const themeLabels: Record<Theme, string> = {
-  dark: 'Тёмная',
-  light: 'Светлая',
-  amoled: 'AMOLED',
-  midnight: 'Midnight',
-}
+/** @deprecated Переключение тем удалено. Не использовать. */
+export const FIXED_THEME = 'light' as const;
