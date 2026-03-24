@@ -1,0 +1,430 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   CHANNEL PANEL
+══════════════════════════════════════════════════════════════════════════════ */
+
+.channel-panel {
+  width: var(--channel-panel-width, 352px);
+  min-width: var(--channel-panel-width, 352px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  height: 100%;
+}
+
+.channel-panel-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.channel-panel-server-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.server-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.server-name-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 4px;
+}
+
+.channel-section-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.channel-add-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.channel-add-btn:hover { color: var(--text-primary); }
+
+.channel-create-form {
+  padding: 4px 10px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.channel-list-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 6px;
+  scrollbar-gutter: stable;
+}
+
+.channel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.channel-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px 6px 10px;
+  margin: 0 2px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+  position: relative;
+}
+.channel-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.channel-item:hover + .channel-delete-btn,
+.channel-delete-btn:hover {
+  opacity: 1 !important;
+}
+.channel-item.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.channel-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  min-height: 20px;
+  border-radius: 0 2px 2px 0;
+  background: var(--text-primary);
+}
+
+.channel-item.has-unread {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.channel-hash {
+  color: var(--text-muted);
+  font-size: 1rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.channel-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-empty {
+  padding: 12px 8px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   USER PANEL — ChannelPanel (Discord-style нижняя панель)
+══════════════════════════════════════════════════════════════════════════════ */
+
+.user-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+  min-height: 56px;
+}
+
+.user-panel-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.user-panel-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.user-panel-avatar--letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.user-panel-status-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-tertiary);
+  transition: background 0.2s;
+}
+.user-panel-status-dot.online  { background: #43b581; }
+.user-panel-status-dot.offline { background: #747f8d; }
+
+.user-panel-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.user-panel-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.user-panel-tag {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.user-panel-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  padding: 0;
+}
+.user-panel-settings-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.user-panel-settings-btn:active {
+  transform: rotate(30deg);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   SIDEBAR USER PANEL — Sidebar (Discord-style нижняя панель)
+══════════════════════════════════════════════════════════════════════════════ */
+
+.sidebar-user-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+  min-height: 56px;
+  width: 424px;
+  min-width: 424px;
+}
+
+.sidebar-user-panel-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 72px;
+  min-width: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.sidebar-user-panel-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.sidebar-user-panel-avatar--letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.sidebar-user-panel-status {
+  position: absolute;
+  bottom: 2px;
+  right: 16px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-tertiary);
+  transition: background 0.2s;
+}
+.sidebar-user-panel-status.online  { background: #43b581; }
+.sidebar-user-panel-status.offline { background: #747f8d; }
+
+.sidebar-user-panel-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  cursor: pointer;
+}
+
+.sidebar-user-panel-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.sidebar-user-panel-tag {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.sidebar-user-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding-right: 6px;
+}
+
+.sidebar-user-panel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.12s, color 0.12s;
+  padding: 0;
+  flex-shrink: 0;
+}
+.sidebar-user-panel-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.sidebar-user-panel-btn--logout:hover {
+  color: var(--error);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   UNREAD INDICATOR
+══════════════════════════════════════════════════════════════════════════════ */
+
+.channel-item.has-unread .channel-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* светящаяся точка, наполовину за пределами панели */
+.unread-dot {
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 
+    0 0 4px  var(--accent),
+    0 0 10px var(--accent),
+    0 0 16px var(--accent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* чуть сильнее свечение когда канал активный */
+.channel-item.has-unread.active .unread-dot {
+  box-shadow: 
+    0 0 6px  var(--accent),
+    0 0 12px var(--accent),
+    0 0 20px var(--accent);
+}

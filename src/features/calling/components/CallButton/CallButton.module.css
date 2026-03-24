@@ -1,0 +1,37 @@
+/* src/features/calling/components/CallButton/CallButton.module.css */
+
+.callBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.callBtn:hover:not(:disabled) {
+  background: #2e7d32;
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.callBtn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.callBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.phoneIcon {
+  width: 18px;
+  height: 18px;
+}

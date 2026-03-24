@@ -1,0 +1,22 @@
+.plusBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: rgba(67, 181, 129, 0.15);
+  color: #43b581;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 300;
+  transition: border-radius 0.2s, background 0.15s, color 0.15s;
+}
+
+.plusBtn:hover {
+  border-radius: 14px;
+  background: #43b581;
+  color: white;
+}
+
