@@ -8,9 +8,9 @@ import { MessageInput } from "../MessageInput/MessageInput";
 import { formatLastSeen } from "@/utils/formatDate";
 import type { ActiveChat, Message, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
-import styles from "./ChatWindow.module.css";
 import { CallButton } from '@/features/calling/components/CallButton';
 import type { CallStatus } from '@/features/calling/hooks/useCall.types';
+import { cn } from "@/shared/utils/cn";
 
 interface Props {
   activeChat: ActiveChat;
@@ -28,13 +28,13 @@ interface ReplyTarget {
 
 function TypingIndicator({ nickname }: { nickname: string }) {
   return (
-    <div className="typing-indicator">
-      <span className="typing-nickname">{nickname}</span>
-      <span className="typing-text"> is typing</span>
-      <span className="typing-dots">
-        <span />
-        <span />
-        <span />
+    <div className="flex items-center px-5 py-1 pb-1.5 text-[0.80rem] text-[#7A7A7A] min-h-[24px] flex-shrink-0">
+      <span className="font-semibold text-[#4A4A4A]">{nickname}</span>
+      <span className="ml-0.5"> is typing</span>
+      <span className="inline-flex items-center gap-[3px] ml-1">
+        <span className="w-[5px] h-[5px] rounded-full bg-[#7A7A7A] animate-bounce" />
+        <span className="w-[5px] h-[5px] rounded-full bg-[#7A7A7A] animate-bounce [animation-delay:0.2s]" />
+        <span className="w-[5px] h-[5px] rounded-full bg-[#7A7A7A] animate-bounce [animation-delay:0.4s]" />
       </span>
     </div>
   );
@@ -91,9 +91,9 @@ function ChatWindowLayout({
   };
 
   return (
-    <div className={styles.chatWindow}>
-      <header className={styles.chatHeader}>
-        <div className={styles.chatHeaderInfo}>{header}</div>
+    <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <header className="px-5 py-2.5 border-b border-border bg-card flex-shrink-0">
+        <div className="flex items-center gap-2.5">{header}</div>
       </header>
 
       <MessageList
@@ -171,23 +171,24 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
 
   const header = partner ? (
     <>
-      <div className="avatar-wrapper">
+      <div className="relative">
         <Avatar 
           name={partner.display_name || partner.username} 
           src={partner.avatar_url} 
           size="large" 
         />
-        {isOnline && <span className="online-dot online-dot--header" />}
+        {isOnline && <span className="absolute bottom-0 right-0 w-[10px] h-[10px] rounded-full border-2 border-white bg-[#2ecc71] bottom-[-2px] right-[-2px]" />}
       </div>
-      <div className="chat-header-text">
-        <span className={styles.chatPartnerName}>
+      <div className="flex flex-col">
+        <span className="text-[0.95rem] font-semibold">
           {partner.display_name || partner.username}
         </span>
         {statusLine && (
           <span
-            className={`chat-partner-status ${
-              isOnline ? "chat-partner-status--online" : ""
-            }`}
+            className={cn(
+              "text-[0.72rem] text-[#7A7A7A]",
+              isOnline && "text-[#2ecc71]"
+            )}
           >
             {statusLine}
           </span>
@@ -202,7 +203,7 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
       />
     </>
   ) : (
-    <span className={styles.loadingText}>Loading…</span>
+    <span className="text-[#7A7A7A] text-[0.9rem]">Loading…</span>
   );
 
   return (
@@ -267,14 +268,14 @@ function RoomChatWindow({ roomId }: { roomId: number }) {
 
   const header = (
     <>
-      <div className="avatar-wrapper">
-        <Avatar name="#" size="large" className="room-avatar" />
+      <div className="relative">
+        <Avatar name="#" size="large" className="bg-[#6c5ce7] font-bold text-[1rem]" />
       </div>
-      <div className="chat-header-text">
-        <span className={styles.chatPartnerName}>
+      <div className="flex flex-col">
+        <span className="text-[0.95rem] font-semibold">
           {roomPreview?.name ?? `Room #${roomId}`}
         </span>
-        <span className="chat-partner-status">group chat</span>
+        <span className="text-[0.72rem] text-[#7A7A7A]">Group chat</span>
       </div>
     </>
   );

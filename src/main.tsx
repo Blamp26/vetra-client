@@ -10,7 +10,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles.css';
-import './channel-panel.css';
+// import './channel-panel.css';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { ensureNotificationPermission } from '@/services/notifications';
 

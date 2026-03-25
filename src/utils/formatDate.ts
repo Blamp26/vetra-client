@@ -21,11 +21,11 @@ export function formatPreviewTime(iso: string | null | undefined): string {
 }
 
 /**
- * Используется в ChatWindow для отображения статуса пользователя.
+ * Uses in ChatWindow to show user status.
  * null/undefined → "offline".
  */
 export function formatLastSeen(iso: string | null | undefined): string {
   if (!iso) return "offline";
   const { formatted, isToday } = timeOrDate(iso);
-  return isToday ? `last seen at ${formatted}` : `last seen ${formatted}`;
+  return isToday ? `last seen at ${formatted}` : `last seen on ${formatted}`;
 }

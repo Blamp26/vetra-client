@@ -1,5 +1,5 @@
 import React from 'react';
-import styles from './Avatar.module.css';
+import { cn } from '@/shared/utils/cn';
 
 interface AvatarProps {
   name?: string;
@@ -20,7 +20,17 @@ export const Avatar: React.FC<AvatarProps> = ({
 }) => {
   const initials = name ? name[0].toUpperCase() : '?';
   
-  const combinedClassName = `${styles.avatar} ${styles[size]} ${className}`;
+  const sizeClasses = {
+    small: 'w-6 h-6 text-[0.7rem]',
+    medium: 'w-8 h-8 text-[0.82rem]',
+    large: 'w-[38px] h-[38px] text-[0.95rem]',
+  };
+
+  const combinedClassName = cn(
+    'rounded-full bg-[#5865F2] text-white font-bold grid place-items-center flex-shrink-0 object-cover select-none leading-[1]',
+    sizeClasses[size],
+    className
+  );
 
   if (src) {
     return (

@@ -1,7 +1,5 @@
 // src/features/calling/components/IncomingCallModal/IncomingCallModal.tsx
 
-import styles from './IncomingCallModal.module.css';
-
 interface Props {
   callerName: string;
   onAccept: () => void;
@@ -10,25 +8,25 @@ interface Props {
 
 export function IncomingCallModal({ callerName, onAccept, onReject }: Props) {
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Входящий звонок">
-      <div className={styles.modal}>
-        <div className={styles.avatarRing}>
-          <div className={styles.avatar}>
+    <div className="fixed inset-0 z-[1000] flex items-start justify-end p-5 pointer-events-none" role="dialog" aria-modal="true" aria-label="Входящий звонок">
+      <div className="pointer-events-auto bg-[#F8F8F8] border border-[#E1E1E1] rounded-2xl p-6 px-7 w-[280px] flex flex-col items-center gap-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-6 duration-250 ease-out">
+        <div className="w-[72px] h-[72px] rounded-full bg-[#5865F2] flex items-center justify-center animate-pulse mb-1">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#a29bfe] text-white text-[1.6rem] font-bold flex items-center justify-center">
             {callerName.charAt(0).toUpperCase()}
           </div>
         </div>
 
-        <p className={styles.label}>Входящий звонок</p>
-        <p className={styles.callerName}>{callerName}</p>
+        <p className="text-[0.78rem] text-[#7A7A7A] uppercase tracking-[0.08em] font-semibold m-0">Входящий звонок</p>
+        <p className="text-[1.05rem] font-bold text-[#0A0A0A] m-0 text-center break-words">{callerName}</p>
 
-        <div className={styles.actions}>
+        <div className="flex gap-5 mt-2">
           <button
-            className={styles.rejectBtn}
+            className="w-[52px] h-[52px] rounded-full border-none cursor-pointer flex items-center justify-center bg-[#c62828] text-white transition-all duration-120 hover:brightness-115 hover:scale-108 active:scale-92"
             onClick={onReject}
             aria-label="Отклонить звонок"
             title="Отклонить"
           >
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path
                 d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9
                    -.87.46-1.67 1.06-2.37 1.78-.18.18-.43.28-.68.28
@@ -43,12 +41,12 @@ export function IncomingCallModal({ callerName, onAccept, onReject }: Props) {
           </button>
 
           <button
-            className={styles.acceptBtn}
+            className="w-[52px] h-[52px] rounded-full border-none cursor-pointer flex items-center justify-center bg-[#2e7d32] text-white transition-all duration-120 hover:brightness-115 hover:scale-108 active:scale-92"
             onClick={onAccept}
             aria-label="Принять звонок"
             title="Принять"
           >
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path
                 d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24
                    1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1
@@ -60,7 +58,7 @@ export function IncomingCallModal({ callerName, onAccept, onReject }: Props) {
           </button>
         </div>
 
-        <div className={styles.hints}>
+        <div className="flex justify-between w-full px-1 text-[0.7rem] text-[#7A7A7A]">
           <span>Отклонить</span>
           <span>Принять</span>
         </div>

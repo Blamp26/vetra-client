@@ -2,6 +2,7 @@ import { useState } from "react";
 import { authApi, type UpdateProfilePayload } from "@/api/auth";
 import { useAppStore, type RootState } from "@/store";
 import type { User } from "@/shared/types";
+import { cn } from "@/shared/utils/cn";
 
 interface Props {
   user:    User;
@@ -61,57 +62,33 @@ export function ProfileModal({ user, onClose }: Props) {
   const previewLetter = (displayName.trim() || username.trim() || "?")[0].toUpperCase();
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Редактировать профиль</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white border border-[#E1E1E1] rounded-lg shadow-xl w-full max-w-[440px] flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-[#E1E1E1] flex items-center justify-between">
+          <h3 className="m-0 text-[1.1rem] font-bold">Редактировать профиль</h3>
+          <button className="bg-none border-none text-[1.5rem] cursor-pointer text-[#7A7A7A] hover:text-[#0A0A0A]" onClick={onClose} aria-label="Close">×</button>
         </div>
 
-        <div className="modal-body">
+        <div className="p-6 overflow-y-auto">
           {/* Аватар */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 16 }}>
-            <div style={{ width: 80, height: 80, marginBottom: 12, flexShrink: 0 }}>
+          <div className="flex flex-col items-center mb-4">
+            <div className="w-20 h-20 mb-3 shrink-0">
               {avatarUrl.trim() ? (
-                /*
-                  ✅ FIX AVATAR: display:block убирает inline-baseline зазор.
-                  transform:translateZ(0) создаёт GPU-слой — это фиксит баг
-                  когда overflow:hidden + border-radius не обрезает картинку
-                  в Chromium/WebView без аппаратного ускорения.
-                */
                 <img
                   src={avatarUrl}
                   alt="avatar"
-                  className="avatar"
-                  style={{
-                    display: "block",
-                    width: 80,
-                    height: 80,
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                    transform: "translateZ(0)",
-                  }}
+                  className="w-20 h-20 rounded-full object-cover block transform translate-z-0"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
-                <div
-                  className="avatar large"
-                  style={{
-                    width: 80,
-                    height: 80,
-                    fontSize: "2rem",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
+                <div className="w-20 h-20 rounded-full bg-[#5865F2] text-white text-[2rem] font-bold flex items-center justify-center shrink-0">
                   {previewLetter}
                 </div>
               )}
             </div>
-            <label className="modal-label">URL аватарки</label>
+            <label className="block mb-1.5 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-[#4A4A4A] self-start">URL аватарки</label>
             <input
-              className="modal-input"
+              className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.88rem] font-inherit outline-none focus:border-[#5865F2]"
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
               placeholder="https://example.com/avatar.png"
@@ -119,11 +96,11 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           {/* Никнейм (display_name) */}
-          <label className="modal-label">
-            Никнейм <span style={{ opacity: 0.55, fontWeight: 400 }}>(необязательно, не уникальный)</span>
+          <label className="block mb-1.5 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-[#4A4A4A]">
+            Никнейм <span className="opacity-55 font-normal normal-case">(необязательно, не уникальный)</span>
           </label>
           <input
-            className="modal-input"
+            className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.88rem] font-inherit outline-none focus:border-[#5865F2]"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder={username}
@@ -131,48 +108,21 @@ export function ProfileModal({ user, onClose }: Props) {
           />
 
           {/* Username */}
-          <label className="modal-label" style={{ marginTop: 8 }}>
-            Юзернейм <span style={{ opacity: 0.55, fontWeight: 400 }}>(уникальный)</span>
+          <label className="block mb-1.5 mt-2 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-[#4A4A4A]">
+            Юзернейм <span className="opacity-55 font-normal normal-case">(уникальный)</span>
           </label>
 
-          {/*
-            ✅ FIX USERNAME @: убираем position:absolute — это был корень проблемы.
-            Делаем враппер с теми же стилями что у .modal-input (padding, bg, border, radius).
-            @ и <input> — соседние flex-дети с alignItems:center, поэтому они
-            всегда идеально выровнены по вертикали без хаков.
-            Состояние фокуса отслеживаем через onFocus/onBlur для border-color.
-          */}
           <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              width: "100%",
-              padding: "10px 12px",
-              background: "var(--bg-tertiary)",
-              border: `1px solid ${
-                usernameErr ? "var(--error, #e55)" : usernameFocused ? "var(--accent)" : "transparent"
-              }`,
-              borderRadius: "var(--radius)",
-              boxSizing: "border-box",
-              transition: "border-color 0.15s",
-              gap: 2,
-            }}
+            className={cn(
+              "flex items-center w-full px-3 py-2 bg-white border rounded-lg transition-colors duration-150 gap-0.5",
+              usernameErr ? "border-[#E74C3C]" : usernameFocused ? "border-[#5865F2]" : "border-[#E1E1E1]"
+            )}
           >
-            <span style={{ opacity: 0.5, fontSize: "0.92rem", lineHeight: 1, flexShrink: 0, userSelect: "none" }}>
+            <span className="opacity-50 text-[0.92rem] leading-none shrink-0 select-none">
               @
             </span>
             <input
-              style={{
-                flex: 1,
-                minWidth: 0,
-                background: "transparent",
-                border: "none",
-                outline: "none",
-                color: "var(--text-primary)",
-                fontSize: "0.92rem",
-                fontFamily: "inherit",
-                padding: 0,
-              }}
+              className="flex-1 min-w-0 bg-transparent border-none outline-none text-[#0A0A0A] text-[0.92rem] font-inherit p-0"
               value={username}
               onChange={(e) => { setUsernameErr(null); setUsername(e.target.value); }}
               onFocus={() => setUsernameFocused(true)}
@@ -183,34 +133,33 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           {usernameErr && (
-            <p style={{ margin: "4px 0 0", color: "var(--error, #e55)", fontSize: "0.82rem" }}>
+            <p className="m-0 mt-1 text-[#E74C3C] text-[0.82rem]">
               {usernameErr}
             </p>
           )}
 
           {/* О себе */}
-          <label className="modal-label" style={{ marginTop: 8 }}>О себе</label>
+          <label className="block mb-1.5 mt-2 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-[#4A4A4A]">О себе</label>
           <textarea
-            className="modal-input"
-            style={{ minHeight: 80, resize: "vertical" }}
+            className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.88rem] font-inherit outline-none focus:border-[#5865F2] min-h-[80px] resize-vertical"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             placeholder="Расскажи о себе..."
             maxLength={300}
             rows={3}
           />
-          <span style={{ fontSize: "0.72rem", opacity: 0.45, display: "block", textAlign: "right" }}>
+          <span className="text-[0.72rem] opacity-45 block text-right">
             {bio.length}/300
           </span>
 
           {error && (
-            <p style={{ color: "var(--error, #e55)", fontSize: "0.85rem", marginTop: 8 }}>{error}</p>
+            <p className="text-[#E74C3C] text-[0.85rem] mt-2">{error}</p>
           )}
         </div>
 
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose} disabled={saving}>Отмена</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving}>
+        <div className="px-6 py-4 border-t border-[#E1E1E1] flex gap-3 justify-end bg-[#F8F8F8]">
+          <button className="px-4 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] text-[0.88rem] font-inherit cursor-pointer hover:bg-[#EDEDED] disabled:opacity-50" onClick={onClose} disabled={saving}>Отмена</button>
+          <button className="px-4 py-2 bg-[#5865F2] text-white border-none rounded-lg text-[0.88rem] font-bold font-inherit cursor-pointer hover:bg-[#4752C4] disabled:opacity-50" onClick={handleSave} disabled={saving}>
             {saving ? "Сохранение..." : "Сохранить"}
           </button>
         </div>

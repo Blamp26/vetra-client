@@ -3,6 +3,7 @@ import type { Message, MessageStatus, MessageReactionGroup } from "@/shared/type
 import { useAppStore, type RootState } from "@/store";
 import { API_BASE_URL } from "@/api/base";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
+import { cn } from "@/shared/utils/cn";
 
 interface Props {
   messages:      Message[];
@@ -19,7 +20,7 @@ interface Props {
 function StatusIcon({ status }: { status?: MessageStatus }) {
   if (status === "error") {
     return (
-      <svg className="msg-status msg-status--error" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Ошибка отправки">
+      <svg className="ml-1" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Error sending">
         <circle cx="7" cy="7" r="7" fill="#FF3B30" />
         <text x="7" y="11" textAnchor="middle" fontSize="9" fontWeight="700" fill="white" fontFamily="Inter, sans-serif">!</text>
       </svg>
@@ -27,13 +28,13 @@ function StatusIcon({ status }: { status?: MessageStatus }) {
   }
   if (status === "sent" || status === "delivered") {
     return (
-      <svg className={`msg-status ${status === "sent" ? "msg-status--sent" : "msg-status--delivered"}`} width="20" height="12" viewBox="-1 5 34 20" xmlns="http://www.w3.org/2000/svg" aria-label={status === "sent" ? "Отправлено" : "Доставлено"}>
+      <svg className={cn("ml-1", status === "sent" ? "text-[#7A7A7A]" : "text-[#5865F2]")} width="20" height="12" viewBox="-1 5 34 20" xmlns="http://www.w3.org/2000/svg" aria-label={status === "sent" ? "Sent" : "Delivered"}>
         <path fill="currentColor" d="M3 13 L8 18 L20 6 L23 9 L8 24 L0 16 Z" />
       </svg>
     );
   }
   return (
-    <svg className="msg-status msg-status--read" width="20" height="12" viewBox="-1 5 34 20" xmlns="http://www.w3.org/2000/svg" aria-label="Прочитано">
+    <svg className="ml-1 text-[#5865F2]" width="20" height="12" viewBox="-1 5 34 20" xmlns="http://www.w3.org/2000/svg" aria-label="Read">
       <path fill="currentColor" d="M3 13 L8 18 L20 6 L23 9 L8 24 L0 16 Z" />
       <path fill="currentColor" d="M16 17 L17 18 L29 6 L32 9 L17 24 L13 20 Z" />
     </svg>
@@ -280,46 +281,37 @@ export function MessageList({
       const mediaUrl = `${API_BASE_URL}/media/${msg.media_file_id}`;
       const isVideo = msg.media_mime_type?.startsWith("video/") ?? false;
       return (
-        <div className="msg-media">
+        <div className="mt-1">
           {isVideo ? (
-            <video className="msg-media-video" controls src={mediaUrl} />
+            <video className="max-w-full rounded-lg max-h-[300px]" controls src={mediaUrl} />
           ) : (
-            <img className="msg-media-image" src={mediaUrl} alt="attachment" />
+            <img className="max-w-full rounded-lg max-h-[400px] object-contain" src={mediaUrl} alt="attachment" />
           )}
         </div>
       );
     }
 
-    return <span className="msg-content">{msg.content}</span>;
+    return <span className="text-[0.92rem] leading-[1.45] whitespace-pre-wrap">{msg.content}</span>;
   };
 
   const renderReactions = (msgId: number, groups?: MessageReactionGroup[]) => {
     const list = messageReactions[msgId] ?? groups ?? [];
     if (!list || list.length === 0) return null;
     return (
-      <div className="reaction-chips" style={{ display: "flex", gap: 6, marginTop: 6 }}>
+      <div className="flex flex-wrap gap-1 mt-1.5">
         {list.map((g: MessageReactionGroup) => {
           const mine = g.user_ids.includes(currentUserId);
           return (
             <button
               key={`${msgId}:${g.emoji}`}
-              className="reaction-chip"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "2px 8px",
-                borderRadius: 14,
-                border: "1px solid var(--border)",
-                background: mine ? "var(--bg-secondary)" : "var(--bg-tertiary)",
-                color: "var(--text-primary)",
-                fontSize: "0.85rem",
-                cursor: "default",
-              }}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[14px] border border-[#E1E1E1] text-[#0A0A0A] text-[0.85rem] cursor-default",
+                mine ? "bg-[#F8F8F8]" : "bg-white"
+              )}
               aria-pressed={mine}
             >
               <span>{g.emoji}</span>
-              <span style={{ opacity: 0.8 }}>{g.count}</span>
+              <span className="opacity-80">{g.count}</span>
             </button>
           );
         })}
@@ -335,12 +327,12 @@ export function MessageList({
     const author =
       target?.sender_display_name ||
       target?.sender_username ||
-      (target ? `User #${target.sender_id}` : "Сообщение");
+      (target ? `User #${target.sender_id}` : "Message");
 
     let previewText = "";
     if (target) {
       if (target.media_file_id && !target.content) {
-        previewText = "[Вложение]";
+        previewText = "[Attachment]";
       } else {
         const base = (target.content ?? "").trim();
         if (base.length > 0) {
@@ -358,39 +350,14 @@ export function MessageList({
     return (
       <button
         type="button"
-        className="reply-preview"
+        className="block w-full text-left px-2.5 py-1.5 mb-1.5 rounded-lg border border-[#E1E1E1] bg-[#F8F8F8] text-[0.8rem] cursor-pointer"
         onClick={handleClick}
-        style={{
-          display: "block",
-          width: "100%",
-          textAlign: "left",
-          padding: "6px 10px",
-          marginBottom: 6,
-          borderRadius: 8,
-          border: "1px solid var(--border-muted, var(--border))",
-          background: "var(--bg-secondary)",
-          fontSize: "0.8rem",
-          cursor: "pointer",
-        }}
       >
-        <div
-          style={{
-            fontWeight: 500,
-            marginBottom: 2,
-            color: "var(--text-primary)",
-          }}
-        >
-          ↩️ Ответ для {author}
+        <div className="font-medium mb-0.5 text-[#0A0A0A]">
+          Replying to {author}
         </div>
         {previewText && (
-          <div
-            style={{
-              color: "var(--text-muted)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
+          <div className="text-[#7A7A7A] whitespace-nowrap overflow-hidden text-ellipsis">
             {previewText}
           </div>
         )}
@@ -410,20 +377,20 @@ export function MessageList({
   }
 
   return (
-    <div ref={containerRef} className="message-list">
+    <div ref={containerRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-0.5 min-w-0">
       {hasMore && (
-        <div className="load-more-wrapper">
-          <button className="load-more-btn" onClick={onLoadMore} disabled={isLoading}>
+        <div className="flex justify-center py-2 pb-3">
+          <button className="bg-white border border-[#E1E1E1] rounded-[20px] text-[#4A4A4A] cursor-pointer px-4 py-1.25 text-[0.82rem] font-inherit transition-colors duration-150 hover:bg-[#EDEDED]" onClick={onLoadMore} disabled={isLoading}>
             {isLoading ? "Loading…" : "Load older messages"}
           </button>
         </div>
       )}
       {messages.length === 0 && !isLoading && (
-        <div className="empty-conversation">No messages yet. Say hello! 👋</div>
+        <div className="flex-1 flex items-center justify-center text-[#7A7A7A] text-[0.9rem]">No messages yet. Say hello! 👋</div>
       )}
       {groupedMessages.map(({ date, messages: dayMessages }) => (
         <div key={date}>
-          <div className="date-separator">
+          <div className="flex items-center my-4 mb-2 gap-3 text-[#7A7A7A] text-[0.72rem] font-semibold tracking-[0.04em] before:content-[''] before:flex-1 before:h-[1px] before:bg-[#E1E1E1] after:content-[''] after:flex-1 after:h-[1px] after:bg-[#E1E1E1]">
             <span>{date}</span>
           </div>
           {dayMessages.map((msg, idx) => {
@@ -434,7 +401,12 @@ export function MessageList({
             return (
               <div
                 key={msg.id}
-                className={`message-row ${isOwn ? "own" : "other"} ${isConsecutive ? "consecutive" : ""}`}
+                className={cn(
+                  "flex flex-col max-w-[70%] mb-0.5 self-start items-start",
+                  isOwn && "self-start items-start", // Follow Telegram Desktop (all left)
+                  isOwn && "max-[1100px]:self-stretch max-[1100px]:max-w-full max-[1100px]:items-end",
+                  !isConsecutive && "mt-2"
+                )}
                 ref={(el) => {
                   if (el) {
                     messageRefs.current[msg.id] = el;
@@ -445,18 +417,26 @@ export function MessageList({
                 onMouseLeave={() => { if (hoverMsgId === msg.id) setHoverMsgId(null); }}
               >
                 {!isOwn && !isConsecutive && (
-                  <span className="msg-sender">{msg.sender_display_name || msg.sender_username}</span>
+                  <span className="text-[0.72rem] text-[#5865F2] mb-0.5 pl-1 font-medium">{msg.sender_display_name || msg.sender_username}</span>
                 )}
-                <div className="message-bubble">
-                  <>
+                <div className={cn(
+                  "flex items-end gap-1.5 px-3 py-1.5 rounded-2xl break-words",
+                  isOwn ? "bg-[#5865F2] text-white rounded-bl-[4px]" : "bg-[#F0F0F0] text-[#0A0A0A] rounded-bl-[4px]",
+                  isConsecutive && "rounded-tl-[4px]",
+                  isOwn && "max-[1100px]:max-w-[70%] max-[1100px]:rounded-bl-2xl max-[1100px]:rounded-br-[4px]",
+                  isOwn && isConsecutive && "max-[1100px]:rounded-tl-2xl max-[1100px]:rounded-tr-[4px]",
+                  !isOwn && "max-[1100px]:rounded-bl-[4px] max-[1100px]:rounded-br-2xl",
+                  !isOwn && isConsecutive && "max-[1100px]:rounded-tl-[4px] max-[1100px]:rounded-tr-2xl"
+                )}>
+                  <div className="flex flex-col min-w-0">
                     {renderReplyPreview(msg)}
                     {renderContent(msg)}
                     {msg.edited_at && msg.content && (
-                      <span style={{ fontSize: "0.68rem", opacity: 0.45, marginLeft: 4 }}>(edited)</span>
+                      <span className="text-[0.68rem] opacity-45 ml-1">(edited)</span>
                     )}
-                  </>
-                  <span className="msg-meta">
-                    <span className="msg-time">{formatTime(msg.inserted_at)}</span>
+                  </div>
+                  <span className="flex items-center ml-auto gap-1 text-[0.65rem] opacity-60 flex-shrink-0">
+                    <span>{formatTime(msg.inserted_at)}</span>
                     {isOwn && chatContext.type !== "room" && <StatusIcon status={msg.status} />}
                   </span>
                   {renderReactions(msg.id, msg.reactions)}
@@ -470,41 +450,24 @@ export function MessageList({
 
       {contextMenu && (
         <div
+          className="fixed z-[1000] bg-white border border-[#E1E1E1] rounded-lg py-1 min-w-[180px] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
           style={{
-            position:    "fixed",
-            top:         contextMenu.y,
-            left:        contextMenu.x,
-            zIndex:      1000,
-            background:  "var(--bg-tertiary)",
-            border:      "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-            padding:     "4px 0",
-            minWidth:    180,
-            boxShadow:   "0 4px 16px rgba(0,0,0,0.4)",
+            top: contextMenu.y,
+            left: contextMenu.x,
           }}
           onClick={(e) => e.stopPropagation()}
         >
           {contextMenu && (
-            <div style={{ padding: "8px 16px", borderBottom: "1px solid var(--border)", marginBottom: 4 }}>
-              <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: 6 }}>
-                Реакции
+            <div className="px-4 py-2 border-b border-[#E1E1E1] mb-1">
+              <span className="text-[0.75rem] text-[#7A7A7A] block mb-1.5">
+                Reactions
               </span>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="flex gap-2">
                 {EMOJIS.map((e) => (
                   <button
                     key={e}
                     onClick={() => toggleReaction(contextMenu.msgId, e)}
-                    style={{
-                      fontSize: "1.1rem",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      padding: "4px",
-                      borderRadius: "4px",
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(el) => (el.currentTarget.style.background = "var(--bg-hover)")}
-                    onMouseLeave={(el) => (el.currentTarget.style.background = "none")}
+                    className="text-[1.1rem] bg-none border-none cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-[#EDEDED]"
                   >
                     {e}
                   </button>
@@ -514,39 +477,17 @@ export function MessageList({
           )}
           <button
             onClick={handleReplyClick}
-            style={{
-              padding: "8px 16px",
-              width: "100%",
-              textAlign: "left",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-primary)",
-              fontSize: "0.88rem",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            className="px-4 py-2 w-full text-left bg-none border-none cursor-pointer text-[#0A0A0A] text-[0.88rem] hover:bg-[#EDEDED]"
           >
-            ↩️ Ответить
+            Reply
           </button>
 
           {contextMenu.hasText && (
             <button
               onClick={handleCopy}
-              style={{
-                padding: "8px 16px",
-                width: "100%",
-                textAlign: "left",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-primary)",
-                fontSize: "0.88rem",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+              className="px-4 py-2 w-full text-left bg-none border-none cursor-pointer text-[#0A0A0A] text-[0.88rem] hover:bg-[#EDEDED]"
             >
-              📋 Скопировать текст
+              Copy text
             </button>
           )}
 
@@ -554,39 +495,16 @@ export function MessageList({
             <>
               <button
                 onClick={handleEdit}
-                style={{
-                  padding: "8px 16px",
-                  width: "100%",
-                  textAlign: "left",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-primary)",
-                  fontSize: "0.88rem",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                className="px-4 py-2 w-full text-left bg-none border-none cursor-pointer text-[#0A0A0A] text-[0.88rem] hover:bg-[#EDEDED]"
               >
-                ✏️ Edit
+                Edit
               </button>
 
               <button
-                style={{
-                  display: "block",
-                  width: "100%",
-                  padding: "8px 16px",
-                  background: "none",
-                  border: "none",
-                  color: "var(--error)",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  fontSize: "0.88rem",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                className="block w-full px-4 py-2 bg-none border-none text-[#E74C3C] cursor-pointer text-left text-[0.88rem] hover:bg-[#EDEDED]"
                 onClick={handleDelete}
               >
-                🗑️ Удалить
+                Delete
               </button>
             </>
           )}
@@ -595,9 +513,9 @@ export function MessageList({
 
       {msgToDelete && (
         <ConfirmModal
-          title="Удалить сообщение"
-          message="Вы уверены, что хотите удалить это сообщение? Это действие нельзя отменить."
-          confirmLabel="Удалить"
+          title="Delete message"
+          message="Are you sure you want to delete this message? This action cannot be undone."
+          confirmLabel="Delete"
           onConfirm={performDelete}
           onCancel={() => setMsgToDelete(null)}
           isLoading={isDeleting}

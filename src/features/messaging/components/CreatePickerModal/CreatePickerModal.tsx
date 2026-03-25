@@ -5,52 +5,32 @@ interface Props {
 }
 
 export function CreatePickerModal({ onPickServer, onPickGroup, onClose }: Props) {
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
   return (
-    <div className="modal-backdrop" onClick={handleBackdropClick}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: 420 }}>
-        <div className="modal-header">
-          <h3>Create</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white border border-[#E1E1E1] rounded-lg shadow-xl w-full max-w-[420px] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-[#E1E1E1] flex items-center justify-between">
+          <h3 className="m-0 text-[1.1rem] font-bold">Create</h3>
+          <button className="bg-none border-none text-[1.5rem] cursor-pointer text-[#7A7A7A] hover:text-[#0A0A0A]" onClick={onClose} aria-label="Close">×</button>
         </div>
 
-        <div className="modal-body">
-          <div style={{ display: "grid", gap: 12 }}>
+        <div className="p-6">
+          <div className="grid gap-3">
             <button
-              className="btn-secondary"
-              style={{
-                margin: 0,
-                textAlign: "left",
-                padding: "14px 14px",
-                borderRadius: 10,
-                border: "1px solid var(--border)",
-                background: "var(--bg-secondary)",
-              }}
+              className="m-0 text-left p-3.5 rounded-lg border border-[#E1E1E1] bg-[#F8F8F8] cursor-pointer transition-colors duration-150 hover:bg-[#EDEDED]"
               onClick={onPickServer}
             >
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Create server</div>
-              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+              <div className="font-bold mb-1">Create server</div>
+              <div className="text-[0.85rem] text-[#7A7A7A]">
                 A community space with channels.
               </div>
             </button>
 
             <button
-              className="btn-secondary"
-              style={{
-                margin: 0,
-                textAlign: "left",
-                padding: "14px 14px",
-                borderRadius: 10,
-                border: "1px solid var(--border)",
-                background: "var(--bg-secondary)",
-              }}
+              className="m-0 text-left p-3.5 rounded-lg border border-[#E1E1E1] bg-[#F8F8F8] cursor-pointer transition-colors duration-150 hover:bg-[#EDEDED]"
               onClick={onPickGroup}
             >
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Create group</div>
-              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+              <div className="font-bold mb-1">Create group</div>
+              <div className="text-[0.85rem] text-[#7A7A7A]">
                 A direct conversation cluster.
               </div>
             </button>
