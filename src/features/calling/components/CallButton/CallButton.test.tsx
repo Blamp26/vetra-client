@@ -4,14 +4,6 @@ import '@testing-library/jest-dom/vitest';
 import { CallButton } from './CallButton';
 import type { CallStatus } from '../../hooks/useCall.types';
 
-// ── CSS Modules mock ──────────────────────────────────────────────────────────
-vi.mock('./CallButton.module.css', () => ({
-  default: {
-    callBtn: 'callBtn',
-    phoneIcon: 'phoneIcon',
-  },
-}));
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const ALL_STATUSES: CallStatus[] = ['idle', 'calling', 'ringing', 'active', 'ended'];

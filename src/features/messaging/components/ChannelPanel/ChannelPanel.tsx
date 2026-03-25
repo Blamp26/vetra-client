@@ -5,6 +5,7 @@ import { roomsApi } from "@/api/rooms";
 import { ServerSettingsModal } from "../ServerSettingsModal/ServerSettingsModal";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import type { Channel } from "@/shared/types";
+import { cn } from "@/shared/utils/cn";
 
 interface Props {
   serverId: number;
@@ -105,13 +106,7 @@ export function ChannelPanel({ serverId }: Props) {
     setIsDeleting(true);
     try {
       await roomsApi.delete(channelToDelete.id);
-      // Мы не удаляем из стора вручную, так как ожидаем событие по сокету room_deleted.
-      // Но если мы хотим мгновенной реакции, можем обновить стор.
-      // useSocketEvents.ts уже обрабатывает room_deleted и вызывает removeRoom.
-      // Однако, removeRoom удаляет из roomPreviews, но нам нужно также удалить из serverChannels.
       
-      // Добавим ручное удаление для лучшего UX
-      const setServerChannels = useAppStore.getState().setServerChannels;
       const updatedChannels = (serverChannels[serverId] || []).filter(ch => ch.id !== channelToDelete.id);
       setServerChannels(serverId, updatedChannels);
       
@@ -134,22 +129,18 @@ export function ChannelPanel({ serverId }: Props) {
 
   return (
     <>
-      <aside className="channel-panel">
+      <div className="w-[352px] min-w-[352px] flex-shrink-0 flex flex-col bg-sidebar border-r border-border overflow-hidden h-full">
         {/* Header */}
-        <div className="channel-panel-header">
-          <div className="channel-panel-server-name">
-            <span className="server-icon">{server?.name?.[0]?.toUpperCase() ?? "?"}</span>
-            <span className="server-name-text">{server?.name ?? "Server"}</span>
+        <div className="p-[12px_14px] border-b border-border bg-card flex-shrink-0 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#6c5ce7] to-[#a29bfe] text-white text-[0.85rem] font-bold inline-flex items-center justify-center flex-shrink-0">{server?.name?.[0]?.toUpperCase() ?? "?"}</span>
+            <span className="text-[0.9rem] font-semibold whitespace-nowrap overflow-hidden text-ellipsis">{server?.name ?? "Server"}</span>
           </div>
           {server && (
             <button
-              className="channel-settings-btn"
+              className="text-[1rem] bg-none border-none cursor-pointer p-1 px-2 text-[#4A4A4A]"
               onClick={() => setShowSettings(true)}
               title="Настройки сервера"
-              style={{
-                fontSize: "1rem", background: "none", border: "none",
-                cursor: "pointer", padding: "4px 8px", color: "var(--text-secondary)",
-              }}
             >
               ⚙️
             </button>
@@ -157,10 +148,10 @@ export function ChannelPanel({ serverId }: Props) {
         </div>
 
         {/* Section label + add button */}
-        <div className="channel-section-header">
-          <span className="channel-section-label">Channels</span>
+        <div className="flex items-center justify-between p-[10px_14px_4px]">
+          <span className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[#7A7A7A]">Channels</span>
           <button
-            className="channel-add-btn"
+            className="bg-none border-none text-[#7A7A7A] cursor-pointer text-[1.1rem] leading-none px-0.5 rounded transition-colors duration-150 hover:text-[#0A0A0A]"
             onClick={() => { setShowCreate((v) => !v); setCreateError(null); setNewChannelName(""); }}
             title="Add channel"
           >
@@ -170,38 +161,35 @@ export function ChannelPanel({ serverId }: Props) {
 
         {/* Inline create form */}
         {showCreate && (
-          <div className="channel-create-form">
+          <div className="p-[4px_10px_10px] border-b border-[#E1E1E1] flex-shrink-0">
             {createError && (
-              <div className="error-banner" style={{ marginBottom: "6px", fontSize: "0.8rem" }}>
+              <div className="bg-[#E74C3C]/12 border border-[#E74C3C] rounded-lg p-2 px-3 text-[#E74C3C] text-[0.8rem] mb-1.5">
                 {createError}
               </div>
             )}
             <input
-              className="modal-input"
+              className="w-full px-2.5 py-1.5 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.85rem] font-inherit outline-none focus:border-[#5865F2]"
               type="text"
               placeholder="new-channel"
               value={newChannelName}
               autoFocus
               maxLength={100}
-              style={{ fontSize: "0.85rem", padding: "7px 10px" }}
               onChange={(e) => { setNewChannelName(e.target.value); setCreateError(null); }}
               onKeyDown={(e) => {
                 if (e.key === "Enter")  handleCreateChannel();
                 if (e.key === "Escape") { setShowCreate(false); setNewChannelName(""); }
               }}
             />
-            <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+            <div className="flex gap-1.5 mt-1.5">
               <button
-                className="btn-primary"
-                style={{ flex: 1, marginTop: 0, fontSize: "0.82rem", padding: "6px 0" }}
+                className="flex-1 px-4 py-1.5 bg-[#5865F2] text-white border-none rounded-lg text-[0.82rem] font-semibold font-inherit cursor-pointer transition-colors duration-150 hover:bg-[#4752C4] disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleCreateChannel}
                 disabled={isCreating || !newChannelName.trim()}
               >
                 {isCreating ? "Creating…" : "Create"}
               </button>
               <button
-                className="btn-secondary"
-                style={{ flex: 1, fontSize: "0.82rem", padding: "6px 0" }}
+                className="flex-1 px-4 py-1.5 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] text-[0.82rem] font-inherit cursor-pointer transition-colors duration-150 hover:bg-[#EDEDED]"
                 onClick={() => { setShowCreate(false); setNewChannelName(""); }}
                 disabled={isCreating}
               >
@@ -212,57 +200,43 @@ export function ChannelPanel({ serverId }: Props) {
         )}
 
         {/* Channel list */}
-        <div className="channel-list-wrapper">
+        <div className="flex-1 overflow-y-auto p-[4px_6px] [scrollbar-gutter:stable]">
           {isLoading ? (
-            <p className="channel-empty">Loading channels…</p>
+            <p className="p-[12px_8px] text-[#7A7A7A] text-[0.82rem] text-center leading-[1.5]">Loading channels…</p>
           ) : !channels || channels.length === 0 ? (
-            <p className="channel-empty">
+            <p className="p-[12px_8px] text-[#7A7A7A] text-[0.82rem] text-center leading-[1.5]">
               No channels yet.{" "}
-              <button className="link-btn" style={{ fontSize: "0.82rem" }} onClick={() => setShowCreate(true)}>
+              <button className="bg-none border-none text-[#5865F2] cursor-pointer text-[0.82rem] p-0 hover:underline" onClick={() => setShowCreate(true)}>
                 Create the first one
               </button>
             </p>
           ) : (
-            <ul className="channel-list">
+            <ul className="list-none m-0 p-0 flex flex-col gap-[1px]">
               {channels.map((ch) => {
                 const hasUnread = (channelUnread[ch.id] ?? 0) > 0;
 
                 return (
-                  <li key={ch.id} style={{ position: "relative" }}>
+                  <li key={ch.id} className="relative group">
                     <button
-                      className={`
-                        channel-item
-                        ${activeChannelId === ch.id ? "active" : ""}
-                        ${hasUnread ? "has-unread" : ""}
-                      `}
+                      className={cn(
+                        "flex items-center gap-1.5 w-full p-[6px_8px_6px_10px] mx-[2px] border-none rounded-md bg-none text-[#4A4A4A] cursor-pointer text-[0.88rem] font-inherit text-left transition-colors duration-120 relative hover:bg-[#EDEDED] hover:text-[#0A0A0A]",
+                        activeChannelId === ch.id && "bg-[#EDEDED] text-[#0A0A0A] before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-3/5 before:min-h-[20px] before:rounded-[0_2px_2px_0] before:bg-[#0A0A0A]",
+                        hasUnread && "text-[#0A0A0A] font-semibold"
+                      )}
                       onClick={() => handleChannelClick(ch.id)}
                     >
-                      {hasUnread && <span className="unread-dot" />}
-                      <span className="channel-hash">#</span>
-                      <span className="channel-name">{ch.name}</span>
+                      {hasUnread && <span className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-[10px] h-[10px] bg-[#5865F2] rounded-full shadow-[0_0_4px_#5865F2,0_0_10px_#5865F2,0_0_16px_#5865F2] pointer-events-none z-[2]" />}
+                      <span className="text-[#7A7A7A] text-[1rem] font-semibold flex-shrink-0">#</span>
+                      <span className="whitespace-nowrap overflow-hidden text-ellipsis">{ch.name}</span>
                     </button>
                     {isOwner && (
                       <button
-                        className="channel-delete-btn"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-none border-none cursor-pointer text-[#7A7A7A] text-[0.8rem] p-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation();
                           setChannelToDelete(ch);
                         }}
                         title="Удалить канал"
-                        style={{
-                          position: "absolute",
-                          right: "8px",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          color: "var(--text-muted)",
-                          fontSize: "0.8rem",
-                          padding: "4px",
-                          opacity: 0,
-                          transition: "opacity 0.2s",
-                        }}
                       >
                         🗑️
                       </button>
@@ -273,38 +247,22 @@ export function ChannelPanel({ serverId }: Props) {
             </ul>
           )}
         </div>
-
-        {/*
-          NOTE: The user panel (avatar / nickname / settings) has been intentionally
-          removed from this component.
-
-          Rationale: Sidebar.tsx already renders a canonical user panel
-          (sidebarUserPanel) that is always present in the DOM — it is the single
-          source of truth for user identity UI.  Rendering a second copy here
-          created a duplicate element every time the user transitioned from a
-          DM/group chat to a server view, causing visual clutter and unnecessary
-          DOM overhead.
-
-          The Sidebar's user panel remains visible in server mode (its avatar is
-          shown in the collapsed 72 px strip).  No functionality is lost: settings,
-          profile, logout, and create-server/room actions all live in the Sidebar
-          panel and are accessible in every view.
-        */}
-      </aside>
+      </div>
 
       {showSettings && server && (
-        <ServerSettingsModal server={server} onClose={() => setShowSettings(false)} />
+        <ServerSettingsModal
+          server={server}
+          onClose={() => setShowSettings(false)}
+        />
       )}
 
       {channelToDelete && (
         <ConfirmModal
-          title="Удалить канал"
-          message={`Вы уверены, что хотите удалить канал #${channelToDelete.name}? Все сообщения в этом канале будут навсегда удалены.`}
-          confirmLabel="Удалить"
+          title={`Delete channel "#${channelToDelete.name}"?`}
+          message="This action cannot be undone."
           onConfirm={handleDeleteChannel}
           onCancel={() => setChannelToDelete(null)}
           isLoading={isDeleting}
-          isDanger
         />
       )}
     </>

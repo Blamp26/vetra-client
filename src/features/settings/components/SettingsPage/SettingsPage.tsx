@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { useAppStore, type RootState } from '@/store';
 import { ProfileModal } from '@/features/profile/components/ProfileModal/ProfileModal';
 import { ConfirmModal } from '@/shared/components/ConfirmModal/ConfirmModal';
+import { cn } from '@/shared/utils/cn';
 
 type SettingsTab =
   | 'account'
@@ -48,41 +49,22 @@ export function SettingsPage({ onClose }: Props) {
   ];
 
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 200,
-        display: 'flex',
-        animation: 'fadeIn 0.15s ease',
-      }}
-    >
+    <div className="fixed inset-0 z-[200] flex bg-[#FAFAFA] animate-in fade-in duration-150">
       {/* ── Sidebar ─────────────────────────────────────────────── */}
-      <div
-        style={{
-          width: 220, flexShrink: 0,
-          background: 'var(--bg-secondary)',
-          borderRight: '1px solid var(--border)',
-          display: 'flex', flexDirection: 'column',
-          padding: '24px 12px 12px',
-        }}
-      >
-        <div style={{ marginBottom: 20, paddingLeft: 8 }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 700 }}>Настройки</h2>
+      <div className="w-[220px] shrink-0 bg-[#F8F8F8] border-r border-[#E1E1E1] flex flex-col p-6 pt-9">
+        <div className="mb-5 pl-2">
+          <h2 className="text-[1rem] font-bold">Настройки</h2>
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav className="flex flex-col gap-0.5">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 10px', borderRadius: 'var(--radius)',
-                border: 'none', background: tab === t.id ? 'var(--bg-hover)' : 'none',
-                color: tab === t.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-                cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.88rem',
-                fontWeight: tab === t.id ? 600 : 400, textAlign: 'left',
-                transition: 'background 0.12s, color 0.12s',
-              }}
+              className={cn(
+                "flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-none text-[0.88rem] cursor-pointer font-inherit transition-all duration-120 text-left",
+                tab === t.id ? "bg-[#EDEDED] text-[#0A0A0A] font-semibold" : "bg-transparent text-[#4A4A4A] font-normal hover:bg-[#EDEDED]"
+              )}
             >
               <span>{t.icon}</span>
               <span>{t.label}</span>
@@ -90,132 +72,79 @@ export function SettingsPage({ onClose }: Props) {
           ))}
         </nav>
 
-        <div style={{ marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--text-muted)',
-              padding: '4px 16px',
-              letterSpacing: '0.04em',
-            }}
-          >
+        <div className="mt-2 border-t border-[#E1E1E1] pt-2">
+          <div className="text-[11px] text-[#7A7A7A] px-4 py-1 tracking-[0.04em] uppercase font-semibold opacity-60">
             App Settings
           </div>
           <button
             onClick={() => setTab('privacy')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 10px', borderRadius: 'var(--radius)',
-              border: 'none', background: tab === 'privacy' ? 'var(--bg-hover)' : 'none',
-              color: tab === 'privacy' ? 'var(--text-primary)' : 'var(--text-secondary)',
-              cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.88rem',
-              fontWeight: tab === 'privacy' ? 600 : 400, textAlign: 'left',
-              transition: 'background 0.12s, color 0.12s',
-              width: '100%',
-            }}
+            className={cn(
+              "flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-none text-[0.88rem] cursor-pointer font-inherit transition-all duration-120 text-left w-full",
+              tab === 'privacy' ? "bg-[#EDEDED] text-[#0A0A0A] font-semibold" : "bg-transparent text-[#4A4A4A] font-normal hover:bg-[#EDEDED]"
+            )}
           >
             <span>🔒</span>
             <span>Privacy</span>
           </button>
         </div>
 
-        <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+        <div className="mt-2.5 border-t border-[#E1E1E1] pt-2.5">
           <button
             onClick={() => setShowLogoutConfirm(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 10px', borderRadius: 'var(--radius)',
-              border: 'none', background: 'none',
-              color: 'var(--error)',
-              cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.88rem',
-              textAlign: 'left',
-              opacity: 0.85,
-              transition: 'background 0.12s, opacity 0.12s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(237,66,69,0.12)'; e.currentTarget.style.opacity = '1'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.opacity = '0.85'; }}
+            className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-none bg-transparent text-[#E74C3C] cursor-pointer font-inherit text-[0.88rem] text-left opacity-85 transition-all duration-120 hover:bg-[#E74C3C]/12 hover:opacity-100"
           >
             <span>⇥</span>
             <span>Log Out</span>
           </button>
         </div>
 
-        <div style={{ marginTop: 'auto' }}>
+        <div className="mt-auto">
           <button
             onClick={onClose}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '9px 10px', borderRadius: 'var(--radius)',
-              border: 'none', background: 'none',
-              color: 'var(--text-muted)', cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: '0.88rem',
-              transition: 'color 0.12s',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+            className="flex items-center gap-2 px-2.5 py-2 rounded-lg border-none bg-transparent text-[#7A7A7A] cursor-pointer font-inherit text-[0.88rem] transition-colors duration-120 hover:text-[#0A0A0A]"
           >
             ← Назад
           </button>
-          <div
-            style={{
-              marginTop: 6, paddingLeft: 8,
-              fontSize: '0.72rem', color: 'var(--text-muted)',
-            }}
-          >
+          <div className="mt-1.5 pl-2 text-[0.72rem] text-[#7A7A7A]">
             Esc — закрыть
           </div>
         </div>
       </div>
 
       {/* ── Content ─────────────────────────────────────────────── */}
-      <div
-        style={{
-          flex: 1, overflowY: 'auto', padding: '32px 40px',
-          background: 'var(--bg-primary)',
-        }}
-      >
+      <div className="flex-1 overflow-y-auto p-8 px-10 bg-[#FAFAFA]">
         {/* ── Account ── */}
         {tab === 'account' && currentUser && (
-          <div style={{ maxWidth: 560 }}>
-            <h3 style={{ marginBottom: 24, fontSize: '1.1rem', fontWeight: 700 }}>Аккаунт</h3>
+          <div className="max-w-[560px]">
+            <h3 className="mb-6 text-[1.1rem] font-bold">Аккаунт</h3>
 
-            <div
-              style={{
-                background: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)', padding: 20, marginBottom: 16,
-                display: 'flex', alignItems: 'center', gap: 16,
-              }}
-            >
+            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 mb-4 flex items-center gap-4">
               {currentUser.avatar_url ? (
                 <img
                   src={currentUser.avatar_url}
                   alt="avatar"
-                  style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                  className="w-16 h-16 rounded-full object-cover shrink-0"
                 />
               ) : (
-                <span
-                  className="avatar"
-                  style={{ width: 64, height: 64, fontSize: '1.5rem', flexShrink: 0 }}
-                >
+                <span className="w-16 h-16 rounded-full bg-[#5865F2] text-white font-bold text-[1.5rem] inline-flex items-center justify-center shrink-0">
                   {(currentUser.display_name || currentUser.username)[0].toUpperCase()}
                 </span>
               )}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 2 }}>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-[1rem] mb-0.5">
                   {currentUser.display_name || currentUser.username}
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                <div className="text-[#7A7A7A] text-[0.85rem]">
                   @{currentUser.username}
                 </div>
                 {currentUser.bio && (
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginTop: 6 }}>
+                  <div className="text-[#4A4A4A] text-[0.82rem] mt-1.5">
                     {currentUser.bio}
                   </div>
                 )}
               </div>
               <button
-                className="btn-secondary"
-                style={{ flexShrink: 0 }}
+                className="px-4 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] text-[0.85rem] font-semibold cursor-pointer hover:bg-[#F8F8F8] transition-colors duration-150 shrink-0"
                 onClick={() => setShowEditProfile(true)}
               >
                 Изменить
@@ -229,63 +158,34 @@ export function SettingsPage({ onClose }: Props) {
             ].map(({ label, value }) => (
               <div
                 key={label}
-                style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '12px 0', borderBottom: '1px solid var(--border)',
-                  fontSize: '0.9rem',
-                }}
+                className="flex justify-between items-center py-3 border-b border-[#E1E1E1] text-[0.9rem]"
               >
-                <span style={{ color: 'var(--text-muted)' }}>{label}</span>
-                <span style={{ color: 'var(--text-primary)' }}>{value}</span>
+                <span className="text-[#7A7A7A]">{label}</span>
+                <span className="text-[#0A0A0A]">{value}</span>
               </div>
             ))}
 
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '12px 0',
-                borderBottom: '1px solid var(--border)',
-                fontSize: '0.9rem',
-              }}
-            >
+            <div className="flex justify-between items-center py-3 border-b border-[#E1E1E1] text-[0.9rem]">
               <div>
-                <div style={{ color: 'var(--text-muted)' }}>Password</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', marginTop: 2 }}>
+                <div className="text-[#7A7A7A]">Password</div>
+                <div className="text-[#4A4A4A] text-[0.82rem] mt-0.5">
                   Last changed recently
                 </div>
               </div>
-              <button className="btn-secondary" style={{ margin: 0 }}>
+              <button className="px-4 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] text-[0.85rem] font-semibold cursor-pointer hover:bg-[#F8F8F8] transition-colors duration-150">
                 Change
               </button>
             </div>
 
-            <div
-              style={{
-                marginTop: 18,
-                paddingTop: 18,
-                borderTop: '1px solid var(--border)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
+            <div className="mt-4.5 pt-4.5 border-t border-[#E1E1E1] flex items-center justify-between gap-3">
               <div>
-                <div style={{ color: 'var(--error)', fontWeight: 700 }}>Log Out</div>
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                <div className="text-[#E74C3C] font-bold">Log Out</div>
+                <div className="text-[0.82rem] text-[#7A7A7A] mt-0.5">
                   You will be returned to the login screen
                 </div>
               </div>
               <button
-                className="btn-secondary"
-                style={{
-                  margin: 0,
-                  borderColor: 'rgba(237,66,69,0.35)',
-                  background: 'rgba(237,66,69,0.12)',
-                  color: 'var(--error)',
-                }}
+                className="px-4 py-2 bg-[#E74C3C]/12 border border-[#E74C3C]/35 text-[#E74C3C] rounded-lg text-[0.85rem] font-semibold cursor-pointer hover:bg-[#E74C3C]/20 transition-colors duration-150"
                 onClick={() => setShowLogoutConfirm(true)}
               >
                 Log Out
@@ -296,15 +196,9 @@ export function SettingsPage({ onClose }: Props) {
 
         {/* ── Notifications ── */}
         {tab === 'notifications' && (
-          <div style={{ maxWidth: 560 }}>
-            <h3 style={{ marginBottom: 24, fontSize: '1.1rem', fontWeight: 700 }}>Уведомления</h3>
-            <div
-              style={{
-                background: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)', padding: 20,
-                color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center',
-              }}
-            >
+          <div className="max-w-[560px]">
+            <h3 className="mb-6 text-[1.1rem] font-bold">Уведомления</h3>
+            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 text-[#7A7A7A] text-[0.9rem] text-center">
               🔔 Настройки уведомлений — в разработке
             </div>
           </div>
@@ -312,15 +206,9 @@ export function SettingsPage({ onClose }: Props) {
 
         {/* ── Profile ── */}
         {tab === 'profile' && (
-          <div style={{ maxWidth: 560 }}>
-            <h3 style={{ marginBottom: 24, fontSize: '1.1rem', fontWeight: 700 }}>Profile</h3>
-            <div
-              style={{
-                background: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)', padding: 20,
-                color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center',
-              }}
-            >
+          <div className="max-w-[560px]">
+            <h3 className="mb-6 text-[1.1rem] font-bold">Profile</h3>
+            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 text-[#7A7A7A] text-[0.9rem] text-center">
               🪪 Profile settings — work in progress
             </div>
           </div>
@@ -328,22 +216,11 @@ export function SettingsPage({ onClose }: Props) {
 
         {/* ── Appearance — статический блок, переключение тем удалено ── */}
         {tab === 'appearance' && (
-          <div style={{ maxWidth: 560 }}>
-            <h3 style={{ marginBottom: 24, fontSize: '1.1rem', fontWeight: 700 }}>Внешний вид</h3>
+          <div className="max-w-[560px]">
+            <h3 className="mb-6 text-[1.1rem] font-bold">Внешний вид</h3>
 
             {/* Уведомление о единой теме */}
-            <div
-              style={{
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)',
-                padding: '20px 24px',
-                marginBottom: 16,
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 14,
-              }}
-            >
+            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 px-6 mb-4 flex items-start gap-3.5">
               {/* Иконка солнца — inline SVG, без внешних зависимостей */}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -351,11 +228,11 @@ export function SettingsPage({ onClose }: Props) {
                 height="22"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="var(--accent)"
+                stroke="#5865F2"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                style={{ flexShrink: 0, marginTop: 2 }}
+                className="shrink-0 mt-0.5"
               >
                 <circle cx="12" cy="12" r="5" />
                 <line x1="12" y1="1" x2="12" y2="3" />
@@ -369,23 +246,10 @@ export function SettingsPage({ onClose }: Props) {
               </svg>
 
               <div>
-                <div
-                  style={{
-                    fontWeight: 600,
-                    fontSize: '0.9rem',
-                    color: 'var(--text-primary)',
-                    marginBottom: 4,
-                  }}
-                >
+                <div className="font-semibold text-[0.9rem] text-[#0A0A0A] mb-1">
                   Единая светлая тема
                 </div>
-                <div
-                  style={{
-                    fontSize: '0.83rem',
-                    color: 'var(--text-secondary)',
-                    lineHeight: 1.5,
-                  }}
-                >
+                <div className="text-[0.83rem] text-[#4A4A4A] leading-[1.5]">
                   Приложение использует единую светлую тему.
                   Переключение тем недоступно в этой версии.
                 </div>
@@ -393,28 +257,12 @@ export function SettingsPage({ onClose }: Props) {
             </div>
 
             {/* Палитра цветов — только для информации, не интерактивна */}
-            <div
-              style={{
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)',
-                padding: '16px 20px',
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 600,
-                  fontSize: '0.78rem',
-                  color: 'var(--text-muted)',
-                  marginBottom: 12,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                }}
-              >
+            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-4 px-5">
+              <div className="font-semibold text-[0.78rem] text-[#7A7A7A] mb-3 uppercase tracking-[0.06em]">
                 Цветовая палитра
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="flex flex-col gap-2">
                 {[
                   { label: 'Основной фон', value: '#FAFAFA' },
                   { label: 'Сайдбар', value: '#F8F8F8' },
@@ -424,32 +272,14 @@ export function SettingsPage({ onClose }: Props) {
                 ].map(({ label, value }) => (
                   <div
                     key={label}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      fontSize: '0.82rem',
-                      color: 'var(--text-secondary)',
-                    }}
+                    className="flex items-center gap-2.5 text-[0.82rem] text-[#4A4A4A]"
                   >
                     <div
-                      style={{
-                        width: 18,
-                        height: 18,
-                        borderRadius: 4,
-                        background: value,
-                        border: '1px solid var(--border)',
-                        flexShrink: 0,
-                      }}
+                      style={{ background: value }}
+                      className="w-[18px] h-[18px] rounded border border-[#E1E1E1] shrink-0"
                     />
-                    <span style={{ flex: 1 }}>{label}</span>
-                    <code
-                      style={{
-                        fontFamily: 'monospace',
-                        fontSize: '0.78rem',
-                        color: 'var(--text-muted)',
-                      }}
-                    >
+                    <span className="flex-1">{label}</span>
+                    <code className="font-mono text-[0.78rem] text-[#7A7A7A]">
                       {value}
                     </code>
                   </div>
@@ -461,15 +291,9 @@ export function SettingsPage({ onClose }: Props) {
 
         {/* ── Audio & Video ── */}
         {tab === 'audioVideo' && (
-          <div style={{ maxWidth: 560 }}>
-            <h3 style={{ marginBottom: 24, fontSize: '1.1rem', fontWeight: 700 }}>Audio &amp; Video</h3>
-            <div
-              style={{
-                background: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)', padding: 20,
-                color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center',
-              }}
-            >
+          <div className="max-w-[560px]">
+            <h3 className="mb-6 text-[1.1rem] font-bold">Audio &amp; Video</h3>
+            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 text-[#7A7A7A] text-[0.9rem] text-center">
               🎙️ Audio and video settings — work in progress
             </div>
           </div>
@@ -477,15 +301,9 @@ export function SettingsPage({ onClose }: Props) {
 
         {/* ── Privacy ── */}
         {tab === 'privacy' && (
-          <div style={{ maxWidth: 560 }}>
-            <h3 style={{ marginBottom: 24, fontSize: '1.1rem', fontWeight: 700 }}>Privacy</h3>
-            <div
-              style={{
-                background: 'var(--bg-secondary)', borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)', padding: 20,
-                color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center',
-              }}
-            >
+          <div className="max-w-[560px]">
+            <h3 className="mb-6 text-[1.1rem] font-bold">Privacy</h3>
+            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 text-[#7A7A7A] text-[0.9rem] text-center">
               🔒 Privacy settings — work in progress
             </div>
           </div>

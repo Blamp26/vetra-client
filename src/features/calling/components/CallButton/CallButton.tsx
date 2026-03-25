@@ -1,7 +1,6 @@
 // src/features/calling/components/CallButton/CallButton.tsx
 
 import type { CallStatus } from '../../hooks/useCall.types';
-import styles from './CallButton.module.css';
 
 interface Props {
   targetUserId: number;
@@ -18,14 +17,14 @@ export function CallButton({ targetUserId, targetUsername, status, onCall }: Pro
 
   return (
     <button
-      className={styles.callBtn}
+      className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-full border-none bg-white text-[#4A4A4A] cursor-pointer transition-all duration-150 shrink-0 p-0 hover:bg-[#2e7d32] hover:text-white hover:scale-108 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed"
       onClick={() => onCall(targetUserId)}
       disabled={isDisabled}
       title={isDisabled ? `Звонок недоступен (${status})` : `Позвонить ${targetUsername}`}
       aria-label={`Позвонить ${targetUsername}`}
     >
       <svg
-        className={styles.phoneIcon}
+        className="w-[18px] h-[18px]"
         viewBox="0 0 24 24"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"

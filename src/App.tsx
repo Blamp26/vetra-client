@@ -56,20 +56,15 @@ function App() {
 
   return (
     <>
-      <div className="app-layout">
+      {/* 1. Sidebar Area (Sidebar + ChannelPanel + Partition) */}
+      <div className="flex flex-shrink-0 h-full">
         <Sidebar
           isServerMode={showChannelPanel}
           onOpenSettings={() => setShowSettings(true)}
         />
 
-        {/*
-          The slot controls visibility via CSS width (0 → 352px).
-          The ChannelPanel itself is never torn down once a server has been
-          visited — it is reused and repositioned by the slot's transition.
-          No new instance is created on each chat-to-server transition.
-        */}
         <div
-          className={`channel-panel-slot${showChannelPanel ? " is-visible" : ""}`}
+          className={`flex-shrink-0 w-0 overflow-hidden transition-[width] duration-200 ease-in-out ${showChannelPanel ? "w-[352px]" : ""}`}
           aria-hidden={!showChannelPanel}
         >
           {persistedServerId !== null && (
@@ -78,34 +73,65 @@ function App() {
             />
           )}
         </div>
-
-        <main className="main-content">
-          {chatTarget ? (
-            <ChatWindow 
-              activeChat={chatTarget} 
-              callStatus={status}
-              onStartCall={startCall}
-            />
-          ) : activeChat?.type === "server" ? (
-            <div className="empty-state">
-              <div className="empty-state-inner">
-                <span className="empty-icon">📢</span>
-                <h2>Select a channel</h2>
-                <p>Pick a channel from the panel on the left to start chatting.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-state-inner">
-                <span className="empty-icon">💬</span>
-                <h2>Select a conversation</h2>
-                <p>Choose a chat from the sidebar or search for a user.</p>
-              </div>
-            </div>
-          )}
-        </main>
       </div>
 
+      {/* 2. Content Area (Chat or Empty State) */}
+      <div className="flex-1 flex overflow-hidden min-w-0">
+        {chatTarget ? (
+          <ChatWindow 
+            activeChat={chatTarget} 
+            callStatus={status}
+            onStartCall={startCall}
+          />
+        ) : activeChat?.type === "server" ? (
+          <div className="flex flex-1 flex-col items-center justify-center bg-background min-w-0">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                <span className="text-[2rem] block">📢</span>
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold text-foreground">
+                  Select a channel
+                </h2>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  Pick a channel from the panel on the left to start chatting.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center bg-background min-w-0">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="24" 
+                  height="24" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  className="h-8 w-8 text-muted-foreground"
+                >
+                  <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"></path>
+                </svg>
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold text-foreground">
+                  Select a conversation
+                </h2>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  Choose a chat from the sidebar or search for a user to start messaging
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Overlays (Fixed components inside root) */}
       {showSettings && (
         <SettingsPage onClose={() => setShowSettings(false)} />
       )}

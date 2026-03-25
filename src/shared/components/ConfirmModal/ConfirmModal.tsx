@@ -1,4 +1,4 @@
-import React from 'react';
+import { cn } from '@/shared/utils/cn';
 
 interface ConfirmModalProps {
   title: string;
@@ -22,38 +22,34 @@ export function ConfirmModal({
   isDanger = true,
 }: ConfirmModalProps) {
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50" onClick={onCancel}>
       <div 
-        className="modal-card" 
-        style={{ width: 400, padding: '24px' }} 
+        className="bg-white border border-[#E1E1E1] rounded-lg shadow-xl w-[400px] p-6" 
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-header" style={{ marginBottom: '16px' }}>
-          <h3 style={{ margin: 0 }}>{title}</h3>
+        <div className="mb-4">
+          <h3 className="m-0 text-[1.1rem] font-semibold text-[#0A0A0A]">{title}</h3>
         </div>
         
-        <div className="modal-body" style={{ marginBottom: '24px' }}>
-          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>{message}</p>
+        <div className="mb-6">
+          <p className="text-[#4A4A4A] leading-[1.5]">{message}</p>
         </div>
         
-        <div className="modal-footer" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+        <div className="flex gap-3 justify-end">
           <button 
-            className="btn-secondary" 
+            className="px-4 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] cursor-pointer hover:bg-[#F8F8F8] disabled:opacity-50 disabled:cursor-not-allowed" 
             onClick={onCancel}
             disabled={isLoading}
-            style={{ margin: 0 }}
           >
             {cancelLabel}
           </button>
           <button 
-            className="btn-primary" 
+            className={cn(
+              "px-4 py-2 text-white border-none rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed",
+              isDanger ? "bg-[#E74C3C] hover:bg-[#c0392b]" : "bg-[#5865F2] hover:bg-[#4752C4]"
+            )}
             onClick={onConfirm}
             disabled={isLoading}
-            style={{ 
-              margin: 0,
-              backgroundColor: isDanger ? 'var(--error)' : 'var(--accent)',
-              borderColor: isDanger ? 'var(--error)' : 'var(--accent)',
-            }}
           >
             {isLoading ? 'Загрузка...' : confirmLabel}
           </button>

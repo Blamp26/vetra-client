@@ -41,31 +41,17 @@ export function ToastHost() {
 
   return (
     <div
-      style={{
-        position: "fixed",
-        left: 16,
-        bottom: 76,
-        zIndex: 99999,
-        pointerEvents: "none",
-      }}
+      className="fixed left-4 bottom-[76px] z-[99999] pointer-events-none"
       aria-live="polite"
     >
       <div
-        style={{
-          width: 320,
-          background: "rgba(25, 27, 33, 0.92)",
-          border: "1px solid rgba(255,255,255,0.09)",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.55)",
-          borderRadius: 10,
-          padding: "12px 14px",
-          backdropFilter: "blur(8px)",
-        }}
+        className="w-[320px] bg-[#191b21]/92 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.55)] rounded-lg p-[12px_14px] backdrop-blur-[8px]"
       >
-        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)" }}>
+        <div className="font-bold text-[13px] text-white">
           {toast.title}
         </div>
         {toast.body && (
-          <div style={{ marginTop: 4, fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+          <div className="mt-1 text-[12.5px] text-white/70 leading-[1.4]">
             {toast.body}
           </div>
         )}

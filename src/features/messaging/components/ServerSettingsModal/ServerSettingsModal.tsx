@@ -5,6 +5,8 @@ import { useAppStore, type RootState } from "@/store";
 import { serversApi } from "@/api/servers";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import type { Server } from "@/shared/types";
+import { cn } from "@/shared/utils/cn";
+import { Avatar } from "@/shared/components/Avatar";
 
 interface Props {
   server:  Server;
@@ -74,16 +76,13 @@ export function ServerSettingsModal({ server, onClose }: Props) {
     setLeaving(true);
     setDeleteError(null);
     try {
-      // Используем существующий метод removeMember, передавая текущего пользователя как target
       await serversApi.removeMember(server.id, currentUser.id);
-      // Обновляем список серверов
       const updatedServers = await serversApi.getList();
       setServers(updatedServers);
-      // Если текущий чат был связан с этим сервером, сбрасываем его
       const activeChat = useAppStore.getState().activeChat;
       if (
-        activeChat?.type === "server" && activeChat.serverId === server.id ||
-        activeChat?.type === "channel" && activeChat.serverId === server.id
+        (activeChat?.type === "server" && activeChat.serverId === server.id) ||
+        (activeChat?.type === "channel" && activeChat.serverId === server.id)
       ) {
         setActiveChat(null);
       }
@@ -105,8 +104,8 @@ export function ServerSettingsModal({ server, onClose }: Props) {
       setServers(updatedServers);
       const activeChat = useAppStore.getState().activeChat;
       if (
-        activeChat?.type === "server" && activeChat.serverId === server.id ||
-        activeChat?.type === "channel" && activeChat.serverId === server.id
+        (activeChat?.type === "server" && activeChat.serverId === server.id) ||
+        (activeChat?.type === "channel" && activeChat.serverId === server.id)
       ) {
         setActiveChat(null);
       }
@@ -133,52 +132,47 @@ export function ServerSettingsModal({ server, onClose }: Props) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="modal-card"
-        style={{ width: 480, maxHeight: "80vh", display: "flex", flexDirection: "column" }}
+        className="bg-white border border-[#E1E1E1] rounded-lg shadow-xl w-full max-w-[480px] max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-header">
-          <h3>⚙️ {server.name}</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+        <div className="px-6 py-4 border-b border-[#E1E1E1] flex items-center justify-between">
+          <h3 className="m-0 text-[1.1rem] font-bold">⚙️ {server.name}</h3>
+          <button className="bg-none border-none text-[1.5rem] cursor-pointer text-[#7A7A7A] hover:text-[#0A0A0A]" onClick={onClose} aria-label="Close">×</button>
         </div>
 
-        <div style={{ display: "flex", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+        <div className="flex border-b border-[#E1E1E1] shrink-0">
           {(["members", "danger"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              style={{
-                flex: 1, padding: "10px 0", background: "none", border: "none",
-                borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
-                color: tab === t ? "var(--accent)" : "var(--text-secondary)",
-                cursor: "pointer", fontFamily: "inherit", fontSize: "0.88rem", fontWeight: 600,
-                transition: "color 0.15s",
-              }}
+              className={cn(
+                "flex-1 py-2.5 bg-none border-none cursor-pointer font-inherit text-[0.88rem] font-semibold transition-colors duration-150 border-b-2",
+                tab === t ? "border-[#5865F2] text-[#5865F2]" : "border-transparent text-[#4A4A4A] hover:text-[#0A0A0A]"
+              )}
             >
               {t === "members" ? "Участники" : "Danger Zone"}
             </button>
           ))}
         </div>
 
-        <div className="modal-body" style={{ flex: 1, overflowY: "auto" }}>
+        <div className="p-6 flex-1 overflow-y-auto">
           {tab === "members" && (
             <>
               {isOwner && (
-                <div style={{ marginBottom: 16, position: "relative" }} ref={dropdownRef}>
-                  <label className="modal-label">Добавить участника</label>
-                  <div style={{ display: "flex", gap: 8 }}>
+                <div className="mb-4 relative" ref={dropdownRef}>
+                  <label className="block mb-1.5 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-[#4A4A4A]">Добавить участника</label>
+                  <div className="flex gap-2">
                     <input
-                      className="modal-input"
-                      style={{ flex: 1 }}
+                      className="flex-1 px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.88rem] font-inherit outline-none focus:border-[#5865F2]"
                       placeholder="Поиск по никнейму..."
                       value={query}
                       onChange={(e) => { setQuery(e.target.value); setSearchError(null); }}
                       onFocus={() => query.trim() && setIsDropdownOpen(true)}
                     />
                     {isSearching && (
-                      <div style={{ alignSelf: "center", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                      <div className="self-center text-[0.82rem] text-[#7A7A7A]">
                         ...
                       </div>
                     )}
@@ -186,44 +180,20 @@ export function ServerSettingsModal({ server, onClose }: Props) {
 
                   {isDropdownOpen && (searchResults || []).length > 0 && (
                     <div
-                      className="search-results-dropdown"
-                      style={{
-                        position: "absolute",
-                        top: "100%",
-                        left: 0,
-                        right: 0,
-                        zIndex: 100,
-                        background: "var(--bg-tertiary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--radius)",
-                        marginTop: 4,
-                        maxHeight: 200,
-                        overflowY: "auto",
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                      }}
+                      className="absolute top-full left-0 right-0 z-[100] bg-white border border-[#E1E1E1] rounded-lg mt-1 max-h-[200px] overflow-y-auto shadow-lg"
                     >
                       {(searchResults || []).map((user) => (
                         <div
                           key={user.id}
                           onClick={() => handleAddMember(user.id)}
-                          style={{
-                            padding: "8px 12px",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                          className="px-3 py-2 cursor-pointer flex items-center gap-2.5 transition-colors duration-100 hover:bg-[#EDEDED]"
                         >
-                          <span className="avatar" style={{ width: 24, height: 24, fontSize: "0.75rem" }}>
-                            {(user.display_name || user.username || "?")[0]?.toUpperCase() || "?"}
-                          </span>
-                          <div style={{ display: "flex", flexDirection: "column" }}>
-                            <span style={{ fontSize: "0.88rem", fontWeight: 500 }}>
+                          <Avatar name={user.display_name || user.username} size="small" />
+                          <div className="flex flex-col">
+                            <span className="text-[0.88rem] font-medium text-[#0A0A0A]">
                               {user.display_name || user.username}
                             </span>
-                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                            <span className="text-[0.75rem] text-[#7A7A7A]">
                               @{user.username}
                             </span>
                           </div>
@@ -233,7 +203,7 @@ export function ServerSettingsModal({ server, onClose }: Props) {
                   )}
 
                   {searchError && (
-                    <p style={{ color: "var(--error)", fontSize: "0.82rem", marginTop: 4 }}>
+                    <p className="text-[#E74C3C] text-[0.82rem] mt-1">
                       {searchError}
                     </p>
                   )}
@@ -241,52 +211,35 @@ export function ServerSettingsModal({ server, onClose }: Props) {
               )}
 
               {isLoading && (
-                <p style={{ color: "var(--text-muted)", textAlign: "center" }}>Загрузка...</p>
+                <p className="text-[#7A7A7A] text-center py-4">Загрузка...</p>
               )}
               {error && (
-                <p style={{ color: "var(--error)" }}>{error}</p>
+                <p className="text-[#E74C3C] py-2">{error}</p>
               )}
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div className="flex flex-col gap-1">
                 {(members || []).map((m) => (
                   <div
                     key={m.user_id}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
-                      borderRadius: "var(--radius)", background: "var(--bg-tertiary)",
-                    }}
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-[#F8F8F8] border border-transparent"
                   >
-                    {m.avatar_url ? (
-                      <img
-                        src={m.avatar_url}
-                        alt="avatar"
-                        style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
-                      />
-                    ) : (
-                      <span
-                          className="avatar"
-                          style={{ width: 32, height: 32, fontSize: "0.85rem", flexShrink: 0 }}
-                        >
-                          {(m.display_name || m.username || "?")[0]?.toUpperCase() || "?"}
-                        </span>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontWeight: 500, fontSize: "0.9rem", display: "block" }}>
+                    <Avatar name={m.display_name || m.username} src={m.avatar_url} size="medium" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-[0.9rem] block text-[#0A0A0A] truncate">
                         {m.display_name || m.username}
                       </span>
-                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      <span className="text-[0.75rem] text-[#7A7A7A]">
                         @{m.username}
                       </span>
                     </div>
                     {m.is_owner && (
-                      <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 600 }}>
+                      <span className="text-[0.72rem] text-[#5865F2] font-semibold">
                         Владелец
                       </span>
                     )}
                     {isOwner && !m.is_owner && currentUser?.id !== m.user_id && (
                       <button
-                        className="btn-secondary"
-                        style={{ padding: "4px 10px", fontSize: "0.78rem", color: "var(--error)" }}
+                        className="px-2.5 py-1 bg-white border border-[#E1E1E1] rounded text-[#E74C3C] text-[0.78rem] cursor-pointer hover:bg-[#E74C3C]/10 transition-colors duration-150"
                         onClick={() => setMemberToKick(m.user_id)}
                       >
                         Исключить
@@ -295,7 +248,7 @@ export function ServerSettingsModal({ server, onClose }: Props) {
                   </div>
                 ))}
                 {!isLoading && (members || []).length === 0 && (
-                  <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "20px 0" }}>
+                  <p className="text-[#7A7A7A] text-center py-5">
                     Нет участников
                   </p>
                 )}
@@ -304,26 +257,22 @@ export function ServerSettingsModal({ server, onClose }: Props) {
           )}
 
           {tab === "danger" && (
-            <div style={{ padding: "8px 0" }}>
+            <div className="py-2">
               {isOwner ? (
                 <div
-                  style={{
-                    border: "1px solid var(--error)", borderRadius: "var(--radius)",
-                    padding: 16,
-                  }}
+                  className="border border-[#E74C3C] rounded-lg p-4 bg-[#E74C3C]/5"
                 >
-                  <h4 style={{ color: "var(--error)", marginBottom: 8 }}>Удалить сервер</h4>
-                  <p style={{ color: "var(--text-secondary)", fontSize: "0.88rem", marginBottom: 12 }}>
+                  <h4 className="text-[#E74C3C] font-bold mb-2">Удалить сервер</h4>
+                  <p className="text-[#4A4A4A] text-[0.88rem] mb-3 leading-relaxed">
                     Это действие необратимо. Все каналы и сообщения будут удалены.
                   </p>
                   {deleteError && (
-                    <p style={{ color: "var(--error)", fontSize: "0.82rem", marginBottom: 8 }}>
+                    <p className="text-[#E74C3C] text-[0.82rem] mb-2">
                       {deleteError}
                     </p>
                   )}
                   <button
-                    className="btn-primary"
-                    style={{ background: "var(--error)", borderColor: "var(--error)" }}
+                    className="px-4 py-2 bg-[#E74C3C] text-white border-none rounded-lg font-bold cursor-pointer hover:bg-[#c0392b] transition-colors duration-150 disabled:opacity-50"
                     onClick={() => setShowConfirmDelete(true)}
                     disabled={deleting}
                   >
@@ -332,22 +281,19 @@ export function ServerSettingsModal({ server, onClose }: Props) {
                 </div>
               ) : (
                 <div
-                  style={{
-                    border: "1px solid var(--border)", borderRadius: "var(--radius)",
-                    padding: 16,
-                  }}
+                  className="border border-[#E1E1E1] rounded-lg p-4 bg-[#F8F8F8]"
                 >
-                  <h4 style={{ marginBottom: 8 }}>Покинуть сервер</h4>
-                  <p style={{ color: "var(--text-secondary)", fontSize: "0.88rem", marginBottom: 12 }}>
+                  <h4 className="font-bold mb-2">Покинуть сервер</h4>
+                  <p className="text-[#4A4A4A] text-[0.88rem] mb-3 leading-relaxed">
                     Вы покинете сервер, но сможете снова присоединиться по инвайту.
                   </p>
                   {deleteError && (
-                    <p style={{ color: "var(--error)", fontSize: "0.82rem", marginBottom: 8 }}>
+                    <p className="text-[#E74C3C] text-[0.82rem] mb-2">
                       {deleteError}
                     </p>
                   )}
                   <button
-                    className="btn-secondary"
+                    className="px-4 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] cursor-pointer hover:bg-[#EDEDED] transition-colors duration-150 disabled:opacity-50"
                     onClick={() => setShowConfirmLeave(true)}
                     disabled={leaving}
                   >
@@ -359,8 +305,8 @@ export function ServerSettingsModal({ server, onClose }: Props) {
           )}
         </div>
 
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>Закрыть</button>
+        <div className="px-6 py-4 border-t border-[#E1E1E1] flex justify-end bg-[#F8F8F8]">
+          <button className="px-4 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] text-[0.88rem] font-inherit cursor-pointer hover:bg-[#EDEDED]" onClick={onClose}>Закрыть</button>
         </div>
       </div>
 

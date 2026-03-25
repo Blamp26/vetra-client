@@ -3,22 +3,6 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { IncomingCallModal } from './IncomingCallModal';
 
-// ── CSS Modules mock ──────────────────────────────────────────────────────────
-vi.mock('./IncomingCallModal.module.css', () => ({
-  default: {
-    overlay: 'overlay',
-    modal: 'modal',
-    avatarRing: 'avatarRing',
-    avatar: 'avatar',
-    label: 'label',
-    callerName: 'callerName',
-    actions: 'actions',
-    acceptBtn: 'acceptBtn',
-    rejectBtn: 'rejectBtn',
-    hints: 'hints',
-  },
-}));
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function renderModal(
@@ -67,14 +51,16 @@ describe('IncomingCallModal', () => {
 
   it('отображает первую букву имени в аватаре (uppercase)', () => {
     renderModal('alice', onAccept, onReject);
-    const avatarEl = document.querySelector('.avatar');
-    expect(avatarEl?.textContent).toBe('A');
+    // После перехода на Tailwind и удаления CSS-модулей, 
+    // мы ищем элемент по тексту или по структуре, так как класс .avatar больше не используется в тестах.
+    const avatarEl = screen.getByText('A');
+    expect(avatarEl).toBeTruthy();
   });
 
   it('корректно берёт первую букву для имён с пробелом', () => {
     renderModal('Борис Иванов', onAccept, onReject);
-    const avatarEl = document.querySelector('.avatar');
-    expect(avatarEl?.textContent).toBe('Б');
+    const avatarEl = screen.getByText('Б');
+    expect(avatarEl).toBeTruthy();
   });
 
   it('отображает текст "Входящий звонок"', () => {

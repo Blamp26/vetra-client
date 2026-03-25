@@ -215,20 +215,20 @@ interface Props {
    }, [content, isEditing]); 
  
    return ( 
-     <div className="message-input-wrapper"> 
+     <div className="flex flex-col flex-shrink-0"> 
        {/* EDIT BAR */} 
        {isEditing && ( 
-         <div className="edit-bar"> 
-           <div className="edit-bar-content"> 
-             <span className="edit-bar-label">✏️ Editing message</span> 
-             <span className="edit-bar-text"> 
+         <div className="flex items-center justify-between bg-white border-t border-[#E1E1E1] px-3 py-1.5 border-l-[3px] border-[#5865F2] gap-2"> 
+           <div className="flex flex-col gap-0.5 min-w-0"> 
+             <span className="text-[0.78rem] font-semibold text-[#5865F2]">✏️ Editing message</span> 
+             <span className="text-[0.82rem] text-[#7A7A7A] whitespace-nowrap overflow-hidden text-ellipsis"> 
                {editingMessage!.content.length > 70 
                  ? editingMessage!.content.slice(0, 67) + "..." 
                  : editingMessage!.content} 
              </span> 
            </div> 
            <button 
-             className="edit-bar-cancel" 
+             className="bg-none border-none text-[#7A7A7A] cursor-pointer text-[1.2rem] flex-shrink-0 hover:text-[#E74C3C]" 
              onClick={cancelEditing} 
              title="Cancel editing" 
            > 
@@ -237,20 +237,20 @@ interface Props {
          </div> 
        )} 
  
-       {/* REPLY BAR (остаётся без изменений) */} 
+       {/* REPLY BAR */} 
        {replyTo && !isEditing && ( 
-        <div className="reply-bar">
-          <div className="reply-bar-content">
-            <span className="reply-bar-label">Ответ для {replyTo.author}</span>
-            <span className="reply-bar-text">
+        <div className="flex items-center justify-between bg-white border-t border-[#E1E1E1] px-3 py-1.5 border-l-[3px] border-[#5865F2] gap-2">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="text-[0.78rem] font-semibold text-[#5865F2]">Replying to {replyTo.author}</span>
+            <span className="text-[0.82rem] text-[#7A7A7A] whitespace-nowrap overflow-hidden text-ellipsis">
               {replyTo.content.slice(0, 60)}{replyTo.content.length > 60 ? "…" : ""}
             </span>
           </div>
-          <button className="reply-bar-cancel" onClick={onCancelReply} type="button">×</button>
+          <button className="bg-none border-none text-[#7A7A7A] cursor-pointer text-[1.2rem] flex-shrink-0 hover:text-[#E74C3C]" onClick={onCancelReply} type="button">×</button>
         </div>
        )} 
  
-      <div className="message-input-bar"> 
+      <div className="flex items-end gap-2 px-3.5 py-2.5 bg-[#F8F8F8] border-t border-[#E1E1E1] flex-shrink-0"> 
         <input
           ref={fileInputRef}
           type="file"
@@ -259,7 +259,7 @@ interface Props {
           style={{ display: "none" }}
         />
         <button
-          className="attach-btn"
+          className="bg-none border-none text-[#7A7A7A] cursor-pointer text-[1.3rem] p-1 rounded-md transition-colors duration-150 hover:bg-white/10 hover:text-[#0A0A0A] disabled:opacity-45 disabled:cursor-not-allowed"
           onClick={handleAttachClick}
           disabled={disabled || isSending || isEditing || isUploading}
           type="button"
@@ -268,7 +268,7 @@ interface Props {
         </button>
          <textarea 
            ref={textareaRef} 
-           className="message-textarea" 
+           className="flex-1 bg-white border border-transparent rounded-[22px] text-[#0A0A0A] text-[0.92rem] font-inherit outline-none px-4 py-2.25 resize-none max-h-[120px] overflow-y-auto leading-[1.45] transition-colors duration-150 focus:border-[#5865F2]" 
            placeholder={isEditing ? "Edit the message…" : "Type a message…"} 
            value={content} 
            onChange={(e) => handleChange(e.target.value)} 
@@ -277,7 +277,7 @@ interface Props {
            rows={1} 
          /> 
          <button 
-           className="send-btn" 
+           className="bg-none border-none text-[#5865F2] cursor-pointer text-[1.3rem] p-1 rounded-md transition-colors duration-150 hover:bg-white/10 disabled:opacity-45 disabled:cursor-not-allowed" 
            onClick={handleSend} 
           disabled={disabled || isSending || isUploading || !content.trim()} 
          > 
@@ -285,23 +285,23 @@ interface Props {
          </button> 
        </div> 
       {uploadStatus !== "idle" && (
-        <div className="upload-status">
+        <div className="px-3.5 py-1.5 bg-[#F8F8F8] border-t border-[#E1E1E1] flex items-center gap-2">
           {uploadStatus === "uploading" && (
             <>
-              <div className="upload-progress">
+              <div className="flex-1 h-1 bg-[#E1E1E1] rounded-full overflow-hidden">
                 <div
-                  className="upload-progress-bar"
+                  className="h-full bg-[#5865F2] transition-[width] duration-150"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
-              <span className="upload-progress-text">{uploadProgress}%</span>
+              <span className="text-[0.72rem] text-[#7A7A7A] min-w-[30px]">{uploadProgress}%</span>
             </>
           )}
           {uploadStatus === "error" && (
             <>
-              <span className="upload-error-text">{uploadError ?? "Upload failed"}</span>
+              <span className="text-[0.72rem] text-[#E74C3C] flex-1">{uploadError ?? "Upload failed"}</span>
               {pendingFile && (
-                <button className="upload-retry-btn" onClick={handleRetryUpload} type="button">
+                <button className="text-[0.72rem] text-[#5865F2] font-semibold hover:underline" onClick={handleRetryUpload} type="button">
                   Retry
                 </button>
               )}
