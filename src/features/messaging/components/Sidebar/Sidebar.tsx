@@ -180,10 +180,12 @@ export function Sidebar({
                       )}
                     >
                       <div className="relative">
-                        <Avatar name={item.name} size="large" className="size-8 h-10 w-10" />
-                        {item.kind === "direct" && item.isOnline && (
-                          <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-sidebar bg-emerald-500"></span>
-                        )}
+                        <Avatar 
+                          name={item.name} 
+                          size="large" 
+                          className="size-8 h-10 w-10" 
+                          status={item.kind === "direct" ? (item.isOnline ? "online" : "offline") : null}
+                        />
                       </div>
                       
                       {!isServerMode && (
@@ -309,17 +311,12 @@ export function Sidebar({
             {/* User Profile & Controls */}
             <div className="flex items-center justify-between rounded-lg bg-muted px-2 py-1.5">
               <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowProfile(true)}>
-                <div className="relative">
-                  <Avatar 
-                    name={displayName} 
-                    src={currentUser?.avatar_url} 
-                    className="h-7 w-7 text-[10px]" 
-                  />
-                  <span className={cn(
-                    "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-muted",
-                    isOnline ? "bg-emerald-500" : "bg-muted-foreground"
-                  )}></span>
-                </div>
+                <Avatar 
+                  name={displayName} 
+                  src={currentUser?.avatar_url} 
+                  className="h-7 w-7 text-[10px]" 
+                  status={isOnline ? "online" : "offline"}
+                />
                 <div className="flex flex-col overflow-hidden">
                   <span className="text-xs font-medium text-card-foreground truncate">{displayName}</span>
                   <div className="flex items-center gap-1 text-[10px] text-muted-foreground">

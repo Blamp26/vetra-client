@@ -8,6 +8,7 @@ interface AvatarProps {
   className?: string;
   onClick?: () => void;
   title?: string;
+  status?: 'online' | 'offline' | 'dnd' | 'away' | null;
 }
 
 export const Avatar: React.FC<AvatarProps> = ({ 
@@ -16,7 +17,8 @@ export const Avatar: React.FC<AvatarProps> = ({
   size = 'medium', 
   className = '', 
   onClick,
-  title
+  title,
+  status
 }) => {
   const initials = name ? name[0].toUpperCase() : '?';
   
@@ -32,20 +34,34 @@ export const Avatar: React.FC<AvatarProps> = ({
     className
   );
 
-  if (src) {
-    return (
-      <img 
-        data-slot="avatar"
-        src={src} 
-        alt={name || 'avatar'} 
-        className={combinedClassName} 
-        onClick={onClick}
-        title={title}
-      />
-    );
-  }
+  const statusColors = {
+    online: 'bg-emerald-500',
+    offline: 'bg-muted-foreground',
+    dnd: 'bg-destructive',
+    away: 'bg-amber-500',
+  };
 
-  return (
+  const renderStatus = () => {
+    if (!status) return null;
+    return (
+      <span className={cn(
+        "absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-sidebar",
+        size === 'small' ? 'h-2 w-2 border-1' : 'h-3 w-3',
+        statusColors[status]
+      )} />
+    );
+  };
+
+  const content = src ? (
+    <img 
+      data-slot="avatar"
+      src={src} 
+      alt={name || 'avatar'} 
+      className={combinedClassName} 
+      onClick={onClick}
+      title={title}
+    />
+  ) : (
     <span 
       data-slot="avatar"
       className={combinedClassName} 
@@ -54,5 +70,12 @@ export const Avatar: React.FC<AvatarProps> = ({
     >
       {initials}
     </span>
+  );
+
+  return (
+    <div className="relative inline-block shrink-0">
+      {content}
+      {renderStatus()}
+    </div>
   );
 };

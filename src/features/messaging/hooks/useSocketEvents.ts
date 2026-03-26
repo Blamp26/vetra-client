@@ -26,6 +26,7 @@ export function useSocketEvents() {
   const removeRoom           = useAppStore((s: RootState) => s.removeRoom);
   const setActiveChat        = useAppStore((s: RootState) => s.setActiveChat);
   const incrementChannelUnread = useAppStore((s: RootState) => s.incrementChannelUnread);
+  const setMessageReactions  = useAppStore((s: RootState) => s.setMessageReactions);
 
   useEffect(() => {
     if (!socketManager || !currentUser) return;
@@ -87,6 +88,7 @@ export function useSocketEvents() {
 
     unsubs.push(socketManager.onMessageEdited((p) => editMessage(p)));
     unsubs.push(socketManager.onMessageDeleted((p) => deleteMessage(p)));
+    unsubs.push(socketManager.onDirectReactionUpdated((p) => setMessageReactions(p.message_id, p.reactions)));
     unsubs.push(socketManager.onPresenceState((s) => applyPresenceState(s)));
     unsubs.push(socketManager.onPresenceDiff((d) => applyPresenceDiff(d)));
     unsubs.push(socketManager.onTypingStart((id) => setTyping(id)));
@@ -242,5 +244,6 @@ export function useSocketEvents() {
     addServerChannel,
     incrementChannelUnread,
     setActiveChat,
+    setMessageReactions,
   ]);
 }

@@ -1,4 +1,5 @@
 import { Channel } from 'phoenix';
+import { useAppStore } from '@/store';
 
 const ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -98,8 +99,11 @@ export class WebRTCService {
     }
 
     private async initPeerConnection(): Promise<void> {
+        const state = useAppStore.getState();
+        const inputId = state.selectedInputDeviceId || 'default';
+        
         this.localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
+            audio: { deviceId: inputId !== 'default' ? { exact: inputId } : undefined },
             video: false,
         });
         this.peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
