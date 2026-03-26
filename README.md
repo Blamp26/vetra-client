@@ -15,7 +15,7 @@
 
 <br/>
 
-[![Download](https://img.shields.io/badge/⬇%20Download-Vetra-black?style=for-the-badge)](https://github.com/)
+[![Download](https://img.shields.io/badge/⬇%20Download-Vetra-black?style=for-the-badge)](https://github.com/Blamp26/vetra-client/releases)
 [![Version](https://img.shields.io/badge/version-1.0.0-white?style=for-the-badge)]()
 [![Platform](https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-available-grey?style=for-the-badge)]()
 
@@ -56,7 +56,7 @@ Create your own space. Organise conversations into channels by topic. Invite you
 <br/>
 
 ### 📞 &nbsp; Crystal-clear Voice Calls
-One click to call anyone. Direct, peer-to-peer, encrypted. No accounts to link, no call limits, no waiting rooms.
+One click to call anyone. One click to call anyone. No accounts to link, no call limits, no waiting rooms.
 
 <br/>
 
@@ -101,7 +101,7 @@ Works on **Windows**, **macOS**, and **Linux**.
 ## ✦ Your data. Not ours.
 
 - 🔒 &nbsp; No ads. No tracking. No selling your conversations.
-- 🔐 &nbsp; Voice calls are peer-to-peer and encrypted end-to-end.
+- 🔐 &nbsp; Voice calls are private — your conversations stay between you.
 - 🚫 &nbsp; We don't read your messages.
 
 <br/>
@@ -118,9 +118,9 @@ Works on **Windows**, **macOS**, and **Linux**.
 
 | Platform | Download |
 |----------|----------|
-| 🪟 Windows | [**Download .exe**](https://github.com/) |
-| 🍎 macOS | [**Download .dmg**](https://github.com/) |
-| 🐧 Linux | [**Download .AppImage**](https://github.com/) |
+| 🪟 Windows | [**Download .exe**](https://github.com/Blamp26/vetra-client/releases) |
+| 🍎 macOS | [**Download .dmg**](https://github.com/Blamp26/vetra-client/releases) |
+| 🐧 Linux | [**Download .AppImage**](https://github.com/Blamp26/vetra-client/releases) |
 
 <br/>
 
@@ -176,6 +176,6 @@ Works on **Windows**, **macOS**, and **Linux**.
 
 <br/>
 
-[![Star on GitHub](https://img.shields.io/github/stars/yourusername/vetra?style=social)](https://github.com/)
+[![Star on GitHub](https://img.shields.io/github/stars/Blamp26/vetra-client?style=social)](https://github.com/Blamp26/vetra-client/releases)
 
 </div>
