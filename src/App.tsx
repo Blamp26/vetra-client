@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAppStore } from "@/store";
 import { AuthPage } from "@/features/registration/AuthPage";
 import { Sidebar } from "@/features/messaging/components/Sidebar";
@@ -8,16 +8,98 @@ import { SettingsPage } from "@/features/settings/components/SettingsPage/Settin
 import { useSocketEvents } from "@/features/messaging/hooks/useSocketEvents";
 import { useAuthHydration } from "@/shared/hooks/useAuthHydration";
 import { useCall } from './features/calling/hooks/useCall';
-import { ActiveCallWindow } from './features/calling/components/ActiveCallWindow';
-import { IncomingCallModal } from './features/calling/components/IncomingCallModal';
+// import { ActiveCallWindow } from './features/calling/components/ActiveCallWindow';
+// import { IncomingCallModal } from './features/calling/components/IncomingCallModal';
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
-  const { status, remoteUserId, remoteStream, remoteUsername, isMuted, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
+  const { status, remoteStream, remoteUsername, isMuted, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
   const activeChat = useAppStore((s) => s.activeChat);
+  const setActiveChat = useAppStore((s) => s.setActiveChat);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const [showSettings, setShowSettings] = useState(false);
+
+  // ── URL Synchronization ──────────────────────────────────────────────────
+  useEffect(() => {
+    const syncUrlToStore = () => {
+      const hash = window.location.hash;
+      if (!hash || hash === '#') return;
+
+      // Format: #/ID (direct), #/r/ID (room), #/s/SID/CID (server/channel)
+      const parts = hash.replace('#/', '').split('/');
+      const p1 = parts[0];
+      const id1 = Number(p1);
+
+      if (!isNaN(id1)) {
+        setActiveChat({ type: 'direct', partnerId: id1 });
+      } else if (p1 === 'r' && parts[1]) {
+        setActiveChat({ type: 'room', roomId: Number(parts[1]) });
+      } else if (p1 === 's' && parts[1]) {
+        if (parts[2]) {
+          setActiveChat({ type: 'channel', serverId: Number(parts[1]), channelId: Number(parts[2]) });
+        } else {
+          setActiveChat({ type: 'server', serverId: Number(parts[1]) });
+        }
+      } else if (p1 === 'settings') {
+        setShowSettings(true);
+      }
+    };
+
+    syncUrlToStore();
+    window.addEventListener('hashchange', syncUrlToStore);
+    return () => window.removeEventListener('hashchange', syncUrlToStore);
+  }, [setActiveChat]);
+
+  useEffect(() => {
+    if (!activeChat) {
+      if (window.location.hash && !showSettings) {
+        // Only clear hash if it wasn't a settings hash
+        // window.history.replaceState(null, '', window.location.pathname);
+      }
+      return;
+    }
+
+    let newHash = '';
+    switch (activeChat.type) {
+      case 'direct':  newHash = `#/${activeChat.partnerId}`; break;
+      case 'room':    newHash = `#/r/${activeChat.roomId}`; break;
+      case 'server':  newHash = `#/s/${activeChat.serverId}`; break;
+      case 'channel': newHash = `#/s/${activeChat.serverId}/${activeChat.channelId}`; break;
+      case 'settings': newHash = `#/settings`; break;
+    }
+
+    if (newHash && window.location.hash !== newHash) {
+      window.history.replaceState(null, '', newHash);
+    }
+  }, [activeChat, showSettings]);
+
+  useEffect(() => {
+    if (showSettings && window.location.hash !== '#/settings') {
+      window.history.replaceState(null, '', '#/settings');
+    } else if (!showSettings && window.location.hash === '#/settings') {
+      // If settings closed but hash is still settings, go back to active chat hash or clear
+      if (activeChat) {
+        let newHash = '';
+        switch (activeChat.type) {
+          case 'direct':  newHash = `#/${activeChat.partnerId}`; break;
+          case 'room':    newHash = `#/r/${activeChat.roomId}`; break;
+          case 'server':  newHash = `#/s/${activeChat.serverId}`; break;
+          case 'channel': newHash = `#/s/${activeChat.serverId}/${activeChat.channelId}`; break;
+        }
+        window.history.replaceState(null, '', newHash || '#');
+      } else {
+        window.history.replaceState(null, '', '#');
+      }
+    }
+  }, [showSettings, activeChat]);
+
+  useEffect(() => {
+    if (audioRef.current && remoteStream) {
+      audioRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   useAuthHydration();
   useSocketEvents();
@@ -56,15 +138,29 @@ function App() {
 
   return (
     <>
+      {/* Audio element for calls */}
+      <audio
+        ref={audioRef}
+        autoPlay
+        hidden
+      />
+
       {/* 1. Sidebar Area (Sidebar + ChannelPanel + Partition) */}
       <div className="flex flex-shrink-0 h-full">
         <Sidebar
           isServerMode={showChannelPanel}
           onOpenSettings={() => setShowSettings(true)}
+          callStatus={status}
+          remoteUsername={remoteUsername}
+          isMuted={isMuted}
+          onMuteToggle={toggleMute}
+          onHangUp={hangUp}
+          onAcceptCall={acceptCall}
+          onRejectCall={rejectCall}
         />
 
         <div
-          className={`flex-shrink-0 w-0 overflow-hidden transition-[width] duration-200 ease-in-out ${showChannelPanel ? "w-[352px]" : ""}`}
+          className={`flex-shrink-0 w-0 overflow-hidden transition-[width] duration-200 ease-in-out ${showChannelPanel ? "w-[360px]" : ""}`}
           aria-hidden={!showChannelPanel}
         >
           {persistedServerId !== null && (
@@ -136,7 +232,7 @@ function App() {
         <SettingsPage onClose={() => setShowSettings(false)} />
       )}
 
-      {status === 'ringing' && (
+      {/* {status === 'ringing' && (
         <IncomingCallModal
           callerName={remoteUsername ?? `User #${remoteUserId}`}
           onAccept={acceptCall}
@@ -152,7 +248,7 @@ function App() {
           onMuteToggle={toggleMute}
           onHangUp={hangUp}
         />
-      )}
+      )} */}
 
       <ToastHost />
     </>

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react"; 
 import { useAppStore, type RootState } from "@/store"; 
 import { API_BASE_URL } from "@/api/base";
+import { Paperclip, Smile, Send, X } from "lucide-react";
+import { cn } from "@/shared/utils/cn";
  
  interface ReplyTarget { id: number; content: string; author: string; } 
  
@@ -112,7 +114,7 @@ interface Props {
   const startUpload = async (file: File) => {
     if (!currentUser || !authToken) {
       setUploadStatus("error");
-      setUploadError("You must be logged in to upload files");
+      setUploadError("Нужно войти, чтобы загружать файлы");
       setPendingFile(file);
       return;
     }
@@ -135,7 +137,7 @@ interface Props {
 
     xhr.onload = async () => {
       if (xhr.status < 200 || xhr.status >= 300) {
-        const errMsg = xhr.response?.error || xhr.response?.message || "Upload failed";
+        const errMsg = xhr.response?.error || xhr.response?.message || "Ошибка загрузки";
         setUploadStatus("error");
         setUploadError(errMsg);
         return;
@@ -146,7 +148,7 @@ interface Props {
 
       if (!mediaFileId) {
         setUploadStatus("error");
-        setUploadError("Upload failed");
+        setUploadError("Ошибка загрузки");
         return;
       }
 
@@ -158,13 +160,13 @@ interface Props {
         setPendingFile(null);
       } catch {
         setUploadStatus("error");
-        setUploadError("Failed to send media message");
+        setUploadError("Не удалось отправить медиа");
       }
     };
 
     xhr.onerror = () => {
       setUploadStatus("error");
-      setUploadError("Upload failed");
+      setUploadError("Ошибка загрузки");
     };
 
     const formData = new FormData();
@@ -179,7 +181,7 @@ interface Props {
 
     if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
       setUploadStatus("error");
-      setUploadError("Only image and video files are allowed");
+      setUploadError("Разрешены только изображения и видео");
       setPendingFile(null);
       return;
     }
@@ -206,109 +208,112 @@ interface Props {
      } 
    }; 
  
-   // Авто-ресайз (увеличиваем высоту в режиме редактирования) 
+   // Авто-ресайз 
    useEffect(() => { 
      const ta = textareaRef.current; 
      if (!ta) return; 
      ta.style.height = "auto"; 
-     ta.style.height = `${Math.min(ta.scrollHeight, isEditing ? 160 : 120)}px`; 
+     ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`; 
    }, [content, isEditing]); 
  
    return ( 
-     <div className="flex flex-col flex-shrink-0"> 
-       {/* EDIT BAR */} 
+     <div className="flex flex-col border-t border-border bg-background flex-shrink-0"> 
+       {/* EDIT BAR */}
        {isEditing && ( 
-         <div className="flex items-center justify-between bg-white border-t border-[#E1E1E1] px-3 py-1.5 border-l-[3px] border-[#5865F2] gap-2"> 
+         <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 py-2 gap-2"> 
            <div className="flex flex-col gap-0.5 min-w-0"> 
-             <span className="text-[0.78rem] font-semibold text-[#5865F2]">✏️ Editing message</span> 
-             <span className="text-[0.82rem] text-[#7A7A7A] whitespace-nowrap overflow-hidden text-ellipsis"> 
-               {editingMessage!.content.length > 70 
-                 ? editingMessage!.content.slice(0, 67) + "..." 
-                 : editingMessage!.content} 
+             <span className="text-[0.78rem] font-semibold text-primary flex items-center gap-1.5">
+               <span className="text-sm">✏️</span> Редактирование
+             </span> 
+             <span className="text-[0.82rem] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis"> 
+               {editingMessage!.content} 
              </span> 
            </div> 
            <button 
-             className="bg-none border-none text-[#7A7A7A] cursor-pointer text-[1.2rem] flex-shrink-0 hover:text-[#E74C3C]" 
+             className="text-muted-foreground hover:text-destructive transition-colors p-1" 
              onClick={cancelEditing} 
-             title="Cancel editing" 
+             title="Отмена" 
            > 
-             × 
+             <X className="h-4 w-4" />
            </button> 
          </div> 
        )} 
  
-       {/* REPLY BAR */} 
+       {/* REPLY BAR */}
        {replyTo && !isEditing && ( 
-        <div className="flex items-center justify-between bg-white border-t border-[#E1E1E1] px-3 py-1.5 border-l-[3px] border-[#5865F2] gap-2">
+        <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 py-2 gap-2">
           <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-[0.78rem] font-semibold text-[#5865F2]">Replying to {replyTo.author}</span>
-            <span className="text-[0.82rem] text-[#7A7A7A] whitespace-nowrap overflow-hidden text-ellipsis">
-              {replyTo.content.slice(0, 60)}{replyTo.content.length > 60 ? "…" : ""}
+            <span className="text-[0.78rem] font-semibold text-primary flex items-center gap-1.5">
+               <span className="text-sm">↩️</span> Ответ {replyTo.author}
+            </span>
+            <span className="text-[0.82rem] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
+              {replyTo.content}
             </span>
           </div>
-          <button className="bg-none border-none text-[#7A7A7A] cursor-pointer text-[1.2rem] flex-shrink-0 hover:text-[#E74C3C]" onClick={onCancelReply} type="button">×</button>
+          <button className="text-muted-foreground hover:text-destructive transition-colors p-1" onClick={onCancelReply} type="button">
+            <X className="h-4 w-4" />
+          </button>
         </div>
-       )} 
- 
-      <div className="flex items-end gap-2 px-3.5 py-2.5 bg-[#F8F8F8] border-t border-[#E1E1E1] flex-shrink-0"> 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,video/*"
-          onChange={handleFileChange}
-          style={{ display: "none" }}
-        />
-        <button
-          className="bg-none border-none text-[#7A7A7A] cursor-pointer text-[1.3rem] p-1 rounded-md transition-colors duration-150 hover:bg-white/10 hover:text-[#0A0A0A] disabled:opacity-45 disabled:cursor-not-allowed"
-          onClick={handleAttachClick}
-          disabled={disabled || isSending || isEditing || isUploading}
-          type="button"
-        >
-          📎
-        </button>
-         <textarea 
-           ref={textareaRef} 
-           className="flex-1 bg-white border border-transparent rounded-[22px] text-[#0A0A0A] text-[0.92rem] font-inherit outline-none px-4 py-2.25 resize-none max-h-[120px] overflow-y-auto leading-[1.45] transition-colors duration-150 focus:border-[#5865F2]" 
-           placeholder={isEditing ? "Edit the message…" : "Type a message…"} 
-           value={content} 
-           onChange={(e) => handleChange(e.target.value)} 
-           onKeyDown={handleKeyDown} 
-          disabled={disabled || isSending} 
-           rows={1} 
-         /> 
-         <button 
-           className="bg-none border-none text-[#5865F2] cursor-pointer text-[1.3rem] p-1 rounded-md transition-colors duration-150 hover:bg-white/10 disabled:opacity-45 disabled:cursor-not-allowed" 
-           onClick={handleSend} 
-          disabled={disabled || isSending || isUploading || !content.trim()} 
-         > 
-           {isSending ? "…" : isEditing ? "✓" : "➤"} 
-         </button> 
-       </div> 
-      {uploadStatus !== "idle" && (
-        <div className="px-3.5 py-1.5 bg-[#F8F8F8] border-t border-[#E1E1E1] flex items-center gap-2">
-          {uploadStatus === "uploading" && (
-            <>
-              <div className="flex-1 h-1 bg-[#E1E1E1] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[#5865F2] transition-[width] duration-150"
-                  style={{ width: `${uploadProgress}%` }}
-                />
+       )}
+
+       {/* UPLOAD PROGRESS / ERROR */}
+       {uploadStatus !== "idle" && (
+        <div className="px-4 py-1.5 bg-muted/30 border-b border-border">
+          {uploadStatus === "uploading" ? (
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-1 bg-border rounded-full overflow-hidden">
+                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
               </div>
-              <span className="text-[0.72rem] text-[#7A7A7A] min-w-[30px]">{uploadProgress}%</span>
-            </>
-          )}
-          {uploadStatus === "error" && (
-            <>
-              <span className="text-[0.72rem] text-[#E74C3C] flex-1">{uploadError ?? "Upload failed"}</span>
-              {pendingFile && (
-                <button className="text-[0.72rem] text-[#5865F2] font-semibold hover:underline" onClick={handleRetryUpload} type="button">
-                  Retry
-                </button>
-              )}
-            </>
+              <span className="text-[10px] font-medium text-muted-foreground w-8 text-right">{uploadProgress}%</span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-destructive font-medium truncate">{uploadError}</span>
+              <button onClick={handleRetryUpload} className="text-[11px] font-semibold text-primary hover:underline shrink-0">Повторить</button>
+            </div>
           )}
         </div>
-      )}
+       )}
+ 
+       <div className="p-4">
+         <div className="flex items-center gap-2">
+            <button 
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-all hover:bg-accent size-9 h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={handleAttachClick}
+              disabled={disabled || isSending || isEditing || isUploading}
+            >
+              <Paperclip className="h-4 w-4" />
+              <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*,video/*" />
+            </button>
+
+            <div className="relative flex-1">
+              <textarea
+                ref={textareaRef}
+                className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground bg-muted border-0 h-9 w-full min-w-0 rounded-md px-3 py-1.5 text-sm transition-[color,box-shadow] outline-none focus-visible:ring-1 focus-visible:ring-ring/50 resize-none pr-10 min-h-[36px]"
+                placeholder="Напишите сообщение..."
+                value={content}
+                onChange={(e) => handleChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={disabled || isSending || isUploading}
+                rows={1}
+              />
+              <button className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-all hover:bg-accent size-7 absolute right-1 top-1 text-muted-foreground hover:text-foreground">
+                <Smile className="h-4 w-4" />
+              </button>
+            </div>
+
+            <button 
+              className={cn(
+                "inline-flex items-center justify-center rounded-md text-sm font-medium transition-all size-9 h-9 w-9 shrink-0",
+                content.trim() ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm" : "bg-muted text-muted-foreground cursor-not-allowed"
+              )}
+              onClick={handleSend}
+              disabled={!content.trim() || disabled || isSending || isUploading}
+            >
+              <Send className="h-4 w-4" />
+            </button>
+         </div>
+       </div>
      </div> 
    ); 
  }

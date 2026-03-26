@@ -11,6 +11,7 @@ import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from '@/features/calling/components/CallButton';
 import type { CallStatus } from '@/features/calling/hooks/useCall.types';
 import { cn } from "@/shared/utils/cn";
+import { Video, EllipsisVertical } from "lucide-react";
 
 interface Props {
   activeChat: ActiveChat;
@@ -28,13 +29,13 @@ interface ReplyTarget {
 
 function TypingIndicator({ nickname }: { nickname: string }) {
   return (
-    <div className="flex items-center px-5 py-1 pb-1.5 text-[0.80rem] text-[#7A7A7A] min-h-[24px] flex-shrink-0">
-      <span className="font-semibold text-[#4A4A4A]">{nickname}</span>
-      <span className="ml-0.5"> is typing</span>
-      <span className="inline-flex items-center gap-[3px] ml-1">
-        <span className="w-[5px] h-[5px] rounded-full bg-[#7A7A7A] animate-bounce" />
-        <span className="w-[5px] h-[5px] rounded-full bg-[#7A7A7A] animate-bounce [animation-delay:0.2s]" />
-        <span className="w-[5px] h-[5px] rounded-full bg-[#7A7A7A] animate-bounce [animation-delay:0.4s]" />
+    <div className="flex items-center px-6 py-1 pb-2 text-[0.80rem] text-muted-foreground min-h-[24px] flex-shrink-0">
+      <span className="font-semibold text-foreground">{nickname}</span>
+      <span className="ml-1">печатает</span>
+      <span className="inline-flex items-center gap-[3px] ml-1.5">
+        <span className="w-1 h-1 rounded-full bg-muted-foreground animate-bounce" />
+        <span className="w-1 h-1 rounded-full bg-muted-foreground animate-bounce [animation-delay:0.2s]" />
+        <span className="w-1 h-1 rounded-full bg-muted-foreground animate-bounce [animation-delay:0.4s]" />
       </span>
     </div>
   );
@@ -91,22 +92,21 @@ function ChatWindowLayout({
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-      <header className="px-5 py-2.5 border-b border-border bg-card flex-shrink-0">
-        <div className="flex items-center gap-2.5">{header}</div>
-      </header>
+    <div className="flex flex-1 flex-col bg-background h-full overflow-hidden">
+      {header}
 
-      <MessageList
-        key={chatId}
-        messages={messages}
-        currentUserId={currentUserId}
-        isLoading={isLoading}
-        hasMore={hasMore}
-        onLoadMore={loadMore}
-        chatContext={chatContext}
-        onReply={handleReplySelect}
-      />
-
+      <div dir="ltr" data-slot="scroll-area" className="relative flex-1 pl-6 overflow-hidden">
+        <MessageList
+          key={chatId}
+          messages={messages}
+          currentUserId={currentUserId}
+          isLoading={isLoading}
+          hasMore={hasMore}
+          onLoadMore={loadMore}
+          chatContext={chatContext}
+          onReply={handleReplySelect}
+        />
+      </div>
 
       {typingNickname && <TypingIndicator nickname={typingNickname} />}
 
@@ -162,7 +162,7 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
   if (!currentUser) return null;
 
   const statusLine = (() => {
-    if (isOnline) return "online";
+    if (isOnline) return "Online";
     const storeLastSeen = lastSeenAt[partnerId];
     if (storeLastSeen)         return formatLastSeen(storeLastSeen);
     if (partner?.last_seen_at) return formatLastSeen(partner.last_seen_at);
@@ -170,40 +170,45 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
   })();
 
   const header = partner ? (
-    <>
-      <div className="relative">
-        <Avatar 
-          name={partner.display_name || partner.username} 
-          src={partner.avatar_url} 
-          size="large" 
-        />
-        {isOnline && <span className="absolute bottom-0 right-0 w-[10px] h-[10px] rounded-full border-2 border-white bg-[#2ecc71] bottom-[-2px] right-[-2px]" />}
-      </div>
-      <div className="flex flex-col">
-        <span className="text-[0.95rem] font-semibold">
-          {partner.display_name || partner.username}
-        </span>
-        {statusLine && (
-          <span
-            className={cn(
-              "text-[0.72rem] text-[#7A7A7A]",
-              isOnline && "text-[#2ecc71]"
-            )}
-          >
+    <div className="flex items-center justify-between border-b border-border px-6 py-4">
+      <div className="flex items-center gap-3">
+        <div className="relative">
+          <Avatar 
+            name={partner.display_name || partner.username} 
+            src={partner.avatar_url} 
+            size="large"
+            className="h-10 w-10"
+          />
+          {isOnline && <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background bg-emerald-500" />}
+        </div>
+        <div>
+          <h3 className="font-medium text-foreground">
+            {partner.display_name || partner.username}
+          </h3>
+          <p className={cn("text-xs text-muted-foreground", isOnline && "text-emerald-500")}>
             {statusLine}
-          </span>
-        )}
+          </p>
+        </div>
       </div>
-
-      <CallButton
-        targetUserId={partnerId}
-        targetUsername={partner.display_name || partner.username}
-        status={callStatus}
-        onCall={onStartCall}
-      />
-    </>
+      <div className="flex items-center gap-1">
+        <CallButton
+          targetUserId={partnerId}
+          targetUsername={partner.display_name || partner.username}
+          status={callStatus}
+          onCall={onStartCall}
+        />
+        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all hover:bg-accent hover:text-foreground size-9 h-9 w-9 text-muted-foreground">
+          <Video className="h-4 w-4" />
+        </button>
+        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all hover:bg-accent hover:text-foreground size-9 h-9 w-9 text-muted-foreground">
+          <EllipsisVertical className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
   ) : (
-    <span className="text-[#7A7A7A] text-[0.9rem]">Loading…</span>
+    <div className="flex items-center justify-between border-b border-border px-6 py-4">
+      <span className="text-muted-foreground text-[0.9rem]">Загрузка…</span>
+    </div>
   );
 
   return (
@@ -254,31 +259,37 @@ function RoomChatWindow({ roomId }: { roomId: number }) {
 
   if (!currentUser) return null;
 
-  const typingNickname: string | null = (() => {
-    const otherId = Array.from(typingRoomMemberIds).find(
-      (id) => id !== currentUser.id
-    );
-    if (otherId === undefined) return null;
-    const info = typingRoomMemberInfo[otherId];
-    if (info) {
-      return info.display_name || info.username;
-    }
-    return `User #${otherId}`;
-  })();
-
   const header = (
-    <>
-      <div className="relative">
-        <Avatar name="#" size="large" className="bg-[#6c5ce7] font-bold text-[1rem]" />
+    <div className="flex items-center justify-between border-b border-border px-6 py-4">
+      <div className="flex items-center gap-3">
+        <Avatar 
+          name={roomPreview?.name || `#${roomId}`} 
+          src={null} 
+          size="large"
+          className="h-10 w-10"
+        />
+        <div>
+          <h3 className="font-medium text-foreground">
+            {roomPreview?.name || `Room #${roomId}`}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Групповой чат
+          </p>
+        </div>
       </div>
-      <div className="flex flex-col">
-        <span className="text-[0.95rem] font-semibold">
-          {roomPreview?.name ?? `Room #${roomId}`}
-        </span>
-        <span className="text-[0.72rem] text-[#7A7A7A]">Group chat</span>
+      <div className="flex items-center gap-1">
+        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all hover:bg-accent hover:text-foreground size-9 h-9 w-9 text-muted-foreground">
+          <EllipsisVertical className="h-4 w-4" />
+        </button>
       </div>
-    </>
+    </div>
   );
+
+  const typingMemberNames: string[] = [];
+  typingRoomMemberIds.forEach((id: number) => {
+    const info = typingRoomMemberInfo[id];
+    typingMemberNames.push(info?.display_name || info?.username || `User #${id}`);
+  });
 
   return (
     <ChatWindowLayout
@@ -290,13 +301,16 @@ function RoomChatWindow({ roomId }: { roomId: number }) {
       hasMore={hasMore}
       loadMore={loadMore}
       sendMessage={sendMessage}
-      typingNickname={typingNickname}
+      typingNickname={
+        typingMemberNames.length > 0
+          ? typingMemberNames.join(", ")
+          : null
+      }
       chatContext={{ type: "room", roomId }}
       onTypingStart={handleTypingStart}
       onTypingStop={handleTypingStop}
     />
-  );
-}
+  );}
 
 // ── Экспортируемый компонент ──────────────────────────────────────────────────
 

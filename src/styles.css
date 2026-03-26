@@ -36,7 +36,7 @@
   --radius-md: .5rem;
   --radius-lg: .75rem;
   --radius-xl: 1rem;
-  --radius-2xl: 1rem;
+  --radius-2xl: 1.5rem;
   
   --spacing: .25rem;
 
@@ -95,7 +95,7 @@
   --accent: lab(95.36% 0 0);
   --accent-foreground: lab(7.78201% -.0000149012 0);
   --destructive: lab(48.4493% 77.4328 61.5452);
-  --destructive-foreground: lab(48.4493% 77.4328 61.5452);
+  --destructive-foreground: lab(98.26% 0 0);
   --border: lab(89.56% -.0000298023 0);
   --input: lab(89.56% -.0000298023 0);
   --ring: lab(66.128% -.0000298023 .0000119209);
