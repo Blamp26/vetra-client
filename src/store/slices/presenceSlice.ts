@@ -34,8 +34,10 @@ export const createPresenceSlice: StateCreator<any, [], [], PresenceSlice> = (se
   applyPresenceDiff: (diff) =>
     set((storeState: any) => {
       const next = new Set(storeState.onlineUserIds);
-      for (const id of Object.keys(diff.joins))  { const n = Number(id); if (!isNaN(n)) next.add(n);    }
+      // Process leaves first, then joins. This handles Presence.update() 
+      // where the same ID may appear in both collections.
       for (const id of Object.keys(diff.leaves)) { const n = Number(id); if (!isNaN(n)) next.delete(n); }
+      for (const id of Object.keys(diff.joins))  { const n = Number(id); if (!isNaN(n)) next.add(n);    }
       return { onlineUserIds: next };
     }),
 

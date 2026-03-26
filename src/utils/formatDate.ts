@@ -6,7 +6,7 @@ function timeOrDate(iso: string): { formatted: string; isToday: boolean } {
   const date = new Date(iso);
   const isToday = date.toDateString() === new Date().toDateString();
   const formatted = isToday
-    ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
     : date.toLocaleDateString([], { month: "short", day: "numeric" });
   return { formatted, isToday };
 }

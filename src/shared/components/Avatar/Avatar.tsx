@@ -23,7 +23,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   const sizeClasses = {
     small: 'w-6 h-6 text-[0.7rem]',
     medium: 'w-8 h-8 text-[0.82rem]',
-    large: 'w-[38px] h-[38px] text-[0.95rem]',
+    large: 'w-10 h-10 text-[0.95rem]',
   };
 
   const combinedClassName = cn(
@@ -35,6 +35,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   if (src) {
     return (
       <img 
+        data-slot="avatar"
         src={src} 
         alt={name || 'avatar'} 
         className={combinedClassName} 
@@ -46,6 +47,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   return (
     <span 
+      data-slot="avatar"
       className={combinedClassName} 
       onClick={onClick}
       title={title}
