@@ -172,15 +172,13 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
   const header = partner ? (
     <div className="flex items-center justify-between border-b border-border px-6 py-4">
       <div className="flex items-center gap-3">
-        <div className="relative">
-          <Avatar 
-            name={partner.display_name || partner.username} 
-            src={partner.avatar_url} 
-            size="large"
-            className="h-10 w-10"
-          />
-          {isOnline && <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background bg-emerald-500" />}
-        </div>
+        <Avatar 
+          name={partner.display_name || partner.username} 
+          src={partner.avatar_url} 
+          size="large"
+          className="h-10 w-10"
+          status={isOnline ? "online" : "offline"}
+        />
         <div>
           <h3 className="font-medium text-foreground">
             {partner.display_name || partner.username}

@@ -11,6 +11,149 @@ import { ProfileModal } from '@/features/profile/components/ProfileModal/Profile
 import { ConfirmModal } from '@/shared/components/ConfirmModal/ConfirmModal';
 import { cn } from '@/shared/utils/cn';
 
+function AudioVideoSettings() {
+  const { 
+    availableInputDevices, 
+    availableOutputDevices, 
+    selectedInputDeviceId, 
+    selectedOutputDeviceId,
+    setInputDevice,
+    setOutputDevice,
+    refreshDevices 
+  } = useAppStore((s: RootState) => ({
+    availableInputDevices: s.availableInputDevices,
+    availableOutputDevices: s.availableOutputDevices,
+    selectedInputDeviceId: s.selectedInputDeviceId,
+    selectedOutputDeviceId: s.selectedOutputDeviceId,
+    setInputDevice: s.setInputDevice,
+    setOutputDevice: s.setOutputDevice,
+    refreshDevices: s.refreshDevices
+  }));
+
+  const [micLevel, setMicLevel] = useState(0);
+
+  useEffect(() => {
+    refreshDevices();
+  }, [refreshDevices]);
+
+  // Микрофонный визуализатор
+  useEffect(() => {
+    let audioContext: AudioContext;
+    let analyser: AnalyserNode;
+    let microphone: MediaStreamAudioSourceNode;
+    let animationId: number;
+    let stream: MediaStream;
+
+    const startVisualizer = async () => {
+      try {
+        const constraints = {
+          audio: { deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined }
+        };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(stream);
+        
+        analyser.fftSize = 256;
+        microphone.connect(analyser);
+        
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        
+        const updateLevel = () => {
+          analyser.getByteFrequencyData(dataArray);
+          const sum = dataArray.reduce((a, b) => a + b, 0);
+          const average = sum / dataArray.length;
+          setMicLevel(average);
+          animationId = requestAnimationFrame(updateLevel);
+        };
+        
+        updateLevel();
+      } catch (err) {
+        console.error("Visualizer error:", err);
+      }
+    };
+
+    startVisualizer();
+
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId);
+      if (audioContext) audioContext.close();
+      if (stream) stream.getTracks().forEach(t => t.stop());
+    };
+  }, [selectedInputDeviceId]);
+
+  return (
+    <div className="max-w-[560px]">
+      <h3 className="mb-6 text-[1.1rem] font-bold">Audio & Video</h3>
+      
+      <div className="space-y-6">
+        {/* Input Device */}
+        <div className="space-y-2">
+          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-[#4A4A4A]">
+            Input Device
+          </label>
+          <select 
+            value={selectedInputDeviceId}
+            onChange={(e) => setInputDevice(e.target.value)}
+            className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.95rem] outline-none focus:border-[#5865F2] transition-colors"
+          >
+            {availableInputDevices.map(device => (
+              <option key={device.deviceId} value={device.deviceId}>
+                {device.label || `Microphone (${device.deviceId.slice(0, 5)})`}
+              </option>
+            ))}
+            {availableInputDevices.length === 0 && <option value="default">Default</option>}
+          </select>
+          
+          {/* Mic Level Visualizer */}
+          <div className="mt-4">
+            <div className="flex justify-between text-[0.72rem] text-[#7A7A7A] mb-1.5">
+              <span>Input Level</span>
+              <span>{Math.round((micLevel / 128) * 100)}%</span>
+            </div>
+            <div className="h-2 w-full bg-[#EDEDED] rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-[#5865F2] transition-all duration-75"
+                style={{ width: `${Math.min(100, (micLevel / 128) * 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Output Device */}
+        <div className="space-y-2">
+          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-[#4A4A4A]">
+            Output Device
+          </label>
+          <select 
+            value={selectedOutputDeviceId}
+            onChange={(e) => setOutputDevice(e.target.value)}
+            className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.95rem] outline-none focus:border-[#5865F2] transition-colors"
+          >
+            {availableOutputDevices.map(device => (
+              <option key={device.deviceId} value={device.deviceId}>
+                {device.label || `Speaker (${device.deviceId.slice(0, 5)})`}
+              </option>
+            ))}
+            {availableOutputDevices.length === 0 && <option value="default">Default</option>}
+          </select>
+          <p className="text-[0.72rem] text-[#7A7A7A]">
+            Note: Speaker selection depends on browser support (mostly Chrome/Edge).
+          </p>
+        </div>
+
+        <button 
+          onClick={() => refreshDevices()}
+          className="text-[0.85rem] text-[#5865F2] hover:underline font-medium"
+        >
+          ↻ Refresh devices
+        </button>
+      </div>
+    </div>
+  );
+}
+
 type SettingsTab =
   | 'account'
   | 'profile'
@@ -291,12 +434,7 @@ export function SettingsPage({ onClose }: Props) {
 
         {/* ── Audio & Video ── */}
         {tab === 'audioVideo' && (
-          <div className="max-w-[560px]">
-            <h3 className="mb-6 text-[1.1rem] font-bold">Audio &amp; Video</h3>
-            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 text-[#7A7A7A] text-[0.9rem] text-center">
-              🎙️ Audio and video settings — work in progress
-            </div>
-          </div>
+          <AudioVideoSettings />
         )}
 
         {/* ── Privacy ── */}

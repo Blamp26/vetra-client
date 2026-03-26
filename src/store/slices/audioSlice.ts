@@ -5,9 +5,18 @@ export interface AudioSlice {
   soundEnabled: boolean;
   micCascaded: boolean;
   lastVoluntaryMic: boolean;
+  
+  // Device Selection
+  selectedInputDeviceId: string;
+  selectedOutputDeviceId: string;
+  availableInputDevices: MediaDeviceInfo[];
+  availableOutputDevices: MediaDeviceInfo[];
 
   toggleMic: () => void;
   toggleSound: () => void;
+  setInputDevice: (deviceId: string) => void;
+  setOutputDevice: (deviceId: string) => void;
+  refreshDevices: () => Promise<void>;
 }
 
 const CASCADE_TOAST_KEY = "vetra_cascade_toast_shown";
@@ -17,6 +26,11 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
   soundEnabled: true,
   micCascaded: false,
   lastVoluntaryMic: true,
+  
+  selectedInputDeviceId: 'default',
+  selectedOutputDeviceId: 'default',
+  availableInputDevices: [],
+  availableOutputDevices: [],
 
   toggleMic: () => {
     const { micEnabled, soundEnabled, micCascaded, socketManager } = get();
@@ -69,8 +83,6 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
       }
     } else {
       // Turning sound back ON restores the last voluntary mic state.
-      // This is not auto-unmute from a UX perspective because restoration is
-      // driven by remembered user intent, not by forcing mic=true.
       set({
         soundEnabled: true,
         micEnabled: lastVoluntaryMic,
@@ -83,5 +95,28 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
       });
     }
   },
-});
 
+  setInputDevice: (deviceId: string) => set({ selectedInputDeviceId: deviceId }),
+  setOutputDevice: (deviceId: string) => set({ selectedOutputDeviceId: deviceId }),
+
+  refreshDevices: async () => {
+    try {
+      // Request permission if not already granted to get labels
+      // We don't store the stream here, just use it to unlock labels
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      
+      const inputs = devices.filter(d => d.kind === 'audioinput');
+      const outputs = devices.filter(d => d.kind === 'audiooutput');
+      
+      set({ 
+        availableInputDevices: inputs,
+        availableOutputDevices: outputs 
+      });
+    } catch (err) {
+      console.error("Failed to enumerate audio devices:", err);
+    }
+  },
+});

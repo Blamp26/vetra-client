@@ -77,7 +77,7 @@ export function MessageList({
   const [msgToDelete, setMsgToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const EMOJIS = ["👍","❤️","😂","🎉","😮"];
+  const EMOJIS = ["👍","❤️","😂","🎉","😮","😢","🔥"];
 
   const messagesById = useMemo(() => {
     const map = new Map<number, Message>();
@@ -304,14 +304,21 @@ export function MessageList({
           return (
             <button
               key={`${msgId}:${g.emoji}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleReaction(msgId, g.emoji);
+              }}
               className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[14px] border border-border text-foreground text-[0.85rem] cursor-default",
-                mine ? "bg-accent" : "bg-muted"
+                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[14px] border transition-all duration-150 text-[0.85rem] cursor-pointer hover:scale-105 active:scale-95",
+                mine 
+                  ? "bg-primary/20 border-primary text-primary font-medium shadow-sm" 
+                  : "bg-muted/50 border-border text-foreground hover:bg-muted hover:border-muted-foreground/30"
               )}
               aria-pressed={mine}
+              title={mine ? "Remove reaction" : "Add reaction"}
             >
               <span>{g.emoji}</span>
-              <span className="opacity-80">{g.count}</span>
+              <span className={cn("text-[0.75rem]", mine ? "text-primary" : "text-muted-foreground")}>{g.count}</span>
             </button>
           );
         })}
@@ -419,6 +426,30 @@ export function MessageList({
                      isOwn ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                      isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]"
                    )}>
+                  {/* Quick Reactions on Hover */}
+                  {!contextMenu && hoverMsgId === msg.id && (
+                    <div className={cn(
+                      "absolute -top-10 flex items-center gap-1 px-2 py-1 bg-background border border-border rounded-full shadow-lg z-10 animate-in fade-in zoom-in duration-200",
+                      isOwn ? "right-0" : "left-0"
+                    )}>
+                      {EMOJIS.slice(0, 5).map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => toggleReaction(msg.id, emoji)}
+                          className="p-1 hover:bg-muted rounded-full transition-colors text-lg leading-none"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                      <button 
+                        onClick={(e) => handleContextMenu(e as unknown as React.MouseEvent, msg)}
+                        className="p-1 hover:bg-muted rounded-full transition-colors text-muted-foreground"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                      </button>
+                    </div>
+                  )}
+
                   {!isOwn && !isConsecutive && (
                     <span className="text-[0.72rem] text-primary mb-1 font-semibold">{msg.sender_display_name || msg.sender_username}</span>
                   )}
