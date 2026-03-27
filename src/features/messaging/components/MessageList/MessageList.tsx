@@ -6,6 +6,7 @@ import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { cn } from "@/shared/utils/cn";
 import { ArrowDown } from "lucide-react";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
+import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
 
 interface Props {
   messages:      Message[];
@@ -300,7 +301,7 @@ export function MessageList({
             {msg.media_mime_type?.startsWith("video/") ? (
               <video className="max-w-full rounded-lg max-h-[300px]" controls src={`${API_BASE_URL}/media/${msg.media_file_id}`} />
             ) : (
-              <img 
+              <AuthenticatedImage 
                 className="max-w-full rounded-lg max-h-[400px] object-contain bg-muted/20" 
                 src={`${API_BASE_URL}/media/${msg.media_file_id}`} 
                 alt="attachment" 

@@ -13,7 +13,7 @@ export const Emoji: React.FC<EmojiProps> = ({ emoji, size = 20, className = "" }
   // Улучшенная функция для получения кода эмодзи для CDN
   const getEmojiCode = (emoji: string) => {
     return Array.from(emoji)
-      .map(char => char.codePointAt(0)?.toString(16))
+      .map(char => char.codePointAt(0)?.toString(16).padStart(4, '0'))
       .filter(Boolean)
       .join('-');
   };
@@ -26,6 +26,7 @@ export const Emoji: React.FC<EmojiProps> = ({ emoji, size = 20, className = "" }
       src={url}
       alt={emoji}
       className={className}
+      crossOrigin="anonymous"
       style={{
         width: size,
         height: size,
@@ -47,7 +48,7 @@ export const Emoji: React.FC<EmojiProps> = ({ emoji, size = 20, className = "" }
 };
 
 export const EmojiText: React.FC<{ text: string; size?: number; className?: string }> = ({ text, size = 18, className = "" }) => {
-  // Более полное регулярное выражение для эмодзи (Emoji 15.0+)
+  // Регулярное выражение для эмодзи, которое исключает обычные цифры
   const emojiRegex = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}|\p{Emoji_Component})/gu;
   
   // Разделяем текст на части (текст и эмодзи)
@@ -56,7 +57,8 @@ export const EmojiText: React.FC<{ text: string; size?: number; className?: stri
   return (
     <span className={className}>
       {parts.map((part, i) => {
-        if (part && part.match(emojiRegex)) {
+        // Дополнительная проверка: если это просто цифра (без модификаторов), то это не эмодзи
+        if (part && part.match(emojiRegex) && !/^[0-9]$/.test(part)) {
           return <Emoji key={i} emoji={part} size={size} />;
         }
         return part;

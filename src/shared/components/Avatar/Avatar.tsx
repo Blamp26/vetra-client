@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '@/shared/utils/cn';
+import { AuthenticatedImage } from '../AuthenticatedImage';
 
 interface AvatarProps {
   name?: string;
@@ -53,7 +54,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   };
 
   const content = src ? (
-    <img 
+    <AuthenticatedImage 
       data-slot="avatar"
       src={src} 
       alt={name || 'avatar'} 
