@@ -4,8 +4,9 @@ import { useAppStore, type RootState } from "@/store";
 import { API_BASE_URL } from "@/api/base";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { cn } from "@/shared/utils/cn";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, Reply, Copy, Edit2, Trash2, Forward, CheckSquare, ChevronDown, ChevronUp } from "lucide-react";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
+import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
 import { ImageLightbox } from "@/shared/components/ImageLightbox";
 
@@ -80,6 +81,7 @@ export function MessageList({
   const [msgToDelete, setMsgToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [isPickerExpanded, setIsPickerExpanded] = useState(false);
   const [lightboxData, setLightboxData] = useState<{ src: string; author: string; time: string } | null>(null);
 
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -166,8 +168,8 @@ export function MessageList({
         `User #${msg.sender_id}`;
 
       // Подбери эти значения под свою реальную ширину/высоту меню
-      const MENU_WIDTH  = 210; // ширина меню (с реакциями + пунктами)
-      const MENU_HEIGHT = 188; // высота (с учётом всех элементов)
+      const MENU_WIDTH  = 260; // ширина меню
+      const MENU_HEIGHT = 320; // высота с запасом
 
       let x = e.clientX;
       let y = e.clientY;
@@ -193,6 +195,7 @@ export function MessageList({
       x = Math.max(12, Math.min(x, vw - MENU_WIDTH - 12));
       y = Math.max(12, Math.min(y, vh - MENU_HEIGHT - 12));
 
+      setIsPickerExpanded(false);
       setContextMenu({
         msgId:   msg.id,
         content: msg.content,
@@ -460,13 +463,15 @@ export function MessageList({
                          messageRefs.current[msg.id] = el;
                        }
                      }}
-                     onContextMenu={(e) => handleContextMenu(e, msg)}
                    >
-                     <div className={cn(
-                       "max-w-[70%] rounded-2xl px-4 py-2.5 flex flex-col relative group",
-                       isOwn ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
-                       isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]"
-                     )}>
+                     <div 
+                       onContextMenu={(e) => handleContextMenu(e, msg)}
+                       className={cn(
+                         "max-w-[70%] rounded-2xl px-4 py-2.5 flex flex-col relative group",
+                         isOwn ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                         isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]"
+                       )}
+                     >
                     {!isOwn && !isConsecutive && (
                       <span className="text-[0.72rem] text-primary mb-1 font-semibold">{msg.sender_display_name || msg.sender_username}</span>
                     )}
@@ -507,68 +512,135 @@ export function MessageList({
 
       {contextMenu && (
         <div
-          className="fixed z-[1000] bg-popover border border-border rounded-lg py-1 min-w-[180px] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+          className="fixed z-[1000] bg-popover/95 backdrop-blur-md border border-border/50 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden w-[260px] h-[320px]"
           style={{
             top: contextMenu.y,
             left: contextMenu.x,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {contextMenu && (
-            <div className="px-4 py-2 border-b border-border mb-1">
-              <span className="text-[0.75rem] text-muted-foreground/70 block mb-1.5">
-                Reactions
-              </span>
-              <div className="flex gap-2">
-                {EMOJIS.map((e) => (
+          {/* Панель реакций */}
+          <div className="flex flex-col border-b border-border/40 shrink-0">
+            <div className="flex items-center px-2 py-1 min-h-[46px]">
+              <div className="flex flex-1 items-center justify-start gap-0.5">
+                {EMOJIS.slice(0, 6).map((e) => (
                   <button
                     key={e}
-                    onClick={() => toggleReaction(contextMenu.msgId, e)}
-                    className="bg-none border-none cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-accent"
+                    onClick={() => {
+                      toggleReaction(contextMenu.msgId, e);
+                      setContextMenu(null);
+                    }}
+                    className="bg-transparent border-none cursor-pointer p-0 rounded-lg transition-all duration-150 hover:bg-accent hover:scale-125 active:scale-90 flex items-center justify-center w-8 h-8"
                   >
-                    <Emoji emoji={e} size={22} />
+                    <Emoji emoji={e} size={20} />
                   </button>
                 ))}
               </div>
-            </div>
-          )}
-
-          <div className="flex flex-col">
-            <button
-              onClick={handleReplyClick}
-              className="flex items-center w-full px-4 py-2 text-left bg-none border-none text-popover-foreground text-[0.88rem] cursor-pointer hover:bg-accent transition-colors duration-120"
-            >
-              Reply
-            </button>
-            
-            {contextMenu.hasText && (
-              <button
-                onClick={handleCopy}
-                className="flex items-center w-full px-4 py-2 text-left bg-none border-none text-popover-foreground text-[0.88rem] cursor-pointer hover:bg-accent transition-colors duration-120"
+              <div className="w-[1px] h-5 bg-border/40 mx-1" />
+              <button 
+                onClick={() => setIsPickerExpanded(!isPickerExpanded)}
+                className="p-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex items-center justify-center w-8 h-8 shrink-0"
               >
-                Copy Text
+                {isPickerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </button>
-            )}
+            </div>
+          </div>
 
-            {contextMenu.isOwn && (
-              <>
-                <div className="h-[1px] bg-border my-1 mx-1" />
-                {!messagesById.get(contextMenu.msgId)?.media_file_id && (
-                  <button
-                    onClick={handleEdit}
-                    className="flex items-center w-full px-4 py-2 text-left bg-none border-none text-popover-foreground text-[0.88rem] cursor-pointer hover:bg-accent transition-colors duration-120"
-                  >
-                    Edit Message
-                  </button>
-                )}
+          <div className="relative flex-1 overflow-hidden">
+            {/* Список пунктов меню */}
+            <div className={cn(
+              "absolute inset-0 flex flex-col p-1.5 transition-all duration-200 bg-popover/95",
+              isPickerExpanded ? "opacity-0 pointer-events-none translate-x-[-10px]" : "opacity-100 translate-x-0"
+            )}>
+              <button
+                onClick={handleReplyClick}
+                className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+              >
+                <Reply className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+                <span>Reply</span>
+              </button>
+              
+              {contextMenu && contextMenu.hasText && (
                 <button
-                  onClick={handleDelete}
-                  className="flex items-center w-full px-4 py-2 text-left bg-none border-none text-destructive text-[0.88rem] cursor-pointer hover:bg-accent transition-colors duration-120"
+                  onClick={handleCopy}
+                  className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
                 >
-                  Delete Message
+                  <Copy className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <span>Copy</span>
                 </button>
-              </>
-            )}
+              )}
+
+              <button
+                className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+              >
+                <Forward className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+                <span>Forward</span>
+              </button>
+
+              <button
+                className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+              >
+                <CheckSquare className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+                <span>Select</span>
+              </button>
+
+              {contextMenu && contextMenu.isOwn && (
+                <>
+                  {contextMenu && !messagesById.get(contextMenu.msgId)?.media_file_id && (
+                    <button
+                      onClick={handleEdit}
+                      className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+                    >
+                      <Edit2 className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+                      <span>Edit</span>
+                    </button>
+                  )}
+                  
+                  <div className="h-[1px] bg-border/40 my-1 mx-2" />
+                  
+                  <button
+                    onClick={handleDelete}
+                    className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-destructive text-[0.9rem] rounded-lg cursor-pointer hover:bg-destructive/10 transition-all duration-120"
+                  >
+                    <Trash2 className="h-[18px] w-[18px] mr-3 text-destructive transition-colors" />
+                    <span>Delete</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Эмодзи пикер */}
+            <div className={cn(
+              "absolute inset-0 transition-all duration-200 bg-popover",
+              isPickerExpanded ? "opacity-100 translate-x-0" : "opacity-0 pointer-events-none translate-x-[10px]"
+            )}>
+              <style>{`
+                .epr-category-nav { display: none !important; }
+                .epr-skin-tone-picker { display: none !important; }
+                .EmojiPickerReact { border: none !important; box-shadow: none !important; }
+                .epr-body::-webkit-scrollbar { display: none !important; }
+                .epr-body { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+              `}</style>
+              <EmojiPicker
+                width="100%"
+                height="100%"
+                onEmojiClick={(emojiData) => {
+                  if (contextMenu) {
+                    toggleReaction(contextMenu.msgId, emojiData.emoji);
+                    setContextMenu(null);
+                  }
+                }}
+                theme={Theme.AUTO}
+                emojiStyle={EmojiStyle.APPLE}
+                lazyLoadEmojis={true}
+                searchPlaceHolder="Поиск..."
+                previewConfig={{ showPreview: false }}
+                skinTonesDisabled={true}
+                searchDisabled={false}
+                skinTonePickerLocation={'NONE' as any}
+                suggestedEmojisMode={'none' as any}
+              />
+            </div>
           </div>
         </div>
       )}

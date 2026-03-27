@@ -406,12 +406,24 @@ interface Props {
 
                 {showEmojiPicker && (
                   <div className="absolute bottom-full right-0 mb-2 z-50">
+                    <style>{`
+                      .epr-category-nav { display: none !important; }
+                      .epr-skin-tone-picker { display: none !important; }
+                      .EmojiPickerReact { border: none !important; box-shadow: none !important; }
+                      .epr-body::-webkit-scrollbar { display: none !important; }
+                      .epr-body { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+                    `}</style>
                     <EmojiPicker 
                       onEmojiClick={onEmojiClick}
                       emojiStyle={EmojiStyle.APPLE}
                       theme={theme}
                       lazyLoadEmojis={true}
                       searchPlaceholder="Поиск..."
+                      previewConfig={{ showPreview: false }}
+                      skinTonesDisabled={true}
+                      searchDisabled={false}
+                      skinTonePickerLocation={'NONE' as any}
+                      suggestedEmojisMode={'none' as any}
                     />
                   </div>
                 )}
