@@ -32,6 +32,7 @@ export function SidebarFooter({
 }: SidebarFooterProps) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
+  const userStatuses = useAppStore((s: RootState) => s.userStatuses);
   const micEnabled = useAppStore((s: RootState) => s.micEnabled);
   const soundEnabled = useAppStore((s: RootState) => s.soundEnabled);
   const toggleMic = useAppStore((s: RootState) => s.toggleMic);
@@ -42,12 +43,13 @@ export function SidebarFooter({
 
   const displayName = currentUser?.display_name || currentUser?.username || "?";
   const isOnline = currentUser ? onlineUserIds.has(Number(currentUser.id)) : false;
+  const currentStatus = currentUser ? userStatuses[Number(currentUser.id)] : 'offline';
 
   const statusText = useMemo(() => {
     if (!soundEnabled) return "Sound muted";
     if (!micEnabled) return "Microphone muted";
-    return isOnline ? "Online" : "Offline";
-  }, [isOnline, micEnabled, soundEnabled]);
+    return currentStatus?.charAt(0).toUpperCase() + currentStatus?.slice(1) || (isOnline ? "Online" : "Offline");
+  }, [isOnline, micEnabled, soundEnabled, currentStatus]);
 
   const isMicMuted = callStatus === 'active' ? isMuted : !micEnabled;
 
@@ -134,12 +136,15 @@ export function SidebarFooter({
 
         {/* User Profile & Controls */}
         <div className="flex items-center justify-between rounded-lg bg-muted px-2 py-1.5">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowProfile(true)}>
+          <div 
+            className="flex items-center gap-2 min-w-0 cursor-pointer transition-opacity hover:opacity-80"
+            onClick={() => setShowProfile(true)}
+          >
             <Avatar 
               name={displayName} 
               src={currentUser?.avatar_url} 
               className="h-7 w-7 text-[10px]" 
-              status={isOnline ? "online" : "offline"}
+              status={currentStatus as any}
             />
             <div className="flex flex-col overflow-hidden">
               <span className="text-xs font-medium text-card-foreground truncate">{displayName}</span>
