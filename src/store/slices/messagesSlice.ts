@@ -166,6 +166,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
   updateMessagesStatus: (messageIds, status) => {
     const idSet = new Set(messageIds);
     set((state: any) => {
+      // 1. Обновляем сообщения в активных чатах
       const nextConversations: Record<number, ConversationState> = {};
       for (const [key, conv] of Object.entries(state.conversations) as [string, ConversationState][]) {
         const partnerId = Number(key);
@@ -181,7 +182,25 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
           ? { ...conv, messages: nextMessages }
           : conv;
       }
-      return { conversations: nextConversations };
+
+      // 2. Обновляем статус последнего сообщения в списке превью
+      const nextPreviews: Record<number, ConversationPreview> = {};
+      for (const [key, preview] of Object.entries(state.conversationPreviews) as [string, ConversationPreview][]) {
+        const partnerId = Number(key);
+        if (preview.last_message && idSet.has(preview.last_message.id)) {
+          nextPreviews[partnerId] = {
+            ...preview,
+            last_message: { ...preview.last_message, status }
+          };
+        } else {
+          nextPreviews[partnerId] = preview;
+        }
+      }
+
+      return { 
+        conversations: nextConversations,
+        conversationPreviews: nextPreviews
+      };
     });
   },
 
@@ -191,15 +210,23 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
     }),
 
   upsertPreview: (preview) =>
-    set((state: any) => ({
-      conversationPreviews: {
-        ...state.conversationPreviews,
-        [preview.partner_id]: {
-          ...state.conversationPreviews[preview.partner_id],
-          ...preview,
+    set((state: any) => {
+      const existing = state.conversationPreviews[preview.partner_id];
+      const newUnread = preview.unread_count === 0 
+        ? 0 
+        : (existing?.unread_count ?? 0) + (preview.unread_count ?? 0);
+
+      return {
+        conversationPreviews: {
+          ...state.conversationPreviews,
+          [preview.partner_id]: {
+            ...(existing ?? {}),
+            ...preview,
+            unread_count: newUnread,
+          },
         },
-      },
-    })),
+      };
+    }),
 
   resetUnread: (partnerId) =>
     set((state: any) => {

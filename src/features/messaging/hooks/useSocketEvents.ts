@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useAppStore, type RootState } from "@/store";
 import type { Message } from "@/shared/types";
 import { showNotification } from "@/services/notifications";
+import { markReadViaChannel } from "@/services/socket";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 export function useSocketEvents() {
@@ -27,6 +28,8 @@ export function useSocketEvents() {
   const setActiveChat        = useAppStore((s: RootState) => s.setActiveChat);
   const incrementChannelUnread = useAppStore((s: RootState) => s.incrementChannelUnread);
   const setMessageReactions  = useAppStore((s: RootState) => s.setMessageReactions);
+  const resetUnread          = useAppStore((s: RootState) => s.resetUnread);
+  const updateMessagesStatus = useAppStore((s: RootState) => s.updateMessagesStatus);
 
   useEffect(() => {
     if (!socketManager || !currentUser) return;
@@ -46,17 +49,6 @@ export function useSocketEvents() {
       const partnerId = msg.sender_id === currentUser.id ? msg.recipient_id : msg.sender_id;
       if (partnerId) {
         appendMessage(partnerId, msg);
-        upsertPreview({
-          partner_id: partnerId,
-          partner_username: msg.sender_username || "Unknown",
-          partner_display_name: msg.sender_display_name || null,
-          unread_count: 1,
-          last_message: {
-            content: msg.content,
-            inserted_at: msg.inserted_at,
-            sender_id: msg.sender_id,
-          },
-        });
 
         // Show notification for new messages from other users
         if (msg.sender_id !== currentUser.id) {
@@ -67,27 +59,73 @@ export function useSocketEvents() {
               activeChat?.type === "direct" &&
               activeChat.partnerId === msg.sender_id;
 
-            if (!isActive || !focused) {
-              const senderName =
-                msg.sender_display_name || msg.sender_username || "User";
-              showNotification(senderName, {
-                body: msg.content || (msg.media_file_id ? "📎 Media" : "New message"),
-                icon: msg.sender?.avatar_url ?? undefined,
-                onClick: () => {
-                  useAppStore.getState().setActiveChat({
-                    type: "direct",
-                    partnerId: msg.sender_id,
-                  });
+            if (isActive && focused) {
+              // Если чат активен и окно в фокусе — помечаем сразу как прочитанное
+              markReadViaChannel(socketManager.userChannel, partnerId);
+              resetUnread(partnerId);
+            } else {
+              // Иначе увеличиваем счетчик непрочитанных в превью
+              upsertPreview({
+                partner_id: partnerId,
+                partner_username: msg.sender_username || "Unknown",
+                partner_display_name: msg.sender_display_name || null,
+                unread_count: 1, // Store will increment this
+                last_message: {
+                  content: msg.content,
+                  inserted_at: msg.inserted_at,
+                  sender_id: msg.sender_id,
                 },
               });
+
+              if (!focused || !isActive) {
+                const senderName =
+                  msg.sender_display_name || msg.sender_username || "User";
+                showNotification(senderName, {
+                  body: msg.content || (msg.media_file_id ? "📎 Media" : "New message"),
+                  icon: msg.sender?.avatar_url ?? undefined,
+                  onClick: () => {
+                    useAppStore.getState().setActiveChat({
+                      type: "direct",
+                      partnerId: msg.sender_id,
+                    });
+                  },
+                });
+              }
             }
+          });
+        } else {
+          // Если это наше сообщение (отправленное с другого устройства)
+          upsertPreview({
+            partner_id: partnerId,
+            partner_username: msg.recipient_username || "Unknown",
+            partner_display_name: msg.recipient_display_name || null,
+            unread_count: 0,
+            last_message: {
+              content: msg.content,
+              inserted_at: msg.inserted_at,
+              sender_id: msg.sender_id,
+            },
           });
         }
       }
     }));
 
+    // Авто-прочтение при фокусе окна
+    const handleFocus = async () => {
+      const state = useAppStore.getState();
+      const active = state.activeChat;
+      if (active?.type === "direct" && active.partnerId) {
+        markReadViaChannel(socketManager.userChannel, active.partnerId);
+        resetUnread(active.partnerId);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    unsubs.push(() => window.removeEventListener("focus", handleFocus));
+
     unsubs.push(socketManager.onMessageEdited((p) => editMessage(p)));
     unsubs.push(socketManager.onMessageDeleted((p) => deleteMessage(p)));
+    unsubs.push(socketManager.onStatusUpdate((ids, status) => updateMessagesStatus(ids, status)));
     unsubs.push(socketManager.onDirectReactionUpdated((p) => setMessageReactions(p.message_id, p.reactions)));
     unsubs.push(socketManager.onPresenceState((s) => applyPresenceState(s)));
     unsubs.push(socketManager.onPresenceDiff((d) => applyPresenceDiff(d)));
@@ -245,5 +283,7 @@ export function useSocketEvents() {
     incrementChannelUnread,
     setActiveChat,
     setMessageReactions,
+    updateMessagesStatus,
+    resetUnread,
   ]);
 }

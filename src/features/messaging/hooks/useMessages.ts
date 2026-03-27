@@ -14,7 +14,6 @@ export function useMessages(partnerId: number | null) {
   const appendMessage           = useAppStore((s: RootState) => s.appendMessage);
   const setConversationLoading  = useAppStore((s: RootState) => s.setConversationLoading);
   const setConversationHasMore  = useAppStore((s: RootState) => s.setConversationHasMore);
-  const updateMessagesStatus    = useAppStore((s: RootState) => s.updateMessagesStatus);
   const resetUnread             = useAppStore((s: RootState) => s.resetUnread);
 
   const conversation = partnerId !== null ? conversations[partnerId] : null;
@@ -47,13 +46,6 @@ export function useMessages(partnerId: number | null) {
     fetchPage,
     actions,
   );
-
-  useEffect(() => {
-    if (!socketManager) return;
-    return socketManager.onStatusUpdate((ids, status) => {
-      updateMessagesStatus(ids, status);
-    });
-  }, [socketManager, updateMessagesStatus]);
 
   useEffect(() => {
     if (!partnerId || !socketManager) return;
