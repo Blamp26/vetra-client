@@ -32,6 +32,7 @@ export function SidebarFooter({
 }: SidebarFooterProps) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
+  const userStatuses = useAppStore((s: RootState) => s.userStatuses);
   const micEnabled = useAppStore((s: RootState) => s.micEnabled);
   const soundEnabled = useAppStore((s: RootState) => s.soundEnabled);
   const toggleMic = useAppStore((s: RootState) => s.toggleMic);
@@ -41,13 +42,23 @@ export function SidebarFooter({
   const [confirmHangUp, setConfirmHangUp] = useState(false);
 
   const displayName = currentUser?.display_name || currentUser?.username || "?";
-  const isOnline = currentUser ? onlineUserIds.has(Number(currentUser.id)) : false;
+  const userId = Number(currentUser?.id);
+  const isOnline = currentUser ? onlineUserIds.has(userId) : false;
+  const currentStatus = userStatuses[userId] || currentUser?.status || (isOnline ? "online" : "offline");
 
   const statusText = useMemo(() => {
     if (!soundEnabled) return "Sound muted";
     if (!micEnabled) return "Microphone muted";
-    return isOnline ? "Online" : "Offline";
-  }, [isOnline, micEnabled, soundEnabled]);
+    
+    const statusMap: Record<string, string> = {
+      online: "Online",
+      away: "Away",
+      dnd: "Do Not Disturb",
+      offline: "Offline"
+    };
+    
+    return statusMap[currentStatus] || "Offline";
+  }, [micEnabled, soundEnabled, currentStatus]);
 
   const isMicMuted = callStatus === 'active' ? isMuted : !micEnabled;
 
@@ -139,7 +150,7 @@ export function SidebarFooter({
               name={displayName} 
               src={currentUser?.avatar_url} 
               className="h-7 w-7 text-[10px]" 
-              status={isOnline ? "online" : "offline"}
+              status={currentStatus as any}
             />
             <div className="flex flex-col overflow-hidden">
               <span className="text-xs font-medium text-card-foreground truncate">{displayName}</span>

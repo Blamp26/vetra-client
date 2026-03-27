@@ -133,6 +133,7 @@ interface DirectChatProps {
 function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProps) {
   const currentUser      = useAppStore((s: RootState) => s.currentUser);
   const onlineUserIds    = useAppStore((s: RootState) => s.onlineUserIds);
+  const userStatuses     = useAppStore((s: RootState) => s.userStatuses);
   const lastSeenAt       = useAppStore((s: RootState) => s.lastSeenAt);
   const typingPartnerIds = useAppStore((s: RootState) => s.typingPartnerIds);
   const socketManager    = useAppStore((s: RootState) => s.socketManager);
@@ -145,6 +146,7 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
 
   const isOnline = onlineUserIds.has(partnerId);
   const isTyping = typingPartnerIds.has(partnerId);
+  const currentStatus = userStatuses[partnerId] || partner?.status || (isOnline ? "online" : "offline");
 
   useEffect(() => {
     let cancelled = false;
@@ -165,11 +167,18 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
   if (!currentUser) return null;
 
   const statusLine = (() => {
-    if (isOnline) return "Online";
+    const statusMap: Record<string, string> = {
+      online: "Online",
+      away: "Away",
+      dnd: "Do Not Disturb",
+      offline: "Offline"
+    };
+
+    if (isOnline) return statusMap[currentStatus] || "Online";
     const storeLastSeen = lastSeenAt[partnerId];
     if (storeLastSeen)         return formatLastSeen(storeLastSeen);
     if (partner?.last_seen_at) return formatLastSeen(partner.last_seen_at);
-    return null;
+    return "Offline";
   })();
 
   const header = partner ? (
@@ -180,13 +189,18 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
           src={partner.avatar_url} 
           size="large"
           className="h-10 w-10"
-          status={isOnline ? "online" : "offline"}
+          status={currentStatus as any}
         />
         <div>
           <h3 className="font-medium text-foreground">
             {partner.display_name || partner.username}
           </h3>
-          <p className={cn("text-xs text-muted-foreground", isOnline && "text-emerald-500")}>
+          <p className={cn(
+            "text-xs text-muted-foreground transition-colors", 
+            currentStatus === "online" && "text-emerald-500",
+            currentStatus === "away" && "text-amber-500",
+            currentStatus === "dnd" && "text-destructive"
+          )}>
             {statusLine}
           </p>
         </div>

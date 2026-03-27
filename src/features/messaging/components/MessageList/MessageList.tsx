@@ -7,6 +7,7 @@ import { cn } from "@/shared/utils/cn";
 import { ArrowDown } from "lucide-react";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
 import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
+import { ImageLightbox } from "@/shared/components/ImageLightbox";
 
 interface Props {
   messages:      Message[];
@@ -79,6 +80,7 @@ export function MessageList({
   const [msgToDelete, setMsgToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [lightboxData, setLightboxData] = useState<{ src: string; author: string; time: string } | null>(null);
 
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const EMOJIS = ["👍","❤️","😂","🎉","😮","😢","🔥"];
@@ -293,6 +295,8 @@ export function MessageList({
   const renderContent = (msg: Message) => {
     const hasMedia = !!msg.media_file_id;
     const hasText = !!(msg.content && msg.content.trim().length > 0);
+    const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
+    const timestamp = formatDate(msg.inserted_at) + " в " + formatTime(msg.inserted_at);
 
     return (
       <div className="flex flex-col gap-2">
@@ -301,11 +305,21 @@ export function MessageList({
             {msg.media_mime_type?.startsWith("video/") ? (
               <video className="max-w-full rounded-lg max-h-[300px]" controls src={`${API_BASE_URL}/media/${msg.media_file_id}`} />
             ) : (
-              <AuthenticatedImage 
-                className="max-w-full rounded-lg max-h-[400px] object-contain bg-muted/20" 
-                src={`${API_BASE_URL}/media/${msg.media_file_id}`} 
-                alt="attachment" 
-              />
+              <div 
+                className="cursor-zoom-in active:scale-[0.99] transition-transform"
+                onClick={() => setLightboxData({
+                  src: `${API_BASE_URL}/media/${msg.media_file_id}`,
+                  author: authorName,
+                  time: timestamp
+                })}
+              >
+                <AuthenticatedImage 
+                  className="max-w-full rounded-lg max-h-[400px] object-contain bg-muted/20 shadow-sm hover:shadow-md transition-shadow" 
+                  src={`${API_BASE_URL}/media/${msg.media_file_id}`} 
+                  alt="attachment" 
+                  crossOrigin="anonymous"
+                />
+              </div>
             )}
           </div>
         )}
@@ -568,6 +582,15 @@ export function MessageList({
           onCancel={() => setMsgToDelete(null)}
           isLoading={isDeleting}
           isDanger
+        />
+      )}
+
+      {lightboxData && (
+        <ImageLightbox
+          src={lightboxData.src}
+          author={lightboxData.author}
+          time={lightboxData.time}
+          onClose={() => setLightboxData(null)}
         />
       )}
     </div>

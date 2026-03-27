@@ -13,6 +13,7 @@ interface Props {
 
 export function ProfileModal({ user, onClose }: Props) {
   const updateCurrentUser = useAppStore((s: RootState) => s.updateCurrentUser);
+  const socketManager     = useAppStore((s: RootState) => s.socketManager);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [username,    setUsername]    = useState(user.username);
@@ -65,6 +66,12 @@ export function ProfileModal({ user, onClose }: Props) {
       };
       const updated = await authApi.updateProfile(user.id, payload);
       updateCurrentUser(updated);
+      
+      // Обновляем статус в Presence через сокет для мгновенного отображения у всех
+      if (payload.status) {
+        socketManager?.updateStatus(payload.status as any);
+      }
+
       onClose();
     } catch (e: unknown) {
       if (e && typeof e === "object" && "details" in e) {

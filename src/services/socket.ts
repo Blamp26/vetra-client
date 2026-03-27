@@ -77,6 +77,8 @@ export interface SocketManager {
   onChannelCreated:      (handler: ChannelCreatedHandler) => () => void;
   onRoomMessageGlobal: (handler: (message: Message) => void) => () => void;
 
+  updateStatus: (status: 'online' | 'away' | 'dnd' | 'offline') => void;
+
   sendTypingStart: (recipientId: number) => void;
   sendTypingStop:  (recipientId: number) => void;
 
@@ -280,6 +282,9 @@ export async function connectSocket(token: string, userId: number): Promise<Sock
     onRoomCreated:         (h) => roomCreatedBus.subscribe(h),
     onChannelCreated:      (h) => channelCreatedBus.subscribe(h),
     onRoomMessageGlobal: (h) => roomMessageGlobalBus.subscribe(h),
+
+    updateStatus: (status) =>
+      userChannel.push("update_status", { status }),
 
     sendTypingStart: (rid) =>
       userChannel.push("typing_start", { recipient_id: rid }),
