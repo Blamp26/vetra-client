@@ -30,10 +30,9 @@ export const Emoji: React.FC<EmojiProps> = ({ emoji, size = 20, className = "" }
       style={{
         width: size,
         height: size,
-        display: 'inline-block',
-        verticalAlign: 'middle',
-        position: 'relative',
-        top: '-1px'
+        display: 'block',
+        objectFit: 'contain',
+        position: 'relative'
       }}
       // Если изображение не загрузилось, показываем системный эмодзи
       onError={(e) => {
