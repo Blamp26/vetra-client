@@ -123,16 +123,15 @@ function ChatWindowLayout({
 
 // ── Личный чат ────────────────────────────────────────────────────────────────
 
-interface DirectChatWindowProps {
+interface DirectChatProps {
   partnerId: number;
   callStatus: CallStatus;
   onStartCall: (targetUserId: number) => void;
 }
 
-function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatWindowProps) {
+function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProps) {
   const currentUser      = useAppStore((s: RootState) => s.currentUser);
   const onlineUserIds    = useAppStore((s: RootState) => s.onlineUserIds);
-  const userStatuses     = useAppStore((s: RootState) => s.userStatuses);
   const lastSeenAt       = useAppStore((s: RootState) => s.lastSeenAt);
   const typingPartnerIds = useAppStore((s: RootState) => s.typingPartnerIds);
   const socketManager    = useAppStore((s: RootState) => s.socketManager);
@@ -143,7 +142,6 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatWind
 
   const isOnline = onlineUserIds.has(partnerId);
   const isTyping = typingPartnerIds.has(partnerId);
-  const currentStatus = userStatuses[partnerId] || 'offline';
 
   useEffect(() => {
     let cancelled = false;
@@ -164,9 +162,7 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatWind
   if (!currentUser) return null;
 
   const statusLine = (() => {
-    if (isOnline) {
-      return currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1);
-    }
+    if (isOnline) return "Online";
     const storeLastSeen = lastSeenAt[partnerId];
     if (storeLastSeen)         return formatLastSeen(storeLastSeen);
     if (partner?.last_seen_at) return formatLastSeen(partner.last_seen_at);
@@ -181,7 +177,7 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatWind
           src={partner.avatar_url} 
           size="large"
           className="h-10 w-10"
-          status={currentStatus as any}
+          status={isOnline ? "online" : "offline"}
         />
         <div>
           <h3 className="font-medium text-foreground">

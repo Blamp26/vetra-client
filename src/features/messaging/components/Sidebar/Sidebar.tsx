@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
+import { UserSearch } from "../UserSearch/UserSearch";
 import { CreateRoomModal } from "../CreateRoomModal/CreateRoomModal";
 import { CreateServerModal } from "../CreateServerModal/CreateServerModal";
 import { CreatePickerModal } from "../CreatePickerModal/CreatePickerModal";
@@ -94,103 +95,90 @@ export function Sidebar({
     setActiveChat(next);
   };
 
-  const renderItem = (item: SidebarItem) => {
-    const active = isItemActive(item);
-    const isDirect = item.kind === "direct";
-    const status = isDirect ? (userStatuses[item.id] || (item.isOnline ? 'online' : 'offline')) : null;
-
-    return (
-      <div
-        key={`${item.kind}-${item.id}`}
-        onClick={() => handleItemClick(item)}
-        className={cn(
-          "group relative flex items-center gap-3 px-3 py-2.5 mx-2 rounded-xl cursor-pointer transition-all duration-200 select-none",
-          active 
-            ? "bg-primary text-primary-foreground shadow-md shadow-primary/20" 
-            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        )}
-      >
-        <Avatar 
-          name={item.name} 
-          size="medium"
-          status={status as any}
-          className={cn(active ? "bg-primary-foreground text-primary" : "")}
-        />
-        
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-1 mb-0.5">
-            <span className={cn(
-              "text-sm font-semibold truncate",
-              active ? "text-primary-foreground" : "text-foreground group-hover:text-accent-foreground"
-            )}>
-              {item.name}
-            </span>
-            <span className={cn(
-              "text-[10px] whitespace-nowrap",
-              active ? "text-primary-foreground/70" : "text-muted-foreground"
-            )}>
-              {formatPreviewTime(item.time)}
-            </span>
-          </div>
-          
-          <div className="flex items-center justify-between gap-2">
-            <p className={cn(
-              "text-xs truncate leading-tight",
-              active ? "text-primary-foreground/80" : "text-muted-foreground"
-            )}>
-              {item.preview}
-            </p>
-            {item.unread > 0 && (
-              <span className={cn(
-                "flex h-4.5 min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold ring-2 ring-sidebar",
-                active ? "bg-primary-foreground text-primary" : "bg-primary text-primary-foreground"
-              )}>
-                {item.unread > 99 ? "99+" : item.unread}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <>
       <div className={cn(
-        "flex h-full flex-col bg-sidebar border-r border-border transition-all duration-300 ease-in-out",
-        isServerMode ? "w-[300px]" : "w-[300px]"
+        "flex h-full w-[432px] flex-col bg-sidebar",
+        isServerMode && "w-[72px]"
       )}>
-        {/* Header */}
-        <div className="p-4 flex items-center justify-between shrink-0">
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Чаты</h2>
-          <div className="flex items-center gap-1">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button 
-                     onClick={() => openModal("CREATE_PICKER")}
-                     className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                   >
-                    <SquarePen className="h-5 w-5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="z-50 overflow-hidden rounded-md bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md animate-in fade-in zoom-in-95 duration-100">
-                  Новый чат
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+        {/* Search */}
+        {!isServerMode && (
+          <div className="p-4">
+            <UserSearch />
           </div>
+        )}
+
+        {/* Messages Header */}
+        <div className={cn("flex items-center justify-between px-4 pb-2", isServerMode && "hidden")}>
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Messages</span>
+          <button
+            onClick={() => openModal("CREATE_PICKER")}
+            className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+            aria-label="Новый чат"
+            title="Начать новый чат"
+          >
+            <SquarePen className="h-4 w-4" />
+          </button>
         </div>
 
-        {/* Items List */}
-        <div className="flex-1 overflow-y-auto py-2 space-y-0.5 scrollbar-hide">
-          {allItems.length === 0 ? (
-            <div className="px-6 py-10 text-center">
-              <p className="text-sm text-muted-foreground">Нет активных чатов</p>
+        {/* Scrollable Area */}
+        <div dir="ltr" data-slot="scroll-area" className="relative flex-1 overflow-hidden">
+          <style>{`[data-radix-scroll-area-viewport]{scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;}[data-radix-scroll-area-viewport]::-webkit-scrollbar{display:none}`}</style>
+          <div data-radix-scroll-area-viewport="" data-slot="scroll-area-viewport" className="focus-visible:ring-ring/50 size-full transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1 overflow-y-auto overflow-x-hidden">
+            <div className="px-2 space-y-1">
+              <TooltipProvider delayDuration={400}>
+                {allItems.map((item) => {
+                  const isActive = isItemActive(item);
+                  
+                  return (
+                    <Tooltip key={`${item.kind}-${item.id}`}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => handleItemClick(item)}
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-sidebar-accent",
+                            isActive && "bg-sidebar-accent"
+                          )}
+                        >
+                          <div className="relative">
+                            <Avatar 
+                              name={item.name} 
+                              size="large" 
+                              className="size-8 h-10 w-10" 
+                              status={item.kind === "direct" ? (item.status || (item.isOnline ? "online" : "offline")) : null}
+                            />
+                          </div>
+                          
+                          {!isServerMode && (
+                            <div className="flex-1 overflow-hidden">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-sidebar-foreground">{item.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatPreviewTime(item.time)}
+                                </span>
+                              </div>
+                              <p className="truncate text-sm text-muted-foreground">{item.preview}</p>
+                            </div>
+                          )}
+
+                          {!isServerMode && item.unread > 0 && (
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
+                              {item.unread}
+                            </span>
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      {isServerMode && (
+                        <TooltipContent side="right" className="z-50 bg-popover text-popover-foreground border border-border px-3 py-1.5 rounded-md text-sm shadow-md animate-in fade-in zoom-in-95 duration-100">
+                          <p>{item.name}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  );
+                })}
+              </TooltipProvider>
             </div>
-          ) : (
-            allItems.map(renderItem)
-          )}
+          </div>
         </div>
       </div>
 
