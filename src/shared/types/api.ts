@@ -8,6 +8,7 @@ export interface User {
   display_name: string | null; // никнейм (не уникальный)
   bio:          string | null;
   avatar_url:   string | null;
+  status:       'online' | 'away' | 'dnd' | 'offline';
   last_seen_at: string | null;
 }
 

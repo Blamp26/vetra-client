@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/utils/cn';
+import { formatCallTime } from '@/utils/formatDate';
 
 interface ActiveCallWindowProps {
   remoteStream: MediaStream | null;
   remoteUsername: string;
+  seconds: number;
   isMuted: boolean;
   onMuteToggle: () => void;
   onHangUp: () => void;
@@ -12,29 +14,18 @@ interface ActiveCallWindowProps {
 export const ActiveCallWindow = ({
   remoteStream,
   remoteUsername,
+  seconds,
   isMuted,
   onMuteToggle,
   onHangUp,
 }: ActiveCallWindowProps) => {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
     if (audioRef.current && remoteStream) {
       audioRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
-
-  useEffect(() => {
-    const interval = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const formatTime = (total: number) => {
-    const m = Math.floor(total / 60).toString().padStart(2, '0');
-    const s = (total % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[4px] z-[9999]">
@@ -47,7 +38,7 @@ export const ActiveCallWindow = ({
         </div>
 
         <p className="m-0 text-[18px] font-semibold text-[#f2f3f5]">{remoteUsername}</p>
-        <p className="m-0 text-[14px] text-[#949ba4] [font-variant-numeric:tabular-nums] tracking-[0.04em]">{formatTime(seconds)}</p>
+        <p className="m-0 text-[14px] text-[#949ba4] [font-variant-numeric:tabular-nums] tracking-[0.04em]">{formatCallTime(seconds)}</p>
 
         <audio ref={audioRef} autoPlay hidden />
 

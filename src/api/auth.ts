@@ -1,5 +1,5 @@
 import { get, post, put } from './base';
-import { User } from '@/shared/types';
+import { User, Server } from '@/shared/types';
 
 export interface RegisterPayload { username: string; password: string; }
 export interface LoginPayload    { username: string; password: string; }
@@ -15,6 +15,12 @@ export interface UpdateProfilePayload {
   display_name?: string | null;
   bio?:          string | null;
   avatar_url?:   string | null;
+  status?:       'online' | 'away' | 'dnd' | 'offline';
+}
+
+export interface GlobalSearchResult {
+  users:   User[];
+  servers: Server[];
 }
 
 export const authApi = {
@@ -27,9 +33,9 @@ export const authApi = {
   },
 
   // current_user_id больше не нужен — сервер знает его из токена
-  searchUsers(query: string): Promise<User[]> {
+  searchUsers(query: string): Promise<GlobalSearchResult> {
     const params = new URLSearchParams({ q: query });
-    return get<User[]>(`/users/search?${params}`);
+    return get<GlobalSearchResult>(`/users/search?${params}`);
   },
 
   getUser(userId: number): Promise<User> {

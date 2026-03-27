@@ -18,7 +18,7 @@ interface SidebarProps {
 }
 
 type SidebarItem =
-  | { kind: "direct"; id: number; name: string; time: string; preview: string; unread: number; isOnline: boolean }
+  | { kind: "direct"; id: number; name: string; time: string; preview: string; unread: number; isOnline: boolean; status?: 'online' | 'away' | 'dnd' | 'offline' | null }
   | { kind: "room";   id: number; name: string; time: string; preview: string; unread: number };
 
 export function Sidebar({ 
@@ -29,6 +29,7 @@ export function Sidebar({
   const conversationPreviews = useAppStore((s: RootState) => s.conversationPreviews);
   const roomPreviews         = useAppStore((s: RootState) => s.roomPreviews);
   const onlineUserIds        = useAppStore((s: RootState) => s.onlineUserIds);
+  const userStatuses         = useAppStore((s: RootState) => s.userStatuses);
   const setActiveChat        = useAppStore((s: RootState) => s.setActiveChat);
   const setServers           = useAppStore((s: RootState) => s.setServers);
   const activeModal          = useAppStore((s: RootState) => s.activeModal);
@@ -59,6 +60,7 @@ export function Sidebar({
     preview:  getPreviewText(p.last_message.content, p.last_message.media_file_id),
     unread:   p.unread_count,
     isOnline: onlineUserIds.has(Number(p.partner_id)),
+    status:   userStatuses[Number(p.partner_id)] || "offline",
   }));
 
   const roomItems: SidebarItem[] = Object.values(roomPreviews)
@@ -143,7 +145,7 @@ export function Sidebar({
                               name={item.name} 
                               size="large" 
                               className="size-8 h-10 w-10" 
-                              status={item.kind === "direct" ? (item.isOnline ? "online" : "offline") : null}
+                              status={item.kind === "direct" ? (item.status || (item.isOnline ? "online" : "offline")) : null}
                             />
                           </div>
                           

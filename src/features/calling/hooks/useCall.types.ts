@@ -32,6 +32,7 @@ export interface UseCallReturn {
     callId: string | null;
     isMuted: boolean;
     remoteStream: MediaStream | null;
+    seconds: number;
     startCall: (targetUserId: number) => void;
     acceptCall: () => void;
     rejectCall: () => void;

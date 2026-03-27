@@ -29,3 +29,12 @@ export function formatLastSeen(iso: string | null | undefined): string {
   const { formatted, isToday } = timeOrDate(iso);
   return isToday ? `last seen at ${formatted}` : `last seen on ${formatted}`;
 }
+
+/**
+ * Форматирует секунды в MM:SS (для звонков).
+ */
+export function formatCallTime(totalSeconds: number): string {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}

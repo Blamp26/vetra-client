@@ -9,6 +9,7 @@ function patchSet(s: Set<number>, id: number, add: boolean): Set<number> {
 
 export interface PresenceSlice {
   onlineUserIds: Set<number>;
+  userStatuses: Record<number, 'online' | 'away' | 'dnd' | 'offline'>;
   lastSeenAt: Record<number, string>;
   typingPartnerIds: Set<number>;
 
@@ -21,24 +22,58 @@ export interface PresenceSlice {
 
 export const createPresenceSlice: StateCreator<any, [], [], PresenceSlice> = (set) => ({
   onlineUserIds: new Set(),
+  userStatuses: {},
   lastSeenAt: {},
   typingPartnerIds: new Set(),
 
   applyPresenceState: (state) => {
-    const ids = new Set(
-      Object.keys(state).map(Number).filter((n) => !isNaN(n))
-    );
-    set({ onlineUserIds: ids });
+    const ids = new Set<number>();
+    const statuses: Record<number, 'online' | 'away' | 'dnd' | 'offline'> = {};
+
+    Object.entries(state).forEach(([idStr, presence]) => {
+      const id = Number(idStr);
+      if (!isNaN(id)) {
+        ids.add(id);
+        const meta = presence.metas[0];
+        if (meta?.status) {
+          statuses[id] = meta.status;
+        }
+      }
+    });
+
+    set({ onlineUserIds: ids, userStatuses: statuses });
   },
 
   applyPresenceDiff: (diff) =>
     set((storeState: any) => {
-      const next = new Set(storeState.onlineUserIds);
-      // Process leaves first, then joins. This handles Presence.update() 
-      // where the same ID may appear in both collections.
-      for (const id of Object.keys(diff.leaves)) { const n = Number(id); if (!isNaN(n)) next.delete(n); }
-      for (const id of Object.keys(diff.joins))  { const n = Number(id); if (!isNaN(n)) next.add(n);    }
-      return { onlineUserIds: next };
+      const nextIds = new Set(storeState.onlineUserIds);
+      const nextStatuses = { ...storeState.userStatuses };
+
+      // Leaves
+      Object.keys(diff.leaves).forEach((idStr) => {
+        const id = Number(idStr);
+        if (!isNaN(id)) {
+          // Only remove if not in joins (Presence.update support)
+          if (!diff.joins[idStr]) {
+            nextIds.delete(id);
+            delete nextStatuses[id];
+          }
+        }
+      });
+
+      // Joins
+      Object.entries(diff.joins).forEach(([idStr, presence]) => {
+        const id = Number(idStr);
+        if (!isNaN(id)) {
+          nextIds.add(id);
+          const meta = presence.metas[0];
+          if (meta?.status) {
+            nextStatuses[id] = meta.status;
+          }
+        }
+      });
+
+      return { onlineUserIds: nextIds, userStatuses: nextStatuses };
     }),
 
   setLastSeenAt: (userId, lastSeenAt) =>
