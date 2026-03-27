@@ -21,7 +21,7 @@ export type ReactionUpdatedHandler  = (payload: ReactionUpdatedPayload) => void;
 
 export type PresenceState = Record<
   string,
-  { metas: Array<{ online_at: string; phx_ref: string }> }
+  { metas: Array<{ online_at: string; status?: 'online' | 'away' | 'dnd' | 'offline'; phx_ref: string }> }
 >;
 
 export interface PresenceDiff {

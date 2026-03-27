@@ -20,6 +20,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [callId, setCallId] = useState<string | null>(null);
     const [isMuted, setIsMuted] = useState(false);
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+    const [seconds, setSeconds] = useState(0);
 
     // ── Refs (не вызывают ре-рендер, нужны внутри колбэков) ───────────────────
     const callChannelRef = useRef<Channel | null>(null);
@@ -38,8 +39,25 @@ export function useCall(currentUserId: number): UseCallReturn {
             setRemoteStream(null);
             setIsMuted(false);
             webrtcRef.current = null;
+            setSeconds(0);
         }, 2000);
     }, []);
+
+    // Timer for active call
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (status === 'active') {
+            interval = setInterval(() => {
+                setSeconds((prev) => prev + 1);
+            }, 1000);
+        } else if (status !== 'ended') {
+            // Сбрасываем только если не "завершено", т.к. в ended мы хотим видеть время звонка еще 2 сек
+            setSeconds(0);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [status]);
 
     // ── Mount: подключить call-канал и подписаться на сигнальные события ───────
     useEffect(() => {
@@ -227,6 +245,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         callId,
         isMuted,
         remoteStream,
+        seconds,
         startCall,
         acceptCall,
         rejectCall,

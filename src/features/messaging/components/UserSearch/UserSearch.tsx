@@ -1,7 +1,8 @@
 import { useUserSearch } from "@/features/messaging/hooks/useUserSearch";
 import { useAppStore, type RootState } from "@/store";
-import type { User } from "@/shared/types";
+import type { User, Server } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
+import { Hash } from "lucide-react";
 
 export function UserSearch() {
   const { query, setQuery, searchResults, isSearching, clearSearch } = useUserSearch();
@@ -11,6 +12,13 @@ export function UserSearch() {
     setActiveChat({ type: "direct", partnerId: user.id });
     clearSearch();
   };
+
+  const handleSelectServer = (server: Server) => {
+    setActiveChat({ type: "server", serverId: server.id });
+    clearSearch();
+  };
+
+  const hasResults = searchResults.users.length > 0 || searchResults.servers.length > 0;
 
   return (
     <div className="relative">
@@ -52,26 +60,57 @@ export function UserSearch() {
         </div>
       )}
       
-      {!isSearching && query && searchResults.length === 0 && (
+      {!isSearching && query && !hasResults && (
         <div className="absolute left-0 right-0 top-full mt-1 px-3 py-2 text-xs text-muted-foreground bg-popover border border-border rounded-md shadow-md z-[110]">
-          No users found for "{query}"
+          No results found for "{query}"
         </div>
       )}
       
-      {searchResults.length > 0 && (
-        <ul className="absolute left-0 right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-md z-[110] max-h-[240px] overflow-y-auto list-none p-1">
-          {searchResults.map((user) => (
-            <li key={user.id}>
-              <button 
-                className="flex items-center gap-2.5 w-full px-3 py-2 rounded-sm text-left hover:bg-sidebar-accent transition-colors" 
-                onClick={() => handleSelectUser(user)}
-              >
-                <Avatar name={user.display_name || user.username} size="small" />
-                <span className="text-sm">{user.display_name || user.username}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {hasResults && (
+        <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-md z-[110] max-h-[320px] overflow-y-auto p-1">
+          {searchResults.users.length > 0 && (
+            <div className="mb-2">
+              <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Users</div>
+              <ul className="list-none p-0 m-0">
+                {searchResults.users.map((user) => (
+                  <li key={`user-${user.id}`}>
+                    <button 
+                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-sm text-left hover:bg-sidebar-accent transition-colors" 
+                      onClick={() => handleSelectUser(user)}
+                    >
+                      <Avatar name={user.display_name || user.username} size="small" status={user.status} />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-medium truncate">{user.display_name || user.username}</span>
+                        {user.display_name && <span className="text-[10px] text-muted-foreground truncate">@{user.username}</span>}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {searchResults.servers.length > 0 && (
+            <div>
+              <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Servers</div>
+              <ul className="list-none p-0 m-0">
+                {searchResults.servers.map((server) => (
+                  <li key={`server-${server.id}`}>
+                    <button 
+                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-sm text-left hover:bg-sidebar-accent transition-colors" 
+                      onClick={() => handleSelectServer(server)}
+                    >
+                      <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center shrink-0">
+                        <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                      <span className="text-sm font-medium truncate">{server.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

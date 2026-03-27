@@ -11,11 +11,12 @@ import { useAuthHydration } from "@/shared/hooks/useAuthHydration";
 import { useCall } from './features/calling/hooks/useCall';
 
 import { IncomingCallModal } from './features/calling/components/IncomingCallModal';
+import { ActiveCallWindow } from './features/calling/components/ActiveCallWindow';
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
-  const { status, remoteStream, remoteUsername, remoteUserId, isMuted, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
+  const { status, remoteStream, remoteUsername, remoteUserId, isMuted, seconds, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
   const activeChat = useAppStore((s) => s.activeChat);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
@@ -172,6 +173,7 @@ function App() {
         <SidebarFooter
           callStatus={status}
           remoteUsername={remoteUsername}
+          callSeconds={seconds}
           isMuted={isMuted}
           onMuteToggle={toggleMute}
           onHangUp={hangUp}
@@ -253,6 +255,17 @@ function App() {
           callerName={remoteUsername ?? `User #${remoteUserId}`}
           onAccept={acceptCall}
           onReject={rejectCall}
+        />
+      )}
+
+      {status === 'active' && (
+        <ActiveCallWindow
+          remoteStream={remoteStream}
+          remoteUsername={remoteUsername ?? `User #${remoteUserId}`}
+          seconds={seconds}
+          isMuted={isMuted}
+          onMuteToggle={toggleMute}
+          onHangUp={hangUp}
         />
       )}
 

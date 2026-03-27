@@ -19,6 +19,7 @@ export function ProfileModal({ user, onClose }: Props) {
   const [displayName, setDisplayName] = useState(user.display_name ?? "");
   const [bio,         setBio]         = useState(user.bio ?? "");
   const [avatarUrl,   setAvatarUrl]   = useState(user.avatar_url ?? "");
+  const [status,      setStatus]      = useState<'online' | 'away' | 'dnd' | 'offline'>(user.status || "online");
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState<string | null>(null);
   const [usernameErr, setUsernameErr] = useState<string | null>(null);
@@ -60,6 +61,7 @@ export function ProfileModal({ user, onClose }: Props) {
         display_name: displayName.trim() || null,
         bio:          bio.trim()         || null,
         avatar_url:   avatarUrl.trim()   || null,
+        status:       status as any,
       };
       const updated = await authApi.updateProfile(user.id, payload);
       updateCurrentUser(updated);
@@ -185,9 +187,36 @@ export function ProfileModal({ user, onClose }: Props) {
             maxLength={300}
             rows={3}
           />
-          <span className="text-[0.72rem] opacity-45 block text-right text-muted-foreground">
+          <span className="text-[0.72rem] opacity-45 block text-right text-muted-foreground mb-4">
             {bio.length}/300
           </span>
+
+          {/* Статус */}
+          <label className="block mb-1.5 mt-2 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">Статус</label>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            {(
+              [
+                { id: 'online', label: 'В сети', color: 'bg-emerald-500' },
+                { id: 'away', label: 'Отошёл', color: 'bg-amber-500' },
+                { id: 'dnd', label: 'Не беспокоить', color: 'bg-destructive' },
+                { id: 'offline', label: 'Невидимый', color: 'bg-muted-foreground' },
+              ] as const
+            ).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setStatus(s.id)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all",
+                  status === s.id 
+                    ? "border-primary bg-primary/10 text-foreground" 
+                    : "border-border bg-background text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <span className={cn("w-2 h-2 rounded-full", s.color)} />
+                {s.label}
+              </button>
+            ))}
+          </div>
 
           {error && (
             <p className="text-destructive text-[0.85rem] mt-2">{error}</p>

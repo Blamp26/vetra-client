@@ -12,15 +12,15 @@ export function useUserSearch() {
 
   useEffect(() => {
     if (!query || query.length < 2 || !currentUser) {
-      setSearchResults([]);
+      setSearchResults({ users: [], servers: [] });
       return;
     }
 
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const users = await authApi.searchUsers(query);
-        setSearchResults(users);
+        const results = await authApi.searchUsers(query);
+        setSearchResults(results);
       } catch (err) {
         console.error("Search failed:", err);
       } finally {
@@ -33,7 +33,7 @@ export function useUserSearch() {
 
   const clearSearch = useCallback(() => {
     setQuery("");
-    setSearchResults([]);
+    setSearchResults({ users: [], servers: [] });
   }, [setSearchResults]);
 
   return { 

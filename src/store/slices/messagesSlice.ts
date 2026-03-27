@@ -7,7 +7,8 @@ import {
   MessageDeletedPayload,
   ConversationState,
   DEFAULT_CONV,
-  User
+  User,
+  Server
 } from '@/shared/types';
 
 function patchConv(
@@ -24,7 +25,7 @@ function patchConv(
 export interface MessagesSlice {
   conversations: Record<number, ConversationState>;
   conversationPreviews: Record<number, ConversationPreview>;
-  searchResults: User[];
+  searchResults: { users: User[], servers: Server[] };
   isSearching: boolean;
   editingMessage: { 
     id: number; 
@@ -33,7 +34,7 @@ export interface MessagesSlice {
     targetId: number; 
   } | null;
 
-  setSearchResults: (users: User[]) => void;
+  setSearchResults: (results: { users: User[], servers: Server[] }) => void;
   setIsSearching: (searching: boolean) => void;
   startEditing: (message: Message, chatType: 'direct' | 'room', targetId: number) => void; 
   cancelEditing: () => void; 
@@ -55,11 +56,11 @@ export interface MessagesSlice {
 export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (set, get) => ({
   conversations: {},
   conversationPreviews: {},
-  searchResults: [],
+  searchResults: { users: [], servers: [] },
   isSearching: false,
   editingMessage: null,
 
-  setSearchResults: (users) => set({ searchResults: users }),
+  setSearchResults: (results) => set({ searchResults: results }),
   setIsSearching: (searching) => set({ isSearching: searching }),
 
   startEditing: (message, chatType, targetId) => 

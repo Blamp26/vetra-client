@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { Avatar } from "@/shared/components/Avatar";
 import { Video, MonitorUp, Settings, Mic, MicOff, Headphones, HeadphoneOff, Phone, PhoneOff, Rss } from "lucide-react";
 import type { CallStatus } from "@/features/calling/hooks/useCall.types";
 import { ProfileModal } from "@/features/profile/components/ProfileModal/ProfileModal";
 import { ConfirmModal } from "@/shared/components/ConfirmModal/ConfirmModal";
+import { formatCallTime } from "@/utils/formatDate";
 
 interface SidebarFooterProps {
   callStatus: CallStatus;
   remoteUsername?: string | null;
+  callSeconds: number;
   isMuted: boolean;
   onMuteToggle: () => void;
   onHangUp: () => void;
@@ -20,6 +22,7 @@ interface SidebarFooterProps {
 export function SidebarFooter({
   callStatus,
   remoteUsername,
+  callSeconds,
   isMuted,
   onMuteToggle,
   onHangUp,
@@ -36,28 +39,6 @@ export function SidebarFooter({
 
   const [showProfile, setShowProfile] = useState(false);
   const [confirmHangUp, setConfirmHangUp] = useState(false);
-  const [callSeconds, setCallSeconds] = useState(0);
-
-  // Timer for active call
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (callStatus === 'active') {
-      interval = setInterval(() => {
-        setCallSeconds((prev) => prev + 1);
-      }, 1000);
-    } else {
-      setCallSeconds(0);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [callStatus]);
-
-  const formatCallTime = (totalSeconds: number) => {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const displayName = currentUser?.display_name || currentUser?.username || "?";
   const isOnline = currentUser ? onlineUserIds.has(Number(currentUser.id)) : false;
