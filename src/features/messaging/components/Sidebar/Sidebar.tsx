@@ -12,6 +12,7 @@ import { Avatar } from "@/shared/components/Avatar";
 import { cn } from "@/shared/utils/cn";
 import { SquarePen } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@radix-ui/react-tooltip";
+import { EmojiText } from "@/shared/components/Emoji/Emoji";
 
 interface SidebarProps {
   isServerMode?:  boolean;
@@ -157,7 +158,9 @@ export function Sidebar({
                                   {formatPreviewTime(item.time)}
                                 </span>
                               </div>
-                              <p className="truncate text-sm text-muted-foreground">{item.preview}</p>
+                              <p className="truncate text-sm text-muted-foreground">
+                                <EmojiText text={item.preview} size={14} />
+                              </p>
                             </div>
                           )}
 

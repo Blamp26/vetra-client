@@ -5,6 +5,7 @@ import { API_BASE_URL } from "@/api/base";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { cn } from "@/shared/utils/cn";
 import { ArrowDown } from "lucide-react";
+import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
 
 interface Props {
   messages:      Message[];
@@ -74,7 +75,6 @@ export function MessageList({
   const activeChat = useAppStore((s: RootState) => s.activeChat);
 
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
-  const [hoverMsgId,  setHoverMsgId]  = useState<number | null>(null);
   const [msgToDelete, setMsgToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -290,21 +290,31 @@ export function MessageList({
   };
 
   const renderContent = (msg: Message) => {
-    if (msg.media_file_id) {
-      const mediaUrl = `${API_BASE_URL}/media/${msg.media_file_id}`;
-      const isVideo = msg.media_mime_type?.startsWith("video/") ?? false;
-      return (
-        <div className="mt-1">
-          {isVideo ? (
-            <video className="max-w-full rounded-lg max-h-[300px]" controls src={mediaUrl} />
-          ) : (
-            <img className="max-w-full rounded-lg max-h-[400px] object-contain" src={mediaUrl} alt="attachment" />
-          )}
-        </div>
-      );
-    }
+    const hasMedia = !!msg.media_file_id;
+    const hasText = !!(msg.content && msg.content.trim().length > 0);
 
-    return <p className="text-sm leading-relaxed">{msg.content}</p>;
+    return (
+      <div className="flex flex-col gap-2">
+        {hasMedia && (
+          <div className="mt-1">
+            {msg.media_mime_type?.startsWith("video/") ? (
+              <video className="max-w-full rounded-lg max-h-[300px]" controls src={`${API_BASE_URL}/media/${msg.media_file_id}`} />
+            ) : (
+              <img 
+                className="max-w-full rounded-lg max-h-[400px] object-contain bg-muted/20" 
+                src={`${API_BASE_URL}/media/${msg.media_file_id}`} 
+                alt="attachment" 
+              />
+            )}
+          </div>
+        )}
+        {hasText && (
+          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+            <EmojiText text={msg.content || ""} />
+          </p>
+        )}
+      </div>
+    );
   };
 
   const renderReactions = (msgId: number, groups?: MessageReactionGroup[]) => {
@@ -330,7 +340,7 @@ export function MessageList({
               aria-pressed={mine}
               title={mine ? "Remove reaction" : "Add reaction"}
             >
-              <span>{g.emoji}</span>
+              <Emoji emoji={g.emoji} size={16} />
               <span className={cn("text-[0.75rem]", mine ? "text-primary" : "text-muted-foreground")}>{g.count}</span>
             </button>
           );
@@ -378,7 +388,7 @@ export function MessageList({
         </div>
         {previewText && (
           <div className="text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
-            {previewText}
+            <EmojiText text={previewText} size={14} />
           </div>
         )}
       </button>
@@ -436,38 +446,12 @@ export function MessageList({
                        }
                      }}
                      onContextMenu={(e) => handleContextMenu(e, msg)}
-                     onMouseEnter={() => setHoverMsgId(msg.id)}
-                     onMouseLeave={() => { if (hoverMsgId === msg.id) setHoverMsgId(null); }}
                    >
                      <div className={cn(
                        "max-w-[70%] rounded-2xl px-4 py-2.5 flex flex-col relative group",
                        isOwn ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                        isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]"
                      )}>
-                    {/* Quick Reactions on Hover */}
-                    {!contextMenu && hoverMsgId === msg.id && (
-                      <div className={cn(
-                        "absolute -top-10 flex items-center gap-1 px-2 py-1 bg-card border border-border rounded-full shadow-lg z-10 animate-in fade-in zoom-in duration-200",
-                        isOwn ? "right-0" : "left-0"
-                      )}>
-                        {EMOJIS.slice(0, 5).map(emoji => (
-                          <button
-                            key={emoji}
-                            onClick={() => toggleReaction(msg.id, emoji)}
-                            className="p-1 hover:bg-muted rounded-full transition-colors text-lg leading-none"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                        <button 
-                          onClick={(e) => handleContextMenu(e as unknown as React.MouseEvent, msg)}
-                          className="p-1 hover:bg-muted rounded-full transition-colors text-muted-foreground"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-                        </button>
-                      </div>
-                    )}
-
                     {!isOwn && !isConsecutive && (
                       <span className="text-[0.72rem] text-primary mb-1 font-semibold">{msg.sender_display_name || msg.sender_username}</span>
                     )}
@@ -525,9 +509,9 @@ export function MessageList({
                   <button
                     key={e}
                     onClick={() => toggleReaction(contextMenu.msgId, e)}
-                    className="text-[1.1rem] bg-none border-none cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-accent"
+                    className="bg-none border-none cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-accent"
                   >
-                    {e}
+                    <Emoji emoji={e} size={22} />
                   </button>
                 ))}
               </div>
