@@ -4,6 +4,7 @@ import { Avatar } from "@/shared/components/Avatar";
 import { Video, MonitorUp, Settings, Mic, MicOff, Headphones, HeadphoneOff, Phone, PhoneOff, Rss } from "lucide-react";
 import type { CallStatus } from "@/features/calling/hooks/useCall.types";
 import { ProfileModal } from "@/features/profile/components/ProfileModal/ProfileModal";
+import { ConfirmModal } from "@/shared/components/ConfirmModal/ConfirmModal";
 
 interface SidebarFooterProps {
   callStatus: CallStatus;
@@ -34,6 +35,7 @@ export function SidebarFooter({
   const toggleSound = useAppStore((s: RootState) => s.toggleSound);
 
   const [showProfile, setShowProfile] = useState(false);
+  const [confirmHangUp, setConfirmHangUp] = useState(false);
   const [callSeconds, setCallSeconds] = useState(0);
 
   // Timer for active call
@@ -119,7 +121,7 @@ export function SidebarFooter({
                     <div className="w-0.5 bg-emerald-500 rounded-full animate-pulse" style={{ height: "6px", animationDelay: "300ms", animationDuration: "400ms" }}></div>
                   </div>
                   <button 
-                    onClick={onHangUp}
+                    onClick={() => callStatus === 'calling' ? onHangUp() : setConfirmHangUp(true)}
                     title="End call"
                     className="flex h-7 w-7 items-center justify-center rounded-md bg-destructive text-destructive-foreground transition-all hover:brightness-110 active:scale-90"
                   >
@@ -133,10 +135,18 @@ export function SidebarFooter({
 
         {/* Quick Actions */}
         <div className="flex gap-1.5 mb-3">
-          <button className="flex h-9 flex-1 items-center justify-center rounded-lg transition-all duration-200 hover:bg-accent hover:text-accent-foreground bg-muted text-muted-foreground">
+          <button 
+            disabled 
+            title="Video call — coming soon"
+            className="flex h-9 flex-1 items-center justify-center rounded-lg bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+          >
             <Video className="h-4 w-4" aria-hidden="true" />
           </button>
-          <button className="flex h-9 flex-1 items-center justify-center rounded-lg transition-all duration-200 hover:bg-accent hover:text-accent-foreground bg-muted text-muted-foreground">
+          <button 
+            disabled 
+            title="Screen share — coming soon"
+            className="flex h-9 flex-1 items-center justify-center rounded-lg bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+          >
             <MonitorUp className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
@@ -196,6 +206,20 @@ export function SidebarFooter({
           </div>
         </div>
       </div>
+
+      {confirmHangUp && (
+        <ConfirmModal
+          title="Завершить звонок?"
+          message="Это прервёт активное соединение."
+          confirmLabel="Завершить"
+          isDanger
+          onConfirm={() => {
+            setConfirmHangUp(false);
+            onHangUp();
+          }}
+          onCancel={() => setConfirmHangUp(false)}
+        />
+      )}
 
       {showProfile && currentUser && (
         <ProfileModal

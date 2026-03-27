@@ -6,6 +6,7 @@ import { ServerSettingsModal } from "../ServerSettingsModal/ServerSettingsModal"
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import type { Channel } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
+import { Settings, Trash2, Plus } from "lucide-react";
 
 interface Props {
   serverId: number;
@@ -134,41 +135,41 @@ export function ChannelPanel({ serverId }: Props) {
         <div className="p-[12px_14px] border-b border-border bg-card flex-shrink-0 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#6c5ce7] to-[#a29bfe] text-white text-[0.85rem] font-bold inline-flex items-center justify-center flex-shrink-0">{server?.name?.[0]?.toUpperCase() ?? "?"}</span>
-            <span className="text-[0.9rem] font-semibold whitespace-nowrap overflow-hidden text-ellipsis">{server?.name ?? "Server"}</span>
+            <span className="text-[0.9rem] font-semibold whitespace-nowrap overflow-hidden text-ellipsis text-foreground">{server?.name ?? "Server"}</span>
           </div>
           {server && (
             <button
-              className="text-[1rem] bg-none border-none cursor-pointer p-1 px-2 text-[#4A4A4A]"
+              className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-accent"
               onClick={() => setShowSettings(true)}
               title="Настройки сервера"
             >
-              ⚙️
+              <Settings className="h-4 w-4" />
             </button>
           )}
         </div>
 
         {/* Section label + add button */}
         <div className="flex items-center justify-between p-[10px_14px_4px]">
-          <span className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[#7A7A7A]">Channels</span>
+          <span className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">Channels</span>
           <button
-            className="bg-none border-none text-[#7A7A7A] cursor-pointer text-[1.1rem] leading-none px-0.5 rounded transition-colors duration-150 hover:text-[#0A0A0A]"
+            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-accent"
             onClick={() => { setShowCreate((v) => !v); setCreateError(null); setNewChannelName(""); }}
             title="Add channel"
           >
-            +
+            <Plus className="h-4 w-4" />
           </button>
         </div>
 
         {/* Inline create form */}
         {showCreate && (
-          <div className="p-[4px_10px_10px] border-b border-[#E1E1E1] flex-shrink-0">
+          <div className="p-[4px_10px_10px] border-b border-border flex-shrink-0">
             {createError && (
-              <div className="bg-[#E74C3C]/12 border border-[#E74C3C] rounded-lg p-2 px-3 text-[#E74C3C] text-[0.8rem] mb-1.5">
+              <div className="bg-destructive/10 border border-destructive rounded-lg p-2 px-3 text-destructive text-[0.8rem] mb-1.5">
                 {createError}
               </div>
             )}
             <input
-              className="w-full px-2.5 py-1.5 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.85rem] font-inherit outline-none focus:border-[#5865F2]"
+              className="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-foreground text-[0.85rem] font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
               type="text"
               placeholder="new-channel"
               value={newChannelName}
@@ -182,14 +183,14 @@ export function ChannelPanel({ serverId }: Props) {
             />
             <div className="flex gap-1.5 mt-1.5">
               <button
-                className="flex-1 px-4 py-1.5 bg-[#5865F2] text-white border-none rounded-lg text-[0.82rem] font-semibold font-inherit cursor-pointer transition-colors duration-150 hover:bg-[#4752C4] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-1.5 bg-primary text-primary-foreground border-none rounded-lg text-[0.82rem] font-semibold font-inherit cursor-pointer transition-colors duration-150 hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleCreateChannel}
                 disabled={isCreating || !newChannelName.trim()}
               >
                 {isCreating ? "Creating…" : "Create"}
               </button>
               <button
-                className="flex-1 px-4 py-1.5 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] text-[0.82rem] font-inherit cursor-pointer transition-colors duration-150 hover:bg-[#EDEDED]"
+                className="flex-1 px-4 py-1.5 bg-background border border-border rounded-lg text-muted-foreground text-[0.82rem] font-inherit cursor-pointer transition-colors duration-150 hover:bg-accent"
                 onClick={() => { setShowCreate(false); setNewChannelName(""); }}
                 disabled={isCreating}
               >
@@ -202,11 +203,11 @@ export function ChannelPanel({ serverId }: Props) {
         {/* Channel list */}
         <div className="flex-1 overflow-y-auto p-[4px_6px] [scrollbar-gutter:stable]">
           {isLoading ? (
-            <p className="p-[12px_8px] text-[#7A7A7A] text-[0.82rem] text-center leading-[1.5]">Loading channels…</p>
+            <p className="p-[12px_8px] text-muted-foreground/70 text-[0.82rem] text-center leading-[1.5]">Loading channels…</p>
           ) : !channels || channels.length === 0 ? (
-            <p className="p-[12px_8px] text-[#7A7A7A] text-[0.82rem] text-center leading-[1.5]">
+            <p className="p-[12px_8px] text-muted-foreground/70 text-[0.82rem] text-center leading-[1.5]">
               No channels yet.{" "}
-              <button className="bg-none border-none text-[#5865F2] cursor-pointer text-[0.82rem] p-0 hover:underline" onClick={() => setShowCreate(true)}>
+              <button className="bg-none border-none text-primary cursor-pointer text-[0.82rem] p-0 hover:underline" onClick={() => setShowCreate(true)}>
                 Create the first one
               </button>
             </p>
@@ -219,26 +220,26 @@ export function ChannelPanel({ serverId }: Props) {
                   <li key={ch.id} className="relative group">
                     <button
                       className={cn(
-                        "flex items-center gap-1.5 w-full p-[6px_8px_6px_10px] mx-[2px] border-none rounded-md bg-none text-[#4A4A4A] cursor-pointer text-[0.88rem] font-inherit text-left transition-colors duration-120 relative hover:bg-[#EDEDED] hover:text-[#0A0A0A]",
-                        activeChannelId === ch.id && "bg-[#EDEDED] text-[#0A0A0A] before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-3/5 before:min-h-[20px] before:rounded-[0_2px_2px_0] before:bg-[#0A0A0A]",
-                        hasUnread && "text-[#0A0A0A] font-semibold"
+                        "flex items-center gap-1.5 w-full p-[6px_8px_6px_10px] mx-[2px] border-none rounded-md bg-none text-muted-foreground cursor-pointer text-[0.88rem] font-inherit text-left transition-colors duration-120 relative hover:bg-accent hover:text-foreground",
+                        activeChannelId === ch.id && "bg-accent text-foreground before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-3/5 before:min-h-[20px] before:rounded-[0_2px_2px_0] before:bg-foreground",
+                        hasUnread && "text-foreground font-semibold"
                       )}
                       onClick={() => handleChannelClick(ch.id)}
                     >
-                      {hasUnread && <span className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-[10px] h-[10px] bg-[#5865F2] rounded-full shadow-[0_0_4px_#5865F2,0_0_10px_#5865F2,0_0_16px_#5865F2] pointer-events-none z-[2]" />}
-                      <span className="text-[#7A7A7A] text-[1rem] font-semibold flex-shrink-0">#</span>
+                      {hasUnread && <span className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-[10px] h-[10px] bg-primary rounded-full shadow-[0_0_4px_var(--primary),0_0_10px_var(--primary)] pointer-events-none z-[2]" />}
+                      <span className="text-muted-foreground/70 text-[1rem] font-semibold flex-shrink-0">#</span>
                       <span className="whitespace-nowrap overflow-hidden text-ellipsis">{ch.name}</span>
                     </button>
                     {isOwner && (
                       <button
-                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-none border-none cursor-pointer text-[#7A7A7A] text-[0.8rem] p-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-none border-none cursor-pointer text-muted-foreground/70 text-[0.8rem] p-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:text-destructive"
                         onClick={(e) => {
                           e.stopPropagation();
                           setChannelToDelete(ch);
                         }}
                         title="Удалить канал"
                       >
-                        🗑️
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
                   </li>

@@ -4,6 +4,7 @@ import { useAppStore, type RootState } from "@/store";
 import { API_BASE_URL } from "@/api/base";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { cn } from "@/shared/utils/cn";
+import { ArrowDown } from "lucide-react";
 
 interface Props {
   messages:      Message[];
@@ -76,8 +77,20 @@ export function MessageList({
   const [hoverMsgId,  setHoverMsgId]  = useState<number | null>(null);
   const [msgToDelete, setMsgToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const EMOJIS = ["👍","❤️","😂","🎉","😮","😢","🔥"];
+
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    setShowScrollBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
+  };
+
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   const messagesById = useMemo(() => {
     const map = new Map<number, Message>();
@@ -384,102 +397,118 @@ export function MessageList({
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto space-y-4 flex flex-col min-w-0 h-full scrollbar-hide">
-      {hasMore && (
-        <div className="flex justify-center py-2 pb-3">
-          <button className="bg-muted hover:bg-accent border border-border rounded-full text-foreground cursor-pointer px-4 py-1.5 text-[0.82rem] transition-colors" onClick={onLoadMore} disabled={isLoading}>
-            {isLoading ? "Загрузка…" : "Загрузить старые сообщения"}
-          </button>
-        </div>
-      )}
-      {messages.length === 0 && !isLoading && (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-[0.9rem]">Сообщений пока нет. Скажите привет! 👋</div>
-      )}
-      {groupedMessages.map(({ date, messages: dayMessages }) => (
-        <div key={date} className="space-y-4">
-          <div className="flex items-center my-6 gap-3 text-muted-foreground text-[0.72rem] font-semibold tracking-[0.04em] before:content-[''] before:flex-1 before:h-[1px] before:bg-border after:content-[''] after:flex-1 after:h-[1px] after:bg-border">
-            <span>{date}</span>
+    <div className="flex-1 relative flex flex-col min-w-0 h-full">
+      <div 
+        ref={containerRef} 
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto space-y-4 flex flex-col min-w-0 h-full scrollbar-hide"
+      >
+        {hasMore && (
+          <div className="flex justify-center py-2 pb-3">
+            <button className="bg-muted hover:bg-accent border border-border rounded-full text-foreground cursor-pointer px-4 py-1.5 text-[0.82rem] transition-colors" onClick={onLoadMore} disabled={isLoading}>
+              {isLoading ? "Загрузка…" : "Загрузить старые сообщения"}
+            </button>
           </div>
-          {dayMessages.map((msg, idx) => {
-            const isOwn        = msg.sender_id === currentUserId;
-            const prevMsg      = dayMessages[idx - 1];
-            const isConsecutive = prevMsg && prevMsg.sender_id === msg.sender_id;
+        )}
+        {messages.length === 0 && !isLoading && (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground text-[0.9rem]">Сообщений пока нет. Скажите привет! 👋</div>
+        )}
+        {groupedMessages.map(({ date, messages: dayMessages }) => (
+          <div key={date} className="space-y-4">
+            <div className="flex items-center my-6 gap-3 text-muted-foreground text-[0.72rem] font-semibold tracking-[0.04em] before:content-[''] before:flex-1 before:h-[1px] before:bg-border after:content-[''] after:flex-1 after:h-[1px] after:bg-border">
+              <span>{date}</span>
+            </div>
+            {dayMessages.map((msg, idx) => {
+              const isOwn        = msg.sender_id === currentUserId;
+              const prevMsg      = dayMessages[idx - 1];
+              const isConsecutive = prevMsg && prevMsg.sender_id === msg.sender_id;
 
-            return (
-              <div
-                  key={msg.id}
-                  className={cn(
-                     "flex w-full",
-                     isOwn ? "justify-start max-[1300px]:justify-end" : "justify-start"
-                   )}
-                   ref={(el) => {
-                     if (el) {
-                       messageRefs.current[msg.id] = el;
-                     }
-                   }}
-                   onContextMenu={(e) => handleContextMenu(e, msg)}
-                   onMouseEnter={() => setHoverMsgId(msg.id)}
-                   onMouseLeave={() => { if (hoverMsgId === msg.id) setHoverMsgId(null); }}
-                 >
-                   <div className={cn(
-                     "max-w-[70%] rounded-2xl px-4 py-2.5 flex flex-col relative group",
-                     isOwn ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
-                     isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]"
-                   )}>
-                  {/* Quick Reactions on Hover */}
-                  {!contextMenu && hoverMsgId === msg.id && (
-                    <div className={cn(
-                      "absolute -top-10 flex items-center gap-1 px-2 py-1 bg-background border border-border rounded-full shadow-lg z-10 animate-in fade-in zoom-in duration-200",
-                      isOwn ? "right-0" : "left-0"
-                    )}>
-                      {EMOJIS.slice(0, 5).map(emoji => (
-                        <button
-                          key={emoji}
-                          onClick={() => toggleReaction(msg.id, emoji)}
-                          className="p-1 hover:bg-muted rounded-full transition-colors text-lg leading-none"
+              return (
+                <div
+                    key={msg.id}
+                    className={cn(
+                       "flex w-full",
+                       isOwn ? "justify-start max-[1300px]:justify-end" : "justify-start"
+                     )}
+                     ref={(el) => {
+                       if (el) {
+                         messageRefs.current[msg.id] = el;
+                       }
+                     }}
+                     onContextMenu={(e) => handleContextMenu(e, msg)}
+                     onMouseEnter={() => setHoverMsgId(msg.id)}
+                     onMouseLeave={() => { if (hoverMsgId === msg.id) setHoverMsgId(null); }}
+                   >
+                     <div className={cn(
+                       "max-w-[70%] rounded-2xl px-4 py-2.5 flex flex-col relative group",
+                       isOwn ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                       isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]"
+                     )}>
+                    {/* Quick Reactions on Hover */}
+                    {!contextMenu && hoverMsgId === msg.id && (
+                      <div className={cn(
+                        "absolute -top-10 flex items-center gap-1 px-2 py-1 bg-card border border-border rounded-full shadow-lg z-10 animate-in fade-in zoom-in duration-200",
+                        isOwn ? "right-0" : "left-0"
+                      )}>
+                        {EMOJIS.slice(0, 5).map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => toggleReaction(msg.id, emoji)}
+                            className="p-1 hover:bg-muted rounded-full transition-colors text-lg leading-none"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        <button 
+                          onClick={(e) => handleContextMenu(e as unknown as React.MouseEvent, msg)}
+                          className="p-1 hover:bg-muted rounded-full transition-colors text-muted-foreground"
                         >
-                          {emoji}
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
                         </button>
-                      ))}
-                      <button 
-                        onClick={(e) => handleContextMenu(e as unknown as React.MouseEvent, msg)}
-                        className="p-1 hover:bg-muted rounded-full transition-colors text-muted-foreground"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-                      </button>
-                    </div>
-                  )}
-
-                  {!isOwn && !isConsecutive && (
-                    <span className="text-[0.72rem] text-primary mb-1 font-semibold">{msg.sender_display_name || msg.sender_username}</span>
-                  )}
-                  {renderReplyPreview(msg)}
-                  {renderContent(msg)}
-                  
-                  <div className="flex items-center mt-1 gap-1.5 self-end">
-                    <p className={cn(
-                      "text-[10px]",
-                      isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
-                    )}>
-                      {formatTime(msg.inserted_at)}
-                    </p>
-                    {msg.edited_at && msg.content && (
-                      <span className="text-[10px] opacity-60">(ред.)</span>
+                      </div>
                     )}
-                    {isOwn && chatContext.type !== "room" && <StatusIcon status={msg.status} />}
+
+                    {!isOwn && !isConsecutive && (
+                      <span className="text-[0.72rem] text-primary mb-1 font-semibold">{msg.sender_display_name || msg.sender_username}</span>
+                    )}
+                    {renderReplyPreview(msg)}
+                    {renderContent(msg)}
+                    
+                    <div className="flex items-center mt-1 gap-1.5 self-end">
+                      <p className={cn(
+                        "text-[10px]",
+                        isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
+                      )}>
+                        {formatTime(msg.inserted_at)}
+                      </p>
+                      {msg.edited_at && msg.content && (
+                        <span className="text-[10px] opacity-60">(ред.)</span>
+                      )}
+                      {isOwn && chatContext.type !== "room" && <StatusIcon status={msg.status} />}
+                    </div>
+                    {renderReactions(msg.id, msg.reactions)}
                   </div>
-                  {renderReactions(msg.id, msg.reactions)}
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-      <div ref={bottomRef} />
+              );
+            })}
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+
+      {showScrollBottom && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-4 right-4 h-9 w-9 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-all z-10 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          aria-label="К последним сообщениям"
+        >
+          <ArrowDown className="h-4 w-4" />
+        </button>
+      )}
 
       {contextMenu && (
         <div
-          className="fixed z-[1000] bg-white border border-[#E1E1E1] rounded-lg py-1 min-w-[180px] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+          className="fixed z-[1000] bg-popover border border-border rounded-lg py-1 min-w-[180px] shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
           style={{
             top: contextMenu.y,
             left: contextMenu.x,
@@ -487,8 +516,8 @@ export function MessageList({
           onClick={(e) => e.stopPropagation()}
         >
           {contextMenu && (
-            <div className="px-4 py-2 border-b border-[#E1E1E1] mb-1">
-              <span className="text-[0.75rem] text-[#7A7A7A] block mb-1.5">
+            <div className="px-4 py-2 border-b border-border mb-1">
+              <span className="text-[0.75rem] text-muted-foreground/70 block mb-1.5">
                 Reactions
               </span>
               <div className="flex gap-2">
@@ -496,7 +525,7 @@ export function MessageList({
                   <button
                     key={e}
                     onClick={() => toggleReaction(contextMenu.msgId, e)}
-                    className="text-[1.1rem] bg-none border-none cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-[#EDEDED]"
+                    className="text-[1.1rem] bg-none border-none cursor-pointer p-1 rounded transition-colors duration-150 hover:bg-accent"
                   >
                     {e}
                   </button>
@@ -504,39 +533,44 @@ export function MessageList({
               </div>
             </div>
           )}
-          <button
-            onClick={handleReplyClick}
-            className="px-4 py-2 w-full text-left bg-none border-none cursor-pointer text-[#0A0A0A] text-[0.88rem] hover:bg-[#EDEDED]"
-          >
-            Reply
-          </button>
 
-          {contextMenu.hasText && (
+          <div className="flex flex-col">
             <button
-              onClick={handleCopy}
-              className="px-4 py-2 w-full text-left bg-none border-none cursor-pointer text-[#0A0A0A] text-[0.88rem] hover:bg-[#EDEDED]"
+              onClick={handleReplyClick}
+              className="flex items-center w-full px-4 py-2 text-left bg-none border-none text-popover-foreground text-[0.88rem] cursor-pointer hover:bg-accent transition-colors duration-120"
             >
-              Copy text
+              Reply
             </button>
-          )}
-
-          {contextMenu.isOwn && (
-            <>
+            
+            {contextMenu.hasText && (
               <button
-                onClick={handleEdit}
-                className="px-4 py-2 w-full text-left bg-none border-none cursor-pointer text-[#0A0A0A] text-[0.88rem] hover:bg-[#EDEDED]"
+                onClick={handleCopy}
+                className="flex items-center w-full px-4 py-2 text-left bg-none border-none text-popover-foreground text-[0.88rem] cursor-pointer hover:bg-accent transition-colors duration-120"
               >
-                Edit
+                Copy Text
               </button>
+            )}
 
-              <button
-                className="block w-full px-4 py-2 bg-none border-none text-[#E74C3C] cursor-pointer text-left text-[0.88rem] hover:bg-[#EDEDED]"
-                onClick={handleDelete}
-              >
-                Delete
-              </button>
-            </>
-          )}
+            {contextMenu.isOwn && (
+              <>
+                <div className="h-[1px] bg-border my-1 mx-1" />
+                {!messagesById.get(contextMenu.msgId)?.media_file_id && (
+                  <button
+                    onClick={handleEdit}
+                    className="flex items-center w-full px-4 py-2 text-left bg-none border-none text-popover-foreground text-[0.88rem] cursor-pointer hover:bg-accent transition-colors duration-120"
+                  >
+                    Edit Message
+                  </button>
+                )}
+                <button
+                  onClick={handleDelete}
+                  className="flex items-center w-full px-4 py-2 text-left bg-none border-none text-destructive text-[0.88rem] cursor-pointer hover:bg-accent transition-colors duration-120"
+                >
+                  Delete Message
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
 

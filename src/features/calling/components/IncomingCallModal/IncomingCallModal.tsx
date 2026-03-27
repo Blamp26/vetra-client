@@ -8,7 +8,7 @@ interface Props {
 
 export function IncomingCallModal({ callerName, onAccept, onReject }: Props) {
   return (
-    <div className="fixed inset-0 z-[1000] flex items-start justify-end p-5 pointer-events-none" role="dialog" aria-modal="true" aria-label="Входящий звонок">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-5 pointer-events-none" role="dialog" aria-modal="true" aria-label="Входящий звонок">
       <div className="pointer-events-auto bg-[#F8F8F8] border border-[#E1E1E1] rounded-2xl p-6 px-7 w-[280px] flex flex-col items-center gap-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-6 duration-250 ease-out">
         <div className="w-[72px] h-[72px] rounded-full bg-[#5865F2] flex items-center justify-center animate-pulse mb-1">
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#a29bfe] text-white text-[1.6rem] font-bold flex items-center justify-center">
