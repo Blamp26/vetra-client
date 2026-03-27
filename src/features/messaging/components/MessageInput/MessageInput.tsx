@@ -3,8 +3,10 @@ import { useAppStore, type RootState } from "@/store";
 import { API_BASE_URL } from "@/api/base";
 import { Paperclip, Smile, Send, X } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
- 
- interface ReplyTarget { id: number; content: string; author: string; } 
+import EmojiPicker, { EmojiStyle, Theme, type EmojiClickData } from 'emoji-picker-react';
+import { EmojiText } from "@/shared/components/Emoji/Emoji";
+
+interface ReplyTarget { id: number; content: string; author: string; } 
  
 interface Props { 
   onSend: (payload: { content?: string | null; mediaFileId?: string | null }, replyToId?: number) => Promise<void>; 
@@ -32,8 +34,15 @@ interface Props {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  const COMMON_EMOJIS = ["😀","😂","❤️","👍","🎉","🔥","😎","🤔","😢","😮","🙏","💯",
-                          "🥹","✨","🫡","👀","💀","🤝","🫶","😤","🥲","😅","🤣","😇"];
+  // Состояние темы для эмодзи-пикера
+  const [theme, setTheme] = useState<Theme>(Theme.LIGHT);
+
+  useEffect(() => {
+    // Простая проверка темы (можно доработать если есть стор с темой)
+    const isDark = document.documentElement.classList.contains('dark') || 
+                   window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setTheme(isDark ? Theme.DARK : Theme.LIGHT);
+  }, []);
  
    const textareaRef = useRef<HTMLTextAreaElement>(null); 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,9 +94,9 @@ interface Props {
       }
     };
     if (showEmojiPicker) {
-      window.addEventListener("click", handleClickOutside);
+      window.addEventListener("mousedown", handleClickOutside);
     }
-    return () => window.removeEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker]);
 
   // Очистка URL превью
@@ -96,6 +105,11 @@ interface Props {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  const onEmojiClick = (emojiData: EmojiClickData) => {
+    setContent(prev => prev + emojiData.emoji);
+    // Не закрываем пикер сразу, чтобы можно было выбрать несколько
+  };
  
    const stopTyping = () => { onTypingStop?.() }; 
  
@@ -284,7 +298,7 @@ interface Props {
                <span className="text-sm">✏️</span> Редактирование
              </span> 
              <span className="text-[0.82rem] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis"> 
-               {editingMessage!.content} 
+               <EmojiText text={editingMessage!.content} /> 
              </span> 
            </div> 
            <button 
@@ -305,7 +319,7 @@ interface Props {
                <span className="text-sm">↩️</span> Ответ {replyTo.author}
             </span>
             <span className="text-[0.82rem] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
-              {replyTo.content}
+              <EmojiText text={replyTo.content} />
             </span>
           </div>
           <button className="text-muted-foreground hover:text-destructive transition-colors p-1" onClick={onCancelReply} type="button">
@@ -391,16 +405,14 @@ interface Props {
                 </button>
 
                 {showEmojiPicker && (
-                  <div className="absolute bottom-full right-0 mb-2 p-2 bg-card border border-border rounded-xl shadow-xl grid grid-cols-6 gap-1 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                    {COMMON_EMOJIS.map(e => (
-                      <button 
-                        key={e} 
-                        onClick={() => { setContent(c => c + e); setShowEmojiPicker(false); textareaRef.current?.focus(); }}
-                        className="p-1.5 text-lg hover:bg-accent rounded-md transition-colors"
-                      >
-                        {e}
-                      </button>
-                    ))}
+                  <div className="absolute bottom-full right-0 mb-2 z-50">
+                    <EmojiPicker 
+                      onEmojiClick={onEmojiClick}
+                      emojiStyle={EmojiStyle.APPLE}
+                      theme={theme}
+                      lazyLoadEmojis={true}
+                      searchPlaceholder="Поиск..."
+                    />
                   </div>
                 )}
               </div>

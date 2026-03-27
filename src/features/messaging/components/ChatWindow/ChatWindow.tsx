@@ -5,13 +5,14 @@ import { useAppStore, type RootState } from "@/store";
 import { authApi } from "@/api/auth";
 import { MessageList } from "../MessageList/MessageList";
 import { MessageInput } from "../MessageInput/MessageInput";
+import { MessageSearch } from "../MessageSearch/MessageSearch";
 import { formatLastSeen } from "@/utils/formatDate";
 import type { ActiveChat, Message, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from '@/features/calling/components/CallButton';
 import type { CallStatus } from '@/features/calling/hooks/useCall.types';
 import { cn } from "@/shared/utils/cn";
-import { Video, EllipsisVertical } from "lucide-react";
+import { Video, EllipsisVertical, Search } from "lucide-react";
 
 interface Props {
   activeChat: ActiveChat;
@@ -137,6 +138,8 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
   const socketManager    = useAppStore((s: RootState) => s.socketManager);
 
   const [partner, setPartner] = useState<User | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
   const { messages, isLoading, hasMore, loadMore, sendMessage } =
     useMessages(partnerId);
 
@@ -195,6 +198,13 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
           status={callStatus}
           onCall={onStartCall}
         />
+        <button 
+          className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all hover:bg-accent hover:text-foreground size-9 h-9 w-9 text-muted-foreground cursor-pointer"
+          onClick={() => setIsSearchOpen(true)}
+          title="Поиск сообщений"
+        >
+          <Search className="h-4 w-4" />
+        </button>
         <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all hover:bg-accent hover:text-foreground size-9 h-9 w-9 text-muted-foreground">
           <Video className="h-4 w-4" />
         </button>
@@ -229,6 +239,16 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
         onTypingStart={handleTypingStart}
         onTypingStop={handleTypingStop}
       />
+      {isSearchOpen && (
+        <MessageSearch 
+          targetId={partnerId} 
+          type="direct"
+          onClose={() => setIsSearchOpen(false)} 
+          onJumpTo={(id) => {
+            console.log("Jump to message:", id);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -241,6 +261,8 @@ function RoomChatWindow({ roomId }: { roomId: number }) {
   const typingRoomMemberIds = useAppStore((s: RootState) => s.typingRoomMemberIds);
   const typingRoomMemberInfo = useAppStore((s: RootState) => s.typingRoomMemberInfo);
   const socketManager       = useAppStore((s: RootState) => s.socketManager);
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const { messages, isLoading, hasMore, loadMore, sendMessage } =
     useRoomMessages(roomId);
@@ -276,6 +298,13 @@ function RoomChatWindow({ roomId }: { roomId: number }) {
         </div>
       </div>
       <div className="flex items-center gap-1">
+        <button 
+          className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all hover:bg-accent hover:text-foreground size-9 h-9 w-9 text-muted-foreground cursor-pointer"
+          onClick={() => setIsSearchOpen(true)}
+          title="Поиск сообщений"
+        >
+          <Search className="h-4 w-4" />
+        </button>
         <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all hover:bg-accent hover:text-foreground size-9 h-9 w-9 text-muted-foreground">
           <EllipsisVertical className="h-4 w-4" />
         </button>
@@ -290,25 +319,39 @@ function RoomChatWindow({ roomId }: { roomId: number }) {
   });
 
   return (
-    <ChatWindowLayout
-      chatId={roomId}
-      currentUserId={currentUser.id}
-      header={header}
-      messages={messages}
-      isLoading={isLoading}
-      hasMore={hasMore}
-      loadMore={loadMore}
-      sendMessage={sendMessage}
-      typingNickname={
-        typingMemberNames.length > 0
-          ? typingMemberNames.join(", ")
-          : null
-      }
-      chatContext={{ type: "room", roomId }}
-      onTypingStart={handleTypingStart}
-      onTypingStop={handleTypingStop}
-    />
-  );}
+    <>
+      <ChatWindowLayout
+        chatId={roomId}
+        currentUserId={currentUser.id}
+        header={header}
+        messages={messages}
+        isLoading={isLoading}
+        hasMore={hasMore}
+        loadMore={loadMore}
+        sendMessage={sendMessage}
+        typingNickname={
+          typingMemberNames.length > 0
+            ? typingMemberNames.join(", ")
+            : null
+        }
+        chatContext={{ type: "room", roomId }}
+        onTypingStart={handleTypingStart}
+        onTypingStop={handleTypingStop}
+      />
+      {isSearchOpen && (
+        <MessageSearch 
+          targetId={roomId} 
+          type="room"
+          onClose={() => setIsSearchOpen(false)} 
+          onJumpTo={(id) => {
+            console.log("Jump to message:", id);
+            // Пока просто лог, в будущем — скролл
+          }}
+        />
+      )}
+    </>
+  );
+}
 
 // ── Экспортируемый компонент ──────────────────────────────────────────────────
 

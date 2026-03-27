@@ -21,4 +21,9 @@ export const messagesApi = {
   getList(): Promise<ConversationPreview[]> {
     return get<ConversationPreview[]>("/conversations");
   },
+
+  search(otherUserId: number, query: string): Promise<Message[]> {
+    const params = new URLSearchParams({ q: query });
+    return get<Message[]>(`/conversations/${otherUserId}/search?${params}`);
+  },
 };
