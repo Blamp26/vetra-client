@@ -9,7 +9,7 @@ import type {
   MessageEditedPayload,
   MessageDeletedPayload,
   MessageReactionGroup,
-} from "@/types";
+} from "@/shared/types";
 import type { SocketManager, PresenceState, PresenceDiff } from "@/services/socket";
 
 const AUTH_STORAGE_KEY = "vetra_user";
