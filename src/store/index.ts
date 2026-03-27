@@ -38,8 +38,9 @@ export const useAppStore = create<RootState>()(
     }),
     {
       name: 'vetra-storage',
-      // theme удалён — нет состояния для персистенции
-      partialize: (_state) => ({}),
+      partialize: (state) => ({
+        theme: state.theme,
+      }),
     }
   )
 );

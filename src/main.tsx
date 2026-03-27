@@ -17,6 +17,10 @@ import { ensureNotificationPermission } from '@/services/notifications';
 // Request notification permission on startup
 ensureNotificationPermission().catch(console.error);
 
+// Применяем сохранённую тему при старте
+const savedTheme = localStorage.getItem('vetra_theme') || 'light';
+document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+
 // Удаляем устаревший ключ темы из localStorage.
 // Безопасно вызывать при каждом старте — если ключа нет, это no-op.
 localStorage.removeItem('theme');

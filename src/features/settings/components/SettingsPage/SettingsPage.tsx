@@ -10,6 +10,7 @@ import { useAppStore, type RootState } from '@/store';
 import { ProfileModal } from '@/features/profile/components/ProfileModal/ProfileModal';
 import { ConfirmModal } from '@/shared/components/ConfirmModal/ConfirmModal';
 import { cn } from '@/shared/utils/cn';
+import { themeLabels, type Theme } from "@/themes";
 
 function AudioVideoSettings() {
   const { 
@@ -90,13 +91,13 @@ function AudioVideoSettings() {
       <div className="space-y-6">
         {/* Input Device */}
         <div className="space-y-2">
-          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-[#4A4A4A]">
+          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">
             Input Device
           </label>
           <select 
             value={selectedInputDeviceId}
             onChange={(e) => setInputDevice(e.target.value)}
-            className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.95rem] outline-none focus:border-[#5865F2] transition-colors"
+            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-[0.95rem] outline-none focus:border-primary transition-colors"
           >
             {availableInputDevices.map(device => (
               <option key={device.deviceId} value={device.deviceId}>
@@ -108,13 +109,13 @@ function AudioVideoSettings() {
           
           {/* Mic Level Visualizer */}
           <div className="mt-4">
-            <div className="flex justify-between text-[0.72rem] text-[#7A7A7A] mb-1.5">
+            <div className="flex justify-between text-[0.72rem] text-muted-foreground/70 mb-1.5">
               <span>Input Level</span>
               <span>{Math.round((micLevel / 128) * 100)}%</span>
             </div>
-            <div className="h-2 w-full bg-[#EDEDED] rounded-full overflow-hidden">
+            <div className="h-2 w-full bg-accent rounded-full overflow-hidden">
               <div 
-                className="h-full bg-[#5865F2] transition-all duration-75"
+                className="h-full bg-primary transition-all duration-75"
                 style={{ width: `${Math.min(100, (micLevel / 128) * 100)}%` }}
               />
             </div>
@@ -123,13 +124,13 @@ function AudioVideoSettings() {
 
         {/* Output Device */}
         <div className="space-y-2">
-          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-[#4A4A4A]">
+          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">
             Output Device
           </label>
           <select 
             value={selectedOutputDeviceId}
             onChange={(e) => setOutputDevice(e.target.value)}
-            className="w-full px-3 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#0A0A0A] text-[0.95rem] outline-none focus:border-[#5865F2] transition-colors"
+            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-[0.95rem] outline-none focus:border-primary transition-colors"
           >
             {availableOutputDevices.map(device => (
               <option key={device.deviceId} value={device.deviceId}>
@@ -138,14 +139,14 @@ function AudioVideoSettings() {
             ))}
             {availableOutputDevices.length === 0 && <option value="default">Default</option>}
           </select>
-          <p className="text-[0.72rem] text-[#7A7A7A]">
+          <p className="text-[0.72rem] text-muted-foreground/70">
             Note: Speaker selection depends on browser support (mostly Chrome/Edge).
           </p>
         </div>
 
         <button 
           onClick={() => refreshDevices()}
-          className="text-[0.85rem] text-[#5865F2] hover:underline font-medium"
+          className="text-[0.85rem] text-primary hover:underline font-medium"
         >
           ↻ Refresh devices
         </button>
@@ -169,6 +170,8 @@ interface Props {
 export function SettingsPage({ onClose }: Props) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const logout = useAppStore((s: RootState) => s.logout);
+  const theme = useAppStore((s: RootState) => s.theme);
+  const setTheme = useAppStore((s: RootState) => s.setTheme);
 
   const [tab, setTab] = useState<SettingsTab>('account');
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -192,11 +195,11 @@ export function SettingsPage({ onClose }: Props) {
   ];
 
   return (
-    <div className="fixed inset-0 z-[200] flex bg-[#FAFAFA] animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[200] flex bg-background animate-in fade-in duration-150">
       {/* ── Sidebar ─────────────────────────────────────────────── */}
-      <div className="w-[220px] shrink-0 bg-[#F8F8F8] border-r border-[#E1E1E1] flex flex-col p-6 pt-9">
+      <div className="w-[220px] shrink-0 bg-sidebar border-r border-border flex flex-col p-6 pt-9">
         <div className="mb-5 pl-2">
-          <h2 className="text-[1rem] font-bold">Настройки</h2>
+          <h2 className="text-[1rem] font-bold text-foreground">Настройки</h2>
         </div>
 
         <nav className="flex flex-col gap-0.5">
@@ -206,7 +209,7 @@ export function SettingsPage({ onClose }: Props) {
               onClick={() => setTab(t.id)}
               className={cn(
                 "flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-none text-[0.88rem] cursor-pointer font-inherit transition-all duration-120 text-left",
-                tab === t.id ? "bg-[#EDEDED] text-[#0A0A0A] font-semibold" : "bg-transparent text-[#4A4A4A] font-normal hover:bg-[#EDEDED]"
+                tab === t.id ? "bg-accent text-foreground font-semibold" : "bg-transparent text-muted-foreground font-normal hover:bg-accent"
               )}
             >
               <span>{t.icon}</span>
@@ -215,15 +218,15 @@ export function SettingsPage({ onClose }: Props) {
           ))}
         </nav>
 
-        <div className="mt-2 border-t border-[#E1E1E1] pt-2">
-          <div className="text-[11px] text-[#7A7A7A] px-4 py-1 tracking-[0.04em] uppercase font-semibold opacity-60">
+        <div className="mt-2 border-t border-border pt-2">
+          <div className="text-[11px] text-muted-foreground/70 px-4 py-1 tracking-[0.04em] uppercase font-semibold opacity-60">
             App Settings
           </div>
           <button
             onClick={() => setTab('privacy')}
             className={cn(
               "flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-none text-[0.88rem] cursor-pointer font-inherit transition-all duration-120 text-left w-full",
-              tab === 'privacy' ? "bg-[#EDEDED] text-[#0A0A0A] font-semibold" : "bg-transparent text-[#4A4A4A] font-normal hover:bg-[#EDEDED]"
+              tab === 'privacy' ? "bg-accent text-foreground font-semibold" : "bg-transparent text-muted-foreground font-normal hover:bg-accent"
             )}
           >
             <span>🔒</span>
@@ -231,10 +234,10 @@ export function SettingsPage({ onClose }: Props) {
           </button>
         </div>
 
-        <div className="mt-2.5 border-t border-[#E1E1E1] pt-2.5">
+        <div className="mt-2.5 border-t border-border pt-2.5">
           <button
             onClick={() => setShowLogoutConfirm(true)}
-            className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-none bg-transparent text-[#E74C3C] cursor-pointer font-inherit text-[0.88rem] text-left opacity-85 transition-all duration-120 hover:bg-[#E74C3C]/12 hover:opacity-100"
+            className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-none bg-transparent text-destructive cursor-pointer font-inherit text-[0.88rem] text-left opacity-85 transition-all duration-120 hover:bg-destructive/10 hover:opacity-100"
           >
             <span>⇥</span>
             <span>Log Out</span>
@@ -244,24 +247,24 @@ export function SettingsPage({ onClose }: Props) {
         <div className="mt-auto">
           <button
             onClick={onClose}
-            className="flex items-center gap-2 px-2.5 py-2 rounded-lg border-none bg-transparent text-[#7A7A7A] cursor-pointer font-inherit text-[0.88rem] transition-colors duration-120 hover:text-[#0A0A0A]"
+            className="flex items-center gap-2 px-2.5 py-2 rounded-lg border-none bg-transparent text-muted-foreground/70 cursor-pointer font-inherit text-[0.88rem] transition-colors duration-120 hover:text-foreground"
           >
             ← Назад
           </button>
-          <div className="mt-1.5 pl-2 text-[0.72rem] text-[#7A7A7A]">
+          <div className="mt-1.5 pl-2 text-[0.72rem] text-muted-foreground/70">
             Esc — закрыть
           </div>
         </div>
       </div>
 
       {/* ── Content ─────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto p-8 px-10 bg-[#FAFAFA]">
+      <div className="flex-1 overflow-y-auto p-8 px-10 bg-background">
         {/* ── Account ── */}
         {tab === 'account' && currentUser && (
           <div className="max-w-[560px]">
-            <h3 className="mb-6 text-[1.1rem] font-bold">Аккаунт</h3>
+            <h3 className="mb-6 text-[1.1rem] font-bold text-foreground">Аккаунт</h3>
 
-            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 mb-4 flex items-center gap-4">
+            <div className="bg-card rounded-lg border border-border p-5 mb-4 flex items-center gap-4">
               {currentUser.avatar_url ? (
                 <img
                   src={currentUser.avatar_url}
@@ -269,25 +272,25 @@ export function SettingsPage({ onClose }: Props) {
                   className="w-16 h-16 rounded-full object-cover shrink-0"
                 />
               ) : (
-                <span className="w-16 h-16 rounded-full bg-[#5865F2] text-white font-bold text-[1.5rem] inline-flex items-center justify-center shrink-0">
+                <span className="w-16 h-16 rounded-full bg-primary text-primary-foreground font-bold text-[1.5rem] inline-flex items-center justify-center shrink-0">
                   {(currentUser.display_name || currentUser.username)[0].toUpperCase()}
                 </span>
               )}
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-[1rem] mb-0.5">
+                <div className="font-bold text-[1rem] mb-0.5 text-foreground">
                   {currentUser.display_name || currentUser.username}
                 </div>
-                <div className="text-[#7A7A7A] text-[0.85rem]">
+                <div className="text-muted-foreground/70 text-[0.85rem]">
                   @{currentUser.username}
                 </div>
                 {currentUser.bio && (
-                  <div className="text-[#4A4A4A] text-[0.82rem] mt-1.5">
+                  <div className="text-muted-foreground text-[0.82rem] mt-1.5">
                     {currentUser.bio}
                   </div>
                 )}
               </div>
               <button
-                className="px-4 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] text-[0.85rem] font-semibold cursor-pointer hover:bg-[#F8F8F8] transition-colors duration-150 shrink-0"
+                className="px-4 py-2 bg-background border border-border rounded-lg text-muted-foreground text-[0.85rem] font-semibold cursor-pointer hover:bg-accent transition-colors duration-150 shrink-0"
                 onClick={() => setShowEditProfile(true)}
               >
                 Изменить
@@ -301,34 +304,34 @@ export function SettingsPage({ onClose }: Props) {
             ].map(({ label, value }) => (
               <div
                 key={label}
-                className="flex justify-between items-center py-3 border-b border-[#E1E1E1] text-[0.9rem]"
+                className="flex justify-between items-center py-3 border-b border-border text-[0.9rem]"
               >
-                <span className="text-[#7A7A7A]">{label}</span>
-                <span className="text-[#0A0A0A]">{value}</span>
+                <span className="text-muted-foreground/70">{label}</span>
+                <span className="text-foreground">{value}</span>
               </div>
             ))}
 
-            <div className="flex justify-between items-center py-3 border-b border-[#E1E1E1] text-[0.9rem]">
+            <div className="flex justify-between items-center py-3 border-b border-border text-[0.9rem]">
               <div>
-                <div className="text-[#7A7A7A]">Password</div>
-                <div className="text-[#4A4A4A] text-[0.82rem] mt-0.5">
+                <div className="text-muted-foreground/70">Password</div>
+                <div className="text-muted-foreground text-[0.82rem] mt-0.5">
                   Last changed recently
                 </div>
               </div>
-              <button className="px-4 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] text-[0.85rem] font-semibold cursor-pointer hover:bg-[#F8F8F8] transition-colors duration-150">
+              <button className="px-4 py-2 bg-background border border-border rounded-lg text-muted-foreground text-[0.85rem] font-semibold cursor-pointer hover:bg-accent transition-colors duration-150">
                 Change
               </button>
             </div>
 
-            <div className="mt-4.5 pt-4.5 border-t border-[#E1E1E1] flex items-center justify-between gap-3">
+            <div className="mt-4.5 pt-4.5 border-t border-border flex items-center justify-between gap-3">
               <div>
-                <div className="text-[#E74C3C] font-bold">Log Out</div>
-                <div className="text-[0.82rem] text-[#7A7A7A] mt-0.5">
+                <div className="text-destructive font-bold">Log Out</div>
+                <div className="text-[0.82rem] text-muted-foreground/70 mt-0.5">
                   You will be returned to the login screen
                 </div>
               </div>
               <button
-                className="px-4 py-2 bg-[#E74C3C]/12 border border-[#E74C3C]/35 text-[#E74C3C] rounded-lg text-[0.85rem] font-semibold cursor-pointer hover:bg-[#E74C3C]/20 transition-colors duration-150"
+                className="px-4 py-2 bg-destructive/10 border border-destructive/35 text-destructive rounded-lg text-[0.85rem] font-semibold cursor-pointer hover:bg-destructive/20 transition-colors duration-150"
                 onClick={() => setShowLogoutConfirm(true)}
               >
                 Log Out
@@ -340,8 +343,8 @@ export function SettingsPage({ onClose }: Props) {
         {/* ── Notifications ── */}
         {tab === 'notifications' && (
           <div className="max-w-[560px]">
-            <h3 className="mb-6 text-[1.1rem] font-bold">Уведомления</h3>
-            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 text-[#7A7A7A] text-[0.9rem] text-center">
+            <h3 className="mb-6 text-[1.1rem] font-bold text-foreground">Уведомления</h3>
+            <div className="bg-card rounded-lg border border-border p-5 text-muted-foreground/70 text-[0.9rem] text-center">
               🔔 Настройки уведомлений — в разработке
             </div>
           </div>
@@ -350,83 +353,78 @@ export function SettingsPage({ onClose }: Props) {
         {/* ── Profile ── */}
         {tab === 'profile' && (
           <div className="max-w-[560px]">
-            <h3 className="mb-6 text-[1.1rem] font-bold">Profile</h3>
-            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 text-[#7A7A7A] text-[0.9rem] text-center">
+            <h3 className="mb-6 text-[1.1rem] font-bold text-foreground">Profile</h3>
+            <div className="bg-card rounded-lg border border-border p-5 text-muted-foreground/70 text-[0.9rem] text-center">
               🪪 Profile settings — work in progress
             </div>
           </div>
         )}
 
-        {/* ── Appearance — статический блок, переключение тем удалено ── */}
+        {/* ── Appearance ── */}
         {tab === 'appearance' && (
           <div className="max-w-[560px]">
-            <h3 className="mb-6 text-[1.1rem] font-bold">Внешний вид</h3>
+            <h3 className="mb-6 text-[1.1rem] font-bold text-foreground">Внешний вид</h3>
 
-            {/* Уведомление о единой теме */}
-            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 px-6 mb-4 flex items-start gap-3.5">
-              {/* Иконка солнца — inline SVG, без внешних зависимостей */}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#5865F2"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="shrink-0 mt-0.5"
-              >
-                <circle cx="12" cy="12" r="5" />
-                <line x1="12" y1="1" x2="12" y2="3" />
-                <line x1="12" y1="21" x2="12" y2="23" />
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                <line x1="1" y1="12" x2="3" y2="12" />
-                <line x1="21" y1="12" x2="23" y2="12" />
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-              </svg>
-
-              <div>
-                <div className="font-semibold text-[0.9rem] text-[#0A0A0A] mb-1">
-                  Единая светлая тема
-                </div>
-                <div className="text-[0.83rem] text-[#4A4A4A] leading-[1.5]">
-                  Приложение использует единую светлую тему.
-                  Переключение тем недоступно в этой версии.
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                  Тема оформления
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {(['light', 'dark'] as Theme[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTheme(t)}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg border transition-all duration-150",
+                        theme === t 
+                          ? "bg-card border-primary shadow-sm" 
+                          : "bg-background border-border hover:border-primary/50"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border flex items-center justify-center",
+                        theme === t ? "border-primary" : "border-border"
+                      )}>
+                        {theme === t && <div className="w-2 h-2 rounded-full bg-primary" />}
+                      </div>
+                      <span className={cn(
+                        "text-[0.9rem] font-medium",
+                        theme === t ? "text-foreground" : "text-muted-foreground"
+                      )}>
+                        {themeLabels[t]}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
 
-            {/* Палитра цветов — только для информации, не интерактивна */}
-            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-4 px-5">
-              <div className="font-semibold text-[0.78rem] text-[#7A7A7A] mb-3 uppercase tracking-[0.06em]">
-                Цветовая палитра
-              </div>
+              {/* Палитра цветов — только для информации, не интерактивна */}
+              <div className="bg-card rounded-lg border border-border p-4 px-5">
+                <div className="font-semibold text-[0.78rem] text-muted-foreground/70 mb-3 uppercase tracking-[0.06em]">
+                  Цветовая палитра
+                </div>
 
-              <div className="flex flex-col gap-2">
-                {[
-                  { label: 'Основной фон', value: '#FAFAFA' },
-                  { label: 'Сайдбар', value: '#F8F8F8' },
-                  { label: 'Панель управления', value: '#FFFFFF' },
-                  { label: 'Текст', value: '#0A0A0A' },
-                  { label: 'Разделители', value: '#E1E1E1' },
-                ].map(({ label, value }) => (
-                  <div
-                    key={label}
-                    className="flex items-center gap-2.5 text-[0.82rem] text-[#4A4A4A]"
-                  >
+                <div className="flex flex-col gap-2">
+                  {[
+                    { label: 'Основной фон', value: 'var(--background)' },
+                    { label: 'Сайдбар', value: 'var(--sidebar)' },
+                    { label: 'Панель управления', value: 'var(--card)' },
+                    { label: 'Текст', value: 'var(--foreground)' },
+                    { label: 'Разделители', value: 'var(--border)' },
+                  ].map(({ label, value }) => (
                     <div
-                      style={{ background: value }}
-                      className="w-[18px] h-[18px] rounded border border-[#E1E1E1] shrink-0"
-                    />
-                    <span className="flex-1">{label}</span>
-                    <code className="font-mono text-[0.78rem] text-[#7A7A7A]">
-                      {value}
-                    </code>
-                  </div>
-                ))}
+                      key={label}
+                      className="flex items-center gap-2.5 text-[0.82rem] text-muted-foreground"
+                    >
+                      <div
+                        style={{ background: value }}
+                        className="w-[18px] h-[18px] rounded border border-border shrink-0"
+                      />
+                      <span className="flex-1">{label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -440,8 +438,8 @@ export function SettingsPage({ onClose }: Props) {
         {/* ── Privacy ── */}
         {tab === 'privacy' && (
           <div className="max-w-[560px]">
-            <h3 className="mb-6 text-[1.1rem] font-bold">Privacy</h3>
-            <div className="bg-[#F8F8F8] rounded-lg border border-[#E1E1E1] p-5 text-[#7A7A7A] text-[0.9rem] text-center">
+            <h3 className="mb-6 text-[1.1rem] font-bold text-foreground">Privacy</h3>
+            <div className="bg-card rounded-lg border border-border p-5 text-muted-foreground/70 text-[0.9rem] text-center">
               🔒 Privacy settings — work in progress
             </div>
           </div>

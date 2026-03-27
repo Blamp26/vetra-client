@@ -9,15 +9,16 @@ import { SettingsPage } from "@/features/settings/components/SettingsPage/Settin
 import { useSocketEvents } from "@/features/messaging/hooks/useSocketEvents";
 import { useAuthHydration } from "@/shared/hooks/useAuthHydration";
 import { useCall } from './features/calling/hooks/useCall';
-// import { ActiveCallWindow } from './features/calling/components/ActiveCallWindow';
-// import { IncomingCallModal } from './features/calling/components/IncomingCallModal';
+
+import { IncomingCallModal } from './features/calling/components/IncomingCallModal';
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
-  const { status, remoteStream, remoteUsername, isMuted, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
+  const { status, remoteStream, remoteUsername, remoteUserId, isMuted, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
   const activeChat = useAppStore((s) => s.activeChat);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
+  const openModal = useAppStore((s) => s.openModal);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const [showSettings, setShowSettings] = useState(false);
@@ -230,6 +231,12 @@ function App() {
                 <p className="max-w-sm text-sm text-muted-foreground">
                   Choose a chat from the sidebar or search for a user to start messaging
                 </p>
+                <button
+                  onClick={() => openModal("CREATE_PICKER")}
+                  className="mt-4 px-6 py-2 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+                >
+                  Start a new conversation
+                </button>
               </div>
             </div>
           </div>
@@ -241,7 +248,7 @@ function App() {
         <SettingsPage onClose={() => setShowSettings(false)} />
       )}
 
-      {/* {status === 'ringing' && (
+      {status === 'ringing' && (
         <IncomingCallModal
           callerName={remoteUsername ?? `User #${remoteUserId}`}
           onAccept={acceptCall}
@@ -249,15 +256,7 @@ function App() {
         />
       )}
 
-      {status === 'active' && remoteUsername && (
-        <ActiveCallWindow
-          remoteStream={remoteStream}
-          remoteUsername={remoteUsername}
-          isMuted={isMuted}
-          onMuteToggle={toggleMute}
-          onHangUp={hangUp}
-        />
-      )} */}
+
 
       <ToastHost />
     </>

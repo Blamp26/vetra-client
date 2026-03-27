@@ -10,6 +10,8 @@ import { formatPreviewTime } from "@/utils/formatDate";
 import type { ActiveChat } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { cn } from "@/shared/utils/cn";
+import { SquarePen } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@radix-ui/react-tooltip";
 
 interface SidebarProps {
   isServerMode?:  boolean;
@@ -105,8 +107,16 @@ export function Sidebar({
         )}
 
         {/* Messages Header */}
-        <div className={cn("px-4 pb-2", isServerMode && "hidden")}>
+        <div className={cn("flex items-center justify-between px-4 pb-2", isServerMode && "hidden")}>
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Messages</span>
+          <button
+            onClick={() => openModal("CREATE_PICKER")}
+            className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+            aria-label="Новый чат"
+            title="Начать новый чат"
+          >
+            <SquarePen className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Scrollable Area */}
@@ -114,47 +124,57 @@ export function Sidebar({
           <style>{`[data-radix-scroll-area-viewport]{scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;}[data-radix-scroll-area-viewport]::-webkit-scrollbar{display:none}`}</style>
           <div data-radix-scroll-area-viewport="" data-slot="scroll-area-viewport" className="focus-visible:ring-ring/50 size-full transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1 overflow-y-auto overflow-x-hidden">
             <div className="px-2 space-y-1">
-              {allItems.map((item) => {
+              <TooltipProvider delayDuration={400}>
+                {allItems.map((item) => {
                   const isActive = isItemActive(item);
                   
                   return (
-                    <button
-                      key={`${item.kind}-${item.id}`}
-                      onClick={() => handleItemClick(item)}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-sidebar-accent",
-                        isActive && "bg-sidebar-accent"
-                      )}
-                    >
-                      <div className="relative">
-                        <Avatar 
-                          name={item.name} 
-                          size="large" 
-                          className="size-8 h-10 w-10" 
-                          status={item.kind === "direct" ? (item.isOnline ? "online" : "offline") : null}
-                        />
-                      </div>
-                      
-                      {!isServerMode && (
-                        <div className="flex-1 overflow-hidden">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-sidebar-foreground">{item.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {formatPreviewTime(item.time)}
-                            </span>
+                    <Tooltip key={`${item.kind}-${item.id}`}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => handleItemClick(item)}
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-sidebar-accent",
+                            isActive && "bg-sidebar-accent"
+                          )}
+                        >
+                          <div className="relative">
+                            <Avatar 
+                              name={item.name} 
+                              size="large" 
+                              className="size-8 h-10 w-10" 
+                              status={item.kind === "direct" ? (item.isOnline ? "online" : "offline") : null}
+                            />
                           </div>
-                          <p className="truncate text-sm text-muted-foreground">{item.preview}</p>
-                        </div>
-                      )}
+                          
+                          {!isServerMode && (
+                            <div className="flex-1 overflow-hidden">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-sidebar-foreground">{item.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatPreviewTime(item.time)}
+                                </span>
+                              </div>
+                              <p className="truncate text-sm text-muted-foreground">{item.preview}</p>
+                            </div>
+                          )}
 
-                      {!isServerMode && item.unread > 0 && (
-                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
-                          {item.unread}
-                        </span>
+                          {!isServerMode && item.unread > 0 && (
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
+                              {item.unread}
+                            </span>
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      {isServerMode && (
+                        <TooltipContent side="right" className="z-50 bg-popover text-popover-foreground border border-border px-3 py-1.5 rounded-md text-sm shadow-md animate-in fade-in zoom-in-95 duration-100">
+                          <p>{item.name}</p>
+                        </TooltipContent>
                       )}
-                    </button>
+                    </Tooltip>
                   );
                 })}
+              </TooltipProvider>
             </div>
           </div>
         </div>

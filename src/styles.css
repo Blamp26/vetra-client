@@ -121,6 +121,36 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+.dark {
+  --background: lab(8% 0 0);
+  --foreground: lab(95% 0 0);
+  --card: lab(12% 0 0);
+  --card-foreground: lab(95% 0 0);
+  --popover: lab(12% 0 0);
+  --popover-foreground: lab(95% 0 0);
+  --primary: lab(95% 0 0);
+  --primary-foreground: lab(8% 0 0);
+  --secondary: lab(18% 0 0);
+  --secondary-foreground: lab(95% 0 0);
+  --muted: lab(18% 0 0);
+  --muted-foreground: lab(60% 0 0);
+  --accent: lab(18% 0 0);
+  --accent-foreground: lab(95% 0 0);
+  --destructive: lab(45% 65 45);
+  --destructive-foreground: lab(95% 0 0);
+  --border: lab(20% 0 0);
+  --input: lab(20% 0 0);
+  --ring: lab(95% 0 0);
+  --sidebar: lab(10% 0 0);
+  --sidebar-foreground: lab(95% 0 0);
+  --sidebar-primary: lab(95% 0 0);
+  --sidebar-primary-foreground: lab(8% 0 0);
+  --sidebar-accent: lab(18% 0 0);
+  --sidebar-accent-foreground: lab(95% 0 0);
+  --sidebar-border: lab(20% 0 0);
+  --sidebar-ring: lab(95% 0 0);
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
