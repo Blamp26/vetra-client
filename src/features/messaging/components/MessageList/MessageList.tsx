@@ -353,18 +353,18 @@ export function MessageList({
     return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
   };
 
-  const renderContent = (msg: Message) => {
+  const renderContent = (msg: Message, isPhotoOnly: boolean = false) => {
     const hasMedia = !!msg.media_file_id;
     const hasText = !!(msg.content && msg.content.trim().length > 0);
     const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
     const timestamp = formatDate(msg.inserted_at) + " в " + formatTime(msg.inserted_at);
 
     return (
-      <div className="flex flex-col gap-2">
+      <>
         {hasMedia && (
-          <div className="mt-1">
+          <div className={cn(!isPhotoOnly && "mb-1")}>
             {msg.media_mime_type?.startsWith("video/") ? (
-              <video className="max-w-full rounded-lg max-h-[300px]" controls src={`${API_BASE_URL}/media/${msg.media_file_id}`} />
+              <video className="max-w-full rounded-lg max-h-[300px] w-full object-cover" controls src={`${API_BASE_URL}/media/${msg.media_file_id}`} />
             ) : (
               <div 
                 className="cursor-zoom-in active:scale-[0.99] transition-transform"
@@ -375,7 +375,10 @@ export function MessageList({
                 })}
               >
                 <AuthenticatedImage 
-                  className="max-w-full rounded-lg max-h-[400px] object-contain bg-muted/20 shadow-sm hover:shadow-md transition-shadow" 
+                  className={cn(
+                    "max-w-full w-full object-cover bg-muted/20 shadow-sm hover:shadow-md transition-shadow",
+                    isPhotoOnly ? "rounded-none max-h-[500px]" : "rounded-lg max-h-[400px]"
+                  )}
                   src={`${API_BASE_URL}/media/${msg.media_file_id}`} 
                   alt="attachment" 
                   crossOrigin="anonymous"
@@ -385,11 +388,13 @@ export function MessageList({
           </div>
         )}
         {hasText && (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+          <p className="text-sm leading-[1.3125] whitespace-pre-wrap break-words relative">
             <EmojiText text={msg.content || ""} />
+            {/* Невидимая распорка только для последней строки */}
+            <span className="inline-block w-[48px] h-[1px]" aria-hidden="true" />
           </p>
         )}
-      </div>
+      </>
     );
   };
 
@@ -425,7 +430,7 @@ export function MessageList({
     );
   };
 
-  const renderReplyPreview = (msg: Message) => {
+  const renderReplyPreview = (msg: Message, isOwn: boolean) => {
     if (!msg.reply_to_id) return null;
 
     const target = messagesById.get(msg.reply_to_id);
@@ -456,14 +461,25 @@ export function MessageList({
     return (
       <button
         type="button"
-        className="block w-full text-left px-2.5 py-1.5 mb-1.5 rounded-lg border border-border bg-background/50 text-[0.8rem] cursor-pointer"
+        className={cn(
+          "block w-full text-left pl-3 py-0 mb-0.5 rounded-sm relative group cursor-pointer border-l-2 transition-colors",
+          isOwn 
+            ? "border-primary-foreground/60 hover:bg-primary-foreground/10" 
+            : "border-primary hover:bg-primary/5"
+        )}
         onClick={handleClick}
       >
-        <div className="font-medium mb-0.5 text-foreground">
-          Replying to {author}
+        <div className={cn(
+          "font-semibold text-[0.75rem] leading-none pt-0.5 truncate",
+          isOwn ? "text-primary-foreground" : "text-primary"
+        )}>
+          {author}
         </div>
         {previewText && (
-          <div className="text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
+          <div className={cn(
+            "text-[0.82rem] leading-tight pb-0.5 truncate",
+            isOwn ? "text-primary-foreground/80" : "text-muted-foreground"
+          )}>
             <EmojiText text={previewText} size={14} />
           </div>
         )}
@@ -509,6 +525,7 @@ export function MessageList({
               const prevMsg      = dayMessages[idx - 1];
               const isConsecutive = prevMsg && prevMsg.sender_id === msg.sender_id;
               const isSelected    = selectedMessageIds.includes(msg.id);
+              const isPhotoOnly   = !!msg.media_file_id && (!msg.content || msg.content.trim().length === 0) && !msg.reply_to_id;
 
               return (
                 <div
@@ -540,31 +557,58 @@ export function MessageList({
                      <div 
                        onContextMenu={(e) => !selectionMode && handleContextMenu(e, msg)}
                        className={cn(
-                         "max-w-[70%] rounded-2xl px-4 py-2.5 flex flex-col relative group",
-                         isOwn ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                         "max-w-[70%] rounded-2xl flex flex-col relative group min-w-[90px] overflow-hidden",
+                         isPhotoOnly 
+                           ? "bg-transparent shadow-none p-0" 
+                           : cn("px-4 pt-2.5 pb-1 shadow-sm", isOwn ? "bg-primary text-primary-foreground pr-[26px]" : "bg-muted text-foreground pr-4"),
                          isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]",
                          selectionMode && isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                        )}
                      >
-                    {!isOwn && !isConsecutive && (
-                      <span className="text-[0.72rem] text-primary mb-1 font-semibold">{msg.sender_display_name || msg.sender_username}</span>
-                    )}
-                    {renderReplyPreview(msg)}
-                    {renderContent(msg)}
+                        {!isOwn && !isConsecutive && (
+                          <span className={cn(
+                            "text-[0.72rem] text-primary mb-1 font-semibold truncate",
+                            isPhotoOnly && "px-4 pt-2"
+                          )}>
+                            {msg.sender_display_name || msg.sender_username}
+                          </span>
+                        )}
+                        {renderReplyPreview(msg, isOwn)}
+                        {renderContent(msg, isPhotoOnly)}
+
+                        <div className={cn(
+                          "absolute flex items-center gap-1 leading-none select-none transition-colors",
+                          isPhotoOnly 
+                            ? "bottom-2 right-2 px-1.5 py-0.5 rounded-full bg-black/30 backdrop-blur-md text-white shadow-sm" 
+                            : "bottom-1 right-2"
+                        )}>
+                          <p className={cn(
+                            "text-[10px]",
+                            isPhotoOnly 
+                              ? "text-white/90" 
+                              : (isOwn ? "text-primary-foreground/70" : "text-muted-foreground")
+                          )}>
+                            {formatTime(msg.inserted_at)}
+                          </p>
+                          {msg.edited_at && msg.content && (
+                            <span className={cn(
+                              "text-[10px] opacity-60 leading-none",
+                              isPhotoOnly && "text-white/70"
+                            )}>(ред.)</span>
+                          )}
+                          {isOwn && chatContext.type !== "room" && (
+                            <div className={cn(
+                              "shrink-0 ml-0.5",
+                              isPhotoOnly && "[&_svg]:text-white"
+                            )}>
+                              <StatusIcon status={msg.status} />
+                            </div>
+                          )}
+                        </div>
                     
-                    <div className="flex items-center mt-1 gap-1.5 self-end">
-                      <p className={cn(
-                        "text-[10px]",
-                        isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
-                      )}>
-                        {formatTime(msg.inserted_at)}
-                      </p>
-                      {msg.edited_at && msg.content && (
-                        <span className="text-[10px] opacity-60">(ред.)</span>
-                      )}
-                      {isOwn && chatContext.type !== "room" && <StatusIcon status={msg.status} />}
+                    <div className={cn(isPhotoOnly && (messageReactions[msg.id] || msg.reactions)?.length > 0 && "px-2 pb-2")}>
+                      {renderReactions(msg.id, msg.reactions)}
                     </div>
-                    {renderReactions(msg.id, msg.reactions)}
                   </div>
                 </div>
               );

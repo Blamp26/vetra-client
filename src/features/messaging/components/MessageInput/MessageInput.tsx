@@ -292,15 +292,18 @@ interface Props {
      <div className="flex flex-col border-t border-border bg-background flex-shrink-0"> 
        {/* EDIT BAR */}
        {isEditing && ( 
-         <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 py-2 gap-2"> 
-           <div className="flex flex-col gap-0.5 min-w-0"> 
-             <span className="text-[0.78rem] font-semibold text-primary flex items-center gap-1.5">
-               <span className="text-sm">✏️</span> Редактирование
-             </span> 
-             <span className="text-[0.82rem] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis"> 
-               <EmojiText text={editingMessage!.content} /> 
-             </span> 
-           </div> 
+         <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 py-1.5 gap-2 animate-in slide-in-from-bottom-2 duration-200"> 
+           <div className="flex items-center gap-3 min-w-0 flex-1">
+             <div className="w-1 h-7 bg-primary rounded-full shrink-0" />
+             <div className="flex flex-col gap-0 min-w-0"> 
+               <span className="text-[0.78rem] font-semibold text-primary leading-tight">
+                 Редактирование
+               </span> 
+               <span className="text-[0.82rem] text-muted-foreground truncate leading-tight"> 
+                 <EmojiText text={editingMessage!.content} /> 
+               </span> 
+             </div>
+           </div>
            <button 
              className="text-muted-foreground hover:text-destructive transition-colors p-1" 
              onClick={cancelEditing} 
@@ -313,14 +316,17 @@ interface Props {
  
        {/* REPLY BAR */}
        {replyTo && !isEditing && ( 
-        <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 py-2 gap-2">
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-[0.78rem] font-semibold text-primary flex items-center gap-1.5">
-               <span className="text-sm">↩️</span> Ответ {replyTo.author}
-            </span>
-            <span className="text-[0.82rem] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
-              <EmojiText text={replyTo.content} />
-            </span>
+        <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 py-1.5 gap-2 animate-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-1 h-7 bg-primary rounded-full shrink-0" />
+            <div className="flex flex-col gap-0 min-w-0">
+              <span className="text-[0.78rem] font-semibold text-primary truncate leading-tight">
+                {replyTo.author}
+              </span>
+              <span className="text-[0.82rem] text-muted-foreground truncate leading-tight">
+                <EmojiText text={replyTo.content} />
+              </span>
+            </div>
           </div>
           <button className="text-muted-foreground hover:text-destructive transition-colors p-1" onClick={onCancelReply} type="button">
             <X className="h-4 w-4" />
