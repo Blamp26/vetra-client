@@ -33,11 +33,18 @@ export interface MessagesSlice {
     chatType: 'direct' | 'room'; 
     targetId: number; 
   } | null;
+  selectionMode: boolean;
+  selectedMessageIds: number[];
+  forwardingMessageIds: number[] | null;
 
   setSearchResults: (results: { users: User[], servers: Server[] }) => void;
   setIsSearching: (searching: boolean) => void;
   startEditing: (message: Message, chatType: 'direct' | 'room', targetId: number) => void; 
   cancelEditing: () => void; 
+  setSelectionMode: (enabled: boolean) => void;
+  toggleMessageSelection: (messageId: number) => void;
+  clearSelection: () => void;
+  setForwardingMessages: (messageIds: number[] | null) => void;
   initConversation: (partnerId: number) => void;
   setConversationMessages: (partnerId: number, messages: Message[]) => void;
   prependMessages: (partnerId: number, messages: Message[]) => void;
@@ -59,6 +66,9 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
   searchResults: { users: [], servers: [] },
   isSearching: false,
   editingMessage: null,
+  selectionMode: false,
+  selectedMessageIds: [],
+  forwardingMessageIds: null,
 
   setSearchResults: (results) => set({ searchResults: results }),
   setIsSearching: (searching) => set({ isSearching: searching }),
@@ -74,6 +84,26 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
     }), 
 
   cancelEditing: () => set({ editingMessage: null }), 
+
+  setSelectionMode: (enabled) => 
+    set({ 
+      selectionMode: enabled, 
+      selectedMessageIds: enabled ? get().selectedMessageIds : [] 
+    }),
+
+  toggleMessageSelection: (messageId) => {
+    const { selectedMessageIds } = get();
+    const isSelected = selectedMessageIds.includes(messageId);
+    set({
+      selectedMessageIds: isSelected
+        ? selectedMessageIds.filter((id: number) => id !== messageId)
+        : [...selectedMessageIds, messageId]
+    });
+  },
+
+  clearSelection: () => set({ selectionMode: false, selectedMessageIds: [] }),
+
+  setForwardingMessages: (messageIds) => set({ forwardingMessageIds: messageIds }),
 
   initConversation: (partnerId) => {
     if (get().conversations[partnerId]) return;
