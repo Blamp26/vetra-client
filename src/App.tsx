@@ -140,7 +140,7 @@ function App() {
   }
 
   return (
-    <>
+    <div className="flex h-screen w-full overflow-hidden bg-background">
       {/* Audio element for calls */}
       <audio
         ref={audioRef}
@@ -149,11 +149,11 @@ function App() {
       />
 
       {/* 1. Sidebar Area (Sidebar + ChannelPanel + Partition) */}
-      <div className="relative flex flex-col flex-shrink-0 h-full border-r border-border bg-sidebar w-[432px]">
+      <div className="relative flex flex-col flex-shrink-0 h-full border-r border-border bg-sidebar w-[432px] z-20">
         {showChannelPanel && (
           <div className="absolute left-[71px] top-0 bottom-0 w-[1px] bg-border pointer-events-none z-0" />
         )}
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           <Sidebar
             isServerMode={showChannelPanel}
           />
@@ -184,7 +184,7 @@ function App() {
       </div>
 
       {/* 2. Content Area (Chat or Empty State) */}
-      <div className="flex-1 flex overflow-hidden min-w-0">
+      <div className="flex-1 flex overflow-hidden min-w-0 relative z-10">
         {chatTarget ? (
           <ChatWindow 
             activeChat={chatTarget} 
@@ -269,10 +269,8 @@ function App() {
         />
       )}
 
-
-
       <ToastHost />
-    </>
+    </div>
   );
 }
 

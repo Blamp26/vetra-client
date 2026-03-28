@@ -99,7 +99,7 @@ export function Sidebar({
   return (
     <>
       <div className={cn(
-        "flex h-full w-[432px] flex-col bg-sidebar",
+        "flex h-full w-[432px] flex-col",
         isServerMode && "w-[72px]"
       )}>
         {/* Search */}

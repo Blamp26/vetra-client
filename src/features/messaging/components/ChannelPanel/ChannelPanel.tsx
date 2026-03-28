@@ -130,7 +130,7 @@ export function ChannelPanel({ serverId }: Props) {
 
   return (
     <>
-      <div className="w-[360px] min-w-[360px] flex-shrink-0 flex flex-col bg-sidebar overflow-hidden h-full">
+      <div className="w-[360px] min-w-[360px] flex-shrink-0 flex flex-col overflow-hidden h-full">
         {/* Header */}
         <div className="p-[12px_14px] border-b border-border bg-card flex-shrink-0 flex items-center justify-between">
           <div className="flex items-center gap-2">

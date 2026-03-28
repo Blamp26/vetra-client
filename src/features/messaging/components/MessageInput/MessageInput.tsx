@@ -292,7 +292,7 @@ interface Props {
      <div className="flex flex-col border-t border-border bg-background flex-shrink-0"> 
        {/* EDIT BAR */}
        {isEditing && ( 
-         <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 py-1.5 gap-2 animate-in slide-in-from-bottom-2 duration-200"> 
+         <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 max-[1300px]:px-6 py-1.5 gap-2 animate-in slide-in-from-bottom-2 duration-200"> 
            <div className="flex items-center gap-3 min-w-0 flex-1">
              <div className="w-1 h-7 bg-primary rounded-full shrink-0" />
              <div className="flex flex-col gap-0 min-w-0"> 
@@ -316,19 +316,23 @@ interface Props {
  
        {/* REPLY BAR */}
        {replyTo && !isEditing && ( 
-        <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 py-1.5 gap-2 animate-in slide-in-from-bottom-2 duration-200">
+        <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 max-[1300px]:px-6 py-1.5 gap-2 animate-in slide-in-from-bottom-2 duration-200">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-1 h-7 bg-primary rounded-full shrink-0" />
             <div className="flex flex-col gap-0 min-w-0">
               <span className="text-[0.78rem] font-semibold text-primary truncate leading-tight">
-                {replyTo.author}
+                <EmojiText text={replyTo.author} />
               </span>
               <span className="text-[0.82rem] text-muted-foreground truncate leading-tight">
                 <EmojiText text={replyTo.content} />
               </span>
             </div>
           </div>
-          <button className="text-muted-foreground hover:text-destructive transition-colors p-1" onClick={onCancelReply} type="button">
+          <button 
+            className="text-muted-foreground hover:text-destructive transition-colors p-1" 
+            onClick={onCancelReply} 
+            title="Отмена" 
+          > 
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -336,7 +340,7 @@ interface Props {
 
        {/* PREVIEW BAR */}
        {previewUrl && (
-         <div className="px-4 pt-3 flex items-center gap-3 animate-in slide-in-from-bottom-2 duration-200">
+         <div className="px-4 max-[1300px]:px-6 pt-3 flex items-center gap-3 animate-in slide-in-from-bottom-2 duration-200">
            <div className="relative group">
              {pendingFile?.type.startsWith("image/") ? (
                <img src={previewUrl} className="w-16 h-16 rounded-lg object-cover border border-border" alt="preview" />
@@ -378,7 +382,7 @@ interface Props {
         </div>
        )}
  
-       <div className="p-4">
+       <div className="p-4 pl-6 max-[1300px]:px-6">
          <div className="flex items-center gap-2">
             <button 
               className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-all hover:bg-accent size-9 h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
