@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import type { Message, MessageStatus, MessageReactionGroup } from "@/shared/types";
+import type { Message } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
-import { API_BASE_URL } from "@/api/base";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { ForwardModal } from "../ForwardModal";
-import { cn } from "@/shared/utils/cn";
-import { ArrowDown, Reply, Copy, Edit2, Trash2, Forward, CheckSquare, ChevronDown, ChevronUp, X } from "lucide-react";
-import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
-import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
-import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
+import { ArrowDown, X, Forward, Trash2 } from "lucide-react";
+import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { sendMessageViaChannel } from "@/services/socket";
 import { ImageLightbox } from "@/shared/components/ImageLightbox";
+import { cn } from "@/shared/utils/cn";
+
+import { MessageItem } from "./MessageItem";
+import { MessageContextMenu } from "./MessageContextMenu";
 
 interface Props {
   messages:      Message[];
@@ -22,30 +22,6 @@ interface Props {
     | { type: "direct"; partnerId: number }
     | { type: "room";   roomId: number };
   onReply?: (target: { id: number; content: string; author: string }) => void;
-}
-
-function StatusIcon({ status }: { status?: MessageStatus }) {
-  if (status === "error") {
-    return (
-      <svg className="ml-1" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Error sending">
-        <circle cx="7" cy="7" r="7" fill="currentColor" className="text-destructive" />
-        <text x="7" y="11" textAnchor="middle" fontSize="9" fontWeight="700" fill="white" fontFamily="Inter, sans-serif">!</text>
-      </svg>
-    );
-  }
-  if (status === "sent" || status === "delivered") {
-    return (
-      <svg className={cn("ml-1", status === "sent" ? "opacity-40" : "opacity-70")} width="18" height="11" viewBox="-1 5 34 20" xmlns="http://www.w3.org/2000/svg" aria-label={status === "sent" ? "Sent" : "Delivered"}>
-        <path fill="currentColor" d="M3 13 L8 18 L20 6 L23 9 L8 24 L0 16 Z" />
-      </svg>
-    );
-  }
-  return (
-    <svg className="ml-1 opacity-90" width="18" height="11" viewBox="-1 5 34 20" xmlns="http://www.w3.org/2000/svg" aria-label="Read">
-      <path fill="currentColor" d="M3 13 L8 18 L20 6 L23 9 L8 24 L0 16 Z" />
-      <path fill="currentColor" d="M16 17 L17 18 L29 6 L32 9 L17 24 L13 20 Z" />
-    </svg>
-  );
 }
 
 interface ContextMenu {
@@ -69,33 +45,49 @@ export function MessageList({
 }: Props) {
   const bottomRef    = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const selectionMode        = useAppStore((s: RootState) => s.selectionMode);
-  const selectedMessageIds   = useAppStore((s: RootState) => s.selectedMessageIds);
-  const setSelectionMode     = useAppStore((s: RootState) => s.setSelectionMode);
-  const toggleMessageSelection = useAppStore((s: RootState) => s.toggleMessageSelection);
-  const clearSelection       = useAppStore((s: RootState) => s.clearSelection);
-  const forwardingMessageIds = useAppStore((s: RootState) => s.forwardingMessageIds);
-  const setForwardingMessages = useAppStore((s: RootState) => s.setForwardingMessages);
-  const setActiveChat        = useAppStore((s: RootState) => s.setActiveChat);
   const isFirstLoad  = useRef(true);
+  const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  const socketManager = useAppStore((s: RootState) => s.socketManager);
-  const deleteMessage = useAppStore((s: RootState) => s.deleteMessage);
-  const deleteRoomMsg = useAppStore((s: RootState) => s.deleteRoomMessage);
-  const setMessageReactions = useAppStore((s: RootState) => s.setMessageReactions);
-  const messageReactions    = useAppStore((s: RootState) => s.messageReactions);
-  const startEditing = useAppStore((s: RootState) => s.startEditing); 
-  const activeChat = useAppStore((s: RootState) => s.activeChat);
+  // Store
+  const {
+    selectionMode,
+    selectedMessageIds,
+    setSelectionMode,
+    toggleMessageSelection,
+    clearSelection,
+    forwardingMessageIds,
+    setForwardingMessages,
+    setActiveChat,
+    socketManager,
+    deleteMessage,
+    deleteRoomMessage,
+    messageReactions,
+    startEditing,
+    activeChat,
+  } = useAppStore((s: RootState) => ({
+    selectionMode: s.selectionMode,
+    selectedMessageIds: s.selectedMessageIds,
+    setSelectionMode: s.setSelectionMode,
+    toggleMessageSelection: s.toggleMessageSelection,
+    clearSelection: s.clearSelection,
+    forwardingMessageIds: s.forwardingMessageIds,
+    setForwardingMessages: s.setForwardingMessages,
+    setActiveChat: s.setActiveChat,
+    socketManager: s.socketManager,
+    deleteMessage: s.deleteMessage,
+    deleteRoomMessage: s.deleteRoomMessage,
+    messageReactions: s.messageReactions,
+    startEditing: s.startEditing,
+    activeChat: s.activeChat,
+  }), true);
 
+  // Local state
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [msgToDelete, setMsgToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [isPickerExpanded, setIsPickerExpanded] = useState(false);
   const [lightboxData, setLightboxData] = useState<{ src: string; author: string; time: string } | null>(null);
-
-  const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const EMOJIS = ["👍","❤️","😂","🎉","😮","😢","🔥"];
 
   const handleScroll = () => {
     const el = containerRef.current;
@@ -149,23 +141,6 @@ export function MessageList({
     return () => window.removeEventListener("click", handler);
   }, [contextMenu]);
 
-  useEffect(() => {
-    if (!socketManager) return;
-    let unsub: (() => void) | undefined;
-    
-    if (chatContext.type === "room") {
-      unsub = socketManager.onRoomReactionUpdated(chatContext.roomId, (p: { message_id: number; reactions: MessageReactionGroup[] }) => {
-        setMessageReactions(p.message_id, p.reactions);
-      });
-    } else {
-      unsub = socketManager.onDirectReactionUpdated((p: { message_id: number; reactions: MessageReactionGroup[] }) => {
-        setMessageReactions(p.message_id, p.reactions);
-      });
-    }
-    
-    return () => { unsub?.(); };
-  }, [socketManager, chatContext, setMessageReactions]);
-
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, msg: Message) => {
       e.preventDefault();
@@ -177,9 +152,8 @@ export function MessageList({
         msg.sender_username ||
         `User #${msg.sender_id}`;
 
-      // Подбери эти значения под свою реальную ширину/высоту меню
-      const MENU_WIDTH  = 260; // ширина меню
-      const MENU_HEIGHT = 320; // высота с запасом
+      const MENU_WIDTH  = 260;
+      const MENU_HEIGHT = 320;
 
       let x = e.clientX;
       let y = e.clientY;
@@ -187,21 +161,18 @@ export function MessageList({
       const vw = window.innerWidth;
       const vh = window.innerHeight;
 
-      // ── Горизонталь: строго по требованию ─────────────────────────────
       if (x + MENU_WIDTH + 16 <= vw) {
-        x += 8; // небольшой отступ справа от курсора
+        x += 8;
       } else {
-        x -= MENU_WIDTH + 8; // строго слева от курсора
+        x -= MENU_WIDTH + 8;
       }
 
-      // ── Вертикаль (обычное поведение, можно оставить как есть) ───────
       if (y + MENU_HEIGHT + 16 <= vh) {
         y += 6;
       } else {
         y -= MENU_HEIGHT + 6;
       }
 
-      // Финальная защита от вылезания за границы
       x = Math.max(12, Math.min(x, vw - MENU_WIDTH - 12));
       y = Math.max(12, Math.min(y, vh - MENU_HEIGHT - 12));
 
@@ -221,17 +192,16 @@ export function MessageList({
 
   const handleEdit = useCallback(() => {
     if (!contextMenu || !contextMenu.isOwn) return;
-    const msg = messages.find((m) => m.id === contextMenu.msgId);
+    const msg = messagesById.get(contextMenu.msgId);
     if (!msg || !activeChat) return;
     if (msg.media_file_id) return;
 
     const chatType = chatContext.type;
-    const targetId =
-      chatType === "direct" ? chatContext.partnerId : chatContext.roomId;
+    const targetId = chatType === "direct" ? chatContext.partnerId : chatContext.roomId;
 
     startEditing(msg, chatType, targetId);
     setContextMenu(null);
-  }, [contextMenu, messages, activeChat, chatContext, startEditing]);
+  }, [contextMenu, messagesById, activeChat, chatContext, startEditing]);
 
   const handleDelete = useCallback(() => {
     if (!contextMenu || !contextMenu.isOwn) return;
@@ -248,16 +218,15 @@ export function MessageList({
         deleteMessage({ id: msgToDelete, recipient_id: chatContext.partnerId });
       } else {
         await socketManager.deleteRoomMessage(chatContext.roomId, msgToDelete);
-        deleteRoomMsg({ id: msgToDelete, room_id: chatContext.roomId });
+        deleteRoomMessage({ id: msgToDelete, room_id: chatContext.roomId });
       }
       setMsgToDelete(null);
     } catch (err) {
       console.error("Delete failed:", err);
-      alert("Не удалось удалить сообщение");
     } finally {
       setIsDeleting(false);
     }
-  }, [msgToDelete, socketManager, chatContext, deleteMessage, deleteRoomMsg]);
+  }, [msgToDelete, socketManager, chatContext, deleteMessage, deleteRoomMessage]);
 
   const handleCopy = useCallback(async () => {
     if (!contextMenu || !contextMenu.hasText || !contextMenu.content) return;
@@ -272,26 +241,20 @@ export function MessageList({
 
   const handleReplyClick = useCallback(() => {
     if (!contextMenu || !onReply) return;
-    const msg = messages.find((m) => m.id === contextMenu.msgId);
+    const msg = messagesById.get(contextMenu.msgId);
     if (!msg) return;
 
-    const content =
-      (msg.content ?? "").trim().length > 0
+    const content = (msg.content ?? "").trim().length > 0
         ? msg.content!
-        : msg.media_file_id
-        ? "[attachment]"
-        : "";
+        : msg.media_file_id ? "[attachment]" : "";
 
     onReply({
       id: msg.id,
       content,
-      author:
-        msg.sender_display_name ||
-        msg.sender_username ||
-        `User #${msg.sender_id}`,
+      author: msg.sender_display_name || msg.sender_username || `User #${msg.sender_id}`,
     });
     setContextMenu(null);
-  }, [contextMenu, messages, onReply]);
+  }, [contextMenu, messagesById, onReply]);
 
   const handleSelect = useCallback(() => {
     if (!contextMenu) return;
@@ -311,7 +274,7 @@ export function MessageList({
 
     try {
       for (const msgId of forwardingMessageIds) {
-        const msg = messages.find(m => m.id === msgId);
+        const msg = messagesById.get(msgId);
         if (!msg) continue;
 
         const payload = {
@@ -338,7 +301,7 @@ export function MessageList({
       setForwardingMessages(null);
       clearSelection();
     }
-  }, [forwardingMessageIds, socketManager, messages, setActiveChat, clearSelection, setForwardingMessages]);
+  }, [forwardingMessageIds, socketManager, messagesById, setActiveChat, clearSelection, setForwardingMessages]);
 
   const formatTime = (iso: string) =>
     new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -353,92 +316,10 @@ export function MessageList({
     return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
   };
 
-  const renderContent = (msg: Message, isPhotoOnly: boolean = false) => {
-    const hasMedia = !!msg.media_file_id;
-    const hasText = !!(msg.content && msg.content.trim().length > 0);
-    const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
-    const timestamp = formatDate(msg.inserted_at) + " в " + formatTime(msg.inserted_at);
-
-    return (
-      <>
-        {hasMedia && (
-          <div className={cn(!isPhotoOnly && "mb-1")}>
-            {msg.media_mime_type?.startsWith("video/") ? (
-              <video className="max-w-full rounded-lg max-h-[300px] w-full object-cover" controls src={`${API_BASE_URL}/media/${msg.media_file_id}`} />
-            ) : (
-              <div 
-                className="cursor-zoom-in active:scale-[0.99] transition-transform"
-                onClick={() => setLightboxData({
-                  src: `${API_BASE_URL}/media/${msg.media_file_id}`,
-                  author: authorName,
-                  time: timestamp
-                })}
-              >
-                <AuthenticatedImage 
-                  className={cn(
-                    "max-w-full w-full object-cover bg-muted/20 shadow-sm hover:shadow-md transition-shadow",
-                    isPhotoOnly ? "rounded-none max-h-[500px]" : "rounded-lg max-h-[400px]"
-                  )}
-                  src={`${API_BASE_URL}/media/${msg.media_file_id}`} 
-                  alt="attachment" 
-                  crossOrigin="anonymous"
-                />
-              </div>
-            )}
-          </div>
-        )}
-        {hasText && (
-          <p className="text-sm leading-[1.3125] whitespace-pre-wrap break-words relative max-w-[65ch] [word-break:normal]">
-            <EmojiText text={msg.content || ""} />
-            {/* Невидимая распорка только для последней строки, увеличенная для (ред.) и галочек */}
-            <span className="inline-block w-[85px] h-[1px]" aria-hidden="true" />
-          </p>
-        )}
-      </>
-    );
-  };
-
-  const renderReactions = (msgId: number, groups?: MessageReactionGroup[]) => {
-    const list = messageReactions[msgId] ?? groups ?? [];
-    if (!list || list.length === 0) return null;
-    return (
-      <div className="flex flex-wrap gap-1 mt-1.5">
-        {list.map((g: MessageReactionGroup) => {
-          const mine = g.user_ids.includes(currentUserId);
-          return (
-            <button
-              key={`${msgId}:${g.emoji}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleReaction(msgId, g.emoji);
-              }}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[14px] border transition-all duration-150 text-[0.85rem] cursor-pointer hover:scale-105 active:scale-95",
-                mine 
-                  ? "bg-primary/20 border-primary text-primary font-medium shadow-sm" 
-                  : "bg-muted/50 border-border text-foreground hover:bg-muted hover:border-muted-foreground/30"
-              )}
-              aria-pressed={mine}
-              title={mine ? "Remove reaction" : "Add reaction"}
-            >
-              <Emoji emoji={g.emoji} size={16} />
-              <span className={cn("text-[0.75rem]", mine ? "text-primary" : "text-muted-foreground")}>{g.count}</span>
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
-
   const renderReplyPreview = (msg: Message, isOwn: boolean) => {
     if (!msg.reply_to_id) return null;
-
     const target = messagesById.get(msg.reply_to_id);
-
-    const author =
-      target?.sender_display_name ||
-      target?.sender_username ||
-      (target ? `User #${target.sender_id}` : "Message");
+    const author = target?.sender_display_name || target?.sender_username || (target ? `User #${target.sender_id}` : "Message");
 
     let previewText = "";
     if (target) {
@@ -452,34 +333,23 @@ export function MessageList({
       }
     }
 
-    const handleClick = () => {
-      const el = messageRefs.current[msg.reply_to_id!];
-      if (!el) return;
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-    };
-
     return (
       <button
         type="button"
         className={cn(
           "block w-full text-left pl-3 py-0 mb-0.5 rounded-sm relative group cursor-pointer border-l-2 transition-colors",
-          isOwn 
-            ? "border-primary-foreground/60 hover:bg-primary-foreground/10" 
-            : "border-primary hover:bg-primary/5"
+          isOwn ? "border-primary-foreground/60 hover:bg-primary-foreground/10" : "border-primary hover:bg-primary/5"
         )}
-        onClick={handleClick}
+        onClick={() => {
+          const el = messageRefs.current[msg.reply_to_id!];
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }}
       >
-        <div className={cn(
-          "font-semibold text-[0.75rem] leading-none pt-0.5 truncate",
-          isOwn ? "text-primary-foreground" : "text-primary"
-        )}>
+        <div className={cn("font-semibold text-[0.75rem] leading-none pt-0.5 truncate", isOwn ? "text-primary-foreground" : "text-primary")}>
           {author}
         </div>
         {previewText && (
-          <div className={cn(
-            "text-[0.82rem] leading-tight pb-0.5 truncate",
-            isOwn ? "text-primary-foreground/80" : "text-muted-foreground"
-          )}>
+          <div className={cn("text-[0.82rem] leading-tight pb-0.5 truncate", isOwn ? "text-primary-foreground/80" : "text-muted-foreground")}>
             <EmojiText text={previewText} size={14} />
           </div>
         )}
@@ -487,16 +357,19 @@ export function MessageList({
     );
   };
 
-  const groupedMessages: Array<{ date: string; messages: Message[] }> = [];
-  for (const msg of messages) {
-    const date = formatDate(msg.inserted_at);
-    const last = groupedMessages[groupedMessages.length - 1];
-    if (last?.date === date) {
-      last.messages.push(msg);
-    } else {
-      groupedMessages.push({ date, messages: [msg] });
+  const groupedMessages = useMemo(() => {
+    const groups: Array<{ date: string; messages: Message[] }> = [];
+    for (const msg of messages) {
+      const date = formatDate(msg.inserted_at);
+      const last = groups[groups.length - 1];
+      if (last?.date === date) {
+        last.messages.push(msg);
+      } else {
+        groups.push({ date, messages: [msg] });
+      }
     }
-  }
+    return groups;
+  }, [messages]);
 
   return (
     <div className="flex-1 relative flex flex-col min-w-0 h-full">
@@ -521,96 +394,31 @@ export function MessageList({
               <span>{date}</span>
             </div>
             {dayMessages.map((msg, idx) => {
-              const isOwn        = msg.sender_id === currentUserId;
-              const prevMsg      = dayMessages[idx - 1];
-              const isConsecutive = prevMsg && prevMsg.sender_id === msg.sender_id;
-              const isSelected    = selectedMessageIds.includes(msg.id);
-              const isPhotoOnly   = !!msg.media_file_id && (!msg.content || msg.content.trim().length === 0) && !msg.reply_to_id;
-
+              const prevMsg = dayMessages[idx - 1];
               return (
-                <div
-                    key={msg.id}
-                    className={cn(
-                       "flex w-full group/msg",
-                       isOwn ? "justify-start max-[1300px]:justify-end max-[1300px]:pr-4" : "justify-start",
-                       selectionMode && "cursor-pointer"
-                     )}
-                     ref={(el) => {
-                       if (el) {
-                         messageRefs.current[msg.id] = el;
-                       }
-                     }}
-                     onClick={() => selectionMode && toggleMessageSelection(msg.id)}
-                   >
-                     {selectionMode && (
-                       <div className="flex items-center justify-center w-12 shrink-0 animate-in fade-in slide-in-from-left-2 duration-200">
-                         <div className={cn(
-                           "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-                           isSelected 
-                            ? "bg-primary border-primary text-primary-foreground" 
-                            : "border-muted-foreground/30 bg-transparent"
-                         )}>
-                           {isSelected && <CheckSquare className="h-3.5 w-3.5" />}
-                         </div>
-                       </div>
-                     )}
-                     <div 
-                       onContextMenu={(e) => !selectionMode && handleContextMenu(e, msg)}
-                       className={cn(
-                         "max-w-[85%] max-[1300px]:max-w-[90%] rounded-2xl flex flex-col relative group min-w-[110px]",
-                         isPhotoOnly 
-                           ? "bg-transparent shadow-none p-0 overflow-hidden" 
-                           : cn("px-4 pt-2.5 pb-1 shadow-sm", isOwn ? "bg-primary text-primary-foreground pr-[34px]" : "bg-muted text-foreground pr-[44px]"),
-                         isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]",
-                         selectionMode && isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                       )}
-                     >
-                        {!isOwn && !isConsecutive && (
-                          <span className={cn(
-                            "text-[0.72rem] text-primary mb-1 font-semibold truncate",
-                            isPhotoOnly && "px-4 pt-2"
-                          )}>
-                            {msg.sender_display_name || msg.sender_username}
-                          </span>
-                        )}
-                        {renderReplyPreview(msg, isOwn)}
-                        {renderContent(msg, isPhotoOnly)}
-
-                        <div className={cn(
-                          "absolute flex items-center gap-1.5 leading-none select-none transition-colors",
-                          isPhotoOnly 
-                            ? "bottom-3 right-3.5 px-1.5 py-0.5 rounded-full bg-black/30 backdrop-blur-md text-white shadow-sm" 
-                            : "bottom-2 right-3.5"
-                        )}>
-                          <p className={cn(
-                            "text-[10px]",
-                            isPhotoOnly 
-                              ? "text-white/90" 
-                              : (isOwn ? "text-primary-foreground/70" : "text-muted-foreground")
-                          )}>
-                            {formatTime(msg.inserted_at)}
-                          </p>
-                          {msg.edited_at && msg.content && (
-                            <span className={cn(
-                              "text-[10px] opacity-60 leading-none",
-                              isPhotoOnly && "text-white/70"
-                            )}>(ред.)</span>
-                          )}
-                          {isOwn && chatContext.type !== "room" && (
-                            <div className={cn(
-                              "shrink-0 ml-0.5",
-                              isPhotoOnly && "[&_svg]:text-white"
-                            )}>
-                              <StatusIcon status={msg.status} />
-                            </div>
-                          )}
-                        </div>
-                    
-                    <div className={cn(isPhotoOnly && (messageReactions[msg.id] || msg.reactions)?.length > 0 && "px-2 pb-2")}>
-                      {renderReactions(msg.id, msg.reactions)}
-                    </div>
-                  </div>
-                </div>
+                <MessageItem
+                  key={msg.id}
+                  ref={(el) => { messageRefs.current[msg.id] = el; }}
+                  msg={msg}
+                  isOwn={msg.sender_id === currentUserId}
+                  isConsecutive={prevMsg?.sender_id === msg.sender_id}
+                  isSelected={selectedMessageIds.includes(msg.id)}
+                  selectionMode={selectionMode}
+                  isRoom={chatContext.type === "room"}
+                  messageReactions={messageReactions[msg.id] || msg.reactions || []}
+                  currentUserId={currentUserId}
+                  onContextMenu={handleContextMenu}
+                  onToggleSelection={toggleMessageSelection}
+                  onToggleReaction={toggleReaction}
+                  onLightbox={setLightboxData}
+                  onReplyClick={(id) => {
+                    const el = messageRefs.current[id];
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
+                  renderReplyPreview={renderReplyPreview}
+                  formatTime={formatTime}
+                  formatDate={formatDate}
+                />
               );
             })}
           </div>
@@ -650,8 +458,6 @@ export function MessageList({
 
           <button 
             onClick={() => {
-              // Implementation for bulk delete
-              // For now we just use the existing delete flow for first one
               if (selectedMessageIds.length > 0) setMsgToDelete(selectedMessageIds[0]);
             }}
             disabled={selectedMessageIds.length === 0}
@@ -678,140 +484,20 @@ export function MessageList({
       )}
 
       {contextMenu && (
-        <div
-          className="fixed z-[1000] bg-popover/95 backdrop-blur-md border border-border/50 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden w-[260px] h-[320px]"
-          style={{
-            top: contextMenu.y,
-            left: contextMenu.x,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Панель реакций */}
-          <div className="flex flex-col border-b border-border/40 shrink-0">
-            <div className="flex items-center px-2 py-1 min-h-[46px]">
-              <div className="flex flex-1 items-center justify-start gap-0.5">
-                {EMOJIS.slice(0, 6).map((e) => (
-                  <button
-                    key={e}
-                    onClick={() => {
-                      toggleReaction(contextMenu.msgId, e);
-                      setContextMenu(null);
-                    }}
-                    className="bg-transparent border-none cursor-pointer p-0 rounded-lg transition-all duration-150 hover:bg-accent hover:scale-125 active:scale-90 flex items-center justify-center w-8 h-8"
-                  >
-                    <Emoji emoji={e} size={20} />
-                  </button>
-                ))}
-              </div>
-              <div className="w-[1px] h-5 bg-border/40 mx-1" />
-              <button 
-                onClick={() => setIsPickerExpanded(!isPickerExpanded)}
-                className="p-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex items-center justify-center w-8 h-8 shrink-0"
-              >
-                {isPickerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="relative flex-1 overflow-hidden">
-            {/* Список пунктов меню */}
-            <div className={cn(
-              "absolute inset-0 flex flex-col p-1.5 transition-all duration-200 bg-popover/95",
-              isPickerExpanded ? "opacity-0 pointer-events-none translate-x-[-10px]" : "opacity-100 translate-x-0"
-            )}>
-              <button
-                onClick={handleReplyClick}
-                className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
-              >
-                <Reply className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                <span>Reply</span>
-              </button>
-              
-              {contextMenu && contextMenu.hasText && (
-                <button
-                  onClick={handleCopy}
-                  className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
-                >
-                  <Copy className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  <span>Copy</span>
-                </button>
-              )}
-
-              <button
-                onClick={handleForward}
-                className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
-              >
-                <Forward className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                <span>Forward</span>
-              </button>
-
-              <button
-                onClick={handleSelect}
-                className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
-              >
-                <CheckSquare className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                <span>Select</span>
-              </button>
-
-              {contextMenu && contextMenu.isOwn && (
-                <>
-                  {contextMenu && !messagesById.get(contextMenu.msgId)?.media_file_id && (
-                    <button
-                      onClick={handleEdit}
-                      className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
-                    >
-                      <Edit2 className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                      <span>Edit</span>
-                    </button>
-                  )}
-                  
-                  <div className="h-[1px] bg-border/40 my-1 mx-2" />
-                  
-                  <button
-                    onClick={handleDelete}
-                    className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-destructive text-[0.9rem] rounded-lg cursor-pointer hover:bg-destructive/10 transition-all duration-120"
-                  >
-                    <Trash2 className="h-[18px] w-[18px] mr-3 text-destructive transition-colors" />
-                    <span>Delete</span>
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* Эмодзи пикер */}
-            <div className={cn(
-              "absolute inset-0 transition-all duration-200 bg-popover",
-              isPickerExpanded ? "opacity-100 translate-x-0" : "opacity-0 pointer-events-none translate-x-[10px]"
-            )}>
-              <style>{`
-                .epr-category-nav { display: none !important; }
-                .epr-skin-tone-picker { display: none !important; }
-                .EmojiPickerReact { border: none !important; box-shadow: none !important; }
-                .epr-body::-webkit-scrollbar { display: none !important; }
-                .epr-body { -ms-overflow-style: none !important; scrollbar-width: none !important; }
-              `}</style>
-              <EmojiPicker
-                width="100%"
-                height="100%"
-                onEmojiClick={(emojiData) => {
-                  if (contextMenu) {
-                    toggleReaction(contextMenu.msgId, emojiData.emoji);
-                    setContextMenu(null);
-                  }
-                }}
-                theme={Theme.AUTO}
-                emojiStyle={EmojiStyle.APPLE}
-                lazyLoadEmojis={true}
-                searchPlaceHolder="Поиск..."
-                previewConfig={{ showPreview: false }}
-                skinTonesDisabled={true}
-                searchDisabled={false}
-                skinTonePickerLocation={'NONE' as any}
-                suggestedEmojisMode={'none' as any}
-              />
-            </div>
-          </div>
-        </div>
+        <MessageContextMenu
+          data={contextMenu}
+          isPickerExpanded={isPickerExpanded}
+          setIsPickerExpanded={setIsPickerExpanded}
+          onToggleReaction={toggleReaction}
+          onReply={handleReplyClick}
+          onCopy={handleCopy}
+          onForward={handleForward}
+          onSelect={handleSelect}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          canEdit={!messagesById.get(contextMenu.msgId)?.media_file_id}
+          onClose={() => setContextMenu(null)}
+        />
       )}
 
       {msgToDelete && (

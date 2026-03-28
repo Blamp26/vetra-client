@@ -1,25 +1,16 @@
 import { StateCreator } from 'zustand';
 import { User } from '@/shared/types';
 import { SocketManager } from '@/services/socket';
-
-const USER_STORAGE_KEY  = "vetra_user";
-const TOKEN_STORAGE_KEY = "vetra_token";
+import { storage, STORAGE_KEYS } from '@/shared/utils/storage';
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 
 function getStoredUser(): User | null {
-  if (typeof localStorage === "undefined") return null;
-  try {
-    const s = localStorage.getItem(USER_STORAGE_KEY);
-    return s ? (JSON.parse(s) as User) : null;
-  } catch {
-    return null;
-  }
+  return storage.get<User>(STORAGE_KEYS.USER);
 }
 
 function getStoredToken(): string | null {
-  if (typeof localStorage === "undefined") return null;
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
+  return storage.getString(STORAGE_KEYS.TOKEN);
 }
 
 // ── Slice interface ───────────────────────────────────────────────────────────
@@ -46,26 +37,20 @@ export const createAuthSlice: StateCreator<AuthSlice> = (set, get) => ({
   socketManager: null,
 
   setCurrentUser: (user) => {
-    if (typeof localStorage !== "undefined") {
-      if (user) localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-      else       localStorage.removeItem(USER_STORAGE_KEY);
-    }
+    if (user) storage.set(STORAGE_KEYS.USER, user);
+    else      storage.remove(STORAGE_KEYS.USER);
     set({ currentUser: user });
   },
 
   setAuthToken: (token) => {
-    if (typeof localStorage !== "undefined") {
-      if (token) localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      else       localStorage.removeItem(TOKEN_STORAGE_KEY);
-    }
+    if (token) storage.setString(STORAGE_KEYS.TOKEN, token);
+    else       storage.remove(STORAGE_KEYS.TOKEN);
     set({ authToken: token });
   },
 
   setAuthSession: (user, token) => {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    }
+    storage.set(STORAGE_KEYS.USER, user);
+    storage.setString(STORAGE_KEYS.TOKEN, token);
     set({ currentUser: user, authToken: token });
   },
 
@@ -73,9 +58,7 @@ export const createAuthSlice: StateCreator<AuthSlice> = (set, get) => ({
     const current = get().currentUser;
     if (!current) return;
     const updated = { ...current, ...updates };
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
-    }
+    storage.set(STORAGE_KEYS.USER, updated);
     set({ currentUser: updated });
   },
 
@@ -86,10 +69,8 @@ export const createAuthSlice: StateCreator<AuthSlice> = (set, get) => ({
 
   logout: () => {
     get().socketManager?.disconnect();
-    if (typeof localStorage !== "undefined") {
-      localStorage.removeItem(USER_STORAGE_KEY);
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-    }
+    storage.remove(STORAGE_KEYS.USER);
+    storage.remove(STORAGE_KEYS.TOKEN);
     set({ currentUser: null, authToken: null, socketManager: null });
   },
 });

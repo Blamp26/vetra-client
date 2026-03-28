@@ -7,6 +7,7 @@
 import { StateCreator } from 'zustand';
 import { ActiveChat, MessageReactionGroup } from '@/shared/types';
 import { Theme } from '@/themes';
+import { storage, STORAGE_KEYS } from '@/shared/utils/storage';
 
 export type ModalType = 'CREATE_PICKER' | 'CREATE_SERVER' | 'CREATE_ROOM';
 
@@ -27,7 +28,7 @@ export const createUISlice: StateCreator<any, [], [], UISlice> = (set) => ({
   activeChat: null,
   activeModal: null,
   messageReactions: {},
-  theme: (localStorage.getItem('vetra_theme') as Theme) || 'light',
+  theme: (storage.getString(STORAGE_KEYS.THEME) as Theme) || 'light',
 
   setActiveChat: (chat) => set({ activeChat: chat }),
   openModal: (modal) => set({ activeModal: modal }),
@@ -40,7 +41,7 @@ export const createUISlice: StateCreator<any, [], [], UISlice> = (set) => ({
 
   setTheme: (theme) => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('vetra_theme', theme);
+    storage.setString(STORAGE_KEYS.THEME, theme);
     set({ theme });
   },
 });

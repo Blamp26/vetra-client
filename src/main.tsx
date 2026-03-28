@@ -14,16 +14,18 @@ import './styles.css';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
 import { ensureNotificationPermission } from '@/services/notifications';
 
+import { storage, STORAGE_KEYS } from '@/shared/utils/storage';
+
 // Request notification permission on startup
 ensureNotificationPermission().catch(console.error);
 
 // Применяем сохранённую тему при старте
-const savedTheme = localStorage.getItem('vetra_theme') || 'light';
+const savedTheme = storage.getString(STORAGE_KEYS.THEME) || 'light';
 document.documentElement.classList.toggle('dark', savedTheme === 'dark');
 
 // Удаляем устаревший ключ темы из localStorage.
 // Безопасно вызывать при каждом старте — если ключа нет, это no-op.
-localStorage.removeItem('theme');
+storage.remove('theme');
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
