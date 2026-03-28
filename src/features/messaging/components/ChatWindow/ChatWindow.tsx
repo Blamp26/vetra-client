@@ -30,7 +30,7 @@ interface ReplyTarget {
 
 function TypingIndicator({ nickname }: { nickname: string }) {
   return (
-    <div className="flex items-center px-6 py-1 pb-2 text-[0.80rem] text-muted-foreground min-h-[24px] flex-shrink-0">
+    <div className="flex items-center pl-6 max-[1300px]:px-6 py-1 pb-2 text-[0.80rem] text-muted-foreground min-h-[24px] flex-shrink-0">
       <span className="font-semibold text-foreground">{nickname}</span>
       <span className="ml-1">печатает</span>
       <span className="inline-flex items-center gap-[3px] ml-1.5">
@@ -96,7 +96,7 @@ function ChatWindowLayout({
     <div className="flex flex-1 flex-col bg-background h-full overflow-hidden">
       {header}
 
-      <div dir="ltr" data-slot="scroll-area" className="relative flex-1 pl-6 overflow-hidden">
+      <div dir="ltr" data-slot="scroll-area" className="relative flex-1 pl-6 max-[1300px]:px-6 overflow-hidden">
         <MessageList
           key={chatId}
           messages={messages}
@@ -182,7 +182,7 @@ function DirectChatWindow({ partnerId, callStatus, onStartCall }: DirectChatProp
   })();
 
   const header = partner ? (
-    <div className="flex items-center justify-between border-b border-border px-6 py-4">
+    <div className="flex items-center justify-between border-b border-border pl-6 max-[1300px]:px-6 py-4">
       <div className="flex items-center gap-3">
         <Avatar 
           name={partner.display_name || partner.username} 
@@ -294,7 +294,7 @@ function RoomChatWindow({ roomId }: { roomId: number }) {
   if (!currentUser) return null;
 
   const header = (
-    <div className="flex items-center justify-between border-b border-border px-6 py-4">
+    <div className="flex items-center justify-between border-b border-border pl-6 max-[1300px]:px-6 py-4">
       <div className="flex items-center gap-3">
         <Avatar 
           name={roomPreview?.name || `#${roomId}`} 

@@ -388,10 +388,10 @@ export function MessageList({
           </div>
         )}
         {hasText && (
-          <p className="text-sm leading-[1.3125] whitespace-pre-wrap break-words relative">
+          <p className="text-sm leading-[1.3125] whitespace-pre-wrap break-words relative max-w-[65ch] [word-break:normal]">
             <EmojiText text={msg.content || ""} />
-            {/* Невидимая распорка только для последней строки */}
-            <span className="inline-block w-[48px] h-[1px]" aria-hidden="true" />
+            {/* Невидимая распорка только для последней строки, увеличенная для (ред.) и галочек */}
+            <span className="inline-block w-[85px] h-[1px]" aria-hidden="true" />
           </p>
         )}
       </>
@@ -532,7 +532,7 @@ export function MessageList({
                     key={msg.id}
                     className={cn(
                        "flex w-full group/msg",
-                       isOwn ? "justify-start max-[1300px]:justify-end" : "justify-start",
+                       isOwn ? "justify-start max-[1300px]:justify-end max-[1300px]:pr-4" : "justify-start",
                        selectionMode && "cursor-pointer"
                      )}
                      ref={(el) => {
@@ -557,10 +557,10 @@ export function MessageList({
                      <div 
                        onContextMenu={(e) => !selectionMode && handleContextMenu(e, msg)}
                        className={cn(
-                         "max-w-[70%] rounded-2xl flex flex-col relative group min-w-[90px] overflow-hidden",
+                         "max-w-[85%] max-[1300px]:max-w-[90%] rounded-2xl flex flex-col relative group min-w-[110px]",
                          isPhotoOnly 
-                           ? "bg-transparent shadow-none p-0" 
-                           : cn("px-4 pt-2.5 pb-1 shadow-sm", isOwn ? "bg-primary text-primary-foreground pr-[26px]" : "bg-muted text-foreground pr-4"),
+                           ? "bg-transparent shadow-none p-0 overflow-hidden" 
+                           : cn("px-4 pt-2.5 pb-1 shadow-sm", isOwn ? "bg-primary text-primary-foreground pr-[34px]" : "bg-muted text-foreground pr-[44px]"),
                          isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]",
                          selectionMode && isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                        )}
@@ -577,10 +577,10 @@ export function MessageList({
                         {renderContent(msg, isPhotoOnly)}
 
                         <div className={cn(
-                          "absolute flex items-center gap-1 leading-none select-none transition-colors",
+                          "absolute flex items-center gap-1.5 leading-none select-none transition-colors",
                           isPhotoOnly 
-                            ? "bottom-2 right-2 px-1.5 py-0.5 rounded-full bg-black/30 backdrop-blur-md text-white shadow-sm" 
-                            : "bottom-1 right-2"
+                            ? "bottom-3 right-3.5 px-1.5 py-0.5 rounded-full bg-black/30 backdrop-blur-md text-white shadow-sm" 
+                            : "bottom-2 right-3.5"
                         )}>
                           <p className={cn(
                             "text-[10px]",
