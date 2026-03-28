@@ -3,11 +3,13 @@ import type { Message, MessageStatus, MessageReactionGroup } from "@/shared/type
 import { useAppStore, type RootState } from "@/store";
 import { API_BASE_URL } from "@/api/base";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
+import { ForwardModal } from "../ForwardModal";
 import { cn } from "@/shared/utils/cn";
-import { ArrowDown, Reply, Copy, Edit2, Trash2, Forward, CheckSquare, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowDown, Reply, Copy, Edit2, Trash2, Forward, CheckSquare, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
+import { sendMessageViaChannel } from "@/services/socket";
 import { ImageLightbox } from "@/shared/components/ImageLightbox";
 
 interface Props {
@@ -67,6 +69,14 @@ export function MessageList({
 }: Props) {
   const bottomRef    = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const selectionMode        = useAppStore((s: RootState) => s.selectionMode);
+  const selectedMessageIds   = useAppStore((s: RootState) => s.selectedMessageIds);
+  const setSelectionMode     = useAppStore((s: RootState) => s.setSelectionMode);
+  const toggleMessageSelection = useAppStore((s: RootState) => s.toggleMessageSelection);
+  const clearSelection       = useAppStore((s: RootState) => s.clearSelection);
+  const forwardingMessageIds = useAppStore((s: RootState) => s.forwardingMessageIds);
+  const setForwardingMessages = useAppStore((s: RootState) => s.setForwardingMessages);
+  const setActiveChat        = useAppStore((s: RootState) => s.setActiveChat);
   const isFirstLoad  = useRef(true);
 
   const socketManager = useAppStore((s: RootState) => s.socketManager);
@@ -282,6 +292,54 @@ export function MessageList({
     });
     setContextMenu(null);
   }, [contextMenu, messages, onReply]);
+
+  const handleSelect = useCallback(() => {
+    if (!contextMenu) return;
+    setSelectionMode(true);
+    toggleMessageSelection(contextMenu.msgId);
+    setContextMenu(null);
+  }, [contextMenu, setSelectionMode, toggleMessageSelection]);
+
+  const handleForward = useCallback(() => {
+    if (!contextMenu) return;
+    setForwardingMessages([contextMenu.msgId]);
+    setContextMenu(null);
+  }, [contextMenu, setForwardingMessages]);
+
+  const handlePerformForward = useCallback(async (target: { type: 'direct' | 'room', id: number }) => {
+    if (!forwardingMessageIds || forwardingMessageIds.length === 0 || !socketManager) return;
+
+    try {
+      for (const msgId of forwardingMessageIds) {
+        const msg = messages.find(m => m.id === msgId);
+        if (!msg) continue;
+
+        const payload = {
+          content: msg.content,
+          mediaFileId: msg.media_file_id
+        };
+
+        if (target.type === 'direct') {
+          await sendMessageViaChannel(socketManager.userChannel, target.id, payload);
+        } else {
+          await socketManager.sendRoomMessageViaChannel(target.id, payload);
+        }
+      }
+      
+      if (target.type === 'direct') {
+        setActiveChat({ type: 'direct', partnerId: target.id });
+      } else {
+        setActiveChat({ type: 'room', roomId: target.id });
+      }
+
+    } catch (err) {
+      console.error("Forwarding failed:", err);
+    } finally {
+      setForwardingMessages(null);
+      clearSelection();
+    }
+  }, [forwardingMessageIds, socketManager, messages, setActiveChat, clearSelection, setForwardingMessages]);
+
   const formatTime = (iso: string) =>
     new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
@@ -450,26 +508,42 @@ export function MessageList({
               const isOwn        = msg.sender_id === currentUserId;
               const prevMsg      = dayMessages[idx - 1];
               const isConsecutive = prevMsg && prevMsg.sender_id === msg.sender_id;
+              const isSelected    = selectedMessageIds.includes(msg.id);
 
               return (
                 <div
                     key={msg.id}
                     className={cn(
-                       "flex w-full",
-                       isOwn ? "justify-start max-[1300px]:justify-end" : "justify-start"
+                       "flex w-full group/msg",
+                       isOwn ? "justify-start max-[1300px]:justify-end" : "justify-start",
+                       selectionMode && "cursor-pointer"
                      )}
                      ref={(el) => {
                        if (el) {
                          messageRefs.current[msg.id] = el;
                        }
                      }}
+                     onClick={() => selectionMode && toggleMessageSelection(msg.id)}
                    >
+                     {selectionMode && (
+                       <div className="flex items-center justify-center w-12 shrink-0 animate-in fade-in slide-in-from-left-2 duration-200">
+                         <div className={cn(
+                           "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+                           isSelected 
+                            ? "bg-primary border-primary text-primary-foreground" 
+                            : "border-muted-foreground/30 bg-transparent"
+                         )}>
+                           {isSelected && <CheckSquare className="h-3.5 w-3.5" />}
+                         </div>
+                       </div>
+                     )}
                      <div 
-                       onContextMenu={(e) => handleContextMenu(e, msg)}
+                       onContextMenu={(e) => !selectionMode && handleContextMenu(e, msg)}
                        className={cn(
                          "max-w-[70%] rounded-2xl px-4 py-2.5 flex flex-col relative group",
                          isOwn ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
-                         isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]"
+                         isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]",
+                         selectionMode && isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                        )}
                      >
                     {!isOwn && !isConsecutive && (
@@ -508,6 +582,55 @@ export function MessageList({
         >
           <ArrowDown className="h-4 w-4" />
         </button>
+      )}
+
+      {selectionMode && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[500] bg-popover/95 backdrop-blur-md border border-border/50 rounded-2xl shadow-2xl px-6 py-3 flex items-center gap-8 animate-in slide-in-from-bottom-6 duration-300">
+          <div className="text-sm font-semibold text-primary mr-2 flex items-center gap-2">
+            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-xs">
+              {selectedMessageIds.length}
+            </span>
+            выбрано
+          </div>
+          
+          <button 
+            onClick={() => setForwardingMessages(selectedMessageIds)}
+            disabled={selectedMessageIds.length === 0}
+            className="flex flex-col items-center gap-1 group text-muted-foreground hover:text-foreground transition-all duration-200 disabled:opacity-40"
+          >
+            <div className="p-2 rounded-xl group-hover:bg-accent group-hover:scale-110 transition-all">
+              <Forward className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-medium">Forward</span>
+          </button>
+
+          <button 
+            onClick={() => {
+              // Implementation for bulk delete
+              // For now we just use the existing delete flow for first one
+              if (selectedMessageIds.length > 0) setMsgToDelete(selectedMessageIds[0]);
+            }}
+            disabled={selectedMessageIds.length === 0}
+            className="flex flex-col items-center gap-1 group text-muted-foreground hover:text-destructive transition-all duration-200 disabled:opacity-40"
+          >
+            <div className="p-2 rounded-xl group-hover:bg-destructive/10 group-hover:scale-110 transition-all">
+              <Trash2 className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-medium">Delete</span>
+          </button>
+
+          <div className="w-[1px] h-8 bg-border/50" />
+
+          <button 
+            onClick={clearSelection}
+            className="flex flex-col items-center gap-1 group text-muted-foreground hover:text-foreground transition-all duration-200"
+          >
+            <div className="p-2 rounded-xl group-hover:bg-accent group-hover:rotate-90 transition-all">
+              <X className="h-5 w-5" />
+            </div>
+            <span className="text-[10px] font-medium">Cancel</span>
+          </button>
+        </div>
       )}
 
       {contextMenu && (
@@ -571,6 +694,7 @@ export function MessageList({
               )}
 
               <button
+                onClick={handleForward}
                 className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
               >
                 <Forward className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
@@ -578,6 +702,7 @@ export function MessageList({
               </button>
 
               <button
+                onClick={handleSelect}
                 className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
               >
                 <CheckSquare className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
@@ -663,6 +788,13 @@ export function MessageList({
           author={lightboxData.author}
           time={lightboxData.time}
           onClose={() => setLightboxData(null)}
+        />
+      )}
+
+      {forwardingMessageIds && (
+        <ForwardModal 
+          onForward={handlePerformForward}
+          onCancel={() => setForwardingMessages(null)}
         />
       )}
     </div>

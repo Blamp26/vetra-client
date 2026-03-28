@@ -71,9 +71,11 @@ export function useSocketEvents() {
                 partner_display_name: msg.sender_display_name || null,
                 unread_count: 1, // Store will increment this
                 last_message: {
+                  id: msg.id,
                   content: msg.content,
                   inserted_at: msg.inserted_at,
                   sender_id: msg.sender_id,
+                  status: msg.status,
                 },
               });
 
@@ -101,9 +103,11 @@ export function useSocketEvents() {
             partner_display_name: msg.recipient_display_name || null,
             unread_count: 0,
             last_message: {
+              id: msg.id,
               content: msg.content,
               inserted_at: msg.inserted_at,
               sender_id: msg.sender_id,
+              status: msg.status,
             },
           });
         }
@@ -141,9 +145,11 @@ export function useSocketEvents() {
       upsertRoomPreview({
         id: roomId,
         last_message: {
+          id: msg.id,
           content: msg.content,
           inserted_at: msg.inserted_at,
           sender_id: msg.sender_id,
+          status: msg.status,
         },
       });
 

@@ -79,9 +79,11 @@ export interface ConversationPreview {
   partner_display_name: string | null;
   unread_count:         number;
   last_message: {
+    id:          number;
     content:     string | null;
     inserted_at: string;
     sender_id:   number;
+    status:      MessageStatus;
     media_file_id?:   string | null;
     media_mime_type?: string | null;
   };
@@ -104,9 +106,11 @@ export interface RoomPreview {
   unread_count: number;
   last_message_at: string | null;
   last_message: {
-    content: string | null;
+    id:          number;
+    content:     string | null;
     inserted_at: string;
-    sender_id: number;
+    sender_id:   number;
+    status:      MessageStatus;
     media_file_id?:   string | null;
     media_mime_type?: string | null;
   } | null;
