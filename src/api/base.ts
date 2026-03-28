@@ -1,3 +1,5 @@
+import { storage, STORAGE_KEYS } from "@/shared/utils/storage";
+
 export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api/v1";
 
 export class ApiError extends Error {
@@ -12,12 +14,11 @@ export class ApiError extends Error {
 }
 
 /**
- * Возвращает текущий authToken из localStorage.
+ * Возвращает текущий authToken из хранилища.
  * Используется внутри request() для автоматической подстановки заголовка.
  */
 function getStoredToken(): string | null {
-  if (typeof localStorage === "undefined") return null;
-  return localStorage.getItem("vetra_token");
+  return storage.getString(STORAGE_KEYS.TOKEN);
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -43,10 +44,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     // 401 — токен истёк или невалиден; очищаем хранилище
     if (response.status === 401) {
-      if (typeof localStorage !== "undefined") {
-        localStorage.removeItem("vetra_token");
-        localStorage.removeItem("vetra_user");
-      }
+      storage.remove(STORAGE_KEYS.TOKEN);
+      storage.remove(STORAGE_KEYS.USER);
       // Перезагрузка бросает ApiError, которую поймает useAuth
     }
     const message = data?.error || data?.message || `Request failed: ${response.status}`;
