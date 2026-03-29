@@ -24,22 +24,22 @@ export const Avatar: React.FC<AvatarProps> = ({
   const initials = name ? name[0].toUpperCase() : '?';
   
   const sizeClasses = {
-    small: 'w-6 h-6 text-[0.7rem]',
-    medium: 'w-8 h-8 text-[0.82rem]',
-    large: 'w-10 h-10 text-[0.95rem]',
+    small: 'w-6 h-6 text-xs',
+    medium: 'w-8 h-8 text-sm',
+    large: 'w-10 h-10 text-base',
   };
 
   const combinedClassName = cn(
-    'rounded-full bg-[#5865F2] text-white font-bold grid place-items-center flex-shrink-0 object-cover select-none leading-[1]',
+    'rounded-full bg-primary text-primary-foreground font-bold grid place-items-center flex-shrink-0 object-cover select-none leading-[1]',
     sizeClasses[size],
     className
   );
 
   const statusColors = {
-    online: 'bg-emerald-500',
-    offline: 'bg-muted-foreground',
-    dnd: 'bg-destructive',
-    away: 'bg-amber-500',
+    online: 'bg-online',
+    offline: 'bg-offline',
+    dnd: 'bg-busy',
+    away: 'bg-away',
   };
 
   const renderStatus = () => {

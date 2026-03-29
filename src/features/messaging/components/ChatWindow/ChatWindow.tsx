@@ -29,10 +29,10 @@ interface ReplyTarget {
 
 function TypingIndicator({ nickname }: { nickname: string }) {
   return (
-    <div className="flex items-center pl-6 max-[1300px]:px-6 py-1 pb-2 text-[0.80rem] text-muted-foreground min-h-[24px] flex-shrink-0">
+    <div className="flex items-center pl-6 max-[1300px]:px-6 py-1 pb-2 text-xs text-muted-foreground min-h-[24px] flex-shrink-0">
       <span className="font-semibold text-foreground">{nickname}</span>
       <span className="ml-1">печатает</span>
-      <span className="inline-flex items-center gap-[3px] ml-1.5">
+      <span className="inline-flex items-center gap-1 ml-1.5">
         <span className="w-1 h-1 rounded-full bg-muted-foreground animate-bounce" />
         <span className="w-1 h-1 rounded-full bg-muted-foreground animate-bounce [animation-delay:0.2s]" />
         <span className="w-1 h-1 rounded-full bg-muted-foreground animate-bounce [animation-delay:0.4s]" />
@@ -128,7 +128,7 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
     if (activeChat.type === "direct") {
       if (!partner) return (
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <span className="text-muted-foreground text-[0.9rem]">Загрузка…</span>
+          <span className="text-muted-foreground text-sm">Загрузка…</span>
         </div>
       );
 

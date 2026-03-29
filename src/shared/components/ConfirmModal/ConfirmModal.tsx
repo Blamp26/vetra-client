@@ -24,20 +24,20 @@ export function ConfirmModal({
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50" onClick={onCancel}>
       <div 
-        className="bg-white border border-[#E1E1E1] rounded-lg shadow-xl w-[400px] p-6" 
+        className="bg-card border border-border rounded-lg shadow-xl w-[400px] p-6" 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4">
-          <h3 className="m-0 text-[1.1rem] font-semibold text-[#0A0A0A]">{title}</h3>
+          <h3 className="m-0 text-lg font-semibold text-foreground">{title}</h3>
         </div>
         
         <div className="mb-6">
-          <p className="text-[#4A4A4A] leading-[1.5]">{message}</p>
+          <p className="text-muted-foreground leading-normal">{message}</p>
         </div>
         
         <div className="flex gap-3 justify-end">
           <button 
-            className="px-4 py-2 bg-white border border-[#E1E1E1] rounded-lg text-[#4A4A4A] cursor-pointer hover:bg-[#F8F8F8] disabled:opacity-50 disabled:cursor-not-allowed" 
+            className="px-4 py-2 bg-background border border-border rounded-lg text-muted-foreground cursor-pointer hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed" 
             onClick={onCancel}
             disabled={isLoading}
           >
@@ -45,8 +45,10 @@ export function ConfirmModal({
           </button>
           <button 
             className={cn(
-              "px-4 py-2 text-white border-none rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed",
-              isDanger ? "bg-[#E74C3C] hover:bg-[#c0392b]" : "bg-[#5865F2] hover:bg-[#4752C4]"
+              "px-4 py-2 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed",
+              isDanger 
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" 
+                : "bg-primary text-primary-foreground hover:bg-primary/90"
             )}
             onClick={onConfirm}
             disabled={isLoading}

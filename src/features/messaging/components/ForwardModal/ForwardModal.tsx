@@ -69,7 +69,7 @@ export function ForwardModal({ onForward, onCancel }: Props) {
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate text-[0.95rem]">{t.name}</div>
+                <div className="font-semibold truncate text-sm">{t.name}</div>
                 <div className="text-xs text-muted-foreground">
                   {t.type === 'direct' ? 'Личное сообщение' : 'Комната'}
                 </div>

@@ -165,7 +165,7 @@ export function Sidebar({
                           )}
 
                           {!isServerMode && item.unread > 0 && (
-                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-unread px-1.5 text-xs font-medium text-unread-foreground">
                               {item.unread}
                             </span>
                           )}
