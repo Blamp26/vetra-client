@@ -103,7 +103,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 onToggleReaction(msg.id, g.emoji);
               }}
               className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[14px] border transition-all duration-150 text-[0.85rem] cursor-pointer hover:scale-105 active:scale-95",
+                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all duration-150 text-xs cursor-pointer hover:scale-105 active:scale-95",
                 mine 
                   ? "bg-primary/20 border-primary text-primary font-medium shadow-sm" 
                   : "bg-muted/50 border-border text-foreground hover:bg-muted hover:border-muted-foreground/30"
@@ -112,7 +112,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               title={mine ? "Remove reaction" : "Add reaction"}
             >
               <Emoji emoji={g.emoji} size={16} />
-              <span className={cn("text-[0.75rem]", mine ? "text-primary" : "text-muted-foreground")}>{g.count}</span>
+              <span className={cn("text-xs", mine ? "text-primary" : "text-muted-foreground")}>{g.count}</span>
             </button>
           );
         })}
@@ -148,14 +148,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           "max-w-[85%] max-[1300px]:max-w-[90%] rounded-2xl flex flex-col relative group min-w-[110px]",
           isPhotoOnly 
             ? "bg-transparent shadow-none p-0 overflow-hidden" 
-            : cn("px-4 pt-2.5 pb-1 shadow-sm", isOwn ? "bg-primary text-primary-foreground pr-[34px]" : "bg-muted text-foreground pr-[44px]"),
+            : cn("px-4 pt-2.5 pb-1 shadow-sm", isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text pr-[34px]" : "bg-bubble-incoming text-bubble-incoming-text pr-[44px]"),
           isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]",
           selectionMode && isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
         )}
       >
         {!isOwn && !isConsecutive && (
           <span className={cn(
-            "text-[0.72rem] text-primary mb-1 font-semibold truncate",
+            "text-xs text-primary mb-1 font-semibold truncate",
             isPhotoOnly && "px-4 pt-2"
           )}>
             {msg.sender_display_name || msg.sender_username}
@@ -171,7 +171,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             : "bottom-2 right-3.5"
         )}>
           <p className={cn(
-            "text-[10px]",
+            "text-2xs",
             isPhotoOnly 
               ? "text-white/90" 
               : (isOwn ? "text-primary-foreground/70" : "text-muted-foreground")
@@ -180,7 +180,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </p>
           {msg.edited_at && msg.content && (
             <span className={cn(
-              "text-[10px] opacity-60 leading-none",
+              "text-2xs opacity-60 leading-none",
               isPhotoOnly && "text-white/70"
             )}>(ред.)</span>
           )}

@@ -345,11 +345,11 @@ export function MessageList({
           if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
         }}
       >
-        <div className={cn("font-semibold text-[0.75rem] leading-none pt-0.5 truncate", isOwn ? "text-primary-foreground" : "text-primary")}>
+        <div className={cn("font-semibold text-xs leading-none pt-0.5 truncate", isOwn ? "text-primary-foreground" : "text-primary")}>
           {author}
         </div>
         {previewText && (
-          <div className={cn("text-[0.82rem] leading-tight pb-0.5 truncate", isOwn ? "text-primary-foreground/80" : "text-muted-foreground")}>
+          <div className={cn("text-sm leading-tight pb-0.5 truncate", isOwn ? "text-primary-foreground/80" : "text-muted-foreground")}>
             <EmojiText text={previewText} size={14} />
           </div>
         )}
@@ -380,17 +380,17 @@ export function MessageList({
       >
         {hasMore && (
           <div className="flex justify-center py-2 pb-3">
-            <button className="bg-muted hover:bg-accent border border-border rounded-full text-foreground cursor-pointer px-4 py-1.5 text-[0.82rem] transition-colors" onClick={onLoadMore} disabled={isLoading}>
+            <button className="bg-muted hover:bg-accent border border-border rounded-full text-foreground cursor-pointer px-4 py-1.5 text-sm transition-colors" onClick={onLoadMore} disabled={isLoading}>
               {isLoading ? "Загрузка…" : "Загрузить старые сообщения"}
             </button>
           </div>
         )}
         {messages.length === 0 && !isLoading && (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-[0.9rem]">Сообщений пока нет. Скажите привет! 👋</div>
+          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Сообщений пока нет. Скажите привет! 👋</div>
         )}
         {groupedMessages.map(({ date, messages: dayMessages }) => (
           <div key={date} className="space-y-4">
-            <div className="flex items-center my-6 gap-3 text-muted-foreground text-[0.72rem] font-semibold tracking-[0.04em] before:content-[''] before:flex-1 before:h-[1px] before:bg-border after:content-[''] after:flex-1 after:h-[1px] after:bg-border">
+            <div className="flex items-center my-6 gap-3 text-muted-foreground text-xs font-semibold tracking-wider before:content-[''] before:flex-1 before:h-[1px] before:bg-border after:content-[''] after:flex-1 after:h-[1px] after:bg-border">
               <span>{date}</span>
             </div>
             {dayMessages.map((msg, idx) => {
@@ -453,7 +453,7 @@ export function MessageList({
             <div className="p-2 rounded-xl group-hover:bg-accent group-hover:scale-110 transition-all">
               <Forward className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-medium">Forward</span>
+            <span className="text-2xs font-medium">Forward</span>
           </button>
 
           <button 
@@ -466,7 +466,7 @@ export function MessageList({
             <div className="p-2 rounded-xl group-hover:bg-destructive/10 group-hover:scale-110 transition-all">
               <Trash2 className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-medium">Delete</span>
+            <span className="text-2xs font-medium">Delete</span>
           </button>
 
           <div className="w-[1px] h-8 bg-border/50" />
@@ -478,7 +478,7 @@ export function MessageList({
             <div className="p-2 rounded-xl group-hover:bg-accent group-hover:rotate-90 transition-all">
               <X className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-medium">Cancel</span>
+            <span className="text-2xs font-medium">Cancel</span>
           </button>
         </div>
       )}

@@ -88,7 +88,7 @@ export function MessageContextMenu({
         )}>
           <button
             onClick={onReply}
-            className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+            className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
           >
             <Reply className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
             <span>Reply</span>
@@ -97,7 +97,7 @@ export function MessageContextMenu({
           {data.hasText && (
             <button
               onClick={onCopy}
-              className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+              className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
             >
               <Copy className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
               <span>Copy</span>
@@ -106,7 +106,7 @@ export function MessageContextMenu({
 
           <button
             onClick={onForward}
-            className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+            className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
           >
             <Forward className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
             <span>Forward</span>
@@ -114,7 +114,7 @@ export function MessageContextMenu({
 
           <button
             onClick={onSelect}
-            className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+            className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
           >
             <CheckSquare className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
             <span>Select</span>
@@ -125,7 +125,7 @@ export function MessageContextMenu({
               {canEdit && (
                 <button
                   onClick={onEdit}
-                  className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-[0.9rem] rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+                  className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
                 >
                   <Edit2 className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
                   <span>Edit</span>
@@ -136,7 +136,7 @@ export function MessageContextMenu({
               
               <button
                 onClick={onDelete}
-                className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-destructive text-[0.9rem] rounded-lg cursor-pointer hover:bg-destructive/10 transition-all duration-120"
+                className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-destructive text-sm rounded-lg cursor-pointer hover:bg-destructive/10 transition-all duration-120"
               >
                 <Trash2 className="h-[18px] w-[18px] mr-3 text-destructive transition-colors" />
                 <span>Delete</span>

@@ -93,8 +93,8 @@ export function ProfileModal({ user, onClose }: Props) {
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-[440px] flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <h3 className="m-0 text-[1.1rem] font-bold text-foreground">Редактировать профиль</h3>
-          <button className="bg-none border-none cursor-pointer text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="Close">
+          <h3 className="m-0 text-lg font-bold text-foreground">Редактировать профиль</h3>
+          <button className="bg-transparent border-none cursor-pointer text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -111,7 +111,7 @@ export function ProfileModal({ user, onClose }: Props) {
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
-                <div className="w-20 h-20 rounded-full bg-primary text-primary-foreground text-[2rem] font-bold flex items-center justify-center shrink-0">
+                <div className="w-20 h-20 rounded-full bg-primary text-primary-foreground text-3xl font-bold flex items-center justify-center shrink-0">
                   {previewLetter}
                 </div>
               )}
@@ -132,9 +132,9 @@ export function ProfileModal({ user, onClose }: Props) {
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }}
               />
             </div>
-            <label className="block mb-1.5 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground self-start">URL аватарки</label>
+            <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground self-start">URL аватарки</label>
             <input
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-[0.88rem] font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
               placeholder="https://example.com/avatar.png"
@@ -142,11 +142,11 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           {/* Никнейм (display_name) */}
-          <label className="block mb-1.5 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Никнейм <span className="opacity-55 font-normal normal-case">(необязательно, не уникальный)</span>
           </label>
           <input
-            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-[0.88rem] font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
+            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder={username}
@@ -154,7 +154,7 @@ export function ProfileModal({ user, onClose }: Props) {
           />
 
           {/* Username */}
-          <label className="block mb-1.5 mt-2 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="block mb-1.5 mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Юзернейм <span className="opacity-55 font-normal normal-case">(уникальный)</span>
           </label>
 
@@ -164,11 +164,11 @@ export function ProfileModal({ user, onClose }: Props) {
               usernameErr ? "border-destructive" : usernameFocused ? "border-primary ring-1 ring-ring" : "border-border"
             )}
           >
-            <span className="opacity-50 text-[0.92rem] leading-none shrink-0 select-none text-foreground">
+            <span className="opacity-50 text-sm leading-none shrink-0 select-none text-foreground">
               @
             </span>
             <input
-              className="flex-1 min-w-0 bg-transparent border-none outline-none text-foreground text-[0.92rem] font-inherit p-0"
+              className="flex-1 min-w-0 bg-transparent border-none outline-none text-foreground text-sm font-inherit p-0"
               value={username}
               onChange={(e) => { setUsernameErr(null); setUsername(e.target.value); }}
               onFocus={() => setUsernameFocused(true)}
@@ -179,27 +179,27 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           {usernameErr && (
-            <p className="m-0 mt-1 text-destructive text-[0.82rem]">
+            <p className="m-0 mt-1 text-destructive text-sm">
               {usernameErr}
             </p>
           )}
 
           {/* О себе */}
-          <label className="block mb-1.5 mt-2 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">О себе</label>
+          <label className="block mb-1.5 mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">О себе</label>
           <textarea
-            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-[0.88rem] font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-vertical"
+            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-vertical"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             placeholder="Расскажи о себе..."
             maxLength={300}
             rows={3}
           />
-          <span className="text-[0.72rem] opacity-45 block text-right text-muted-foreground mb-4">
+          <span className="text-2xs opacity-45 block text-right text-muted-foreground mb-4">
             {bio.length}/300
           </span>
 
           {/* Статус */}
-          <label className="block mb-1.5 mt-2 text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">Статус</label>
+          <label className="block mb-1.5 mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Статус</label>
           <div className="grid grid-cols-2 gap-2 mb-2">
             {(
               [
@@ -226,13 +226,13 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           {error && (
-            <p className="text-destructive text-[0.85rem] mt-2">{error}</p>
+            <p className="text-destructive text-sm mt-2">{error}</p>
           )}
         </div>
 
         <div className="px-6 py-4 border-t border-border flex gap-3 justify-end bg-card">
-          <button className="px-4 py-2 bg-background border border-border rounded-lg text-muted-foreground text-[0.88rem] font-inherit cursor-pointer hover:bg-accent disabled:opacity-50" onClick={onClose} disabled={saving}>Отмена</button>
-          <button className="px-4 py-2 bg-primary text-primary-foreground border-none rounded-lg text-[0.88rem] font-bold font-inherit cursor-pointer hover:bg-primary/90 disabled:opacity-50" onClick={handleSave} disabled={saving}>
+          <button className="px-4 py-2 bg-background border border-border rounded-lg text-muted-foreground text-sm font-inherit cursor-pointer hover:bg-accent disabled:opacity-50" onClick={onClose} disabled={saving}>Отмена</button>
+          <button className="px-4 py-2 bg-primary text-primary-foreground border-none rounded-lg text-sm font-bold font-inherit cursor-pointer hover:bg-primary/90 disabled:opacity-50" onClick={handleSave} disabled={saving}>
             {saving ? "Сохранение..." : "Сохранить"}
           </button>
         </div>

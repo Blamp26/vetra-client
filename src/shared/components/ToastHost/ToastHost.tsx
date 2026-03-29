@@ -45,13 +45,13 @@ export function ToastHost() {
       aria-live="polite"
     >
       <div
-        className="w-[320px] bg-[#191b21]/92 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.55)] rounded-lg p-[12px_14px] backdrop-blur-[8px]"
+        className="w-[320px] bg-popover/95 border border-border shadow-xl rounded-lg p-3 backdrop-blur-md pointer-events-auto"
       >
-        <div className="font-bold text-[13px] text-white">
+        <div className="font-bold text-xs text-popover-foreground">
           {toast.title}
         </div>
         {toast.body && (
-          <div className="mt-1 text-[12.5px] text-white/70 leading-[1.4]">
+          <div className="mt-1 text-2xs text-popover-foreground/70 leading-normal">
             {toast.body}
           </div>
         )}
