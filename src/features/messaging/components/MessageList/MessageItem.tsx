@@ -145,10 +145,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "max-w-[85%] max-[1300px]:max-w-[90%] rounded-2xl flex flex-col relative group min-w-[110px]",
+          "max-w-[85%] max-[1300px]:max-w-[90%] rounded-2xl flex flex-col justify-center relative group min-w-[110px]",
           isPhotoOnly 
             ? "bg-transparent shadow-none p-0 overflow-hidden" 
-            : cn("px-4 pt-2.5 pb-1 shadow-sm", isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text pr-[34px]" : "bg-bubble-incoming text-bubble-incoming-text pr-[44px]"),
+            : cn("px-4 py-3 shadow-sm", isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text pr-[34px]" : "bg-bubble-incoming text-bubble-incoming-text pr-[44px]"),
           isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]",
           selectionMode && isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
         )}
@@ -168,7 +168,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           "absolute flex items-center gap-1.5 leading-none select-none transition-colors",
           isPhotoOnly 
             ? "bottom-3 right-3.5 px-1.5 py-0.5 rounded-full bg-black/30 backdrop-blur-md text-white shadow-sm" 
-            : "bottom-2 right-3.5"
+            : "bottom-1.5 right-3.5"
         )}>
           <p className={cn(
             "text-2xs",
