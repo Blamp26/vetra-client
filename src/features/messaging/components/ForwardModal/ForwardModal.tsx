@@ -29,8 +29,8 @@ export function ForwardModal({ onForward, onCancel }: Props) {
   ].filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-popover border border-border rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-300">
+      <div className="bg-card border border-border/50 rounded-2xl shadow-2xl shadow-black/5 ring-1 ring-white/5 w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 slide-in-from-bottom-2 duration-300">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <h3 className="font-bold text-lg">Переслать сообщение</h3>
           <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1 rounded-lg transition-colors">
@@ -43,7 +43,7 @@ export function ForwardModal({ onForward, onCancel }: Props) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               autoFocus
-              className="w-full bg-muted border-none rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full bg-background border border-border/50 rounded-xl pl-10 pr-4 py-2.5 text-[15px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 shadow-sm transition-shadow"
               placeholder="Кому переслать?"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -56,7 +56,7 @@ export function ForwardModal({ onForward, onCancel }: Props) {
             <button
               key={`${t.type}-${t.id}`}
               onClick={() => onForward(t)}
-              className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-accent transition-colors text-left group"
+              className="w-full flex items-center gap-3 p-2 rounded-xl transition-all duration-200 hover:bg-accent active:scale-[0.98] text-left group"
             >
               <div className="relative">
                 <Avatar 

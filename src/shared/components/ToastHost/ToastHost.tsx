@@ -41,20 +41,25 @@ export function ToastHost() {
 
   return (
     <div
-      className="fixed left-4 bottom-[76px] z-[99999] pointer-events-none"
+      className="fixed left-6 bottom-24 z-[99999] pointer-events-none"
       aria-live="polite"
     >
       <div
-        className="w-[320px] bg-popover/95 border border-border shadow-xl rounded-lg p-3 backdrop-blur-md pointer-events-auto"
+        className="max-w-[340px] bg-card/60 backdrop-blur-3xl border border-white/10 dark:border-white/5 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.3)] rounded-[1.5rem] p-4 px-5 pointer-events-auto ring-1 ring-inset ring-white/10 animate-in slide-in-from-bottom-8 fade-in duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]"
       >
-        <div className="font-bold text-xs text-popover-foreground">
-          {toast.title}
-        </div>
-        {toast.body && (
-          <div className="mt-1 text-2xs text-popover-foreground/70 leading-normal">
-            {toast.body}
+        <div className="flex items-start gap-3">
+          <div className="w-1.5 h-6 rounded-full bg-primary mt-0.5 shrink-0" />
+          <div className="flex flex-col gap-0.5">
+            <div className="font-extrabold text-[0.9rem] text-foreground tracking-tight leading-tight">
+              {toast.title}
+            </div>
+            {toast.body && (
+              <div className="text-[0.8rem] font-medium text-muted-foreground/80 leading-snug">
+                {toast.body}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

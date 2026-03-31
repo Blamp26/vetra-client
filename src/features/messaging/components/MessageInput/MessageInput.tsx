@@ -319,10 +319,10 @@ interface Props {
    }, [content, isEditing]); 
  
    return ( 
-     <div className="flex flex-col border-t border-border bg-background flex-shrink-0"> 
+     <div className="flex flex-col bg-background/80 backdrop-blur-2xl border-t border-white/5 dark:border-white/[0.02] flex-shrink-0 shadow-[0_-8px_30px_-15px_rgba(0,0,0,0.05)] relative z-20"> 
        {/* EDIT BAR */}
        {isEditing && ( 
-         <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 max-[1300px]:px-6 py-1.5 gap-2 animate-in slide-in-from-bottom-2 duration-200"> 
+         <div className="flex items-center justify-between bg-muted/20 border-b border-white/5 px-4 max-[1300px]:px-6 py-2.5 gap-2 animate-in slide-in-from-bottom-2 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"> 
            <div className="flex items-center gap-3 min-w-0 flex-1">
              <div className="w-1 h-7 bg-primary rounded-full shrink-0" />
              <div className="flex flex-col gap-0 min-w-0"> 
@@ -346,7 +346,7 @@ interface Props {
  
        {/* REPLY BAR */}
        {replyTo && !isEditing && ( 
-        <div className="flex items-center justify-between bg-muted/50 border-b border-border px-4 max-[1300px]:px-6 py-1.5 gap-2 animate-in slide-in-from-bottom-2 duration-200">
+        <div className="flex items-center justify-between bg-muted/20 border-b border-border/20 px-4 max-[1300px]:px-6 py-2.5 gap-2 animate-in slide-in-from-bottom-2 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-1 h-7 bg-primary rounded-full shrink-0" />
             <div className="flex flex-col gap-0 min-w-0">
@@ -395,7 +395,7 @@ interface Props {
 
        {/* UPLOAD PROGRESS / ERROR */}
        {uploadStatus !== "idle" && (
-        <div className="px-4 py-1.5 bg-muted/30 border-b border-border mt-2">
+        <div className="px-4 py-2 bg-muted/30 border-b border-border/50 mt-2">
           {uploadStatus === "uploading" ? (
             <div className="flex items-center gap-3">
               <div className="flex-1 h-1 bg-border rounded-full overflow-hidden">
@@ -412,15 +412,15 @@ interface Props {
         </div>
        )}
  
-       <div className="p-4 pl-6 max-[1300px]:px-6">
-         <div className="flex items-center gap-2">
+       <div className="p-3 pl-4 max-[1300px]:px-5 pb-4 relative">
+         <div className="flex items-end gap-2">
             <button 
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-all hover:bg-accent size-9 h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+              className="inline-flex items-center justify-center rounded-[1rem] text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 size-[2.625rem] h-[2.625rem] w-[2.625rem] shrink-0 text-muted-foreground hover:text-foreground shadow-sm ring-1 ring-inset ring-transparent hover:ring-border/50"
               onClick={handleAttachClick}
               disabled={disabled || isSending || isEditing || isUploading}
               type="button"
             >
-              <Paperclip className="h-4 w-4" />
+              <Paperclip className="h-5 w-5" />
               <input 
                 type="file" 
                 id="message-file-upload"
@@ -437,7 +437,7 @@ interface Props {
                 ref={textareaRef}
                 id="message-content-input"
                 name="content"
-                className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground bg-muted border-0 h-9 w-full min-w-0 rounded-md px-3 py-1.5 text-sm transition-[color,box-shadow] outline-none focus-visible:ring-1 focus-visible:ring-ring/50 resize-none pr-10 min-h-[36px]"
+                className="file:text-foreground placeholder:text-muted-foreground/60 selection:bg-primary/20 selection:text-primary bg-muted/40 hover:bg-muted/60 focus:bg-muted/80 ring-1 ring-inset ring-border/20 focus:ring-primary/50 w-full min-w-0 rounded-[1.25rem] px-5 py-2.5 text-[0.9375rem] leading-[1.4] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] outline-none resize-none pr-[2.75rem] min-h-[42px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
                 placeholder="Напишите сообщение..."
                 value={content}
                 onChange={(e) => handleChange(e.target.value)}
@@ -446,13 +446,13 @@ interface Props {
                 disabled={disabled || isSending || isUploading}
                 rows={1}
               />
-              <div className="absolute right-1 top-1" ref={emojiPickerRef}>
+              <div className="absolute right-2 top-2" ref={emojiPickerRef}>
                 <button 
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }}
-                  className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-all hover:bg-accent size-7 text-muted-foreground hover:text-foreground"
+                  className="inline-flex items-center justify-center rounded-[0.5rem] text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 size-[1.625rem] text-muted-foreground hover:text-foreground"
                 >
-                  <Smile className="h-4 w-4" />
+                  <Smile className="h-5 w-5" />
                 </button>
 
                 {showEmojiPicker && (
@@ -581,13 +581,13 @@ interface Props {
 
             <button 
               className={cn(
-                "inline-flex items-center justify-center rounded-md text-sm font-medium transition-all size-9 h-9 w-9 shrink-0",
-                (content.trim() || pendingFile) ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm" : "bg-muted text-muted-foreground cursor-not-allowed"
+                "inline-flex items-center justify-center rounded-[1rem] text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] size-[2.625rem] h-[2.625rem] w-[2.625rem] shrink-0",
+                (content.trim() || pendingFile) ? "bg-primary text-primary-foreground hover:scale-[1.03] active:scale-95 shadow-[0_8px_20px_-8px_var(--tw-shadow-color)] shadow-primary/40 ring-1 ring-inset ring-black/10 dark:ring-white/10" : "bg-muted/50 text-muted-foreground/30 ring-1 ring-inset ring-border/50 cursor-not-allowed"
               )}
               onClick={handleSend}
               disabled={(!content.trim() && !pendingFile) || disabled || isSending || isUploading}
             >
-              <Send className="h-4 w-4" />
+              <Send className="h-4 w-4 ml-0.5" />
             </button>
          </div>
        </div>

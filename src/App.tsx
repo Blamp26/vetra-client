@@ -14,6 +14,85 @@ import { IncomingCallModal } from './features/calling/components/IncomingCallMod
 import { ActiveCallWindow } from './features/calling/components/ActiveCallWindow';
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 
+function EmptyState({
+  eyebrow,
+  title,
+  description,
+  actionLabel,
+  onAction,
+  mode,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  mode: "channel" | "conversation";
+}) {
+  return (
+    <div className="flex flex-1 items-center justify-center px-8 py-10">
+      <div className="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-border/70 bg-card/75 p-8 shadow-[0_32px_90px_-52px_rgba(15,23,42,0.28)] backdrop-blur-xl sm:p-10">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.9),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.28),transparent_70%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent_70%)]" />
+        <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_18rem] lg:items-center">
+          <div className="space-y-4">
+            <span className="inline-flex items-center rounded-full border border-border/80 bg-background/80 px-3 py-1 text-[11px] font-medium tracking-[0.14em] text-muted-foreground">
+              {eyebrow}
+            </span>
+            <div className="space-y-3">
+              <h2 className="max-w-lg text-3xl font-semibold tracking-tight text-foreground sm:text-[2.2rem] sm:leading-[1.02]">
+                {title}
+              </h2>
+              <p className="max-w-[34rem] text-sm leading-6 text-muted-foreground sm:text-[15px]">
+                {description}
+              </p>
+            </div>
+            {actionLabel && onAction && (
+              <button
+                onClick={onAction}
+                className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-transform duration-200 hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0 active:scale-[0.98]"
+              >
+                {actionLabel}
+              </button>
+            )}
+          </div>
+          <div className="relative ml-auto hidden w-full max-w-[18rem] lg:block">
+            <div className="absolute inset-x-6 top-3 h-32 rounded-full bg-primary/10 blur-3xl" />
+            <div className="relative rounded-[2rem] border border-border/70 bg-background/90 p-4 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)]">
+              <div className="flex items-center justify-between rounded-[1.35rem] border border-border/60 bg-card px-4 py-3">
+                <div className="space-y-2">
+                  <div className="h-2.5 w-16 rounded-full bg-foreground/10" />
+                  <div className="h-2 w-24 rounded-full bg-foreground/6" />
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-[1rem] bg-primary text-base font-semibold text-primary-foreground">
+                  {mode === "channel" ? "#" : "+"}
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3">
+                <div className="rounded-[1.35rem] border border-border/60 bg-card px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <div className="h-2.5 w-24 rounded-full bg-foreground/10" />
+                      <div className="h-2 w-32 rounded-full bg-foreground/6" />
+                    </div>
+                    <div className="h-6 w-10 rounded-full bg-primary/10" />
+                  </div>
+                </div>
+                <div className="rounded-[1.35rem] border border-dashed border-border/70 bg-card/70 px-4 py-4">
+                  <div className="space-y-2">
+                    <div className="h-2.5 w-20 rounded-full bg-foreground/10" />
+                    <div className="h-2 w-full rounded-full bg-foreground/6" />
+                    <div className="h-2 w-4/5 rounded-full bg-foreground/6" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
   const { status, remoteStream, remoteUsername, remoteUserId, isMuted, seconds, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
@@ -140,16 +219,19 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
-      {/* Audio element for calls */}
+    <div className="relative flex min-h-[100dvh] w-full overflow-hidden bg-background text-foreground">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 top-0 h-[24rem] w-[24rem] rounded-full bg-primary/6 blur-3xl" />
+        <div className="absolute bottom-0 right-0 h-[26rem] w-[26rem] rounded-full bg-foreground/[0.035] blur-3xl dark:bg-white/[0.04]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.28),transparent_24%,transparent_76%,rgba(255,255,255,0.08))] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_28%,transparent_76%,rgba(255,255,255,0.02))]" />
+      </div>
       <audio
         ref={audioRef}
         autoPlay
         hidden
       />
-
-      {/* 1. Sidebar Area (Sidebar + ChannelPanel + Partition) */}
-      <div className="relative flex flex-col flex-shrink-0 h-full border-r border-border bg-sidebar w-[432px] z-20">
+      <div className="relative flex min-h-[100dvh] w-full overflow-hidden">
+      <div className="relative z-20 flex h-full w-[432px] flex-shrink-0 flex-col border-r border-border/70 bg-sidebar/90 shadow-[24px_0_80px_-48px_rgba(15,23,42,0.35)] backdrop-blur-xl">
         {showChannelPanel && (
           <div className="absolute left-[71px] top-0 bottom-0 w-[1px] bg-border pointer-events-none z-0" />
         )}
@@ -182,9 +264,7 @@ function App() {
           onOpenSettings={() => setShowSettings(true)}
         />
       </div>
-
-      {/* 2. Content Area (Chat or Empty State) */}
-      <div className="flex-1 flex overflow-hidden min-w-0 relative z-10">
+      <div className="relative z-10 flex min-w-0 flex-1 overflow-hidden">
         {chatTarget ? (
           <ChatWindow 
             activeChat={chatTarget} 
@@ -192,60 +272,25 @@ function App() {
             onStartCall={startCall}
           />
         ) : activeChat?.type === "server" ? (
-          <div className="flex flex-1 flex-col items-center justify-center bg-background min-w-0">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                <span className="text-[2rem] block">📢</span>
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-xl font-semibold text-foreground">
-                  Select a channel
-                </h2>
-                <p className="max-w-sm text-sm text-muted-foreground">
-                  Pick a channel from the panel on the left to start chatting.
-                </p>
-              </div>
-            </div>
-          </div>
+          <EmptyState
+            eyebrow="Workspace"
+            title="Choose a channel to open the conversation thread."
+            description="Your server panel stays pinned on the left. Open any channel to jump straight into messages, files, and presence updates without switching screens."
+            mode="channel"
+          />
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center bg-background min-w-0">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  width="24" 
-                  height="24" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  className="h-8 w-8 text-muted-foreground"
-                >
-                  <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"></path>
-                </svg>
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-xl font-semibold text-foreground">
-                  Select a conversation
-                </h2>
-                <p className="max-w-sm text-sm text-muted-foreground">
-                  Choose a chat from the sidebar or search for a user to start messaging
-                </p>
-                <button
-                  onClick={() => openModal("CREATE_PICKER")}
-                  className="mt-4 px-6 py-2 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
-                >
-                  Start a new conversation
-                </button>
-              </div>
-            </div>
-          </div>
+          <EmptyState
+            eyebrow="Inbox"
+            title="Pick a conversation or start a new one from the sidebar."
+            description="Recent chats, rooms, and server channels stay organized in one place. Use search or create a new thread when you want to reach someone faster."
+            actionLabel="Start a new conversation"
+            onAction={() => openModal("CREATE_PICKER")}
+            mode="conversation"
+          />
         )}
       </div>
+      </div>
 
-      {/* Overlays (Fixed components inside root) */}
       {showSettings && (
         <SettingsPage onClose={() => setShowSettings(false)} />
       )}

@@ -14,8 +14,8 @@ interface ConfirmModalProps {
 export function ConfirmModal({
   title,
   message,
-  confirmLabel = 'Подтвердить',
-  cancelLabel = 'Отмена',
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
   onConfirm,
   onCancel,
   isLoading = false,
@@ -23,7 +23,7 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   return (
     <div 
-      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm sm:p-6" 
+      className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-background/40 backdrop-blur-3xl sm:p-6 animate-in fade-in duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]" 
       onClick={onCancel}
       role="dialog"
       aria-modal="true"
@@ -31,14 +31,14 @@ export function ConfirmModal({
       aria-describedby="confirm-modal-desc"
     >
       <div 
-        className="flex flex-col w-full max-w-md gap-6 p-6 bg-card border border-border rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200" 
+        className="flex flex-col w-full max-w-md gap-8 p-8 bg-card/60 backdrop-blur-2xl border border-white/10 dark:border-white/5 rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] ring-1 ring-inset ring-white/10 animate-in zoom-in-[0.95] slide-in-from-bottom-8 duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]" 
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col gap-2">
-          <h3 id="confirm-modal-title" className="text-xl font-semibold tracking-tight text-foreground">
+        <div className="flex flex-col gap-3">
+          <h3 id="confirm-modal-title" className="text-[1.25rem] font-extrabold tracking-tight text-foreground leading-tight">
             {title}
           </h3>
-          <p id="confirm-modal-desc" className="text-sm text-muted-foreground leading-relaxed">
+          <p id="confirm-modal-desc" className="text-[0.875rem] font-medium text-muted-foreground/70 leading-relaxed">
             {message}
           </p>
         </div>
@@ -46,7 +46,7 @@ export function ConfirmModal({
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
           <button 
             type="button"
-            className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors border border-border rounded-lg bg-background text-foreground hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" 
+            className="inline-flex items-center justify-center px-6 py-3 text-[0.875rem] font-bold transition-all border border-white/10 rounded-2xl bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground active:scale-95 disabled:pointer-events-none disabled:opacity-50" 
             onClick={onCancel}
             disabled={isLoading}
           >
@@ -55,10 +55,10 @@ export function ConfirmModal({
           <button 
             type="button"
             className={cn(
-              "inline-flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+              "inline-flex items-center justify-center px-6 py-3 text-[0.875rem] font-bold transition-all active:scale-95 rounded-2xl shadow-lg ring-1 ring-inset ring-black/5 disabled:pointer-events-none disabled:opacity-50",
               isDanger 
-                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive shadow-sm" 
-                : "bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary shadow-sm"
+                ? "bg-destructive text-white hover:bg-destructive/90 shadow-destructive/20" 
+                : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20"
             )}
             onClick={onConfirm}
             disabled={isLoading}
@@ -69,10 +69,10 @@ export function ConfirmModal({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Загрузка...
+                Processing...
               </span>
             ) : (
-                confirmLabel
+                 confirmLabel
             )}
           </button>
         </div>

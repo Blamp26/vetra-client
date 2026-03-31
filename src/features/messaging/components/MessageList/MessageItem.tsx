@@ -54,30 +54,30 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     return (
       <>
         {hasMedia && (
-          <div className={cn(!isPhotoOnly && "mb-1")}>
-            {msg.media_mime_type?.startsWith("video/") ? (
-              <video className="max-w-full rounded-lg max-h-[300px] w-full object-cover" controls src={`${API_BASE_URL}/media/${msg.media_file_id}`} />
-            ) : (
-              <div 
-                className="cursor-zoom-in active:scale-[0.99] transition-transform"
-                onClick={() => onLightbox({
-                  src: `${API_BASE_URL}/media/${msg.media_file_id}`,
-                  author: authorName,
-                  time: timestamp
-                })}
-              >
-                <AuthenticatedImage 
-                  className={cn(
-                    "max-w-full w-full object-cover bg-muted/20 shadow-sm hover:shadow-md transition-shadow",
-                    isPhotoOnly ? "rounded-none max-h-[500px]" : "rounded-lg max-h-[400px]"
-                  )}
-                  src={`${API_BASE_URL}/media/${msg.media_file_id}`} 
-                  alt="attachment" 
-                  crossOrigin="anonymous"
-                />
-              </div>
-            )}
-          </div>
+            <div className={cn(!isPhotoOnly && "mb-1.5")}>
+              {msg.media_mime_type?.startsWith("video/") ? (
+                <video className="max-w-full rounded-2xl max-h-[300px] w-full object-cover shadow-sm ring-1 ring-inset ring-black/5 dark:ring-white/5" controls src={`${API_BASE_URL}/media/${msg.media_file_id}`} />
+              ) : (
+                <div 
+                  className="cursor-zoom-in active:scale-[0.98] transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+                  onClick={() => onLightbox({
+                    src: `${API_BASE_URL}/media/${msg.media_file_id}`,
+                    author: authorName,
+                    time: timestamp
+                  })}
+                >
+                  <AuthenticatedImage 
+                    className={cn(
+                      "max-w-full w-full object-cover bg-muted/20 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.1)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.15)] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ring-1 ring-inset ring-black/5 dark:ring-white/5",
+                      isPhotoOnly ? "rounded-[4px] max-h-[500px]" : "rounded-2xl max-h-[400px]"
+                    )}
+                    src={`${API_BASE_URL}/media/${msg.media_file_id}`} 
+                    alt="attachment" 
+                    crossOrigin="anonymous"
+                  />
+                </div>
+              )}
+            </div>
         )}
         {hasText && (
           <p className="text-sm leading-[1.3125] whitespace-pre-wrap break-words relative max-w-[65ch] [word-break:normal]">
@@ -103,10 +103,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 onToggleReaction(msg.id, g.emoji);
               }}
               className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all duration-150 text-xs cursor-pointer hover:scale-105 active:scale-95",
+                "inline-flex items-center gap-1.5 px-2.5 py-[0.1875rem] rounded-full transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] text-xs cursor-pointer hover:scale-[1.08] active:scale-95",
                 mine 
-                  ? "bg-primary/20 border-primary text-primary font-medium shadow-sm" 
-                  : "bg-muted/50 border-border text-foreground hover:bg-muted hover:border-muted-foreground/30"
+                  ? "bg-primary/10 text-primary font-semibold shadow-sm ring-1 ring-inset ring-primary/20" 
+                  : "bg-background/40 backdrop-blur-md text-foreground hover:bg-muted/80 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] ring-1 ring-inset ring-border/50 hover:ring-border"
               )}
               aria-pressed={mine}
               title={mine ? "Remove reaction" : "Add reaction"}
@@ -145,11 +145,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "max-w-[85%] max-[1300px]:max-w-[90%] rounded-2xl flex flex-col justify-center relative group min-w-[110px]",
+          "max-w-[85%] max-[1300px]:max-w-[90%] rounded-[1.25rem] flex flex-col justify-center relative group min-w-[110px] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
           isPhotoOnly 
             ? "bg-transparent shadow-none p-0 overflow-hidden" 
-            : cn("px-4 py-3 shadow-sm", isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text pr-[34px]" : "bg-bubble-incoming text-bubble-incoming-text pr-[44px]"),
-          isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-2xl max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]",
+            : cn("px-[1.125rem] py-[0.625rem] shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] ring-1 ring-inset", isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text pr-[2.5rem] ring-black/5 dark:ring-white/[0.08]" : "bg-bubble-incoming text-bubble-incoming-text pr-[3rem] ring-border/40"),
+          isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-[1.25rem] max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]",
           selectionMode && isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
         )}
       >

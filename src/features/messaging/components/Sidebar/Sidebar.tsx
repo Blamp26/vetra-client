@@ -41,7 +41,7 @@ export function Sidebar({
 
   const getPreviewText = (content?: string | null, mediaFileId?: string | null) => {
     if (content && content.trim().length > 0) return content;
-    if (mediaFileId) return "📎 Attachment";
+    if (mediaFileId) return "Attachment";
     return "No messages yet";
   };
 
@@ -80,6 +80,7 @@ export function Sidebar({
   const allItems = [...directItems, ...roomItems].sort(
     (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
   );
+  const hasItems = allItems.length > 0;
 
   const isItemActive = (item: SidebarItem): boolean => {
     if (!activeChat) return false;
@@ -99,87 +100,139 @@ export function Sidebar({
   return (
     <>
       <div className={cn(
-        "flex h-full w-[432px] flex-col",
+        "flex h-full w-full flex-col",
         isServerMode && "w-[72px]"
       )}>
-        {/* Search */}
         {!isServerMode && (
-          <div className="p-4">
+          <div className="px-4 pt-4">
+            <div className="rounded-[1.75rem] border border-border/70 bg-card/80 p-4 shadow-[0_18px_50px_-34px_rgba(15,23,42,0.28)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <span className="inline-flex rounded-full border border-border/50 bg-background px-2.5 py-1 text-[11px] font-medium tracking-[0.12em] text-muted-foreground shadow-sm">
+                    Inbox
+                  </span>
+                  <div className="space-y-1">
+                    <h1 className="text-[1.55rem] font-semibold tracking-tight text-sidebar-foreground">
+                      Messages
+                    </h1>
+                    <p className="max-w-[18rem] text-sm leading-5 text-muted-foreground">
+                      {hasItems
+                        ? `${allItems.length} conversations ready to open`
+                        : "Start a conversation or create a room to build your inbox."}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => openModal("CREATE_PICKER")}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/50 bg-background text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-accent hover:text-foreground active:translate-y-0 active:scale-[0.95] shadow-sm"
+                  aria-label="Новый чат"
+                  title="Начать новый чат"
+                >
+                  <SquarePen className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!isServerMode && (
+          <div className="px-4 pt-4">
             <UserSearch />
           </div>
         )}
 
-        {/* Messages Header */}
-        <div className={cn("flex items-center justify-between px-4 pb-2", isServerMode && "hidden")}>
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Messages</span>
-          <button
-            onClick={() => openModal("CREATE_PICKER")}
-            className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
-            aria-label="Новый чат"
-            title="Начать новый чат"
-          >
-            <SquarePen className="h-4 w-4" />
-          </button>
+        <div className={cn("px-4 pb-2 pt-5", isServerMode && "hidden")}>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground">
+              Recent chats
+            </span>
+            <span className="rounded-full bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
+              {allItems.length}
+            </span>
+          </div>
         </div>
 
-        {/* Scrollable Area */}
         <div dir="ltr" data-slot="scroll-area" className="relative flex-1 overflow-hidden">
           <style>{`[data-radix-scroll-area-viewport]{scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;}[data-radix-scroll-area-viewport]::-webkit-scrollbar{display:none}`}</style>
           <div data-radix-scroll-area-viewport="" data-slot="scroll-area-viewport" className="focus-visible:ring-ring/50 size-full transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1 overflow-y-auto overflow-x-hidden">
-            <div className="px-2 space-y-1">
-              <TooltipProvider delayDuration={400}>
-                {allItems.map((item) => {
-                  const isActive = isItemActive(item);
-                  
-                  return (
-                    <Tooltip key={`${item.kind}-${item.id}`}>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => handleItemClick(item)}
-                          className={cn(
-                            "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-sidebar-accent",
-                            isActive && "bg-sidebar-accent"
-                          )}
-                        >
-                          <div className="relative">
-                            <Avatar 
-                              name={item.name} 
-                              size="large" 
-                              className="size-8 h-10 w-10" 
-                              status={item.kind === "direct" ? (item.status || (item.isOnline ? "online" : "offline")) : null}
-                            />
-                          </div>
-                          
-                          {!isServerMode && (
-                            <div className="flex-1 overflow-hidden">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-sidebar-foreground">{item.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {formatPreviewTime(item.time)}
-                                </span>
-                              </div>
-                              <p className="truncate text-sm text-muted-foreground">
-                                <EmojiText text={item.preview} size={14} />
-                              </p>
+            <div className="space-y-1 px-2.5 pb-3">
+              {hasItems ? (
+                <TooltipProvider delayDuration={400}>
+                  {allItems.map((item) => {
+                    const isActive = isItemActive(item);
+                    
+                    return (
+                      <Tooltip key={`${item.kind}-${item.id}`}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => handleItemClick(item)}
+                            className={cn(
+                              "flex w-full items-center gap-3 rounded-[1.25rem] border border-transparent px-3 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-border/70 hover:bg-card/80 hover:shadow-[0_16px_32px_-28px_rgba(15,23,42,0.35)] active:translate-y-0 active:scale-[0.99]",
+                              isActive && "border-border/70 bg-card text-foreground shadow-[0_18px_36px_-26px_rgba(15,23,42,0.35)]"
+                            )}
+                          >
+                            <div className="relative">
+                              <Avatar 
+                                name={item.name} 
+                                size="large" 
+                                className="size-8 h-10 w-10 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)]" 
+                                status={item.kind === "direct" ? (item.status || (item.isOnline ? "online" : "offline")) : null}
+                              />
                             </div>
-                          )}
+                            
+                            {!isServerMode && (
+                              <div className="min-w-0 flex-1 overflow-hidden">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="truncate text-sm font-semibold text-sidebar-foreground">{item.name}</span>
+                                  <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                                    {formatPreviewTime(item.time)}
+                                  </span>
+                                </div>
+                                <p className="truncate pt-0.5 text-sm leading-5 text-muted-foreground">
+                                  <EmojiText text={item.preview} size={14} />
+                                </p>
+                              </div>
+                            )}
 
-                          {!isServerMode && item.unread > 0 && (
-                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-unread px-1.5 text-xs font-medium text-unread-foreground">
-                              {item.unread}
-                            </span>
-                          )}
-                        </button>
-                      </TooltipTrigger>
-                      {isServerMode && (
-                        <TooltipContent side="right" className="z-50 bg-popover text-popover-foreground border border-border px-3 py-1.5 rounded-md text-sm shadow-md animate-in fade-in zoom-in-95 duration-100">
-                          <p>{item.name}</p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  );
-                })}
-              </TooltipProvider>
+                            {!isServerMode && item.unread > 0 && (
+                              <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-unread px-1.5 text-[11px] font-semibold text-unread-foreground shadow-[0_10px_24px_-16px_rgba(15,23,42,0.55)]">
+                                {item.unread}
+                              </span>
+                            )}
+                          </button>
+                        </TooltipTrigger>
+                        {isServerMode && (
+                          <TooltipContent side="right" className="z-50 rounded-xl border border-border bg-popover px-3 py-1.5 text-sm text-popover-foreground shadow-md animate-in fade-in zoom-in-95 duration-100">
+                            <p>{item.name}</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    );
+                  })}
+                </TooltipProvider>
+              ) : !isServerMode ? (
+                <div className="rounded-[1.5rem] border border-border/50 bg-muted/20 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                  <div className="space-y-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-[1rem] bg-primary text-primary-foreground shadow-sm shadow-primary/30">
+                      <SquarePen className="h-4 w-4" />
+                    </div>
+                    <div className="space-y-1">
+                      <h2 className="text-base font-semibold tracking-tight text-sidebar-foreground">
+                        Your inbox is empty
+                      </h2>
+                      <p className="text-sm leading-6 text-muted-foreground">
+                        Search for a teammate or create a room to start your first thread.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => openModal("CREATE_PICKER")}
+                      className="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-all duration-200 active:scale-95 shadow-sm shadow-primary/20 hover:bg-primary/90"
+                    >
+                      Start a conversation
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

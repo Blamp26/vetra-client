@@ -66,11 +66,11 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
 
   return (
     <div 
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4" 
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/80 backdrop-blur-md p-4 animate-in fade-in duration-300" 
       onClick={handleBackdropClick}
     >
       <div 
-        className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-[500px] max-h-[80vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200" 
+        className="bg-card border border-border/50 rounded-2xl shadow-2xl shadow-black/5 ring-1 ring-white/5 w-full max-w-[500px] max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-2 duration-300" 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -93,7 +93,7 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
               ref={inputRef}
               id="message-text-search"
               name="search-query"
-              className="w-full bg-secondary border-none rounded-lg pl-10 pr-4 py-2.5 text-sm focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-muted-foreground/60"
+              className="w-full bg-background border border-border/50 rounded-xl pl-10 pr-4 py-2.5 text-[15px] focus:border-primary focus:ring-2 focus:ring-primary/20 shadow-sm outline-none transition-all placeholder:text-muted-foreground/60"
               placeholder="Введите текст для поиска…"
               value={query}
               onChange={handleChange}
@@ -132,7 +132,7 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
               <button
                 key={msg.id}
                 type="button"
-                className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 text-left transition-all active:scale-[0.98] group cursor-pointer"
+                className="flex items-start gap-3 p-3 rounded-xl hover:bg-accent text-left transition-all active:scale-[0.98] group cursor-pointer"
                 onClick={() => { onJumpTo(msg.id); onClose(); }}
               >
                 <Avatar 

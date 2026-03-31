@@ -380,7 +380,7 @@ export function MessageList({
       >
         {hasMore && (
           <div className="flex justify-center py-2 pb-3">
-            <button className="bg-muted hover:bg-accent border border-border rounded-full text-foreground cursor-pointer px-4 py-1.5 text-sm transition-colors" onClick={onLoadMore} disabled={isLoading}>
+            <button className="bg-background/60 hover:bg-muted border border-border shadow-sm rounded-full text-foreground cursor-pointer px-4 py-1.5 text-xs font-medium backdrop-blur-md transition-all active:scale-95 disabled:opacity-50" onClick={onLoadMore} disabled={isLoading}>
               {isLoading ? "Загрузка…" : "Загрузить старые сообщения"}
             </button>
           </div>
@@ -390,8 +390,10 @@ export function MessageList({
         )}
         {groupedMessages.map(({ date, messages: dayMessages }) => (
           <div key={date} className="space-y-4">
-            <div className="flex items-center my-6 gap-3 text-muted-foreground text-xs font-semibold tracking-wider before:content-[''] before:flex-1 before:h-[1px] before:bg-border after:content-[''] after:flex-1 after:h-[1px] after:bg-border">
-              <span>{date}</span>
+            <div className="flex justify-center my-6 relative z-[5] pointer-events-none">
+              <span className="bg-background/40 backdrop-blur-2xl text-foreground/80 text-[0.6875rem] font-semibold tracking-widest uppercase px-3.5 py-1.5 rounded-full border border-white/5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.12)] ring-1 ring-inset ring-black/5 dark:ring-white/5">
+                {date}
+              </span>
             </div>
             {dayMessages.map((msg, idx) => {
               const prevMsg = dayMessages[idx - 1];
@@ -429,15 +431,15 @@ export function MessageList({
       {showScrollBottom && (
         <button
           onClick={scrollToBottom}
-          className="absolute bottom-4 right-4 h-9 w-9 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-all z-10 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          className="absolute bottom-4 right-4 h-10 w-10 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/20 flex items-center justify-center hover:bg-primary/90 hover:scale-105 active:scale-95 transition-all z-10 animate-in fade-in slide-in-from-bottom-2 duration-300"
           aria-label="К последним сообщениям"
         >
-          <ArrowDown className="h-4 w-4" />
+          <ArrowDown className="h-5 w-5" />
         </button>
       )}
 
       {selectionMode && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[500] bg-popover/95 backdrop-blur-md border border-border/50 rounded-2xl shadow-2xl px-6 py-3 flex items-center gap-8 animate-in slide-in-from-bottom-6 duration-300">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[500] bg-background/80 backdrop-blur-3xl border border-white/10 dark:border-white/5 rounded-[1.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.15)] px-6 py-3.5 flex items-center gap-8 animate-in slide-in-from-bottom-6 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ring-1 ring-inset ring-black/5 dark:ring-white/10">
           <div className="text-sm font-semibold text-primary mr-2 flex items-center gap-2">
             <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-xs">
               {selectedMessageIds.length}
@@ -448,12 +450,12 @@ export function MessageList({
           <button 
             onClick={() => setForwardingMessages(selectedMessageIds)}
             disabled={selectedMessageIds.length === 0}
-            className="flex flex-col items-center gap-1 group text-muted-foreground hover:text-foreground transition-all duration-200 disabled:opacity-40"
+            className="flex flex-col items-center gap-1 group text-muted-foreground hover:text-foreground transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] disabled:opacity-40"
           >
-            <div className="p-2 rounded-xl group-hover:bg-accent group-hover:scale-110 transition-all">
+            <div className="p-2 rounded-[1rem] group-hover:bg-accent group-hover:scale-[1.15] group-active:scale-95 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] shadow-sm ring-1 ring-inset ring-transparent group-hover:ring-border/50">
               <Forward className="h-5 w-5" />
             </div>
-            <span className="text-2xs font-medium">Forward</span>
+            <span className="text-[0.625rem] font-semibold uppercase tracking-wider">Forward</span>
           </button>
 
           <button 
@@ -461,24 +463,24 @@ export function MessageList({
               if (selectedMessageIds.length > 0) setMsgToDelete(selectedMessageIds[0]);
             }}
             disabled={selectedMessageIds.length === 0}
-            className="flex flex-col items-center gap-1 group text-muted-foreground hover:text-destructive transition-all duration-200 disabled:opacity-40"
+            className="flex flex-col items-center gap-1 group text-muted-foreground hover:text-destructive transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] disabled:opacity-40"
           >
-            <div className="p-2 rounded-xl group-hover:bg-destructive/10 group-hover:scale-110 transition-all">
+            <div className="p-2 rounded-[1rem] group-hover:bg-destructive/10 group-hover:scale-[1.15] group-active:scale-95 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] shadow-sm ring-1 ring-inset ring-transparent group-hover:ring-destructive/20">
               <Trash2 className="h-5 w-5" />
             </div>
-            <span className="text-2xs font-medium">Delete</span>
+            <span className="text-[0.625rem] font-semibold uppercase tracking-wider">Delete</span>
           </button>
 
-          <div className="w-[1px] h-8 bg-border/50" />
+          <div className="w-[1px] h-8 bg-border/40" />
 
           <button 
             onClick={clearSelection}
-            className="flex flex-col items-center gap-1 group text-muted-foreground hover:text-foreground transition-all duration-200"
+            className="flex flex-col items-center gap-1 group text-muted-foreground hover:text-foreground transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
           >
-            <div className="p-2 rounded-xl group-hover:bg-accent group-hover:rotate-90 transition-all">
+            <div className="p-2 rounded-[1rem] group-hover:bg-accent group-hover:rotate-90 group-hover:scale-105 group-active:scale-95 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] shadow-sm ring-1 ring-inset ring-transparent group-hover:ring-border/50">
               <X className="h-5 w-5" />
             </div>
-            <span className="text-2xs font-medium">Cancel</span>
+            <span className="text-[0.625rem] font-semibold uppercase tracking-wider">Cancel</span>
           </button>
         </div>
       )}

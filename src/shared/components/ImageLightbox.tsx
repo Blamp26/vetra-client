@@ -92,7 +92,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
 
   const handleClose = () => {
     setIsClosing(true);
-    setTimeout(onClose, 200); // Даем время для анимации выхода
+    setTimeout(onClose, 400); // Даем время для анимации выхода (более плавной)
   };
 
   const handleRotate = (e: React.MouseEvent) => {
@@ -112,8 +112,6 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
     if (isDragging && scale > 1 && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       
-      // Максимальное смещение: (ширина_фото_с_зумом - ширина_контейнера) / 2
-      // Если результат отрицательный (фото меньше контейнера), смещение 0
       const limitX = Math.max(0, (rect.width * scale - rect.width) / 2);
       const limitY = Math.max(0, (rect.height * scale - rect.height) / 2);
 
@@ -151,8 +149,8 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
   return (
     <div 
       className={cn(
-        "fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm transition-opacity duration-200",
-        isClosing ? "opacity-0" : "opacity-100 animate-in fade-in"
+        "fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-black/60 backdrop-blur-3xl transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
+        isClosing ? "opacity-0 scale-105" : "opacity-100 animate-in fade-in duration-500"
       )}
       onClick={handleClose}
       onMouseMove={handleMouseMove}
@@ -161,7 +159,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
     >
       {/* Кнопка закрытия сверху справа */}
       <button 
-        className="absolute top-6 right-6 p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all z-[2001] cursor-pointer"
+        className="absolute top-8 right-8 p-3 bg-white/10 backdrop-blur-xl border border-white/10 text-white rounded-[1rem] shadow-2xl transition-all duration-300 z-[2001] cursor-pointer hover:bg-white/20 hover:scale-110 active:scale-90"
         onClick={handleClose}
       >
         <X className="w-6 h-6" />
@@ -170,62 +168,62 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
       {/* Контейнер изображения */}
       <div 
         ref={containerRef}
-        className="relative w-full h-full flex items-center justify-center p-12 md:p-24 overflow-hidden"
+        className="relative w-full h-full flex items-center justify-center p-8 md:p-20 overflow-hidden"
       >
         <AuthenticatedImage 
           src={src} 
           alt="Lightbox" 
           className={cn(
-            "max-w-full max-h-full object-contain transition-transform duration-300 shadow-2xl select-none",
+             "max-w-full max-h-full object-contain shadow-[0_64px_128px_-32px_rgba(0,0,0,0.8)] select-none",
             scale > 1 ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-default"
           )}
           style={{ 
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
-            transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0, 0.2, 1)'
+            transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.32, 0.72, 0, 1)'
           }}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={handleMouseDown}
         />
       </div>
 
-      {/* Нижний интерфейс */}
+      {/* Нижний интерфейс (Floating Bottom Bar) */}
       <div 
-        className="absolute bottom-0 left-0 right-0 p-6 flex items-end justify-between bg-gradient-to-t from-black/60 to-transparent pointer-events-none"
+        className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-8 px-8 py-4 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2rem] shadow-2xl pointer-events-auto animate-in slide-in-from-bottom-8 duration-700 ease-[cubic-bezier(0.32,0.72,0,1)]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Информация об авторе (слева снизу) */}
-        <div className="flex flex-col gap-1 pointer-events-auto">
-          <span className="text-white font-medium text-lg drop-shadow-md">
+        {/* Информация об авторе */}
+        <div className="flex flex-col pr-8 border-r border-white/10">
+          <span className="text-white font-extrabold text-[1rem] tracking-tight leading-tight whitespace-nowrap">
             {author}
           </span>
-          <span className="text-white/60 text-sm">
+          <span className="text-white/40 text-[0.75rem] font-bold uppercase tracking-widest mt-0.5">
             {time}
           </span>
         </div>
 
-        {/* Кнопки действий (справа снизу) */}
-        <div className="flex items-center gap-2 pointer-events-auto">
+        {/* Кнопки действий */}
+        <div className="flex items-center gap-4">
           <button 
             onClick={handleDownload}
-            className="p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-all cursor-pointer group flex flex-col items-center"
-            title="Скачать"
+            className="p-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-[0.85rem] transition-all duration-300 cursor-pointer active:scale-90"
+            title="Download"
           >
-            <Download className="w-6 h-6" />
+            <Download className="w-5 h-5" />
           </button>
           
           <button 
             onClick={handleRotate}
-            className="p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-all cursor-pointer group flex flex-col items-center"
-            title="Повернуть на 90°"
+            className="p-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-[0.85rem] transition-all duration-300 cursor-pointer active:scale-90"
+            title="Rotate 90°"
           >
-            <RotateCw className="w-6 h-6" />
+            <RotateCw className="w-5 h-5" />
           </button>
 
           <button 
-            className="p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-all cursor-pointer group flex flex-col items-center"
-            title="Больше"
+            className="p-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-[0.85rem] transition-all duration-300 cursor-pointer active:scale-90"
+            title="More Options"
           >
-            <MoreHorizontal className="w-6 h-6" />
+            <MoreHorizontal className="w-5 h-5" />
           </button>
         </div>
       </div>

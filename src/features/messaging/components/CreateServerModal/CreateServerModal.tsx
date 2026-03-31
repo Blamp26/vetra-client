@@ -49,8 +49,8 @@ export function CreateServerModal({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-[440px] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/80 backdrop-blur-md p-4 animate-in fade-in duration-300" onClick={onClose}>
+      <div className="bg-card border border-border/50 rounded-2xl shadow-2xl shadow-black/5 ring-1 ring-white/5 w-full max-w-[440px] flex flex-col animate-in zoom-in-95 slide-in-from-bottom-2 duration-300" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <h3 className="m-0 text-lg font-bold text-foreground">Create a Server</h3>
           <button className="bg-transparent border-none text-2xl cursor-pointer text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="Close">×</button>
@@ -61,7 +61,7 @@ export function CreateServerModal({ onClose }: Props) {
 
           <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground" htmlFor="create-server-name">Server name</label>
           <input
-            className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
+            className="w-full px-3 py-2.5 bg-background border border-border/50 rounded-xl text-foreground text-[15px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 shadow-sm transition-shadow"
             id="create-server-name"
             name="server-name"
             type="text"
@@ -78,11 +78,11 @@ export function CreateServerModal({ onClose }: Props) {
         </div>
 
         <div className="px-6 py-4 border-t border-border flex gap-3 justify-end bg-muted/30">
-          <button className="px-4 py-2 bg-background border border-border rounded-lg text-muted-foreground text-sm font-inherit cursor-pointer hover:bg-accent" onClick={onClose} disabled={isCreating}>
+          <button className="px-4 py-2 bg-background border border-border/50 rounded-xl text-muted-foreground text-sm font-medium transition-all cursor-pointer hover:bg-muted active:scale-95 shadow-sm" onClick={onClose} disabled={isCreating}>
             Cancel
           </button>
           <button
-            className="px-4 py-2 bg-primary text-primary-foreground border-none rounded-lg text-sm font-bold font-inherit cursor-pointer hover:bg-primary/90 disabled:opacity-50"
+            className="px-4 py-2 bg-primary text-primary-foreground border-none rounded-xl text-sm font-medium transition-all active:scale-95 cursor-pointer hover:bg-primary/90 disabled:opacity-50 shadow-sm shadow-primary/20"
             onClick={handleCreate}
             disabled={isCreating || !name.trim()}
           >

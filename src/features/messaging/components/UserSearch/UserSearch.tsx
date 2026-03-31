@@ -42,7 +42,7 @@ export function UserSearch() {
         data-slot="input"
         id="user-global-search"
         name="user-search"
-        className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive bg-sidebar-accent border-0 pl-9 focus-visible:ring-1"
+        className="h-[38px] w-full min-w-0 rounded-xl px-3 py-1 text-[14px] outline-none bg-muted/40 border border-border/50 pl-9 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-sm placeholder:text-muted-foreground"
         placeholder="Search conversations..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -57,19 +57,19 @@ export function UserSearch() {
       )}
       
       {isSearching && (
-        <div className="absolute left-0 right-0 top-full mt-1 px-3 py-2 text-xs text-muted-foreground bg-popover border border-border rounded-md shadow-md z-[110]">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] px-3 py-2 text-xs text-muted-foreground bg-popover border border-border/50 rounded-xl shadow-lg z-[110]">
           Searching…
         </div>
       )}
       
       {!isSearching && query && !hasResults && (
-        <div className="absolute left-0 right-0 top-full mt-1 px-3 py-2 text-xs text-muted-foreground bg-popover border border-border rounded-md shadow-md z-[110]">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] px-3 py-2 text-xs text-muted-foreground bg-popover border border-border/50 rounded-xl shadow-lg z-[110]">
           No results found for "{query}"
         </div>
       )}
       
       {hasResults && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-md z-[110] max-h-[320px] overflow-y-auto p-1">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-popover border border-border/50 rounded-xl shadow-lg z-[110] max-h-[320px] overflow-y-auto p-1.5">
           {searchResults.users.length > 0 && (
             <div className="mb-2">
               <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Users</div>
@@ -77,7 +77,7 @@ export function UserSearch() {
                 {searchResults.users.map((user) => (
                   <li key={`user-${user.id}`}>
                     <button 
-                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-sm text-left hover:bg-sidebar-accent transition-colors" 
+                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-left hover:bg-accent transition-all duration-200 active:scale-[0.98]" 
                       onClick={() => handleSelectUser(user)}
                     >
                       <Avatar name={user.display_name || user.username} size="small" status={user.status} />
@@ -99,7 +99,7 @@ export function UserSearch() {
                 {searchResults.servers.map((server) => (
                   <li key={`server-${server.id}`}>
                     <button 
-                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-sm text-left hover:bg-sidebar-accent transition-colors" 
+                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-left hover:bg-accent transition-all duration-200 active:scale-[0.98]" 
                       onClick={() => handleSelectServer(server)}
                     >
                       <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center shrink-0">

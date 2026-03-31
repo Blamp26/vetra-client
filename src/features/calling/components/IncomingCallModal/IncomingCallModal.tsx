@@ -8,25 +8,31 @@ interface Props {
 
 export function IncomingCallModal({ callerName, onAccept, onReject }: Props) {
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-5 pointer-events-none" role="dialog" aria-modal="true" aria-label="Входящий звонок">
-      <div className="pointer-events-auto bg-[#F8F8F8] border border-[#E1E1E1] rounded-2xl p-6 px-7 w-[280px] flex flex-col items-center gap-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-6 duration-250 ease-out">
-        <div className="w-[72px] h-[72px] rounded-full bg-[#5865F2] flex items-center justify-center animate-pulse mb-1">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#a29bfe] text-white text-[1.6rem] font-bold flex items-center justify-center">
-            {callerName.charAt(0).toUpperCase()}
+    <div className="fixed inset-x-0 top-12 z-[1000] flex items-center justify-center p-5 pointer-events-none" role="dialog" aria-modal="true" aria-label="Incoming Call">
+      <div className="pointer-events-auto bg-card/60 backdrop-blur-3xl border border-white/10 dark:border-white/5 rounded-[2.5rem] p-4 pl-6 pr-4 flex items-center gap-6 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] ring-1 ring-inset ring-white/10 animate-in fade-in slide-in-from-top-8 duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]">
+        
+        <div className="flex items-center gap-4">
+          <div className="relative w-12 h-12 shrink-0">
+            <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping duration-[2000ms]" />
+            <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary/60 text-primary-foreground text-lg font-bold flex items-center justify-center shadow-lg ring-2 ring-background">
+              {callerName.charAt(0).toUpperCase()}
+            </div>
+          </div>
+
+          <div className="flex flex-col">
+            <span className="text-[0.625rem] font-bold text-primary uppercase tracking-[0.14em]">Incoming Call</span>
+            <span className="text-[1.05rem] font-extrabold text-foreground tracking-tight leading-tight">{callerName}</span>
           </div>
         </div>
 
-        <p className="text-[0.78rem] text-[#7A7A7A] uppercase tracking-[0.08em] font-semibold m-0">Входящий звонок</p>
-        <p className="text-[1.05rem] font-bold text-[#0A0A0A] m-0 text-center break-words">{callerName}</p>
-
-        <div className="flex gap-5 mt-2">
+        <div className="flex gap-3">
           <button
-            className="w-[52px] h-[52px] rounded-full border-none cursor-pointer flex items-center justify-center bg-[#c62828] text-white transition-all duration-120 hover:brightness-115 hover:scale-108 active:scale-92"
+            className="w-12 h-12 rounded-full border-none cursor-pointer flex items-center justify-center bg-destructive/10 text-destructive transition-all duration-300 hover:bg-destructive hover:text-destructive-foreground hover:scale-110 active:scale-90 ring-1 ring-inset ring-destructive/20"
             onClick={onReject}
-            aria-label="Отклонить звонок"
-            title="Отклонить"
+            aria-label="Decline Call"
+            title="Decline"
           >
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path
                 d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9
                    -.87.46-1.67 1.06-2.37 1.78-.18.18-.43.28-.68.28
@@ -41,12 +47,12 @@ export function IncomingCallModal({ callerName, onAccept, onReject }: Props) {
           </button>
 
           <button
-            className="w-[52px] h-[52px] rounded-full border-none cursor-pointer flex items-center justify-center bg-[#2e7d32] text-white transition-all duration-120 hover:brightness-115 hover:scale-108 active:scale-92"
+            className="w-12 h-12 rounded-full border-none cursor-pointer flex items-center justify-center bg-green-500/10 text-green-500 transition-all duration-300 hover:bg-green-500 hover:text-white hover:scale-110 active:scale-95 ring-1 ring-inset ring-green-500/20 shadow-[0_8px_16px_-4px_rgba(34,197,94,0.3)] shadow-green-500/20"
             onClick={onAccept}
-            aria-label="Принять звонок"
-            title="Принять"
+            aria-label="Accept Call"
+            title="Accept"
           >
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path
                 d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24
                    1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1
@@ -57,12 +63,7 @@ export function IncomingCallModal({ callerName, onAccept, onReject }: Props) {
             </svg>
           </button>
         </div>
-
-        <div className="flex justify-between w-full px-1 text-[0.7rem] text-[#7A7A7A]">
-          <span>Отклонить</span>
-          <span>Принять</span>
-        </div>
       </div>
     </div>
-  );
+    );
 }

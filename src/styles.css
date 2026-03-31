@@ -113,45 +113,45 @@
 }
 
 :root {
-  --background: #FAFAFA;
-  --foreground: #171717;
+  --background: #F6F6F3;
+  --foreground: #171C18;
   --card: #FFFFFF;
-  --card-foreground: #171717;
+  --card-foreground: #171C18;
   --popover: #FFFFFF;
-  --popover-foreground: #171717;
-  --primary: #262626;
-  --primary-foreground: #FAFAFA;
-  --secondary: #F5F5F5;
-  --secondary-foreground: #262626;
-  --muted: #F5F5F5;
-  --muted-foreground: #737373;
-  --accent: #E5E5E5;
-  --accent-foreground: #171717;
-  --destructive: #404040;
-  --destructive-foreground: #FAFAFA;
-  --border: #E5E5E5;
-  --input: #D4D4D4;
-  --ring: #A3A3A3;
+  --popover-foreground: #171C18;
+  --primary: #222A25;
+  --primary-foreground: #F7F7F2;
+  --secondary: #EFEFEA;
+  --secondary-foreground: #222A25;
+  --muted: #EFEFEA;
+  --muted-foreground: #6E756E;
+  --accent: #E6E6DE;
+  --accent-foreground: #171C18;
+  --destructive: #3F4741;
+  --destructive-foreground: #F7F7F2;
+  --border: #DFE0D7;
+  --input: #D1D4C9;
+  --ring: #899287;
   --radius: .75rem;
 
-  --sidebar: #F5F5F5;
-  --sidebar-foreground: #171717;
-  --sidebar-primary: #262626;
-  --sidebar-primary-foreground: #FAFAFA;
-  --sidebar-accent: #E5E5E5;
-  --sidebar-accent-foreground: #171717;
-  --sidebar-border: #D4D4D4;
-  --sidebar-ring: #A3A3A3;
+  --sidebar: #F1F1EB;
+  --sidebar-foreground: #171C18;
+  --sidebar-primary: #222A25;
+  --sidebar-primary-foreground: #F7F7F2;
+  --sidebar-accent: #E8E8E0;
+  --sidebar-accent-foreground: #171C18;
+  --sidebar-border: #D4D6CC;
+  --sidebar-ring: #899287;
 
   /* Messaging Specific */
-  --bubble-incoming: #F5F5F5;
-  --bubble-incoming-text: #171717;
-  --bubble-outgoing: #262626;
-  --bubble-outgoing-text: #FAFAFA;
-  --mention-bg: #E5E5E5;
-  --mention-text: #171717;
-  --unread-badge: #262626;
-  --unread-badge-text: #FAFAFA;
+  --bubble-incoming: #EFEFEA;
+  --bubble-incoming-text: #171C18;
+  --bubble-outgoing: #222A25;
+  --bubble-outgoing-text: #F7F7F2;
+  --mention-bg: #E6E6DE;
+  --mention-text: #171C18;
+  --unread-badge: #222A25;
+  --unread-badge-text: #F7F7F2;
 
   /* Presence */
   --presence-online: #10b981;
@@ -185,44 +185,44 @@
 }
 
 .dark {
-  --background: #0A0A0A;
-  --foreground: #E5E5E5;
-  --card: #171717;
-  --card-foreground: #E5E5E5;
-  --popover: #171717;
-  --popover-foreground: #E5E5E5;
-  --primary: #FAFAFA;
-  --primary-foreground: #0A0A0A;
-  --secondary: #262626;
-  --secondary-foreground: #FAFAFA;
-  --muted: #171717;
-  --muted-foreground: #A3A3A3;
-  --accent: #262626;
-  --accent-foreground: #FAFAFA;
-  --destructive: #D4D4D4;
-  --destructive-foreground: #0A0A0A;
-  --border: #262626;
-  --input: #262626;
-  --ring: #525252;
+  --background: #0F1110;
+  --foreground: #E8EAE4;
+  --card: #151817;
+  --card-foreground: #E8EAE4;
+  --popover: #151817;
+  --popover-foreground: #E8EAE4;
+  --primary: #F4F5EE;
+  --primary-foreground: #111412;
+  --secondary: #1B1F1D;
+  --secondary-foreground: #F4F5EE;
+  --muted: #171B19;
+  --muted-foreground: #9EA59C;
+  --accent: #202421;
+  --accent-foreground: #F4F5EE;
+  --destructive: #D4D9CF;
+  --destructive-foreground: #101311;
+  --border: #272C29;
+  --input: #232825;
+  --ring: #5F665F;
   
-  --sidebar: #0A0A0A;
-  --sidebar-foreground: #E5E5E5;
-  --sidebar-primary: #FAFAFA;
-  --sidebar-primary-foreground: #0A0A0A;
-  --sidebar-accent: #171717;
-  --sidebar-accent-foreground: #FAFAFA;
-  --sidebar-border: #262626;
-  --sidebar-ring: #525252;
+  --sidebar: #0D0F0E;
+  --sidebar-foreground: #E8EAE4;
+  --sidebar-primary: #F4F5EE;
+  --sidebar-primary-foreground: #111412;
+  --sidebar-accent: #171A18;
+  --sidebar-accent-foreground: #F4F5EE;
+  --sidebar-border: #252A27;
+  --sidebar-ring: #5F665F;
 
   /* Messaging Specific */
-  --bubble-incoming: #171717;
-  --bubble-incoming-text: #E5E5E5;
-  --bubble-outgoing: #262626;
-  --bubble-outgoing-text: #FAFAFA;
-  --mention-bg: #262626;
-  --mention-text: #FAFAFA;
-  --unread-badge: #FAFAFA;
-  --unread-badge-text: #0A0A0A;
+  --bubble-incoming: #171A18;
+  --bubble-incoming-text: #E8EAE4;
+  --bubble-outgoing: #242A26;
+  --bubble-outgoing-text: #F4F5EE;
+  --mention-bg: #232825;
+  --mention-text: #F4F5EE;
+  --unread-badge: #F4F5EE;
+  --unread-badge-text: #111412;
 
   /* Presence */
   --presence-online: #10b981;
@@ -245,9 +245,18 @@
   --info-text: #dbeafe;
 }
 
+html,
 body {
   margin: 0;
+  min-height: 100dvh;
+  background: var(--background);
+  color: var(--foreground);
   font-family: var(--font-sans);
+  scroll-behavior: smooth;
+}
+
+#root {
+  min-height: 100dvh;
 }
 
 @layer utilities {

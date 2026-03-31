@@ -65,10 +65,9 @@ export function SidebarFooter({
 
   return (
     <div className="relative z-10 p-3">
-      <div className="rounded-xl bg-card shadow-lg ring-1 ring-border p-3">
-        {/* Voice Status (Visible during call) */}
+      <div className="rounded-[1.6rem] border border-border/70 bg-card/85 p-3 shadow-[0_22px_54px_-38px_rgba(15,23,42,0.35)] backdrop-blur-xl">
         {(callStatus === 'active' || callStatus === 'calling' || callStatus === 'ringing') && (
-          <div className="flex items-center justify-between rounded-lg bg-muted px-2.5 py-2 mb-3">
+          <div className="mb-3 flex items-center justify-between rounded-[1.2rem] border border-border/70 bg-background/80 px-2.5 py-2">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
                 <Rss className="h-4 w-4" aria-hidden="true" />
@@ -92,14 +91,14 @@ export function SidebarFooter({
                   <button 
                     onClick={onAcceptCall}
                     title="Accept call"
-                    className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-500 text-white transition-all hover:brightness-110 active:scale-90"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 text-white transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.96]"
                   >
                     <Phone className="h-4 w-4" aria-hidden="true" />
                   </button>
                   <button 
                     onClick={onRejectCall}
                     title="Reject call"
-                    className="flex h-7 w-7 items-center justify-center rounded-md bg-destructive text-destructive-foreground transition-all hover:brightness-110 active:scale-90"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-destructive text-destructive-foreground transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.96]"
                   >
                     <PhoneOff className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -116,7 +115,7 @@ export function SidebarFooter({
                   <button 
                     onClick={() => callStatus === 'calling' ? onHangUp() : setConfirmHangUp(true)}
                     title="End call"
-                    className="flex h-7 w-7 items-center justify-center rounded-md bg-destructive text-destructive-foreground transition-all hover:brightness-110 active:scale-90"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-destructive text-destructive-foreground transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.96]"
                   >
                     <PhoneOff className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -126,31 +125,29 @@ export function SidebarFooter({
           </div>
         )}
 
-        {/* Quick Actions */}
-        <div className="flex gap-1.5 mb-3">
+        <div className="mb-3 flex gap-1.5">
           <button 
             disabled 
             title="Video call — coming soon"
-            className="flex h-9 flex-1 items-center justify-center rounded-lg bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+            className="flex h-9 flex-1 cursor-not-allowed items-center justify-center rounded-[1rem] border border-border/60 bg-background/80 text-muted-foreground opacity-50"
           >
             <Video className="h-4 w-4" aria-hidden="true" />
           </button>
           <button 
             disabled 
             title="Screen share — coming soon"
-            className="flex h-9 flex-1 items-center justify-center rounded-lg bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+            className="flex h-9 flex-1 cursor-not-allowed items-center justify-center rounded-[1rem] border border-border/60 bg-background/80 text-muted-foreground opacity-50"
           >
             <MonitorUp className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
-        {/* User Profile & Controls */}
-        <div className="flex items-center justify-between rounded-lg bg-muted px-2 py-1.5">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowProfile(true)}>
+        <div className="flex items-center justify-between rounded-[1.2rem] border border-border/70 bg-background/80 px-2 py-1.5">
+          <div className="flex cursor-pointer items-center gap-2" onClick={() => setShowProfile(true)}>
             <Avatar 
               name={displayName} 
               src={currentUser?.avatar_url} 
-              className="h-7 w-7 text-[10px]" 
+              className="h-7 w-7 text-[10px] shadow-[0_12px_24px_-20px_rgba(15,23,42,0.35)]" 
               status={currentStatus as any}
             />
             <div className="flex flex-col overflow-hidden">
@@ -176,7 +173,7 @@ export function SidebarFooter({
                 }
               }}
               title={!isMicMuted ? "Mute microphone" : "Unmute microphone"}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground active:translate-y-0 active:scale-[0.96]"
             >
               {isMicMuted ? (
                 <MicOff className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
@@ -187,7 +184,7 @@ export function SidebarFooter({
             <button 
               onClick={() => toggleSound()}
               title={soundEnabled ? "Mute sound" : "Unmute sound"}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground active:translate-y-0 active:scale-[0.96]"
             >
               {soundEnabled ? (
                 <Headphones className="h-3.5 w-3.5" aria-hidden="true" />
@@ -198,7 +195,7 @@ export function SidebarFooter({
             <button 
               onClick={onOpenSettings}
               title="User settings"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground active:translate-y-0 active:scale-[0.96]"
             >
               <Settings className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
