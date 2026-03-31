@@ -46,7 +46,7 @@ export const Avatar: React.FC<AvatarProps> = ({
     if (!status) return null;
     return (
       <span className={cn(
-        "absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-sidebar",
+        "absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-background",
         size === 'small' ? 'h-2 w-2 border-1' : 'h-3 w-3',
         statusColors[status]
       )} />

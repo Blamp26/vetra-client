@@ -55,7 +55,7 @@ export function RegisterForm({ onSwitchToLogin }: Props) {
           </label>
           <input
             className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-foreground text-[0.95rem] font-inherit outline-none transition-all duration-150 focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
-            id="reg-username" type="text" placeholder="Choose a username (2–32 chars)"
+            id="reg-username" name="username" type="text" placeholder="Choose a username (2–32 chars)"
             value={username} 
             onChange={(e) => { clearError(); setUsername(e.target.value); }}
             onBlur={(e) => validateUsername(e.target.value)}
@@ -71,7 +71,7 @@ export function RegisterForm({ onSwitchToLogin }: Props) {
           <div className="relative">
             <input
               className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-foreground text-[0.95rem] font-inherit outline-none transition-all duration-150 focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
-              id="reg-password" type={showPassword ? "text" : "password"} placeholder="Choose a password"
+              id="reg-password" name="password" type={showPassword ? "text" : "password"} placeholder="Choose a password"
               value={password} 
               onChange={(e) => { clearError(); setPassword(e.target.value); }}
               onBlur={(e) => validatePassword(e.target.value)}

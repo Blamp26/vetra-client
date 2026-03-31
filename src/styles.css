@@ -96,10 +96,10 @@
   --color-unread-foreground: var(--unread-badge-text);
 
   /* Presence Tailwind classes */
-  --color-online: var(--presence-online);
-  --color-away: var(--presence-away);
-  --color-busy: var(--presence-busy);
-  --color-offline: var(--presence-offline);
+  --color-online: #10b981;
+  --color-away: #f59e0b;
+  --color-busy: #ef4444;
+  --color-offline: #737373;
 
   /* Status Tailwind classes */
   --color-success-fg: var(--success-text);
@@ -154,24 +154,24 @@
   --unread-badge-text: #FAFAFA;
 
   /* Presence */
-  --presence-online: #262626;
-  --presence-away: #A3A3A3;
-  --presence-busy: #525252;
-  --presence-offline: #D4D4D4;
+  --presence-online: #10b981;
+  --presence-away: #f59e0b;
+  --presence-busy: #ef4444;
+  --presence-offline: #737373;
 
   /* Status Colors */
-  --success: #262626;
-  --success-bg: #F5F5F5;
-  --success-text: #171717;
-  --error: #262626;
-  --error-bg: #F5F5F5;
-  --error-text: #171717;
-  --warning: #262626;
-  --warning-bg: #F5F5F5;
-  --warning-text: #171717;
-  --info: #262626;
-  --info-bg: #F5F5F5;
-  --info-text: #171717;
+  --success: #22c55e;
+  --success-bg: #f0fdf4;
+  --success-text: #166534;
+  --error: #ef4444;
+  --error-bg: #fef2f2;
+  --error-text: #991b1b;
+  --warning: #f59e0b;
+  --warning-bg: #fffbeb;
+  --warning-text: #92400e;
+  --info: #3b82f6;
+  --info-bg: #eff6ff;
+  --info-text: #1e40af;
 
   --chart-1: #171717; 
   --chart-2: #404040; 
@@ -225,24 +225,24 @@
   --unread-badge-text: #0A0A0A;
 
   /* Presence */
-  --presence-online: #FAFAFA;
-  --presence-away: #737373;
-  --presence-busy: #A3A3A3;
-  --presence-offline: #404040;
+  --presence-online: #10b981;
+  --presence-away: #f59e0b;
+  --presence-busy: #ef4444;
+  --presence-offline: #737373;
 
   /* Status Colors */
-  --success: #FAFAFA;
-  --success-bg: #171717;
-  --success-text: #FAFAFA;
-  --error: #FAFAFA;
-  --error-bg: #171717;
-  --error-text: #FAFAFA;
-  --warning: #FAFAFA;
-  --warning-bg: #171717;
-  --warning-text: #FAFAFA;
-  --info: #FAFAFA;
-  --info-bg: #171717;
-  --info-text: #FAFAFA;
+  --success: #22c55e;
+  --success-bg: #064e3b;
+  --success-text: #dcfce7;
+  --error: #ef4444;
+  --error-bg: #450a0a;
+  --error-text: #fee2e2;
+  --warning: #f59e0b;
+  --warning-bg: #451a03;
+  --warning-text: #fef3c7;
+  --info: #3b82f6;
+  --info-bg: #172554;
+  --info-text: #dbeafe;
 }
 
 body {

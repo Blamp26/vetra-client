@@ -91,6 +91,8 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <input
               ref={inputRef}
+              id="message-text-search"
+              name="search-query"
               className="w-full bg-secondary border-none rounded-lg pl-10 pr-4 py-2.5 text-sm focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-muted-foreground/60"
               placeholder="Введите текст для поиска…"
               value={query}

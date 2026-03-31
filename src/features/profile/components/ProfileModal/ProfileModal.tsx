@@ -126,15 +126,19 @@ export function ProfileModal({ user, onClose }: Props) {
               </button>
               <input
                 ref={fileInputRef}
+                id="profile-avatar-upload"
+                name="avatar-file"
                 type="file"
                 accept="image/*"
                 className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }}
               />
             </div>
-            <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground self-start">URL аватарки</label>
+            <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground self-start" htmlFor="profile-avatar-url">URL аватарки</label>
             <input
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
+              id="profile-avatar-url"
+              name="avatar_url"
               value={avatarUrl}
               onChange={(e) => setAvatarUrl(e.target.value)}
               placeholder="https://example.com/avatar.png"
@@ -142,11 +146,13 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           {/* Никнейм (display_name) */}
-          <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground" htmlFor="profile-display-name">
             Никнейм <span className="opacity-55 font-normal normal-case">(необязательно, не уникальный)</span>
           </label>
           <input
             className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
+            id="profile-display-name"
+            name="display_name"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder={username}
@@ -154,7 +160,7 @@ export function ProfileModal({ user, onClose }: Props) {
           />
 
           {/* Username */}
-          <label className="block mb-1.5 mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <label className="block mb-1.5 mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground" htmlFor="profile-username">
             Юзернейм <span className="opacity-55 font-normal normal-case">(уникальный)</span>
           </label>
 
@@ -169,6 +175,8 @@ export function ProfileModal({ user, onClose }: Props) {
             </span>
             <input
               className="flex-1 min-w-0 bg-transparent border-none outline-none text-foreground text-sm font-inherit p-0"
+              id="profile-username"
+              name="username"
               value={username}
               onChange={(e) => { setUsernameErr(null); setUsername(e.target.value); }}
               onFocus={() => setUsernameFocused(true)}
@@ -185,9 +193,11 @@ export function ProfileModal({ user, onClose }: Props) {
           )}
 
           {/* О себе */}
-          <label className="block mb-1.5 mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">О себе</label>
+          <label className="block mb-1.5 mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground" htmlFor="profile-bio">О себе</label>
           <textarea
             className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-vertical"
+            id="profile-bio"
+            name="bio"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             placeholder="Расскажи о себе..."
@@ -203,10 +213,10 @@ export function ProfileModal({ user, onClose }: Props) {
           <div className="grid grid-cols-2 gap-2 mb-2">
             {(
               [
-                { id: 'online', label: 'В сети', color: 'bg-emerald-500' },
-                { id: 'away', label: 'Отошёл', color: 'bg-amber-500' },
-                { id: 'dnd', label: 'Не беспокоить', color: 'bg-destructive' },
-                { id: 'offline', label: 'Невидимый', color: 'bg-muted-foreground' },
+                { id: 'online', label: 'В сети', color: 'bg-online' },
+                { id: 'away', label: 'Отошёл', color: 'bg-away' },
+                { id: 'dnd', label: 'Не беспокоить', color: 'bg-busy' },
+                { id: 'offline', label: 'Невидимый', color: 'bg-offline' },
               ] as const
             ).map((s) => (
               <button

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { Avatar } from "@/shared/components/Avatar";
+import { cn } from "@/shared/utils/cn";
 import { Video, MonitorUp, Settings, Mic, MicOff, Headphones, HeadphoneOff, Phone, PhoneOff, Rss } from "lucide-react";
 import type { CallStatus } from "@/features/calling/hooks/useCall.types";
 import { ProfileModal } from "@/features/profile/components/ProfileModal/ProfileModal";
@@ -154,8 +155,14 @@ export function SidebarFooter({
             />
             <div className="flex flex-col overflow-hidden">
               <span className="text-xs font-medium text-card-foreground truncate">{displayName}</span>
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <span className="truncate">{statusText}</span>
+              <div className="flex items-center gap-1 text-[10px]">
+                <span className={cn(
+                  "truncate transition-colors",
+                  currentStatus === "online" ? "text-online" :
+                  currentStatus === "away" ? "text-away" :
+                  currentStatus === "dnd" ? "text-busy" :
+                  "text-muted-foreground"
+                )}>{statusText}</span>
               </div>
             </div>
           </div>

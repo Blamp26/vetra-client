@@ -35,13 +35,21 @@ interface Props {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   // Состояние темы для эмодзи-пикера
-  const [theme, setTheme] = useState<Theme>(Theme.LIGHT);
+  const [theme, setTheme] = useState<Theme>(Theme.AUTO);
 
   useEffect(() => {
-    // Простая проверка темы (можно доработать если есть стор с темой)
-    const isDark = document.documentElement.classList.contains('dark') || 
-                   window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const observer = new MutationObserver(() => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setTheme(isDark ? Theme.DARK : Theme.LIGHT);
+    });
+
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+    // Начальная установка
+    const isDark = document.documentElement.classList.contains('dark');
     setTheme(isDark ? Theme.DARK : Theme.LIGHT);
+
+    return () => observer.disconnect();
   }, []);
  
    const textareaRef = useRef<HTMLTextAreaElement>(null); 
@@ -72,19 +80,41 @@ interface Props {
    }, [isEditing, editingMessage]); 
  
    // Сброс редактирования при смене чата 
-   useEffect(() => { 
-     if (editingMessage && activeChat) { 
-       const sameChat = 
-         (editingMessage.chatType === 'direct' && 
-          activeChat.type === 'direct' && 
-          editingMessage.targetId === activeChat.partnerId) || 
-         (editingMessage.chatType === 'room' && 
-          activeChat.type === 'room' && 
-          editingMessage.targetId === activeChat.roomId); 
- 
-       if (!sameChat) cancelEditing(); 
-     } 
-   }, [activeChat, editingMessage, cancelEditing]); 
+  useEffect(() => { 
+    if (editingMessage && activeChat) { 
+      const sameChat = 
+        (editingMessage.chatType === 'direct' && 
+         activeChat.type === 'direct' && 
+         editingMessage.targetId === activeChat.partnerId) || 
+        (editingMessage.chatType === 'room' && 
+         activeChat.type === 'room' && 
+         editingMessage.targetId === activeChat.roomId); 
+
+      if (!sameChat) cancelEditing(); 
+    } 
+  }, [activeChat, editingMessage, cancelEditing]); 
+
+  // Добавляем id и name для инпута поиска в EmojiPicker
+  useEffect(() => {
+    if (!showEmojiPicker || !emojiPickerRef.current) return;
+
+    const addAttributes = () => {
+      const input = emojiPickerRef.current?.querySelector('input[aria-label*="search"], input[type="text"]');
+      if (input) {
+        if (!input.getAttribute('id')) input.setAttribute('id', 'emoji-search-input');
+        if (!input.getAttribute('name')) input.setAttribute('name', 'emoji-search');
+      }
+    };
+
+    // Сразу пробуем добавить
+    addAttributes();
+
+    // Следим за изменениями в DOM (на случай если библиотека перерендерит инпут)
+    const observer = new MutationObserver(addAttributes);
+    observer.observe(emojiPickerRef.current, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, [showEmojiPicker]);
 
   // Закрытие emoji picker при клике вне
   useEffect(() => {
@@ -388,14 +418,25 @@ interface Props {
               className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-all hover:bg-accent size-9 h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
               onClick={handleAttachClick}
               disabled={disabled || isSending || isEditing || isUploading}
+              type="button"
             >
               <Paperclip className="h-4 w-4" />
-              <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*,video/*" />
+              <input 
+                type="file" 
+                id="message-file-upload"
+                name="file-upload"
+                ref={fileInputRef} 
+                className="hidden" 
+                onChange={handleFileChange} 
+                accept="image/*,video/*" 
+              />
             </button>
 
             <div className="relative flex-1">
               <textarea
                 ref={textareaRef}
+                id="message-content-input"
+                name="content"
                 className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground bg-muted border-0 h-9 w-full min-w-0 rounded-md px-3 py-1.5 text-sm transition-[color,box-shadow] outline-none focus-visible:ring-1 focus-visible:ring-ring/50 resize-none pr-10 min-h-[36px]"
                 placeholder="Напишите сообщение..."
                 value={content}
@@ -415,13 +456,109 @@ interface Props {
                 </button>
 
                 {showEmojiPicker && (
-                  <div className="absolute bottom-full right-0 mb-2 z-50">
+                  <div className="absolute bottom-full right-0 mb-2 z-50 overflow-hidden rounded-lg shadow-xl border border-border">
                     <style>{`
-                      .epr-category-nav { display: none !important; }
-                      .epr-skin-tone-picker { display: none !important; }
-                      .EmojiPickerReact { border: none !important; box-shadow: none !important; }
-                      .epr-body::-webkit-scrollbar { display: none !important; }
-                      .epr-body { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+                      /* Делаем весь пикер скроллящимся, чтобы хедер уезжал */
+                      .EmojiPickerReact { 
+                        border: none !important; 
+                        box-shadow: none !important; 
+                        display: block !important;
+                        overflow-y: auto !important;
+                        overflow-x: hidden !important;
+                        height: 400px !important;
+                      }
+
+                      .epr-main {
+                        display: block !important;
+                      }
+
+                      /* Заголовок (поиск и категории) */
+                      .epr-header {
+                        position: static !important;
+                        padding: 12px !important;
+                        background: var(--card) !important;
+                      }
+
+                      .epr-search-container {
+                        background-color: var(--card) !important;
+                      }
+
+                      /* Стили по умолчанию (Светлая тема) */
+                      .EmojiPickerReact {
+                        background-color: var(--card) !important;
+                        --epr-bg-color: var(--card) !important;
+                        --epr-category-label-bg-color: var(--card) !important;
+                        --epr-text-color: var(--foreground) !important;
+                        --epr-search-input-bg-color: var(--muted) !important;
+                        --epr-search-input-text-color: var(--foreground) !important;
+                        --epr-category-text: #1d4ed8 !important;
+                      }
+
+                      /* Переопределение для Темной темы */
+                      .dark .EmojiPickerReact {
+                        --epr-category-text: #3b82f6 !important;
+                      }
+
+                      .epr-body {
+                        position: static !important;
+                        overflow: visible !important;
+                        height: auto !important;
+                        padding: 0 12px !important;
+                      }
+
+                      /* Скрываем ненужные элементы */
+                      .epr-header-overlay, .epr-category-nav, .epr-skin-tone-picker {
+                        display: none !important;
+                      }
+
+                      /* Категории (заголовки внутри списка) */
+                      .epr-emoji-category-label {
+                        position: static !important;
+                        display: block !important;
+                        background: inherit !important;
+                        margin: 0 -12px !important;
+                        padding: 16px 12px 4px !important;
+                        font-size: 11px !important;
+                        font-weight: 800 !important;
+                        text-transform: uppercase !important;
+                        letter-spacing: 0.05em !important;
+                        color: var(--epr-category-text) !important;
+                        opacity: 1 !important;
+                      }
+
+                      /* Поиск (полное перекрытие всех состояний) */
+                      .EmojiPickerReact input[aria-label*="search"],
+                      .EmojiPickerReact input[type="text"] {
+                        background-color: var(--epr-search-input-bg-color) !important;
+                        color: var(--epr-search-input-text-color) !important;
+                        border: 1px solid rgba(128, 128, 128, 0.2) !important;
+                        outline: none !important;
+                        box-shadow: none !important;
+                      }
+                      
+                      .EmojiPickerReact input[aria-label*="search"]:focus,
+                      .EmojiPickerReact input[type="text"]:focus,
+                      .EmojiPickerReact input[aria-label*="search"]:focus-visible,
+                      .EmojiPickerReact input[type="text"]:focus-visible {
+                        background-color: var(--epr-search-input-bg-color) !important;
+                        color: var(--epr-search-input-text-color) !important;
+                        outline: none !important;
+                        box-shadow: none !important;
+                      }
+                      
+                      .EmojiPickerReact input::placeholder {
+                        color: var(--epr-search-input-text-color) !important;
+                        opacity: 0.5 !important;
+                      }
+
+                      /* Скрываем скроллбар */
+                      .EmojiPickerReact::-webkit-scrollbar { display: none !important; }
+                      .EmojiPickerReact { 
+                        -ms-overflow-style: none !important; 
+                        scrollbar-width: none !important; 
+                      }
+
+                      /* Темизация (уже настроена выше через переменные) */
                     `}</style>
                     <EmojiPicker 
                       onEmojiClick={onEmojiClick}
@@ -434,6 +571,8 @@ interface Props {
                       searchDisabled={false}
                       skinTonePickerLocation={'NONE' as any}
                       suggestedEmojisMode={'none' as any}
+                      width={320}
+                      height={400}
                     />
                   </div>
                 )}

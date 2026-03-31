@@ -109,9 +109,11 @@ export function CreateRoomModal({ onClose }: Props) {
         <div className="p-6 overflow-y-auto">
           {error && <div className="bg-destructive/10 border border-destructive rounded-lg p-2.5 px-3 text-destructive text-sm mb-4">{error}</div>}
 
-          <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">Group name</label>
+          <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground" htmlFor="create-room-name">Group name</label>
           <input
             className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
+            id="create-room-name"
+            name="room-name"
             type="text"
             placeholder="Enter group name…"
             value={name}
@@ -119,7 +121,7 @@ export function CreateRoomModal({ onClose }: Props) {
             autoFocus
           />
 
-          <label className="block mb-1.5 mt-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          <label className="block mb-1.5 mt-3 text-xs font-bold uppercase tracking-wider text-muted-foreground" htmlFor="create-room-search">
             Add members
           </label>
 
@@ -143,6 +145,8 @@ export function CreateRoomModal({ onClose }: Props) {
           <div className="relative">
             <input
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
+              id="create-room-search"
+              name="user-search"
               type="text"
               placeholder="🔍 Search users…"
               value={query}

@@ -59,9 +59,11 @@ export function CreateServerModal({ onClose }: Props) {
         <div className="p-6">
           {error && <div className="bg-destructive/10 border border-destructive rounded-lg p-2.5 px-3 text-destructive text-sm mb-4">{error}</div>}
 
-          <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">Server name</label>
+          <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground" htmlFor="create-server-name">Server name</label>
           <input
             className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-inherit outline-none focus:border-primary focus-visible:ring-1 focus-visible:ring-ring"
+            id="create-server-name"
+            name="server-name"
             type="text"
             placeholder="My Awesome Server"
             value={name}

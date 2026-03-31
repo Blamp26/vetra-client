@@ -91,10 +91,12 @@ function AudioVideoSettings() {
       <div className="space-y-6">
         {/* Input Device */}
         <div className="space-y-2">
-          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground" htmlFor="settings-audio-input">
             Input Device
           </label>
           <select 
+            id="settings-audio-input"
+            name="audio-input"
             value={selectedInputDeviceId}
             onChange={(e) => setInputDevice(e.target.value)}
             className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-[0.95rem] outline-none focus:border-primary transition-colors"
@@ -124,10 +126,12 @@ function AudioVideoSettings() {
 
         {/* Output Device */}
         <div className="space-y-2">
-          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+          <label className="text-[0.78rem] font-bold uppercase tracking-[0.06em] text-muted-foreground" htmlFor="settings-audio-output">
             Output Device
           </label>
           <select 
+            id="settings-audio-output"
+            name="audio-output"
             value={selectedOutputDeviceId}
             onChange={(e) => setOutputDevice(e.target.value)}
             className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-[0.95rem] outline-none focus:border-primary transition-colors"

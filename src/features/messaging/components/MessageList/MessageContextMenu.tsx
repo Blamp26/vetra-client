@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, Reply, Copy, Forward, CheckSquare, Edit2, Trash2 } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
@@ -44,6 +45,30 @@ export function MessageContextMenu({
   canEdit,
   onClose
 }: MessageContextMenuProps) {
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Добавляем id и name для инпута поиска в EmojiPicker
+  useEffect(() => {
+    if (!isPickerExpanded || !pickerRef.current) return;
+
+    const addAttributes = () => {
+      const input = pickerRef.current?.querySelector('input[aria-label*="search"], input[type="text"]');
+      if (input) {
+        if (!input.getAttribute('id')) input.setAttribute('id', 'emoji-search-input-ctx');
+        if (!input.getAttribute('name')) input.setAttribute('name', 'emoji-search-ctx');
+      }
+    };
+
+    // Сразу пробуем добавить
+    addAttributes();
+
+    // Следим за изменениями в DOM
+    const observer = new MutationObserver(addAttributes);
+    observer.observe(pickerRef.current, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, [isPickerExpanded]);
+
   return (
     <div
       className="fixed z-[1000] bg-popover/95 backdrop-blur-md border border-border/50 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden w-[260px] h-[320px]"
@@ -146,16 +171,96 @@ export function MessageContextMenu({
         </div>
 
         {/* Эмодзи пикер */}
-        <div className={cn(
+        <div 
+          ref={pickerRef}
+          className={cn(
           "absolute inset-0 transition-all duration-200 bg-popover",
           isPickerExpanded ? "opacity-100 translate-x-0" : "opacity-0 pointer-events-none translate-x-[10px]"
         )}>
           <style>{`
-            .epr-category-nav { display: none !important; }
-            .epr-skin-tone-picker { display: none !important; }
-            .EmojiPickerReact { border: none !important; box-shadow: none !important; }
-            .epr-body::-webkit-scrollbar { display: none !important; }
-            .epr-body { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+            .EmojiPickerReact { 
+              border: none !important; 
+              box-shadow: none !important; 
+              display: block !important;
+              overflow-y: auto !important;
+              overflow-x: hidden !important;
+              height: 100% !important;
+              background: transparent !important;
+            }
+            .epr-main { display: block !important; }
+            .epr-header { 
+               position: static !important; 
+               padding: 12px !important; 
+               background: var(--card) !important; 
+             }
+             
+             .epr-search-container {
+               background-color: var(--card) !important;
+             }
+
+             /* Стили по умолчанию (Светлая тема) */
+             .EmojiPickerReact {
+               background-color: var(--card) !important;
+               --epr-bg-color: var(--card) !important;
+               --epr-category-label-bg-color: var(--card) !important;
+               --epr-text-color: var(--foreground) !important;
+               --epr-search-input-bg-color: var(--muted) !important;
+               --epr-search-input-text-color: var(--foreground) !important;
+               --epr-category-text: #1d4ed8 !important;
+             }
+
+             /* Переопределение для Темной темы */
+             .dark .EmojiPickerReact {
+               --epr-category-text: #3b82f6 !important;
+             }
+
+             .epr-body { position: static !important; overflow: visible !important; height: auto !important; padding: 0 12px !important; }
+             .epr-header-overlay, .epr-category-nav, .epr-skin-tone-picker { display: none !important; }
+              
+              /* Категории (заголовки внутри списка) */
+              .epr-emoji-category-label {
+                position: static !important;
+                display: block !important;
+                background: inherit !important;
+                 margin: 0 -12px !important;
+                 padding: 16px 12px 4px !important;
+                 font-size: 11px !important;
+                 font-weight: 800 !important;
+                 text-transform: uppercase !important;
+                 letter-spacing: 0.05em !important;
+                 color: var(--epr-category-text) !important;
+                 opacity: 1 !important;
+               }
+
+               /* Поиск (полное перекрытие всех состояний) */
+              .EmojiPickerReact input[aria-label*="search"],
+              .EmojiPickerReact input[type="text"] {
+                background-color: var(--epr-search-input-bg-color) !important;
+                color: var(--epr-search-input-text-color) !important;
+                border: 1px solid rgba(128, 128, 128, 0.2) !important;
+                outline: none !important;
+                box-shadow: none !important;
+              }
+
+              .EmojiPickerReact input[aria-label*="search"]:focus,
+              .EmojiPickerReact input[type="text"]:focus,
+              .EmojiPickerReact input[aria-label*="search"]:focus-visible,
+              .EmojiPickerReact input[type="text"]:focus-visible {
+                background-color: var(--epr-search-input-bg-color) !important;
+                color: var(--epr-search-input-text-color) !important;
+                outline: none !important;
+                box-shadow: none !important;
+              }
+              
+              .EmojiPickerReact input::placeholder {
+                color: var(--epr-search-input-text-color) !important;
+                opacity: 0.5 !important;
+              }
+
+              .EmojiPickerReact::-webkit-scrollbar { display: none !important; }
+             .EmojiPickerReact { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+             
+             /* Темизация (уже настроена выше через переменные) */
           `}</style>
           <EmojiPicker
             width="100%"
@@ -167,7 +272,7 @@ export function MessageContextMenu({
             theme={Theme.AUTO}
             emojiStyle={EmojiStyle.APPLE}
             lazyLoadEmojis={true}
-            searchPlaceHolder="Поиск..."
+            searchPlaceholder="Поиск..."
             previewConfig={{ showPreview: false }}
             skinTonesDisabled={true}
             searchDisabled={false}

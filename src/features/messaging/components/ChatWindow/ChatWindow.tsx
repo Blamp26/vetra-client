@@ -166,10 +166,11 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
                 {partner.display_name || partner.username}
               </h3>
               <p className={cn(
-                "text-xs text-muted-foreground transition-colors", 
-                currentStatus === "online" && "text-emerald-500",
-                currentStatus === "away" && "text-amber-500",
-                currentStatus === "dnd" && "text-destructive"
+                "text-xs transition-colors", 
+                currentStatus === "online" ? "text-online" :
+                currentStatus === "away" ? "text-away" :
+                currentStatus === "dnd" ? "text-busy" :
+                "text-muted-foreground"
               )}>
                 {statusLine}
               </p>
