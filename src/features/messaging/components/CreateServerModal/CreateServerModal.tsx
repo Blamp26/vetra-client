@@ -20,11 +20,7 @@ export function CreateServerModal({ onClose }: Props) {
 
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Please enter a server name.");
-      return;
-    }
-    if (trimmed.length > 100) {
-      setError("Server name must be 100 characters or fewer.");
+      setError("Enter server name");
       return;
     }
 
@@ -37,56 +33,47 @@ export function CreateServerModal({ onClose }: Props) {
       setActiveChat({ type: "server", serverId: server.id });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create server.");
+      setError("Create failed");
     } finally {
       setIsCreating(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter")  handleCreate();
-    if (e.key === "Escape") onClose();
-  };
-
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/80 backdrop-blur-md p-4 animate-in fade-in duration-300" onClick={onClose}>
-      <div className="bg-card border border-border/50 rounded-2xl shadow-2xl shadow-black/5 ring-1 ring-white/5 w-full max-w-[440px] flex flex-col animate-in zoom-in-95 slide-in-from-bottom-2 duration-300" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <h3 className="m-0 text-lg font-bold text-foreground">Create a Server</h3>
-          <button className="bg-transparent border-none text-2xl cursor-pointer text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="Close">×</button>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h3 className="text-lg font-normal">Create Server</h3>
+          <button onClick={onClose} className="text-2xl">×</button>
         </div>
 
-        <div className="p-6">
-          {error && <div className="bg-destructive/10 border border-destructive rounded-lg p-2.5 px-3 text-destructive text-sm mb-4">{error}</div>}
+        <div className="p-4 flex flex-col gap-4">
+          {error && <div className="bg-destructive/10 border border-destructive p-2 text-destructive text-xs">{error}</div>}
 
-          <label className="block mb-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground" htmlFor="create-server-name">Server name</label>
-          <input
-            className="w-full px-3 py-2.5 bg-background border border-border/50 rounded-xl text-foreground text-[15px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 shadow-sm transition-shadow"
-            id="create-server-name"
-            name="server-name"
-            type="text"
-            placeholder="My Awesome Server"
-            value={name}
-            maxLength={100}
-            autoFocus
-            onChange={(e) => { setName(e.target.value); setError(null); }}
-            onKeyDown={handleKeyDown}
-          />
-          <p className="text-xs text-muted-foreground mt-1">
-            You can always change this later.
-          </p>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase text-muted-foreground" htmlFor="create-server-name">Server name</label>
+            <input
+              className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
+              id="create-server-name"
+              type="text"
+              placeholder="Name..."
+              value={name}
+              maxLength={100}
+              autoFocus
+              onChange={(e) => { setName(e.target.value); setError(null); }}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+            />
+          </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-border flex gap-3 justify-end bg-muted/30">
-          <button className="px-4 py-2 bg-background border border-border/50 rounded-xl text-muted-foreground text-sm font-medium transition-all cursor-pointer hover:bg-muted active:scale-95 shadow-sm" onClick={onClose} disabled={isCreating}>
-            Cancel
-          </button>
+        <div className="p-4 border-t border-border flex gap-2 justify-end">
+          <button className="px-4 py-2 text-sm border border-border" onClick={onClose} disabled={isCreating}>Cancel</button>
           <button
-            className="px-4 py-2 bg-primary text-primary-foreground border-none rounded-xl text-sm font-medium transition-all active:scale-95 cursor-pointer hover:bg-primary/90 disabled:opacity-50 shadow-sm shadow-primary/20"
+            className="px-4 py-2 bg-primary text-primary-foreground text-sm border border-primary disabled:opacity-50"
             onClick={handleCreate}
             disabled={isCreating || !name.trim()}
           >
-            {isCreating ? "Creating…" : "Create Server"}
+            {isCreating ? "..." : "Create"}
           </button>
         </div>
       </div>

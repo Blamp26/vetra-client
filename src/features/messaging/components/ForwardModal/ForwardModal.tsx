@@ -1,5 +1,5 @@
 import { useAppStore, type RootState } from "@/store";
-import { X, Search, Send, User, Hash } from "lucide-react";
+import { X, Search, Send, User } from "lucide-react";
 import { useState } from "react";
 import { Avatar } from "@/shared/components/Avatar/Avatar";
 
@@ -29,22 +29,22 @@ export function ForwardModal({ onForward, onCancel }: Props) {
   ].filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="bg-card border border-border/50 rounded-2xl shadow-2xl shadow-black/5 ring-1 ring-white/5 w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 slide-in-from-bottom-2 duration-300">
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-background/50" onClick={onCancel}>
+      <div className="bg-card border border-border w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="font-bold text-lg">Forward message</h3>
-          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1 rounded-lg transition-colors">
+          <h3 className="text-lg font-normal">Forward</h3>
+          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="p-3">
+        <div className="p-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               autoFocus
-              className="w-full bg-background border border-border/50 rounded-xl pl-10 pr-4 py-2.5 text-[15px] outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 shadow-sm transition-shadow"
-              placeholder="Who to forward to?"
+              className="w-full bg-background border border-border pl-10 pr-4 py-2 text-sm outline-none focus:border-primary"
+              placeholder="Search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -56,30 +56,30 @@ export function ForwardModal({ onForward, onCancel }: Props) {
             <button
               key={`${t.type}-${t.id}`}
               onClick={() => onForward(t)}
-              className="w-full flex items-center gap-3 p-2 rounded-xl transition-all duration-200 hover:bg-accent active:scale-[0.98] text-left group"
+              className="w-full flex items-center gap-3 p-2 border border-transparent hover:bg-accent text-left group"
             >
               <div className="relative">
                 <Avatar 
                   name={t.name}
                   src={null}
-                  size="large"
+                  size="medium"
                 />
-                <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-1 border border-border shadow-sm">
-                  {t.type === 'direct' ? <User className="h-3 w-3" /> : <Hash className="h-3 w-3" />}
+                <div className="absolute -bottom-1 -right-1 bg-background border border-border p-0.5">
+                  <User className="h-2 w-2" />
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate text-sm">{t.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {t.type === 'direct' ? 'Direct Message' : 'Room'}
+                <div className="text-sm font-normal truncate">{t.name}</div>
+                <div className="text-[10px] uppercase text-muted-foreground">
+                  {t.type === 'direct' ? 'DM' : 'Room'}
                 </div>
               </div>
-              <Send className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mr-2" />
+              <Send className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 mr-2" />
             </button>
           ))}
           {targets.length === 0 && (
-            <div className="py-8 text-center text-muted-foreground text-sm">
-              No one found
+            <div className="py-8 text-center text-muted-foreground text-xs">
+              No results
             </div>
           )}
         </div>

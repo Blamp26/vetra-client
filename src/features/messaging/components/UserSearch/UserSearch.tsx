@@ -2,7 +2,7 @@ import { useUserSearch } from "@/features/messaging/hooks/useUserSearch";
 import { useAppStore, type RootState } from "@/store";
 import type { User, Server } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
-import { Hash } from "lucide-react";
+import { Search, X } from "lucide-react";
 
 export function UserSearch() {
   const { query, setQuery, searchResults, isSearching, clearSearch } = useUserSearch();
@@ -22,28 +22,10 @@ export function UserSearch() {
 
   return (
     <div className="relative">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="lucide lucide-search absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-        aria-hidden="true"
-      >
-        <path d="m21 21-4.34-4.34"></path>
-        <circle cx="11" cy="11" r="8"></circle>
-      </svg>
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
       <input
-        data-slot="input"
-        id="user-global-search"
-        name="user-search"
-        className="h-[38px] w-full min-w-0 rounded-xl px-3 py-1 text-[14px] outline-none bg-muted/40 border border-border/50 pl-9 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-sm placeholder:text-muted-foreground"
-        placeholder="Search conversations..."
+        className="h-9 w-full bg-background border border-border pl-9 pr-8 text-sm outline-none focus:border-primary"
+        placeholder="Search..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
@@ -52,64 +34,62 @@ export function UserSearch() {
           className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" 
           onClick={clearSearch}
         >
-          ×
+          <X className="h-4 w-4" />
         </button>
       )}
       
       {isSearching && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] px-3 py-2 text-xs text-muted-foreground bg-popover border border-border/50 rounded-xl shadow-lg z-[110]">
-          Searching…
+        <div className="absolute left-0 right-0 top-full mt-1 px-3 py-2 text-xs text-muted-foreground bg-popover border border-border z-[110]">
+          Searching...
         </div>
       )}
       
       {!isSearching && query && !hasResults && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] px-3 py-2 text-xs text-muted-foreground bg-popover border border-border/50 rounded-xl shadow-lg z-[110]">
-          No results found for "{query}"
+        <div className="absolute left-0 right-0 top-full mt-1 px-3 py-2 text-xs text-muted-foreground bg-popover border border-border z-[110]">
+          No results for "{query}"
         </div>
       )}
       
       {hasResults && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] bg-popover border border-border/50 rounded-xl shadow-lg z-[110] max-h-[320px] overflow-y-auto p-1.5">
+        <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-border z-[110] max-h-[320px] overflow-y-auto p-1">
           {searchResults.users.length > 0 && (
             <div className="mb-2">
-              <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Users</div>
-              <ul className="list-none p-0 m-0">
+              <div className="px-2 py-1 text-[10px] uppercase text-muted-foreground">Users</div>
+              <div className="space-y-0.5">
                 {searchResults.users.map((user) => (
-                  <li key={`user-${user.id}`}>
-                    <button 
-                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-left hover:bg-accent transition-all duration-200 active:scale-[0.98]" 
-                      onClick={() => handleSelectUser(user)}
-                    >
-                      <Avatar name={user.display_name || user.username} size="small" status={user.status} />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-medium truncate">{user.display_name || user.username}</span>
-                        {user.display_name && <span className="text-[10px] text-muted-foreground truncate">@{user.username}</span>}
-                      </div>
-                    </button>
-                  </li>
+                  <button 
+                    key={`user-${user.id}`}
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-left hover:bg-accent" 
+                    onClick={() => handleSelectUser(user)}
+                  >
+                    <Avatar name={user.display_name || user.username} size="small" status={user.status} />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-xs font-normal truncate">{user.display_name || user.username}</span>
+                      {user.display_name && <span className="text-[10px] text-muted-foreground truncate">@{user.username}</span>}
+                    </div>
+                  </button>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
 
           {searchResults.servers.length > 0 && (
             <div>
-              <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Servers</div>
-              <ul className="list-none p-0 m-0">
+              <div className="px-2 py-1 text-[10px] uppercase text-muted-foreground">Servers</div>
+              <div className="space-y-0.5">
                 {searchResults.servers.map((server) => (
-                  <li key={`server-${server.id}`}>
-                    <button 
-                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-left hover:bg-accent transition-all duration-200 active:scale-[0.98]" 
-                      onClick={() => handleSelectServer(server)}
-                    >
-                      <div className="w-6 h-6 rounded-md bg-muted flex items-center justify-center shrink-0">
-                        <Hash className="h-3.5 w-3.5 text-muted-foreground" />
-                      </div>
-                      <span className="text-sm font-medium truncate">{server.name}</span>
-                    </button>
-                  </li>
+                  <button 
+                    key={`server-${server.id}`}
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-left hover:bg-accent" 
+                    onClick={() => handleSelectServer(server)}
+                  >
+                    <div className="w-6 h-6 border border-border bg-muted flex items-center justify-center shrink-0 text-[10px]">
+                      #
+                    </div>
+                    <span className="text-xs font-normal truncate">{server.name}</span>
+                  </button>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
         </div>

@@ -11,7 +11,6 @@ import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from '@/features/calling/components/CallButton';
 import type { CallStatus } from '@/features/calling/hooks/useCall.types';
 import { cn } from "@/shared/utils/cn";
-import { Video, EllipsisVertical, Search } from "lucide-react";
 
 interface Props {
   activeChat: ActiveChat;
@@ -25,37 +24,24 @@ interface ReplyTarget {
   author:  string;
 }
 
-// ── Typing indicator ──────────────────────────────────────────────────────────
-
 function TypingIndicator({ nickname }: { nickname: string }) {
   return (
-    <div className="flex min-h-[40px] flex-shrink-0 items-center px-6 pb-2 pt-1 z-10">
-      <div className="inline-flex items-center gap-2 rounded-full border border-white/5 dark:border-white/10 bg-card/60 backdrop-blur-xl px-3.5 py-1.5 text-xs text-muted-foreground shadow-[0_8px_30px_-12px_rgba(0,0,0,0.12)] ring-1 ring-inset ring-black/5 dark:ring-white/5 transition-all animate-in fade-in slide-in-from-bottom-2 duration-300">
-        <span className="font-semibold text-foreground tracking-tight">{nickname}</span>
-        <span className="opacity-80">is typing</span>
-        <span className="ml-0.5 inline-flex items-center gap-1">
-          <span className="h-1 w-1 rounded-full bg-primary/80 animate-bounce" />
-          <span className="h-1 w-1 rounded-full bg-primary/80 animate-bounce [animation-delay:0.2s]" />
-          <span className="h-1 w-1 rounded-full bg-primary/80 animate-bounce [animation-delay:0.4s]" />
-        </span>
-      </div>
+    <div className="px-4 py-1 text-xs text-muted-foreground border-t border-border">
+      <span className="font-normal">{nickname}</span>
+      <span className="opacity-80 ml-1">is typing...</span>
     </div>
   );
 }
-
-// ── Unified Chat Window ───────────────────────────────────────────────────────
 
 export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
   
-  // Direct chat state
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
   const userStatuses = useAppStore((s: RootState) => s.userStatuses);
   const lastSeenAt = useAppStore((s: RootState) => s.lastSeenAt);
   const typingPartnerIds = useAppStore((s: RootState) => s.typingPartnerIds);
   
-  // Room chat state
   const roomPreviews = useAppStore((s: RootState) => s.roomPreviews);
   const typingRoomMemberIds = useAppStore((s: RootState) => s.typingRoomMemberIds);
   const typingRoomMemberInfo = useAppStore((s: RootState) => s.typingRoomMemberInfo);
@@ -128,17 +114,7 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
 
   const renderHeader = () => {
     if (activeChat.type === "direct") {
-      if (!partner) return (
-        <div className="flex z-20 items-center justify-between border-b border-border/40 bg-background/60 px-6 py-4 backdrop-blur-2xl shadow-[0_1px_0_0_rgba(255,255,255,0.03)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.02)]">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 animate-pulse rounded-[1.25rem] bg-muted/50" />
-            <div className="space-y-2">
-              <div className="h-3 w-28 animate-pulse rounded-full bg-muted/50" />
-              <div className="h-2.5 w-16 animate-pulse rounded-full bg-muted/50" />
-            </div>
-          </div>
-        </div>
-      );
+      if (!partner) return <div className="p-4 border-b border-border">Loading...</div>;
 
       const isOnline = onlineUserIds.has(activeChat.partnerId);
       const currentStatus = userStatuses[activeChat.partnerId] || partner.status || (isOnline ? "online" : "offline");
@@ -160,43 +136,37 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
       })();
 
       return (
-        <div className="flex z-20 items-center justify-between border-b border-border/40 bg-background/60 px-6 py-4 backdrop-blur-2xl shadow-[0_1px_0_0_rgba(255,255,255,0.03)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.02)]">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between border-b border-border p-2">
+          <div className="flex items-center gap-2">
             <Avatar 
               name={partner.display_name || partner.username} 
               src={partner.avatar_url} 
-              size="large"
-              className="h-10 w-10 shadow-[0_14px_30px_-22px_rgba(15,23,42,0.35)]"
+              size="medium"
               status={currentStatus as any}
             />
-            <div className="space-y-1">
-              <h3 className="text-base font-semibold tracking-tight text-foreground">
+            <div>
+              <h3 className="text-sm font-normal">
                 {partner.display_name || partner.username}
               </h3>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className={cn(
-                  "text-xs font-medium transition-colors", 
-                  currentStatus === "online" ? "text-online" :
-                  currentStatus === "away" ? "text-away" :
-                  currentStatus === "dnd" ? "text-busy" :
-                  "text-muted-foreground"
-                )}>
-                  {statusLine}
-                </p>
-                <span className="rounded-full border border-border/70 bg-card px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                  Direct message
-                </span>
-              </div>
+              <p className={cn(
+                "text-[10px]", 
+                currentStatus === "online" ? "text-online" :
+                currentStatus === "away" ? "text-away" :
+                currentStatus === "dnd" ? "text-busy" :
+                "text-muted-foreground"
+              )}>
+                {statusLine}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <CallButton
               targetUserId={activeChat.partnerId}
               targetUsername={partner.display_name || partner.username}
               status={callStatus}
               onCall={onStartCall}
             />
-            <HeaderActions onSearchClick={() => setIsSearchOpen(true)} />
+            <button onClick={() => setIsSearchOpen(true)}>Search</button>
           </div>
         </div>
       );
@@ -204,28 +174,21 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
       const roomId = activeChat.roomId;
       const roomPreview = roomPreviews[roomId];
       return (
-        <div className="flex z-20 items-center justify-between border-b border-border/40 bg-background/60 px-6 py-4 backdrop-blur-2xl shadow-[0_1px_0_0_rgba(255,255,255,0.03)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.02)]">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between border-b border-border p-2">
+          <div className="flex items-center gap-2">
             <Avatar 
               name={roomPreview?.name || `#${roomId}`} 
-              src={null} 
-              size="large"
-              className="h-10 w-10 shadow-[0_14px_30px_-22px_rgba(15,23,42,0.35)]"
+              size="medium"
             />
-            <div className="space-y-1">
-              <h3 className="text-base font-semibold tracking-tight text-foreground">
+            <div>
+              <h3 className="text-sm font-normal">
                 {roomPreview?.name || `Room #${roomId}`}
               </h3>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-medium text-muted-foreground">Group chat</p>
-                <span className="rounded-full border border-border/70 bg-card px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                  Shared room
-                </span>
-              </div>
+              <p className="text-[10px] text-muted-foreground">Group chat</p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
-            <HeaderActions onSearchClick={() => setIsSearchOpen(true)} />
+          <div className="flex items-center gap-2">
+            <button onClick={() => setIsSearchOpen(true)}>Search</button>
           </div>
         </div>
       );
@@ -234,11 +197,10 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden bg-background/50 relative">
-      <div className="absolute inset-0 pointer-events-none z-0 opacity-[0.03] dark:opacity-[0.02] mix-blend-overlay bg-noise" />
+    <div className="flex h-full flex-1 flex-col overflow-hidden bg-background">
       {renderHeader()}
 
-      <div dir="ltr" className="relative flex-1 overflow-hidden px-6">
+      <div className="relative flex-1 overflow-hidden p-2">
         <MessageList
           key={chatId}
           messages={messages}
@@ -270,25 +232,5 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
         />
       )}
     </div>
-  );
-}
-
-function HeaderActions({ onSearchClick }: { onSearchClick: () => void }) {
-  return (
-    <>
-      <button 
-        className="inline-flex h-9 w-9 items-center justify-center gap-2 rounded-xl text-sm font-medium text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-[1px] hover:bg-card hover:text-foreground active:translate-y-0 active:scale-95 hover:shadow-sm ring-1 ring-inset ring-transparent hover:ring-border/50"
-        onClick={onSearchClick}
-        title="Поиск сообщений"
-      >
-        <Search className="h-4 w-4" />
-      </button>
-      <button className="inline-flex h-9 w-9 items-center justify-center gap-2 rounded-xl text-sm font-medium text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-[1px] hover:bg-card hover:text-foreground active:translate-y-0 active:scale-95 hover:shadow-sm ring-1 ring-inset ring-transparent hover:ring-border/50">
-        <Video className="h-4 w-4" />
-      </button>
-      <button className="inline-flex h-9 w-9 items-center justify-center gap-2 rounded-xl text-sm font-medium text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-[1px] hover:bg-card hover:text-foreground active:translate-y-0 active:scale-95 hover:shadow-sm ring-1 ring-inset ring-transparent hover:ring-border/50">
-        <EllipsisVertical className="h-4 w-4" />
-      </button>
-    </>
   );
 }

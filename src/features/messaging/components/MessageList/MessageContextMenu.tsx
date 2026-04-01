@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, Reply, Copy, Forward, CheckSquare, Edit2, Trash2 } from "lucide-react";
-import { cn } from "@/shared/utils/cn";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 
@@ -47,7 +46,6 @@ export function MessageContextMenu({
 }: MessageContextMenuProps) {
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Add id and name for search input in EmojiPicker
   useEffect(() => {
     if (!isPickerExpanded || !pickerRef.current) return;
 
@@ -59,19 +57,15 @@ export function MessageContextMenu({
       }
     };
 
-    // Try adding immediately
     addAttributes();
-
-    // Watch for DOM changes
     const observer = new MutationObserver(addAttributes);
     observer.observe(pickerRef.current, { childList: true, subtree: true });
-
     return () => observer.disconnect();
   }, [isPickerExpanded]);
 
   return (
     <div
-      className="fixed z-floating bg-popover/95 backdrop-blur-md border border-border/50 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden w-64 max-h-[70vh]"
+      className="fixed z-floating bg-popover border border-border flex flex-col w-64"
       style={{
         top: data.y,
         left: data.x,
@@ -79,205 +73,142 @@ export function MessageContextMenu({
       onClick={(e) => e.stopPropagation()}
     >
       {/* Reactions panel */}
-      <div className="flex flex-col border-b border-border/40 shrink-0">
-        <div className="flex items-center px-2 py-1 min-h-[46px]">
-          <div className="flex flex-1 items-center justify-start gap-0.5">
-            {EMOJIS.slice(0, 6).map((e) => (
+      <div className="flex flex-col border-b border-border">
+        <div className="flex items-center px-1 py-1">
+          <div className="flex flex-1 items-center justify-start gap-1">
+            {EMOJIS.map((e) => (
               <button
                 key={e}
                 onClick={() => {
                   onToggleReaction(data.msgId, e);
                   onClose();
                 }}
-                className="bg-transparent border-none cursor-pointer p-0 rounded-lg transition-all duration-150 hover:bg-accent hover:scale-125 active:scale-90 flex items-center justify-center w-8 h-8"
+                className="bg-transparent border border-transparent p-1 flex items-center justify-center hover:border-border"
               >
-                <Emoji emoji={e} size={20} />
+                <Emoji emoji={e} size={18} />
               </button>
             ))}
           </div>
-          <div className="border-l border-border/40 h-5 mx-1" />
+          <div className="border-l border-border h-4 mx-1" />
           <button 
             onClick={() => setIsPickerExpanded(!isPickerExpanded)}
-            className="p-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex items-center justify-center w-8 h-8 shrink-0"
+            className="p-1 text-muted-foreground hover:text-foreground"
           >
             {isPickerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
         </div>
       </div>
 
-      <div className="relative flex-1 overflow-hidden">
+      <div className="relative min-h-[200px]">
         {/* Menu items list */}
-        <div className={cn(
-          "absolute inset-0 flex flex-col p-1.5 transition-all duration-200 bg-popover/95",
-          isPickerExpanded ? "opacity-0 pointer-events-none translate-x-[-10px]" : "opacity-100 translate-x-0"
-        )}>
-          <button
-            onClick={onReply}
-            className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
-          >
-            <Reply className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-            <span>Reply</span>
-          </button>
-          
-          {data.hasText && (
+        {!isPickerExpanded && (
+          <div className="flex flex-col p-1">
             <button
-              onClick={onCopy}
-              className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
+              onClick={() => { onReply(); onClose(); }}
+              className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
             >
-              <Copy className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-              <span>Copy</span>
+              <Reply className="h-4 w-4 mr-3 text-muted-foreground" />
+              <span>Reply</span>
             </button>
-          )}
-
-          <button
-            onClick={onForward}
-            className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
-          >
-            <Forward className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-            <span>Forward</span>
-          </button>
-
-          <button
-            onClick={onSelect}
-            className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
-          >
-            <CheckSquare className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-            <span>Select</span>
-          </button>
-
-          {data.isOwn && (
-            <>
-              {canEdit && (
-                <button
-                  onClick={onEdit}
-                  className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm rounded-lg cursor-pointer hover:bg-accent transition-all duration-120"
-                >
-                  <Edit2 className="h-[18px] w-[18px] mr-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  <span>Edit</span>
-                </button>
-              )}
-              
-              <div className="border-t border-border/40 my-1 mx-2" />
-              
+            
+            {data.hasText && (
               <button
-                onClick={onDelete}
-                className="group flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-destructive text-sm rounded-lg cursor-pointer hover:bg-destructive/10 transition-all duration-120"
+                onClick={() => { onCopy(); onClose(); }}
+                className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
               >
-                <Trash2 className="h-[18px] w-[18px] mr-3 text-destructive transition-colors" />
-                <span>Delete</span>
+                <Copy className="h-4 w-4 mr-3 text-muted-foreground" />
+                <span>Copy</span>
               </button>
-            </>
-          )}
-        </div>
+            )}
+
+            <button
+              onClick={() => { onForward(); onClose(); }}
+              className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
+            >
+              <Forward className="h-4 w-4 mr-3 text-muted-foreground" />
+              <span>Forward</span>
+            </button>
+
+            <button
+              onClick={() => { onSelect(); onClose(); }}
+              className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
+            >
+              <CheckSquare className="h-4 w-4 mr-3 text-muted-foreground" />
+              <span>Select</span>
+            </button>
+
+            {data.isOwn && (
+              <>
+                {canEdit && (
+                  <button
+                    onClick={() => { onEdit(); onClose(); }}
+                    className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
+                  >
+                    <Edit2 className="h-4 w-4 mr-3 text-muted-foreground" />
+                    <span>Edit</span>
+                  </button>
+                )}
+                
+                <div className="border-t border-border my-1" />
+                
+                <button
+                  onClick={() => { onDelete(); onClose(); }}
+                  className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-destructive text-sm hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4 mr-3 text-destructive" />
+                  <span>Delete</span>
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Emoji picker */}
-        <div 
-          ref={pickerRef}
-          className={cn(
-          "absolute inset-0 transition-all duration-200 bg-popover",
-          isPickerExpanded ? "opacity-100 translate-x-0" : "opacity-0 pointer-events-none translate-x-[10px]"
-        )}>
-          <style>{`
-            .EmojiPickerReact { 
-              border: none !important; 
-              box-shadow: none !important; 
-              display: block !important;
-              overflow-y: auto !important;
-              overflow-x: hidden !important;
-              height: 100% !important;
-              background: transparent !important;
-            }
-            .epr-main { display: block !important; }
-            .epr-header { 
-               position: static !important; 
-               padding: 12px !important; 
-               background: var(--card) !important; 
-             }
-             
-             .epr-search-container {
-               background-color: var(--card) !important;
-             }
-
-             /* Default styles (Light theme) */
-             .EmojiPickerReact {
-               background-color: var(--card) !important;
-               --epr-bg-color: var(--card) !important;
-               --epr-category-label-bg-color: var(--card) !important;
-               --epr-text-color: var(--foreground) !important;
-               --epr-search-input-bg-color: var(--muted) !important;
-               --epr-search-input-text-color: var(--foreground) !important;
-               --epr-category-text: #1d4ed8 !important;
-             }
-
-             /* Override for Dark theme */
-             .dark .EmojiPickerReact {
-               --epr-category-text: #3b82f6 !important;
-             }
-
-             .epr-body { position: static !important; overflow: visible !important; height: auto !important; padding: 0 12px !important; }
-             .epr-header-overlay, .epr-category-nav, .epr-skin-tone-picker { display: none !important; }
-              
-              /* Categories (headers inside list) */
-              .epr-emoji-category-label {
-                position: static !important;
+        {isPickerExpanded && (
+          <div 
+            ref={pickerRef}
+            className="h-[300px] bg-popover"
+          >
+            <style>{`
+              .EmojiPickerReact { 
+                border: none !important; 
+                box-shadow: none !important; 
                 display: block !important;
-                background: inherit !important;
-                 margin: 0 -12px !important;
-                 padding: 16px 12px 4px !important;
-                 font-size: 11px !important;
-                 font-weight: 800 !important;
-                 text-transform: uppercase !important;
-                 letter-spacing: 0.05em !important;
-                 color: var(--epr-category-text) !important;
-                 opacity: 1 !important;
-               }
-
-               /* Search (full override of all states) */
-              .EmojiPickerReact input[aria-label*="search"],
-              .EmojiPickerReact input[type="text"] {
-                background-color: var(--epr-search-input-bg-color) !important;
-                color: var(--epr-search-input-text-color) !important;
-                border: 1px solid rgba(128, 128, 128, 0.2) !important;
-                outline: none !important;
-                box-shadow: none !important;
+                height: 100% !important;
+                background: transparent !important;
               }
-
-              .EmojiPickerReact input[aria-label*="search"]:focus,
-              .EmojiPickerReact input[type="text"]:focus,
-              .EmojiPickerReact input[aria-label*="search"]:focus-visible,
-              .EmojiPickerReact input[type="text"]:focus-visible {
-                background-color: var(--epr-search-input-bg-color) !important;
-                color: var(--epr-search-input-text-color) !important;
-                outline: none !important;
-                box-shadow: none !important;
+              .epr-main { display: block !important; }
+              .epr-header { padding: 8px !important; background: var(--card) !important; }
+              .epr-search-container { background-color: var(--card) !important; }
+              .EmojiPickerReact {
+                --epr-bg-color: var(--card) !important;
+                --epr-category-label-bg-color: var(--card) !important;
+                --epr-text-color: var(--foreground) !important;
+                --epr-search-input-bg-color: var(--muted) !important;
+                --epr-search-input-text-color: var(--foreground) !important;
               }
-              
-              .EmojiPickerReact input::placeholder {
-                color: var(--epr-search-input-text-color) !important;
-                opacity: 0.5 !important;
-              }
-
+              .epr-body { padding: 0 8px !important; }
+              .epr-header-overlay, .epr-category-nav, .epr-skin-tone-picker { display: none !important; }
+              .epr-emoji-category-label { position: static !important; font-size: 10px !important; font-weight: bold !important; text-transform: uppercase !important; }
+              .EmojiPickerReact input { border: 1px solid var(--border) !important; }
               .EmojiPickerReact::-webkit-scrollbar { display: none !important; }
-             .EmojiPickerReact { -ms-overflow-style: none !important; scrollbar-width: none !important; }
-          `}</style>
-          <EmojiPicker
-            width="100%"
-            height="100%"
-            onEmojiClick={(emojiData) => {
-              onToggleReaction(data.msgId, emojiData.emoji);
-              onClose();
-            }}
-            theme={Theme.AUTO}
-            emojiStyle={EmojiStyle.APPLE}
-            lazyLoadEmojis={true}
-            searchPlaceholder="Search emoji..."
-            previewConfig={{ showPreview: false }}
-            skinTonesDisabled={true}
-            searchDisabled={false}
-            skinTonePickerLocation={'NONE' as any}
-            suggestedEmojisMode={'none' as any}
-          />
-        </div>
+            `}</style>
+            <EmojiPicker
+              width="100%"
+              height="100%"
+              onEmojiClick={(emojiData) => {
+                onToggleReaction(data.msgId, emojiData.emoji);
+                onClose();
+              }}
+              theme={Theme.AUTO}
+              emojiStyle={EmojiStyle.APPLE}
+              lazyLoadEmojis={true}
+              searchPlaceholder="Search..."
+              previewConfig={{ showPreview: false }}
+              skinTonesDisabled={true}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

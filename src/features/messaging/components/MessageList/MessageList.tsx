@@ -3,8 +3,6 @@ import type { Message } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { ForwardModal } from "../ForwardModal";
-import { ArrowDown, X, Forward, Trash2 } from "lucide-react";
-import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { sendMessageViaChannel } from "@/services/socket";
 import { ImageLightbox } from "@/shared/components/ImageLightbox";
 import { cn } from "@/shared/utils/cn";
@@ -48,7 +46,6 @@ export function MessageList({
   const isFirstLoad  = useRef(true);
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
-  // Store
   const {
     selectionMode,
     selectedMessageIds,
@@ -63,7 +60,6 @@ export function MessageList({
     deleteRoomMessage,
     messageReactions,
     startEditing,
-    activeChat,
   } = useAppStore((s: RootState) => ({
     selectionMode: s.selectionMode,
     selectedMessageIds: s.selectedMessageIds,
@@ -78,10 +74,8 @@ export function MessageList({
     deleteRoomMessage: s.deleteRoomMessage,
     messageReactions: s.messageReactions,
     startEditing: s.startEditing,
-    activeChat: s.activeChat,
   }), true);
 
-  // Local state
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [msgToDelete, setMsgToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -96,7 +90,7 @@ export function MessageList({
   };
 
   const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView();
   };
 
   const messagesById = useMemo(() => {
@@ -124,13 +118,13 @@ export function MessageList({
 
   useEffect(() => {
     if (isFirstLoad.current && messages.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: "instant" });
+      bottomRef.current?.scrollIntoView();
       isFirstLoad.current = false;
     } else if (!isFirstLoad.current) {
       const el = containerRef.current;
       if (!el) return;
       const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-      if (isNearBottom) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      if (isNearBottom) bottomRef.current?.scrollIntoView();
     }
   }, [messages]);
 
@@ -144,46 +138,14 @@ export function MessageList({
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, msg: Message) => {
       e.preventDefault();
-
-      const isOwn   = msg.sender_id === currentUserId;
-      const hasText = (msg.content ?? "").trim().length > 0;
-      const author  =
-        msg.sender_display_name ||
-        msg.sender_username ||
-        `User #${msg.sender_id}`;
-
-      const MENU_WIDTH  = 260;
-      const MENU_HEIGHT = 320;
-
-      let x = e.clientX;
-      let y = e.clientY;
-
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-
-      if (x + MENU_WIDTH + 16 <= vw) {
-        x += 8;
-      } else {
-        x -= MENU_WIDTH + 8;
-      }
-
-      if (y + MENU_HEIGHT + 16 <= vh) {
-        y += 6;
-      } else {
-        y -= MENU_HEIGHT + 6;
-      }
-
-      x = Math.max(12, Math.min(x, vw - MENU_WIDTH - 12));
-      y = Math.max(12, Math.min(y, vh - MENU_HEIGHT - 12));
-
-      setIsPickerExpanded(false);
+      const author = msg.sender_display_name || msg.sender_username || `User #${msg.sender_id}`;
       setContextMenu({
-        msgId:   msg.id,
+        msgId: msg.id,
         content: msg.content,
-        x,
-        y,
-        isOwn,
-        hasText,
+        x: e.clientX,
+        y: e.clientY,
+        isOwn: msg.sender_id === currentUserId,
+        hasText: (msg.content ?? "").trim().length > 0,
         author,
       });
     },
@@ -193,15 +155,12 @@ export function MessageList({
   const handleEdit = useCallback(() => {
     if (!contextMenu || !contextMenu.isOwn) return;
     const msg = messagesById.get(contextMenu.msgId);
-    if (!msg || !activeChat) return;
-    if (msg.media_file_id) return;
-
+    if (!msg) return;
     const chatType = chatContext.type;
     const targetId = chatType === "direct" ? chatContext.partnerId : chatContext.roomId;
-
     startEditing(msg, chatType, targetId);
     setContextMenu(null);
-  }, [contextMenu, messagesById, activeChat, chatContext, startEditing]);
+  }, [contextMenu, messagesById, chatContext, startEditing]);
 
   const handleDelete = useCallback(() => {
     if (!contextMenu || !contextMenu.isOwn) return;
@@ -243,16 +202,8 @@ export function MessageList({
     if (!contextMenu || !onReply) return;
     const msg = messagesById.get(contextMenu.msgId);
     if (!msg) return;
-
-    const content = (msg.content ?? "").trim().length > 0
-        ? msg.content!
-        : msg.media_file_id ? "[attachment]" : "";
-
-    onReply({
-      id: msg.id,
-      content,
-      author: msg.sender_display_name || msg.sender_username || `User #${msg.sender_id}`,
-    });
+    const content = (msg.content ?? "").trim().length > 0 ? msg.content! : msg.media_file_id ? "[attachment]" : "";
+    onReply({ id: msg.id, content, author: contextMenu.author });
     setContextMenu(null);
   }, [contextMenu, messagesById, onReply]);
 
@@ -271,30 +222,22 @@ export function MessageList({
 
   const handlePerformForward = useCallback(async (target: { type: 'direct' | 'room', id: number }) => {
     if (!forwardingMessageIds || forwardingMessageIds.length === 0 || !socketManager) return;
-
     try {
       for (const msgId of forwardingMessageIds) {
         const msg = messagesById.get(msgId);
         if (!msg) continue;
-
-        const payload = {
-          content: msg.content,
-          mediaFileId: msg.media_file_id
-        };
-
+        const payload = { content: msg.content, mediaFileId: msg.media_file_id };
         if (target.type === 'direct') {
           await sendMessageViaChannel(socketManager.userChannel, target.id, payload);
         } else {
           await socketManager.sendRoomMessageViaChannel(target.id, payload);
         }
       }
-      
       if (target.type === 'direct') {
         setActiveChat({ type: 'direct', partnerId: target.id });
       } else {
         setActiveChat({ type: 'room', roomId: target.id });
       }
-
     } catch (err) {
       console.error("Forwarding failed:", err);
     } finally {
@@ -307,13 +250,8 @@ export function MessageList({
     new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
   const formatDate = (iso: string) => {
-    const date      = new Date(iso);
-    const today     = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    if (date.toDateString() === today.toDateString()) return "Today";
-    if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-    return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    const date = new Date(iso);
+    return date.toLocaleDateString();
   };
 
   const renderReplyPreview = (msg: Message, isOwn: boolean) => {
@@ -336,23 +274,14 @@ export function MessageList({
     return (
       <button
         type="button"
-        className={cn(
-          "block w-full text-left pl-3 py-0 mb-0.5 rounded-sm relative group cursor-pointer border-l-2 transition-colors",
-          isOwn ? "border-primary-foreground/60 hover:bg-primary-foreground/10" : "border-primary hover:bg-primary/5"
-        )}
+        className={cn("block w-full text-left p-1 border-l-2 border-border mb-1 text-xs", isOwn ? "bg-white/10" : "bg-black/5")}
         onClick={() => {
           const el = messageRefs.current[msg.reply_to_id!];
-          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (el) el.scrollIntoView();
         }}
       >
-        <div className={cn("font-semibold text-xs leading-none pt-0.5 truncate", isOwn ? "text-primary-foreground" : "text-primary")}>
-          {author}
-        </div>
-        {previewText && (
-          <div className={cn("text-sm leading-tight pb-0.5 truncate", isOwn ? "text-primary-foreground/80" : "text-muted-foreground")}>
-            <EmojiText text={previewText} size={14} />
-          </div>
-        )}
+        <div className="font-normal">{author}</div>
+        {previewText && <div className="truncate opacity-70">{previewText}</div>}
       </button>
     );
   };
@@ -372,28 +301,26 @@ export function MessageList({
   }, [messages]);
 
   return (
-    <div className="flex-1 relative flex flex-col min-w-0 h-full">
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
       <div 
         ref={containerRef} 
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto space-y-4 flex flex-col min-w-0 h-full scrollbar-hide"
+        className="flex-1 overflow-y-auto p-2 space-y-2 scrollbar-hide"
       >
         {hasMore && (
-          <div className="flex justify-center py-2 pb-3">
-            <button className="bg-background/60 hover:bg-muted border border-border shadow-sm rounded-full text-foreground cursor-pointer px-4 py-1.5 text-xs font-medium backdrop-blur-md transition-all active:scale-95 disabled:opacity-50" onClick={onLoadMore} disabled={isLoading}>
-              {isLoading ? "Loading..." : "Load older messages"}
+          <div className="flex justify-center p-2">
+            <button onClick={onLoadMore} disabled={isLoading}>
+              {isLoading ? "Loading..." : "Older messages"}
             </button>
           </div>
         )}
         {messages.length === 0 && !isLoading && (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">No messages yet. Say hello! 👋</div>
+          <div className="text-center p-4 text-muted-foreground text-sm">No messages.</div>
         )}
         {groupedMessages.map(({ date, messages: dayMessages }) => (
-          <div key={date} className="space-y-4">
-            <div className="flex justify-center my-6 relative z-[5] pointer-events-none">
-              <span className="bg-background/40 backdrop-blur-2xl text-foreground/80 text-[0.6875rem] font-semibold tracking-widest uppercase px-3.5 py-1.5 rounded-full border border-white/5 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.12)] ring-1 ring-inset ring-black/5 dark:ring-white/5">
-                {date}
-              </span>
+          <div key={date} className="space-y-2">
+            <div className="text-center border-b border-border my-4">
+              <span className="bg-background px-2 text-[10px] text-muted-foreground uppercase">{date}</span>
             </div>
             {dayMessages.map((msg, idx) => {
               const prevMsg = dayMessages[idx - 1];
@@ -415,7 +342,7 @@ export function MessageList({
                   onLightbox={setLightboxData}
                   onReplyClick={(id) => {
                     const el = messageRefs.current[id];
-                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    if (el) el.scrollIntoView();
                   }}
                   renderReplyPreview={renderReplyPreview}
                   formatTime={formatTime}
@@ -429,51 +356,19 @@ export function MessageList({
       </div>
 
       {showScrollBottom && (
-        <button
-          onClick={scrollToBottom}
-          className="absolute bottom-4 right-4 h-10 w-10 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/20 flex items-center justify-center hover:bg-primary/90 hover:scale-105 active:scale-95 transition-all z-10 animate-in fade-in slide-in-from-bottom-2 duration-300"
-          aria-label="To bottom"
-        >
-          <ArrowDown className="h-5 w-5" />
+        <button onClick={scrollToBottom} className="absolute bottom-20 right-4 p-2 bg-primary text-primary-foreground">
+          Down
         </button>
       )}
 
       {selectionMode && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-floating bg-background/80 backdrop-blur-3xl border border-white/10 dark:border-white/5 rounded-[1.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.15)] px-6 py-3.5 flex items-center gap-8 animate-in slide-in-from-bottom-6 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ring-1 ring-inset ring-black/5 dark:ring-white/10">
-          <div className="text-sm font-semibold text-primary mr-2 flex items-center gap-2">
-            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-xs">
-              {selectedMessageIds.length}
-            </span>
-            selected
+        <div className="p-2 border-t border-border flex items-center justify-between bg-card text-sm">
+          <span>{selectedMessageIds.length} selected</span>
+          <div className="flex gap-2">
+            <button onClick={() => selectedMessageIds.length > 0 && setMsgToDelete(selectedMessageIds[0])} className="text-destructive">Delete</button>
+            <button onClick={() => setForwardingMessages(selectedMessageIds)}>Forward</button>
+            <button onClick={clearSelection}>Cancel</button>
           </div>
-          
-          <button 
-            onClick={() => {
-              if (selectedMessageIds.length > 0) setMsgToDelete(selectedMessageIds[0]);
-            }}
-            disabled={selectedMessageIds.length === 0}
-            className="flex items-center gap-2 text-destructive hover:bg-destructive/10 px-3 py-2 rounded-xl transition-colors font-medium text-sm disabled:opacity-40"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
-          
-          <button 
-            onClick={() => setForwardingMessages(selectedMessageIds)}
-            disabled={selectedMessageIds.length === 0}
-            className="flex items-center gap-2 text-foreground/80 hover:bg-accent px-3 py-2 rounded-xl transition-colors font-medium text-sm disabled:opacity-40"
-          >
-            <Forward className="h-4 w-4" />
-            Forward
-          </button>
-          
-          <button 
-            onClick={clearSelection}
-            className="flex items-center gap-2 text-muted-foreground hover:bg-accent px-3 py-2 rounded-xl transition-colors font-medium text-sm"
-          >
-            <X className="h-4 w-4" />
-            Cancel
-          </button>
         </div>
       )}
 
@@ -497,7 +392,7 @@ export function MessageList({
       {msgToDelete && (
         <ConfirmModal
           title="Delete message"
-          message="Are you sure you want to delete this message? This action cannot be undone."
+          message="Delete this message?"
           confirmLabel="Delete"
           onConfirm={performDelete}
           onCancel={() => setMsgToDelete(null)}

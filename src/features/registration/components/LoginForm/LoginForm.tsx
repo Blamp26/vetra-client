@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/shared/hooks/useAuth";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 interface Props { onSwitchToRegister: () => void; }
 
@@ -15,7 +15,7 @@ export function LoginForm({ onSwitchToRegister }: Props) {
 
   const validateUsername = (v: string) => {
     if (!v.trim()) setUsernameError("Required field");
-    else if (v.trim().length < 2) setUsernameError("Minimum 2 characters");
+    else if (v.trim().length < 2) setUsernameError("Min 2 chars");
     else setUsernameError(null);
   };
 
@@ -33,38 +33,38 @@ export function LoginForm({ onSwitchToRegister }: Props) {
   const isInvalid = !!usernameError || !!passwordError || !username.trim() || !password.trim();
 
   return (
-    <div className="bg-card/60 backdrop-blur-3xl border border-white/5 dark:border-white/[0.02] rounded-[1.5rem] p-8 px-10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.5)] w-full ring-1 ring-inset ring-white/10 dark:ring-white/5 relative z-10 transition-all duration-500">
-      <h2 className="text-[1.4rem] font-bold mb-8 text-foreground tracking-tight text-center">Welcome Back</h2>
+    <div className="bg-card border border-border p-6 w-full">
+      <h2 className="text-xl font-normal mb-6 text-foreground text-center">Login</h2>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {error && (
-          <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-3 px-4 text-destructive text-[0.85rem] font-medium shadow-sm animate-in slide-in-from-top-1 fade-in duration-300">
+          <div className="bg-destructive/10 border border-destructive/20 p-2 text-destructive text-xs">
             {error.message}
           </div>
         )}
         
-        <div className="space-y-2">
-          <label className="text-[0.6875rem] font-bold uppercase tracking-widest text-muted-foreground ml-1" htmlFor="login-username">
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] uppercase text-muted-foreground" htmlFor="login-username">
             Username
           </label>
           <input
-            className="w-full px-4 py-3 bg-background/50 border border-transparent rounded-[1rem] text-foreground text-[0.95rem] outline-none transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus:bg-background/80 ring-1 ring-inset ring-border/30 dark:ring-white/5 focus:ring-primary/50 focus:border-primary/20 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]"
-            id="login-username" name="username" type="text" placeholder="Your username"
+            className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
+            id="login-username" name="username" type="text" placeholder="Username"
             value={username} 
             onChange={(e) => { clearError(); setUsername(e.target.value); }}
             onBlur={(e) => validateUsername(e.target.value)}
             required autoFocus
           />
-          {usernameError && <p className="text-destructive text-xs mt-1 ml-1 animate-in fade-in slide-in-from-top-1">{usernameError}</p>}
+          {usernameError && <p className="text-destructive text-[10px]">{usernameError}</p>}
         </div>
 
-        <div className="space-y-2">
-          <label className="text-[0.6875rem] font-bold uppercase tracking-widest text-muted-foreground ml-1" htmlFor="login-password">
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] uppercase text-muted-foreground" htmlFor="login-password">
             Password
           </label>
           <div className="relative">
             <input
-              className="w-full pl-4 pr-10 py-3 bg-background/50 border border-transparent rounded-[1rem] text-foreground text-[0.95rem] outline-none transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] focus:bg-background/80 ring-1 ring-inset ring-border/30 dark:ring-white/5 focus:ring-primary/50 focus:border-primary/20 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]"
-              id="login-password" name="password" type={showPassword ? "text" : "password"} placeholder="Your password"
+              className="w-full pl-2 pr-8 py-2 bg-background border border-border text-sm outline-none"
+              id="login-password" name="password" type={showPassword ? "text" : "password"} placeholder="Password"
               value={password} 
               onChange={(e) => { clearError(); setPassword(e.target.value); }}
               onBlur={(e) => validatePassword(e.target.value)}
@@ -72,35 +72,27 @@ export function LoginForm({ onSwitchToRegister }: Props) {
             />
             <button
               type="button"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-all duration-300 hover:scale-[1.15] active:scale-95 ease-[cubic-bezier(0.32,0.72,0,1)]"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               onClick={() => setShowPassword((v) => !v)}
               tabIndex={-1}
-              aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {passwordError && <p className="text-destructive text-xs mt-1 ml-1 animate-in fade-in slide-in-from-top-1">{passwordError}</p>}
+          {passwordError && <p className="text-destructive text-[10px]">{passwordError}</p>}
         </div>
 
         <button 
           type="submit" 
           disabled={isLoading || isInvalid} 
-          className="relative overflow-hidden w-full flex items-center justify-center gap-2 px-4 py-3.5 bg-primary text-primary-foreground border-none rounded-[1rem] text-[0.95rem] font-bold tracking-wide mt-2 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary/95 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_8px_20px_-8px_var(--tw-shadow-color)] shadow-primary/40 ring-1 ring-inset ring-black/10 dark:ring-white/10"
+          className="w-full px-4 py-2 bg-primary text-primary-foreground text-sm border border-primary disabled:opacity-50 mt-2"
         >
-          {isLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin shrink-0 text-primary-foreground/80" />
-              <span>Logging in...</span>
-            </>
-          ) : (
-            "Log In"
-          )}
+          {isLoading ? "Logging in..." : "Log In"}
         </button>
       </form>
-      <p className="mt-4 text-center text-sm text-muted-foreground">
-        Don't have an account?{" "}
-        <button className="bg-none border-none text-primary cursor-pointer text-inherit p-0 hover:underline" onClick={onSwitchToRegister}>Register</button>
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        No account?{" "}
+        <button className="text-primary hover:underline" onClick={onSwitchToRegister}>Register</button>
       </p>
     </div>
   );

@@ -20,7 +20,6 @@ function EmptyState({
   description,
   actionLabel,
   onAction,
-  mode,
 }: {
   eyebrow: string;
   title: string;
@@ -30,63 +29,28 @@ function EmptyState({
   mode: "channel" | "conversation";
 }) {
   return (
-    <div className="flex flex-1 items-center justify-center px-8 py-10">
-      <div className="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-border/70 bg-card/75 p-8 shadow-[0_32px_90px_-52px_rgba(15,23,42,0.28)] backdrop-blur-xl sm:p-10">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.9),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.28),transparent_70%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent_70%)]" />
-        <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_18rem] lg:items-center">
-          <div className="space-y-4">
-            <span className="inline-flex items-center rounded-full border border-border/80 bg-background/80 px-3 py-1 text-[11px] font-medium tracking-[0.14em] text-muted-foreground">
-              {eyebrow}
-            </span>
-            <div className="space-y-3">
-              <h2 className="max-w-lg text-3xl font-semibold tracking-tight text-foreground sm:text-[2.2rem] sm:leading-[1.02]">
-                {title}
-              </h2>
-              <p className="max-w-[34rem] text-sm leading-6 text-muted-foreground sm:text-[15px]">
-                {description}
-              </p>
-            </div>
-            {actionLabel && onAction && (
-              <button
-                onClick={onAction}
-                className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-transform duration-200 hover:-translate-y-0.5 hover:opacity-95 active:translate-y-0 active:scale-[0.98]"
-              >
-                {actionLabel}
-              </button>
-            )}
+    <div className="flex flex-1 items-center justify-center p-4">
+      <div className="w-full max-w-2xl border border-border bg-card p-4">
+        <div className="space-y-2">
+          <span className="text-xs uppercase text-muted-foreground">
+            {eyebrow}
+          </span>
+          <div className="space-y-1">
+            <h2 className="text-xl font-normal text-foreground">
+              {title}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {description}
+            </p>
           </div>
-          <div className="relative ml-auto hidden w-full max-w-[18rem] lg:block">
-            <div className="absolute inset-x-6 top-3 h-32 rounded-full bg-primary/10 blur-3xl" />
-            <div className="relative rounded-[2rem] border border-border/70 bg-background/90 p-4 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)]">
-              <div className="flex items-center justify-between rounded-[1.35rem] border border-border/60 bg-card px-4 py-3">
-                <div className="space-y-2">
-                  <div className="h-2.5 w-16 rounded-full bg-foreground/10" />
-                  <div className="h-2 w-24 rounded-full bg-foreground/6" />
-                </div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-[1rem] bg-primary text-base font-semibold text-primary-foreground">
-                  {mode === "channel" ? "#" : "+"}
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3">
-                <div className="rounded-[1.35rem] border border-border/60 bg-card px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-2">
-                      <div className="h-2.5 w-24 rounded-full bg-foreground/10" />
-                      <div className="h-2 w-32 rounded-full bg-foreground/6" />
-                    </div>
-                    <div className="h-6 w-10 rounded-full bg-primary/10" />
-                  </div>
-                </div>
-                <div className="rounded-[1.35rem] border border-dashed border-border/70 bg-card/70 px-4 py-4">
-                  <div className="space-y-2">
-                    <div className="h-2.5 w-20 rounded-full bg-foreground/10" />
-                    <div className="h-2 w-full rounded-full bg-foreground/6" />
-                    <div className="h-2 w-4/5 rounded-full bg-foreground/6" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          {actionLabel && onAction && (
+            <button
+              onClick={onAction}
+              className="bg-primary px-4 py-2 text-sm text-primary-foreground"
+            >
+              {actionLabel}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -103,13 +67,11 @@ function App() {
 
   const [showSettings, setShowSettings] = useState(false);
 
-  // ── URL Synchronization ──────────────────────────────────────────────────
   useEffect(() => {
     const syncUrlToStore = () => {
       const hash = window.location.hash;
       if (!hash || hash === '#') return;
 
-      // Format: #/ID (direct), #/r/ID (room), #/s/SID/CID (server/channel)
       const parts = hash.replace('#/', '').split('/');
       const p1 = parts[0];
       const id1 = Number(p1);
@@ -135,13 +97,7 @@ function App() {
   }, [setActiveChat]);
 
   useEffect(() => {
-    if (!activeChat) {
-      if (window.location.hash && !showSettings) {
-        // Only clear hash if it wasn't a settings hash
-        // window.history.replaceState(null, '', window.location.pathname);
-      }
-      return;
-    }
+    if (!activeChat) return;
 
     let newHash = '';
     switch (activeChat.type) {
@@ -155,13 +111,12 @@ function App() {
     if (newHash && window.location.hash !== newHash) {
       window.history.replaceState(null, '', newHash);
     }
-  }, [activeChat, showSettings]);
+  }, [activeChat]);
 
   useEffect(() => {
     if (showSettings && window.location.hash !== '#/settings') {
       window.history.replaceState(null, '', '#/settings');
     } else if (!showSettings && window.location.hash === '#/settings') {
-      // If settings closed but hash is still settings, go back to active chat hash or clear
       if (activeChat) {
         let newHash = '';
         switch (activeChat.type) {
@@ -186,10 +141,6 @@ function App() {
   useAuthHydration();
   useSocketEvents();
 
-  // Persist the last valid server ID so the ChannelPanel instance is never
-  // unmounted when the user navigates away from a server view back to a DM/room.
-  // The panel stays mounted (hidden by CSS) and is simply repositioned/revealed
-  // on the next server transition — no duplicate creation, no state reset.
   const lastServerIdRef = useRef<number | null>(null);
 
   const showChannelPanel =
@@ -200,8 +151,6 @@ function App() {
       activeChat?.type === "channel" ? activeChat.serverId :
         null;
 
-  // Track the latest server ID so we can keep the panel alive when
-  // channelPanelServerId becomes null (DM / group chat active).
   if (channelPanelServerId !== null) {
     lastServerIdRef.current = channelPanelServerId;
   }
@@ -219,37 +168,26 @@ function App() {
   }
 
   return (
-    <div className="relative flex min-h-[100dvh] w-full overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 top-0 h-[24rem] w-[24rem] rounded-full bg-primary/6 blur-3xl" />
-        <div className="absolute bottom-0 right-0 h-[26rem] w-[26rem] rounded-full bg-foreground/[0.035] blur-3xl dark:bg-white/[0.04]" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.28),transparent_24%,transparent_76%,rgba(255,255,255,0.08))] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent_28%,transparent_76%,rgba(255,255,255,0.02))]" />
-      </div>
+    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
       <audio
         ref={audioRef}
         autoPlay
         hidden
       />
-      <div className="relative flex min-h-[100dvh] w-full overflow-hidden">
-      <div className="relative z-20 flex h-full w-[432px] flex-shrink-0 flex-col border-r border-border/70 bg-sidebar/90 shadow-[24px_0_80px_-48px_rgba(15,23,42,0.35)] backdrop-blur-xl">
-        {showChannelPanel && (
-          <div className="absolute left-[71px] top-0 bottom-0 w-[1px] bg-border pointer-events-none z-0" />
-        )}
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+      
+      <div className="flex h-full w-[400px] flex-shrink-0 flex-col border-r border-border bg-sidebar">
+        <div className="flex flex-1 overflow-hidden">
           <Sidebar
             isServerMode={showChannelPanel}
           />
 
-          <div
-            className={`flex-shrink-0 w-0 overflow-hidden ${showChannelPanel ? "w-[360px]" : ""}`}
-            aria-hidden={!showChannelPanel}
-          >
-            {persistedServerId !== null && (
+          {showChannelPanel && persistedServerId !== null && (
+            <div className="w-[320px] border-l border-border">
               <ChannelPanel
                 serverId={persistedServerId}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <SidebarFooter
@@ -264,7 +202,8 @@ function App() {
           onOpenSettings={() => setShowSettings(true)}
         />
       </div>
-      <div className="relative z-10 flex min-w-0 flex-1 overflow-hidden">
+      
+      <div className="flex min-w-0 flex-1 overflow-hidden">
         {chatTarget ? (
           <ChatWindow 
             activeChat={chatTarget} 
@@ -274,21 +213,20 @@ function App() {
         ) : activeChat?.type === "server" ? (
           <EmptyState
             eyebrow="Workspace"
-            title="Choose a channel to open the conversation thread."
-            description="Your server panel stays pinned on the left. Open any channel to jump straight into messages, files, and presence updates without switching screens."
+            title="Choose a channel"
+            description="Open any channel to start messaging."
             mode="channel"
           />
         ) : (
           <EmptyState
             eyebrow="Inbox"
-            title="Pick a conversation or start a new one from the sidebar."
-            description="Recent chats, rooms, and server channels stay organized in one place. Use search or create a new thread when you want to reach someone faster."
+            title="Pick a conversation"
+            description="Select a chat or start a new one."
             actionLabel="Start a new conversation"
             onAction={() => openModal("CREATE_PICKER")}
             mode="conversation"
           />
         )}
-      </div>
       </div>
 
       {showSettings && (

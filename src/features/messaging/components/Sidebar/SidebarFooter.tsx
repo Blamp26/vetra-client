@@ -64,107 +64,94 @@ export function SidebarFooter({
   const isMicMuted = callStatus === 'active' ? isMuted : !micEnabled;
 
   return (
-    <div className="relative z-10 p-3">
-      <div className="rounded-[1.6rem] border border-border/70 bg-card/85 p-3 shadow-[0_22px_54px_-38px_rgba(15,23,42,0.35)] backdrop-blur-xl">
+    <div className="border-t border-border bg-card p-2">
+      <div className="flex flex-col gap-2">
         {(callStatus === 'active' || callStatus === 'calling' || callStatus === 'ringing') && (
-          <div className="mb-3 flex items-center justify-between rounded-[1.2rem] border border-border/70 bg-background/80 px-2.5 py-2">
+          <div className="flex items-center justify-between border border-border p-2 bg-background">
             <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-online/10 text-online">
-                <Rss className="h-4 w-4" aria-hidden="true" />
-              </div>
+              <Rss className="h-4 w-4 text-online" />
               <div className="flex flex-col min-w-0">
-                <span className="text-xs font-medium text-online truncate">
-                  {callStatus === 'active' ? 'Voice Connected' : 
-                   callStatus === 'calling' ? 'Calling...' : 'Incoming call'}
+                <span className="text-xs text-online truncate">
+                  {callStatus === 'active' ? 'Connected' : 
+                   callStatus === 'calling' ? 'Calling...' : 'In-call'}
                 </span>
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground truncate">{remoteUsername || "Unknown User"}</span>
+                  <span className="text-[10px] text-muted-foreground truncate">{remoteUsername || "User"}</span>
                   {callStatus === 'active' && (
-                    <span className="text-[10px] text-muted-foreground tabular-nums">({formatCallTime(callSeconds)})</span>
+                    <span className="text-[10px] text-muted-foreground">({formatCallTime(callSeconds)})</span>
                   )}
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               {callStatus === 'ringing' && (
                 <>
                   <button 
                     onClick={onAcceptCall}
-                    title="Accept call"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-online text-white transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.96]"
+                    title="Accept"
+                    className="flex h-7 w-7 items-center justify-center bg-online text-white"
                   >
-                    <Phone className="h-4 w-4" aria-hidden="true" />
+                    <Phone className="h-4 w-4" />
                   </button>
                   <button 
                     onClick={onRejectCall}
-                    title="Reject call"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-destructive text-destructive-foreground transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.96]"
+                    title="Reject"
+                    className="flex h-7 w-7 items-center justify-center bg-destructive text-destructive-foreground"
                   >
-                    <PhoneOff className="h-4 w-4" aria-hidden="true" />
+                    <PhoneOff className="h-4 w-4" />
                   </button>
                 </>
               )}
 
               {(callStatus === 'active' || callStatus === 'calling') && (
-                <>
-                  <div className="flex items-end gap-0.5 h-3 px-1">
-                    <div className="w-0.5 bg-online rounded-full animate-pulse h-2 [animation-delay:100ms] [animation-duration:400ms]"></div>
-                    <div className="w-0.5 bg-online rounded-full animate-pulse h-3 [animation-delay:200ms] [animation-duration:400ms]"></div>
-                    <div className="w-0.5 bg-online rounded-full animate-pulse h-1.5 [animation-delay:300ms] [animation-duration:400ms]"></div>
-                  </div>
-                  <button 
-                    onClick={() => callStatus === 'calling' ? onHangUp() : setConfirmHangUp(true)}
-                    title="End call"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-destructive text-destructive-foreground transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.96]"
-                  >
-                    <PhoneOff className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </>
+                <button 
+                  onClick={() => callStatus === 'calling' ? onHangUp() : setConfirmHangUp(true)}
+                  title="Hang up"
+                  className="flex h-7 w-7 items-center justify-center bg-destructive text-destructive-foreground"
+                >
+                  <PhoneOff className="h-4 w-4" />
+                </button>
               )}
             </div>
           </div>
         )}
 
-        <div className="mb-3 flex gap-1.5">
+        <div className="flex gap-1">
           <button 
             disabled 
-            title="Video call — coming soon"
-            className="flex h-9 flex-1 cursor-not-allowed items-center justify-center rounded-[1rem] border border-border/60 bg-background/80 text-muted-foreground opacity-50"
+            className="flex h-8 flex-1 items-center justify-center border border-border bg-background text-muted-foreground opacity-50"
           >
-            <Video className="h-4 w-4" aria-hidden="true" />
+            <Video className="h-4 w-4" />
           </button>
           <button 
             disabled 
-            title="Screen share — coming soon"
-            className="flex h-9 flex-1 cursor-not-allowed items-center justify-center rounded-[1rem] border border-border/60 bg-background/80 text-muted-foreground opacity-50"
+            className="flex h-8 flex-1 items-center justify-center border border-border bg-background text-muted-foreground opacity-50"
           >
-            <MonitorUp className="h-4 w-4" aria-hidden="true" />
+            <MonitorUp className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex items-center justify-between rounded-[1.2rem] border border-border/70 bg-background/80 px-2 py-1.5">
+        <div className="flex items-center justify-between border border-border bg-background p-1.5">
           <div className="flex cursor-pointer items-center gap-2" onClick={() => setShowProfile(true)}>
             <Avatar 
               name={displayName} 
               src={currentUser?.avatar_url} 
-              className="h-7 w-7 text-[10px] shadow-[0_12px_24px_-20px_rgba(15,23,42,0.35)]" 
+              className="h-7 w-7 text-[10px]" 
               status={currentStatus as any}
             />
-            <div className="flex flex-col overflow-hidden">
-              <span className="text-xs font-medium text-card-foreground truncate">{displayName}</span>
-              <div className="flex items-center gap-1 text-[10px]">
-                <span className={cn(
-                  "truncate transition-colors",
-                  currentStatus === "online" ? "text-online" :
-                  currentStatus === "away" ? "text-away" :
-                  currentStatus === "dnd" ? "text-busy" :
-                  "text-muted-foreground"
-                )}>{statusText}</span>
-              </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-normal truncate">{displayName}</span>
+              <span className={cn(
+                "text-[10px] truncate",
+                currentStatus === "online" ? "text-online" :
+                currentStatus === "away" ? "text-away" :
+                currentStatus === "dnd" ? "text-busy" :
+                "text-muted-foreground"
+              )}>{statusText}</span>
             </div>
           </div>
           
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center">
             <button 
               onClick={() => {
                 toggleMic();
@@ -172,32 +159,24 @@ export function SidebarFooter({
                   onMuteToggle();
                 }
               }}
-              title={!isMicMuted ? "Mute microphone" : "Unmute microphone"}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground active:translate-y-0 active:scale-[0.96]"
+              title="Mic"
+              className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:bg-accent"
             >
-              {isMicMuted ? (
-                <MicOff className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
-              ) : (
-                <Mic className="h-3.5 w-3.5" aria-hidden="true" />
-              )}
+              {isMicMuted ? <MicOff className="h-3.5 w-3.5 text-destructive" /> : <Mic className="h-3.5 w-3.5" />}
             </button>
             <button 
               onClick={() => toggleSound()}
-              title={soundEnabled ? "Mute sound" : "Unmute sound"}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground active:translate-y-0 active:scale-[0.96]"
+              title="Sound"
+              className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:bg-accent"
             >
-              {soundEnabled ? (
-                <Headphones className="h-3.5 w-3.5" aria-hidden="true" />
-              ) : (
-                <HeadphoneOff className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
-              )}
+              {soundEnabled ? <Headphones className="h-3.5 w-3.5" /> : <HeadphoneOff className="h-3.5 w-3.5 text-destructive" />}
             </button>
             <button 
               onClick={onOpenSettings}
-              title="User settings"
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground active:translate-y-0 active:scale-[0.96]"
+              title="Settings"
+              className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:bg-accent"
             >
-              <Settings className="h-3.5 w-3.5" aria-hidden="true" />
+              <Settings className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -205,9 +184,9 @@ export function SidebarFooter({
 
       {confirmHangUp && (
         <ConfirmModal
-          title="Завершить звонок?"
-          message="Это прервёт активное соединение."
-          confirmLabel="Завершить"
+          title="Hang up?"
+          message="End call?"
+          confirmLabel="Hang up"
           isDanger
           onConfirm={() => {
             setConfirmHangUp(false);

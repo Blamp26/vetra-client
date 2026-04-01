@@ -30,7 +30,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   };
 
   const combinedClassName = cn(
-    'rounded-[1.15rem] bg-primary text-primary-foreground font-bold grid place-items-center flex-shrink-0 object-cover select-none leading-[1] shadow-sm',
+    'border border-border bg-primary text-primary-foreground font-normal grid place-items-center flex-shrink-0 object-cover select-none leading-[1]',
     sizeClasses[size],
     className
   );
@@ -46,8 +46,8 @@ export const Avatar: React.FC<AvatarProps> = ({
     if (!status) return null;
     return (
       <span className={cn(
-        "absolute -bottom-1 -right-1 rounded-full border-2 border-background shadow-sm",
-        size === 'small' ? 'h-2.5 w-2.5 border-1' : 'h-3.5 w-3.5',
+        "absolute -bottom-1 -right-1 border border-background",
+        size === 'small' ? 'h-2 w-2' : 'h-3 w-3',
         statusColors[status]
       )} />
     );
