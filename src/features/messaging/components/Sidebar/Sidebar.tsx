@@ -10,20 +10,20 @@ import { formatPreviewTime } from "@/utils/formatDate";
 import type { ActiveChat } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { cn } from "@/shared/utils/cn";
-import { SquarePen } from "lucide-react";
+import { SquarePen, Plus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@radix-ui/react-tooltip";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 
 interface SidebarProps {
-  isServerMode?:  boolean;
+  isServerMode?: boolean;
 }
 
 type SidebarItem =
   | { kind: "direct"; id: number; name: string; time: string; preview: string; unread: number; isOnline: boolean; status?: 'online' | 'away' | 'dnd' | 'offline' | null }
   | { kind: "room";   id: number; name: string; time: string; preview: string; unread: number };
 
-export function Sidebar({ 
-  isServerMode = false, 
+export function Sidebar({
+  isServerMode = false,
 }: SidebarProps) {
   const currentUser          = useAppStore((s: RootState) => s.currentUser);
   const activeChat           = useAppStore((s: RootState) => s.activeChat);
@@ -32,6 +32,7 @@ export function Sidebar({
   const onlineUserIds        = useAppStore((s: RootState) => s.onlineUserIds);
   const userStatuses         = useAppStore((s: RootState) => s.userStatuses);
   const setActiveChat        = useAppStore((s: RootState) => s.setActiveChat);
+  const servers              = useAppStore((s: RootState) => s.servers);
   const setServers           = useAppStore((s: RootState) => s.setServers);
   const activeModal          = useAppStore((s: RootState) => s.activeModal);
   const openModal            = useAppStore((s: RootState) => s.openModal);
@@ -82,6 +83,8 @@ export function Sidebar({
   );
   const hasItems = allItems.length > 0;
 
+  const serverList = Object.values(servers);
+
   const isItemActive = (item: SidebarItem): boolean => {
     if (!activeChat) return false;
     if (item.kind === "direct")
@@ -90,11 +93,11 @@ export function Sidebar({
   };
 
   const handleItemClick = (item: SidebarItem) => {
-    const next: ActiveChat =
-      item.kind === "direct"
-        ? { type: "direct", partnerId: item.id }
-        : { type: "room",   roomId: item.id };
-    setActiveChat(next);
+    if (item.kind === "direct") {
+      window.location.hash = `/${item.id}`;
+    } else {
+      window.location.hash = `/r/${item.id}`;
+    }
   };
 
   return (
@@ -141,6 +144,43 @@ export function Sidebar({
           </div>
         )}
 
+        {/* ── Servers section ── */}
+        {!isServerMode && serverList.length > 0 && (
+          <div className="px-4 pt-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground">
+                Servers
+              </span>
+              <button
+                onClick={() => openModal("CREATE_SERVER")}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                title="Create a server"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {serverList.map((server) => (
+                <button
+                  key={server.id}
+                  onClick={() => { window.location.hash = `/s/${server.id}`; }}
+                  className="flex w-full items-center gap-3 rounded-[1.25rem] border border-transparent px-3 py-2.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-border/70 hover:bg-card/80 hover:shadow-[0_16px_32px_-28px_rgba(15,23,42,0.35)] active:translate-y-0 active:scale-[0.99]"
+                >
+                  <Avatar
+                    name={server.name}
+                    size="large"
+                    className="size-8 h-9 w-9 shrink-0 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)]"
+                    status={null}
+                  />
+                  <span className="truncate text-sm font-semibold text-sidebar-foreground">
+                    {server.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className={cn("px-4 pb-2 pt-5", isServerMode && "hidden")}>
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground">
@@ -160,7 +200,7 @@ export function Sidebar({
                 <TooltipProvider delayDuration={400}>
                   {allItems.map((item) => {
                     const isActive = isItemActive(item);
-                    
+
                     return (
                       <Tooltip key={`${item.kind}-${item.id}`}>
                         <TooltipTrigger asChild>
@@ -172,14 +212,14 @@ export function Sidebar({
                             )}
                           >
                             <div className="relative">
-                              <Avatar 
-                                name={item.name} 
-                                size="large" 
-                                className="size-8 h-10 w-10 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)]" 
+                              <Avatar
+                                name={item.name}
+                                size="large"
+                                className="size-8 h-10 w-10 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)]"
                                 status={item.kind === "direct" ? (item.status || (item.isOnline ? "online" : "offline")) : null}
                               />
                             </div>
-                            
+
                             {!isServerMode && (
                               <div className="min-w-0 flex-1 overflow-hidden">
                                 <div className="flex items-center justify-between gap-3">
