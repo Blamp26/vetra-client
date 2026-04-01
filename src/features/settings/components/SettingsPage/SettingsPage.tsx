@@ -1,9 +1,4 @@
 // client/src/features/settings/components/SettingsPage/SettingsPage.tsx
-//
-// УДАЛЕНО: импорт { themeLabels, type Theme } из "@/themes"
-// УДАЛЕНО: селекторы theme и setTheme из useAppStore
-// УДАЛЕНО: блок выбора темы в табе "appearance"
-// ДОБАВЛЕНО: статический блок "Единая светлая тема"
 
 import { useState, useEffect } from 'react';
 import { useAppStore, type RootState } from '@/store';
@@ -199,7 +194,7 @@ export function SettingsPage({ onClose }: Props) {
   ];
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-background/50 backdrop-blur-3xl animate-in fade-in duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] p-4 sm:p-8">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-background/50 backdrop-blur-3xl animate-in fade-in duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] p-4 sm:p-8">
       {/* Clicking outside closes the modal */}
       <div className="absolute inset-0 z-0" onClick={onClose} />
       
@@ -262,10 +257,10 @@ export function SettingsPage({ onClose }: Props) {
             onClick={onClose}
             className="flex items-center gap-2 px-2.5 py-2 rounded-lg border-none bg-transparent text-muted-foreground/70 cursor-pointer font-inherit text-[0.88rem] transition-colors duration-120 hover:text-foreground"
           >
-            ← Назад
+            ← Back
           </button>
           <div className="mt-1.5 pl-2 text-[0.72rem] text-muted-foreground/70">
-            Esc — закрыть
+            Esc — close
           </div>
         </div>
       </div>

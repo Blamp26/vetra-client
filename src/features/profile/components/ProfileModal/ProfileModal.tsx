@@ -36,7 +36,7 @@ export function ProfileModal({ user, onClose }: Props) {
       const url = `${API_BASE_URL}/media/${res.media_file_id}`;
       setAvatarUrl(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка загрузки аватара");
+      setError(err instanceof Error ? err.message : "Error uploading avatar");
     } finally {
       setSaving(false);
     }
@@ -47,11 +47,11 @@ export function ProfileModal({ user, onClose }: Props) {
     setError(null);
 
     if (username.trim().length < 2) {
-      setUsernameErr("Минимум 2 символа");
+      setUsernameErr("Minimum 2 characters");
       return;
     }
     if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
-      setUsernameErr("Только буквы, цифры, подчёркивание");
+      setUsernameErr("Only letters, numbers, underscores");
       return;
     }
 
@@ -67,7 +67,7 @@ export function ProfileModal({ user, onClose }: Props) {
       const updated = await authApi.updateProfile(user.id, payload);
       updateCurrentUser(updated);
       
-      // Обновляем статус в Presence через сокет для мгновенного отображения у всех
+      // Update status in Presence via socket for instant update for everyone
       if (payload.status) {
         socketManager?.updateStatus(payload.status as any);
       }
@@ -77,11 +77,11 @@ export function ProfileModal({ user, onClose }: Props) {
       if (e && typeof e === "object" && "details" in e) {
         const details = (e as { details?: Record<string, string[]> }).details;
         if (details?.username) {
-          setUsernameErr(`@${username.trim()} уже занят`);
+          setUsernameErr(`@${username.trim()} is already taken`);
           return;
         }
       }
-      setError(e instanceof Error ? e.message : "Ошибка сохранения");
+      setError(e instanceof Error ? e.message : "Error saving");
     } finally {
       setSaving(false);
     }

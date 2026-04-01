@@ -138,7 +138,7 @@ export function ChannelPanel({ serverId }: Props) {
               <span className="w-10 h-10 rounded-[1rem] bg-gradient-to-br from-primary to-primary/60 text-primary-foreground text-sm font-black inline-flex items-center justify-center flex-shrink-0 shadow-lg ring-2 ring-white/10">
                 {server?.name?.[0]?.toUpperCase() ?? "?"}
               </span>
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-4 border-card" />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-online border-4 border-card" />
             </div>
             <span className="text-[1.125rem] font-extrabold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis text-foreground">
               {server?.name ?? "Server"}

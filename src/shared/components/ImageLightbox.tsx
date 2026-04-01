@@ -12,7 +12,7 @@ interface ImageLightboxProps {
 }
 
 /**
- * Полноэкранный просмотр изображений (Lightbox)
+ * Full-screen image viewer (Lightbox)
  */
 export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time, onClose }) => {
   const [rotation, setRotation] = useState(0);
@@ -25,13 +25,13 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
   const containerRef = useRef<HTMLDivElement>(null);
   const authToken = useAppStore((s) => s.authToken);
 
-  // Обработка клавиши Escape для закрытия
+  // Handle Escape key to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', handleKeyDown);
-    // Блокируем скролл фона
+    // Block background scroll
     document.body.style.overflow = 'hidden';
     
     return () => {
@@ -40,7 +40,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
     };
   }, []);
 
-  // Зум через Ctrl + Колесо (относительно курсора)
+  // Zoom via Ctrl + Wheel (relative to cursor)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -52,7 +52,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
         const delta = e.deltaY > 0 ? -0.2 : 0.2;
         const rect = container.getBoundingClientRect();
         
-        // Координаты мыши относительно центра контейнера
+        // Mouse coordinates relative to container center
         const mouseX = e.clientX - (rect.left + rect.width / 2);
         const mouseY = e.clientY - (rect.top + rect.height / 2);
 
@@ -64,14 +64,14 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
             return 1;
           }
 
-          // Вычисляем новое смещение, чтобы точка под курсором осталась на месте
+          // Calculate new offset to keep the point under the cursor in place
           const ratio = nextScale / prevScale;
           
           setPosition(prevPos => {
             const nextX = mouseX - (mouseX - prevPos.x) * ratio;
             const nextY = mouseY - (mouseY - prevPos.y) * ratio;
 
-            // Строгие лимиты: фото не может уйти за края контейнера
+            // Strict limits: photo cannot go beyond container edges
             const limitX = Math.max(0, (rect.width * nextScale - rect.width) / 2);
             const limitY = Math.max(0, (rect.height * nextScale - rect.height) / 2);
 
@@ -92,7 +92,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({ src, author, time,
 
   const handleClose = () => {
     setIsClosing(true);
-    setTimeout(onClose, 400); // Даем время для анимации выхода (более плавной)
+    setTimeout(onClose, 400); // Give time for exit animation (smoother)
   };
 
   const handleRotate = (e: React.MouseEvent) => {

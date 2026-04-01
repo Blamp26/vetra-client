@@ -13,7 +13,7 @@ import type {
 export function useCall(currentUserId: number): UseCallReturn {
     const socketManager = useAppStore((s) => s.socketManager);
 
-    // ── Состояние ──────────────────────────────────────────────────────────────
+    // ── State ──────────────────────────────────────────────────────────────────
     const [status, setStatus] = useState<CallStatus>('idle');
     const [remoteUserId, setRemoteUserId] = useState<number | null>(null);
     const [remoteUsername, setRemoteUsername] = useState<string | null>(null);
@@ -22,12 +22,12 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const [seconds, setSeconds] = useState(0);
 
-    // ── Refs (не вызывают ре-рендер, нужны внутри колбэков) ───────────────────
+    // ── Refs (don't trigger re-render, needed inside callbacks) ────────────────
     const callChannelRef = useRef<Channel | null>(null);
     const webrtcRef = useRef<WebRTCService | null>(null);
     const endedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // ── Хелпер: завершить звонок локально ─────────────────────────────────────
+    // ── Helper: end call locally ──────────────────────────────────────────────
     const resetAfterDelay = useCallback(() => {
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
         setStatus('ended');
@@ -51,7 +51,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 setSeconds((prev) => prev + 1);
             }, 1000);
         } else if (status !== 'ended') {
-            // Сбрасываем только если не "завершено", т.к. в ended мы хотим видеть время звонка еще 2 сек
+            // Reset only if not "ended", because in ended we want to see the call duration for another 2 seconds
             setSeconds(0);
         }
         return () => {
@@ -59,25 +59,25 @@ export function useCall(currentUserId: number): UseCallReturn {
         };
     }, [status]);
 
-    // ── Mount: подключить call-канал и подписаться на сигнальные события ───────
+    // ── Mount: connect call channel and subscribe to signaling events ──────────
     useEffect(() => {
         if (!socketManager) return;
 
         const channel = socketManager.socket.channel(`call:${currentUserId}`, {});
 
-        // "answer" — нам ответили (мы были caller)
+        // "answer" — we were answered (we were the caller)
         channel.on('answer', (payload: AnswerPayload) => {
             webrtcRef.current?.handleAnswer(payload.sdp);
             setRemoteUsername(payload.from_username);
             setStatus('active');
         });
 
-        // "ice_candidate" — удалённый пир прислал кандидата
+        // "ice_candidate" — remote peer sent a candidate
         channel.on('ice_candidate', (payload: IceCandidatePayload) => {
             webrtcRef.current?.addIceCandidate(payload.candidate);
         });
 
-        // "hang_up" — собеседник положил трубку
+        // "hang_up" — peer hung up
         channel.on('hang_up', () => {
             webrtcRef.current?.hangUp();
             resetAfterDelay();
@@ -89,7 +89,7 @@ export function useCall(currentUserId: number): UseCallReturn {
 
         callChannelRef.current = channel;
 
-        // "incoming_call" приходит через user-канал (сервер делает Endpoint.broadcast)
+        // "incoming_call" comes via user-channel (server does Endpoint.broadcast)
         const unsubIncoming = socketManager.userChannel.on(
             'incoming_call',
             (payload: IncomingCallPayload) => {

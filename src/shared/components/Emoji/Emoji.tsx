@@ -7,10 +7,10 @@ interface EmojiProps {
 }
 
 /**
- * Рендерит эмодзи в стиле Apple (iOS), используя CDN.
+ * Renders Apple-style (iOS) emojis using a CDN.
  */
 export const Emoji: React.FC<EmojiProps> = ({ emoji, size = 20, className = "" }) => {
-  // Улучшенная функция для получения кода эмодзи для CDN
+  // Improved function to get emoji code for CDN
   const getEmojiCode = (emoji: string) => {
     return Array.from(emoji)
       .map(char => char.codePointAt(0)?.toString(16).padStart(4, '0'))
@@ -34,7 +34,7 @@ export const Emoji: React.FC<EmojiProps> = ({ emoji, size = 20, className = "" }
         objectFit: 'contain',
         position: 'relative'
       }}
-      // Если изображение не загрузилось, показываем системный эмодзи
+      // If image fails to load, show system emoji
       onError={(e) => {
         const target = e.target as HTMLImageElement;
         target.style.display = 'none';
@@ -47,16 +47,16 @@ export const Emoji: React.FC<EmojiProps> = ({ emoji, size = 20, className = "" }
 };
 
 export const EmojiText: React.FC<{ text: string; size?: number; className?: string }> = ({ text, size = 18, className = "" }) => {
-  // Регулярное выражение для эмодзи, которое исключает обычные цифры
+  // Emoji regex that excludes standard numbers
   const emojiRegex = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}|\p{Emoji_Component})/gu;
   
-  // Разделяем текст на части (текст и эмодзи)
+  // Split text into parts (text and emojis)
   const parts = text.split(emojiRegex);
 
   return (
     <span className={className}>
       {parts.map((part, i) => {
-        // Дополнительная проверка: если это просто цифра (без модификаторов), то это не эмодзи
+        // Additional check: if it's just a digit (no modifiers), it's not an emoji
         if (part && part.match(emojiRegex) && !/^[0-9]$/.test(part)) {
           return <Emoji key={i} emoji={part} size={size} />;
         }

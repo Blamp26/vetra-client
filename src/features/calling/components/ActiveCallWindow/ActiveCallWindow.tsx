@@ -28,7 +28,7 @@ export const ActiveCallWindow = ({
   }, [remoteStream]);
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-background/40 backdrop-blur-3xl z-[9999] animate-in fade-in duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]">
+    <div className="fixed inset-0 flex items-center justify-center bg-background/40 backdrop-blur-3xl z-modal animate-in fade-in duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]">
       <div className="flex flex-col items-center gap-6 p-10 px-12 rounded-[2.5rem] bg-card/60 backdrop-blur-2xl shadow-[0_48px_96px_-24px_rgba(0,0,0,0.4)] border border-white/10 dark:border-white/5 ring-1 ring-inset ring-white/10 min-w-[320px] animate-in zoom-in-[0.95] slide-in-from-bottom-8 duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]">
         
         <div className="relative">
@@ -37,7 +37,7 @@ export const ActiveCallWindow = ({
             <span className="text-[2.25rem] font-extrabold text-primary-foreground select-none tracking-tight">
               {remoteUsername.charAt(0).toUpperCase()}
             </span>
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 border-4 border-card animate-bounce shadow-lg" />
+            <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-online border-4 border-card animate-bounce shadow-lg" />
           </div>
         </div>
 

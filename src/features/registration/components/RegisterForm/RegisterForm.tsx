@@ -14,14 +14,14 @@ export function RegisterForm({ onSwitchToLogin }: Props) {
   const { register, isLoading, error, clearError } = useAuth();
 
   const validateUsername = (v: string) => {
-    if (!v.trim()) setUsernameError("Поле обязательно");
-    else if (v.trim().length < 2) setUsernameError("Минимум 2 символа");
+    if (!v.trim()) setUsernameError("Required field");
+    else if (v.trim().length < 2) setUsernameError("Minimum 2 characters");
     else setUsernameError(null);
   };
 
   const validatePassword = (v: string) => {
-    if (!v.trim()) setPasswordError("Поле обязательно");
-    else if (v.trim().length < 6) setPasswordError("Минимум 6 символов");
+    if (!v.trim()) setPasswordError("Required field");
+    else if (v.trim().length < 6) setPasswordError("Minimum 6 characters");
     else setPasswordError(null);
   };
 
@@ -82,7 +82,7 @@ export function RegisterForm({ onSwitchToLogin }: Props) {
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-all duration-300 hover:scale-[1.15] active:scale-95 ease-[cubic-bezier(0.32,0.72,0,1)]"
               onClick={() => setShowPassword((v) => !v)}
               tabIndex={-1}
-              aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+              aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>

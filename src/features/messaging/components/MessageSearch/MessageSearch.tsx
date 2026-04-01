@@ -51,7 +51,7 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
               : await messagesApi.search(targetId, val.trim());
           setResults(msgs);
         } catch {
-          setError("Ошибка поиска. Попробуйте еще раз.");
+          setError("Search error. Please try again.");
         } finally {
           setLoading(false);
         }
@@ -76,7 +76,7 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="text-[1.05rem] font-semibold flex items-center gap-2">
             <Search className="w-4 h-4 text-muted-foreground" />
-            Поиск сообщений
+            Search messages
           </h3>
           <button 
             className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground cursor-pointer" 
@@ -94,70 +94,83 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
               id="message-text-search"
               name="search-query"
               className="w-full bg-background border border-border/50 rounded-xl pl-10 pr-4 py-2.5 text-[15px] focus:border-primary focus:ring-2 focus:ring-primary/20 shadow-sm outline-none transition-all placeholder:text-muted-foreground/60"
-              placeholder="Введите текст для поиска…"
+              placeholder="Enter text to search..."
               value={query}
               onChange={handleChange}
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto min-h-[300px] flex flex-col gap-1 pr-1 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-3 min-h-0 py-2">
             {loading && (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-3">
+              <div className="flex flex-col items-center justify-center py-10 gap-3 text-muted-foreground animate-in fade-in zoom-in-95">
                 <Loader2 className="w-8 h-8 animate-spin text-primary/60" />
-                <span className="text-sm font-medium">Ищем сообщения...</span>
+                <span className="text-sm font-medium">Searching...</span>
               </div>
             )}
 
-            {error && (
-              <div className="flex items-center justify-center py-12 text-destructive text-sm font-medium">
-                {error}
+            {!loading && error && (
+              <div className="text-center py-10 text-destructive bg-destructive/5 rounded-xl border border-destructive/20 mx-2 animate-in fade-in">
+                <span className="text-sm font-medium">{error}</span>
               </div>
             )}
 
-            {!loading && query && results.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground/60 gap-3">
-                <MessageSquare className="w-10 h-10 opacity-20" />
-                <span className="text-sm">Ничего не найдено</span>
+            {!loading && query.trim() && results.length === 0 && !error && (
+              <div className="flex flex-col items-center justify-center py-10 gap-3 text-muted-foreground animate-in fade-in zoom-in-95">
+                <div className="p-4 rounded-full bg-muted/50 border border-border/50">
+                  <X className="w-8 h-8 opacity-40" />
+                </div>
+                <span className="text-sm font-medium">Nothing found</span>
               </div>
             )}
 
-            {!loading && !query && (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground/40 gap-3">
-                <Search className="w-10 h-10 opacity-20" />
-                <span className="text-sm">Начните вводить текст...</span>
+            {!loading && results.length > 0 && (
+              <div className="space-y-3 px-1">
+                <div className="text-[0.7rem] uppercase tracking-widest font-bold text-muted-foreground/60 px-2 flex justify-between items-center mb-1">
+                  <span>Results</span>
+                  <span className="bg-muted px-2 py-0.5 rounded-full lowercase">{results.length} matches</span>
+                </div>
+                {results.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => onJumpTo(m.id)}
+                    className="w-full text-left p-3.5 rounded-xl border border-border/40 bg-card hover:bg-accent hover:border-primary/30 hover:shadow-md transition-all duration-300 group relative flex flex-col gap-2"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={m.sender_display_name || m.sender_username} size="small" src={m.sender?.avatar_url} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                            {m.sender_display_name || m.sender_username}
+                          </span>
+                          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                            {new Date(m.inserted_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pl-8">
+                      <p className="text-[13px] text-muted-foreground group-hover:text-foreground line-clamp-3 transition-colors leading-relaxed">
+                        {m.content || (m.media_file_id ? "📎 Attachment" : "")}
+                      </p>
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
 
-            {!loading && results.map((msg) => (
-              <button
-                key={msg.id}
-                type="button"
-                className="flex items-start gap-3 p-3 rounded-xl hover:bg-accent text-left transition-all active:scale-[0.98] group cursor-pointer"
-                onClick={() => { onJumpTo(msg.id); onClose(); }}
-              >
-                <Avatar 
-                  name={msg.sender_display_name || msg.sender_username} 
-                  src={msg.sender?.avatar_url}
-                  size="medium"
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <span className="font-semibold text-sm truncate group-hover:text-primary transition-colors">
-                      {msg.sender_display_name || msg.sender_username}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                      {new Date(msg.inserted_at).toLocaleString("ru-RU", {
-                        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed break-words">
-                    {msg.content || (msg.media_file_id ? "📎 Attachment" : "")}
+            {!loading && !query.trim() && (
+              <div className="flex flex-col items-center justify-center py-16 gap-4 text-muted-foreground animate-in fade-in zoom-in-95">
+                <div className="p-5 rounded-3xl bg-primary/5 border border-primary/10 shadow-inner">
+                  <MessageSquare className="w-10 h-10 text-primary/30" />
+                </div>
+                <div className="text-center space-y-1">
+                  <span className="text-sm font-bold text-foreground/80 block">Message Search</span>
+                  <p className="text-xs text-muted-foreground/60 max-w-[240px]">
+                    Find anything you said or heard in this chat.
                   </p>
                 </div>
-              </button>
-            ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

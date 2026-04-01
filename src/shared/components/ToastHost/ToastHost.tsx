@@ -41,7 +41,7 @@ export function ToastHost() {
 
   return (
     <div
-      className="fixed left-6 bottom-24 z-[99999] pointer-events-none"
+      className="fixed left-6 bottom-24 z-toast pointer-events-none"
       aria-live="polite"
     >
       <div

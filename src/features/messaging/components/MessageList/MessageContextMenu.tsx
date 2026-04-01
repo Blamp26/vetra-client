@@ -47,7 +47,7 @@ export function MessageContextMenu({
 }: MessageContextMenuProps) {
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Добавляем id и name для инпута поиска в EmojiPicker
+  // Add id and name for search input in EmojiPicker
   useEffect(() => {
     if (!isPickerExpanded || !pickerRef.current) return;
 
@@ -59,10 +59,10 @@ export function MessageContextMenu({
       }
     };
 
-    // Сразу пробуем добавить
+    // Try adding immediately
     addAttributes();
 
-    // Следим за изменениями в DOM
+    // Watch for DOM changes
     const observer = new MutationObserver(addAttributes);
     observer.observe(pickerRef.current, { childList: true, subtree: true });
 
@@ -71,14 +71,14 @@ export function MessageContextMenu({
 
   return (
     <div
-      className="fixed z-[1000] bg-popover/95 backdrop-blur-md border border-border/50 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden w-[260px] h-[320px]"
+      className="fixed z-floating bg-popover/95 backdrop-blur-md border border-border/50 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] animate-in fade-in zoom-in-95 duration-150 flex flex-col overflow-hidden w-64 max-h-[70vh]"
       style={{
         top: data.y,
         left: data.x,
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Панель реакций */}
+      {/* Reactions panel */}
       <div className="flex flex-col border-b border-border/40 shrink-0">
         <div className="flex items-center px-2 py-1 min-h-[46px]">
           <div className="flex flex-1 items-center justify-start gap-0.5">
@@ -95,7 +95,7 @@ export function MessageContextMenu({
               </button>
             ))}
           </div>
-          <div className="w-[1px] h-5 bg-border/40 mx-1" />
+          <div className="border-l border-border/40 h-5 mx-1" />
           <button 
             onClick={() => setIsPickerExpanded(!isPickerExpanded)}
             className="p-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors flex items-center justify-center w-8 h-8 shrink-0"
@@ -106,7 +106,7 @@ export function MessageContextMenu({
       </div>
 
       <div className="relative flex-1 overflow-hidden">
-        {/* Список пунктов меню */}
+        {/* Menu items list */}
         <div className={cn(
           "absolute inset-0 flex flex-col p-1.5 transition-all duration-200 bg-popover/95",
           isPickerExpanded ? "opacity-0 pointer-events-none translate-x-[-10px]" : "opacity-100 translate-x-0"
@@ -157,7 +157,7 @@ export function MessageContextMenu({
                 </button>
               )}
               
-              <div className="h-[1px] bg-border/40 my-1 mx-2" />
+              <div className="border-t border-border/40 my-1 mx-2" />
               
               <button
                 onClick={onDelete}
@@ -170,7 +170,7 @@ export function MessageContextMenu({
           )}
         </div>
 
-        {/* Эмодзи пикер */}
+        {/* Emoji picker */}
         <div 
           ref={pickerRef}
           className={cn(
@@ -198,7 +198,7 @@ export function MessageContextMenu({
                background-color: var(--card) !important;
              }
 
-             /* Стили по умолчанию (Светлая тема) */
+             /* Default styles (Light theme) */
              .EmojiPickerReact {
                background-color: var(--card) !important;
                --epr-bg-color: var(--card) !important;
@@ -209,7 +209,7 @@ export function MessageContextMenu({
                --epr-category-text: #1d4ed8 !important;
              }
 
-             /* Переопределение для Темной темы */
+             /* Override for Dark theme */
              .dark .EmojiPickerReact {
                --epr-category-text: #3b82f6 !important;
              }
@@ -217,7 +217,7 @@ export function MessageContextMenu({
              .epr-body { position: static !important; overflow: visible !important; height: auto !important; padding: 0 12px !important; }
              .epr-header-overlay, .epr-category-nav, .epr-skin-tone-picker { display: none !important; }
               
-              /* Категории (заголовки внутри списка) */
+              /* Categories (headers inside list) */
               .epr-emoji-category-label {
                 position: static !important;
                 display: block !important;
@@ -232,7 +232,7 @@ export function MessageContextMenu({
                  opacity: 1 !important;
                }
 
-               /* Поиск (полное перекрытие всех состояний) */
+               /* Search (full override of all states) */
               .EmojiPickerReact input[aria-label*="search"],
               .EmojiPickerReact input[type="text"] {
                 background-color: var(--epr-search-input-bg-color) !important;
@@ -259,8 +259,6 @@ export function MessageContextMenu({
 
               .EmojiPickerReact::-webkit-scrollbar { display: none !important; }
              .EmojiPickerReact { -ms-overflow-style: none !important; scrollbar-width: none !important; }
-             
-             /* Темизация (уже настроена выше через переменные) */
           `}</style>
           <EmojiPicker
             width="100%"
@@ -272,7 +270,7 @@ export function MessageContextMenu({
             theme={Theme.AUTO}
             emojiStyle={EmojiStyle.APPLE}
             lazyLoadEmojis={true}
-            searchPlaceholder="Поиск..."
+            searchPlaceholder="Search emoji..."
             previewConfig={{ showPreview: false }}
             skinTonesDisabled={true}
             searchDisabled={false}

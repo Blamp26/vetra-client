@@ -45,7 +45,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 }, ref) => {
   const isPhotoOnly = !!msg.media_file_id && (!msg.content || msg.content.trim().length === 0) && !msg.reply_to_id;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
-  const timestamp = formatDate(msg.inserted_at) + " в " + formatTime(msg.inserted_at);
+  const timestamp = formatDate(msg.inserted_at) + " at " + formatTime(msg.inserted_at);
 
   const renderContent = () => {
     const hasMedia = !!msg.media_file_id;
@@ -125,7 +125,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       ref={ref}
       className={cn(
         "flex w-full group/msg",
-        isOwn ? "justify-start max-[1300px]:justify-end max-[1300px]:pr-4" : "justify-start",
+        isOwn ? "justify-start pr-4" : "justify-start",
         selectionMode && "cursor-pointer"
       )}
       onClick={() => selectionMode && onToggleSelection(msg.id)}
@@ -145,11 +145,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "max-w-[85%] max-[1300px]:max-w-[90%] rounded-[1.25rem] flex flex-col justify-center relative group min-w-[110px] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          "max-w-[85%] rounded-[1.25rem] flex flex-col justify-center relative group min-w-[110px] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
           isPhotoOnly 
             ? "bg-transparent shadow-none p-0 overflow-hidden" 
             : cn("px-[1.125rem] py-[0.625rem] shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] ring-1 ring-inset", isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text pr-[2.5rem] ring-black/5 dark:ring-white/[0.08]" : "bg-bubble-incoming text-bubble-incoming-text pr-[3rem] ring-border/40"),
-          isOwn ? "rounded-bl-[4px] max-[1300px]:rounded-bl-[1.25rem] max-[1300px]:rounded-br-[4px]" : "rounded-bl-[4px]",
+          isOwn ? "rounded-bl-[4px]" : "rounded-bl-[4px]",
           selectionMode && isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
         )}
       >

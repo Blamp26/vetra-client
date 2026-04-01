@@ -1,8 +1,4 @@
 // client/src/store/slices/uiSlice.ts
-//
-// УДАЛЕНО: theme, setTheme — переключение тем убрано.
-//          Светлая тема задана статически через CSS-переменные в styles.css.
-// СОХРАНЕНО: activeChat, activeModal, messageReactions и все их экшены.
 
 import { StateCreator } from 'zustand';
 import { ActiveChat, MessageReactionGroup } from '@/shared/types';

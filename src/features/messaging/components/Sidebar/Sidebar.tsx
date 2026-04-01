@@ -118,15 +118,15 @@ export function Sidebar({
                     <p className="max-w-[18rem] text-sm leading-5 text-muted-foreground">
                       {hasItems
                         ? `${allItems.length} conversations ready to open`
-                        : "Start a conversation or create a room to build your inbox."}
+                        : "All your conversations and threads in one place."}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => openModal("CREATE_PICKER")}
                   className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/50 bg-background text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-accent hover:text-foreground active:translate-y-0 active:scale-[0.95] shadow-sm"
-                  aria-label="Новый чат"
-                  title="Начать новый чат"
+                  aria-label="New chat"
+                  title="Start a new chat"
                 >
                   <SquarePen className="h-4 w-4" />
                 </button>
@@ -211,25 +211,38 @@ export function Sidebar({
                   })}
                 </TooltipProvider>
               ) : !isServerMode ? (
-                <div className="rounded-[1.5rem] border border-border/50 bg-muted/20 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-                  <div className="space-y-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-[1rem] bg-primary text-primary-foreground shadow-sm shadow-primary/30">
-                      <SquarePen className="h-4 w-4" />
+                <div className="space-y-3 px-1.5">
+                  {/* MOBILE-ONLY: Full card empty state */}
+                  <div className="lg:hidden rounded-[1.5rem] border border-border/50 bg-muted/20 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                    <div className="space-y-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-[1rem] bg-primary text-primary-foreground shadow-sm shadow-primary/30">
+                        <SquarePen className="h-4 w-4" />
+                      </div>
+                      <div className="space-y-1">
+                        <h2 className="text-base font-semibold tracking-tight text-sidebar-foreground">
+                          Your inbox is empty
+                        </h2>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          Search for a teammate or create a room to start your first thread.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => openModal("CREATE_PICKER")}
+                        className="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-all duration-200 active:scale-95 shadow-sm shadow-primary/20 hover:bg-primary/90"
+                      >
+                        Start a conversation
+                      </button>
                     </div>
-                    <div className="space-y-1">
-                      <h2 className="text-base font-semibold tracking-tight text-sidebar-foreground">
-                        Your inbox is empty
-                      </h2>
-                      <p className="text-sm leading-6 text-muted-foreground">
-                        Search for a teammate or create a room to start your first thread.
-                      </p>
+                  </div>
+
+                  {/* DESKTOP-ONLY: Minimalist placeholder */}
+                  <div className="hidden lg:flex flex-col items-center justify-center py-10 px-4 text-center">
+                    <div className="h-12 w-12 rounded-full bg-muted/30 flex items-center justify-center mb-3">
+                      <SquarePen className="h-5 w-5 text-muted-foreground/40" />
                     </div>
-                    <button
-                      onClick={() => openModal("CREATE_PICKER")}
-                      className="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-all duration-200 active:scale-95 shadow-sm shadow-primary/20 hover:bg-primary/90"
-                    >
-                      Start a conversation
-                    </button>
+                    <span className="text-sm font-medium text-muted-foreground/60">
+                      No conversations yet
+                    </span>
                   </div>
                 </div>
               ) : null}

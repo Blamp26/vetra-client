@@ -261,7 +261,7 @@ interface Props {
 
     if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
       setUploadStatus("error");
-      setUploadError("Разрешены только изображения и видео");
+      setUploadError("Only images and videos are allowed");
       setPendingFile(null);
       return;
     }
@@ -322,12 +322,12 @@ interface Props {
      <div className="flex flex-col bg-background/80 backdrop-blur-2xl border-t border-white/5 dark:border-white/[0.02] flex-shrink-0 shadow-[0_-8px_30px_-15px_rgba(0,0,0,0.05)] relative z-20"> 
        {/* EDIT BAR */}
        {isEditing && ( 
-         <div className="flex items-center justify-between bg-muted/20 border-b border-white/5 px-4 max-[1300px]:px-6 py-2.5 gap-2 animate-in slide-in-from-bottom-2 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"> 
+         <div className="flex items-center justify-between bg-muted/20 border-b border-white/5 px-6 py-2.5 gap-2 animate-in slide-in-from-bottom-2 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"> 
            <div className="flex items-center gap-3 min-w-0 flex-1">
              <div className="w-1 h-7 bg-primary rounded-full shrink-0" />
              <div className="flex flex-col gap-0 min-w-0"> 
                <span className="text-[0.78rem] font-semibold text-primary leading-tight">
-                 Редактирование
+                 Editing
                </span> 
                <span className="text-[0.82rem] text-muted-foreground truncate leading-tight"> 
                  <EmojiText text={editingMessage!.content} /> 
@@ -337,7 +337,7 @@ interface Props {
            <button 
              className="text-muted-foreground hover:text-destructive transition-colors p-1" 
              onClick={cancelEditing} 
-             title="Отмена" 
+             title="Cancel" 
            > 
              <X className="h-4 w-4" />
            </button> 
@@ -346,7 +346,7 @@ interface Props {
  
        {/* REPLY BAR */}
        {replyTo && !isEditing && ( 
-        <div className="flex items-center justify-between bg-muted/20 border-b border-border/20 px-4 max-[1300px]:px-6 py-2.5 gap-2 animate-in slide-in-from-bottom-2 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]">
+        <div className="flex items-center justify-between bg-muted/20 border-b border-border/20 px-6 py-2.5 gap-2 animate-in slide-in-from-bottom-2 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-1 h-7 bg-primary rounded-full shrink-0" />
             <div className="flex flex-col gap-0 min-w-0">
@@ -361,7 +361,7 @@ interface Props {
           <button 
             className="text-muted-foreground hover:text-destructive transition-colors p-1" 
             onClick={onCancelReply} 
-            title="Отмена" 
+            title="Cancel" 
           > 
             <X className="h-4 w-4" />
           </button>
@@ -370,7 +370,7 @@ interface Props {
 
        {/* PREVIEW BAR */}
        {previewUrl && (
-         <div className="px-4 max-[1300px]:px-6 pt-3 flex items-center gap-3 animate-in slide-in-from-bottom-2 duration-200">
+         <div className="px-6 pt-3 flex items-center gap-3 animate-in slide-in-from-bottom-2 duration-200">
            <div className="relative group">
              {pendingFile?.type.startsWith("image/") ? (
                <img src={previewUrl} className="w-16 h-16 rounded-lg object-cover border border-border" alt="preview" />
@@ -395,7 +395,7 @@ interface Props {
 
        {/* UPLOAD PROGRESS / ERROR */}
        {uploadStatus !== "idle" && (
-        <div className="px-4 py-2 bg-muted/30 border-b border-border/50 mt-2">
+        <div className="px-6 py-2 bg-muted/30 border-b border-border/50 mt-2">
           {uploadStatus === "uploading" ? (
             <div className="flex items-center gap-3">
               <div className="flex-1 h-1 bg-border rounded-full overflow-hidden">
@@ -406,16 +406,16 @@ interface Props {
           ) : (
             <div className="flex items-center justify-between gap-2">
               <span className="text-[11px] text-destructive font-medium truncate">{uploadError}</span>
-              <button onClick={handleRetryUpload} className="text-[11px] font-semibold text-primary hover:underline shrink-0">Повторить</button>
+              <button onClick={handleRetryUpload} className="text-[11px] font-semibold text-primary hover:underline shrink-0">Retry</button>
             </div>
           )}
         </div>
        )}
  
-       <div className="p-3 pl-4 max-[1300px]:px-5 pb-4 relative">
+       <div className="p-3 px-6 pb-4 relative">
          <div className="flex items-end gap-2">
             <button 
-              className="inline-flex items-center justify-center rounded-[1rem] text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 size-[2.625rem] h-[2.625rem] w-[2.625rem] shrink-0 text-muted-foreground hover:text-foreground shadow-sm ring-1 ring-inset ring-transparent hover:ring-border/50"
+              className="inline-flex items-center justify-center rounded-[1rem] text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 size-[2.625rem] shrink-0 text-muted-foreground hover:text-foreground shadow-sm ring-1 ring-inset ring-transparent hover:ring-border/50"
               onClick={handleAttachClick}
               disabled={disabled || isSending || isEditing || isUploading}
               type="button"
@@ -438,7 +438,7 @@ interface Props {
                 id="message-content-input"
                 name="content"
                 className="file:text-foreground placeholder:text-muted-foreground/60 selection:bg-primary/20 selection:text-primary bg-muted/40 hover:bg-muted/60 focus:bg-muted/80 ring-1 ring-inset ring-border/20 focus:ring-primary/50 w-full min-w-0 rounded-[1.25rem] px-5 py-2.5 text-[0.9375rem] leading-[1.4] transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] outline-none resize-none pr-[2.75rem] min-h-[42px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
-                placeholder="Напишите сообщение..."
+                placeholder="Write a message..."
                 value={content}
                 onChange={(e) => handleChange(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -581,7 +581,7 @@ interface Props {
 
             <button 
               className={cn(
-                "inline-flex items-center justify-center rounded-[1rem] text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] size-[2.625rem] h-[2.625rem] w-[2.625rem] shrink-0",
+                "inline-flex items-center justify-center rounded-[1rem] text-sm font-medium transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] size-[2.625rem] shrink-0",
                 (content.trim() || pendingFile) ? "bg-primary text-primary-foreground hover:scale-[1.03] active:scale-95 shadow-[0_8px_20px_-8px_var(--tw-shadow-color)] shadow-primary/40 ring-1 ring-inset ring-black/10 dark:ring-white/10" : "bg-muted/50 text-muted-foreground/30 ring-1 ring-inset ring-border/50 cursor-not-allowed"
               )}
               onClick={handleSend}

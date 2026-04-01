@@ -29,10 +29,10 @@ interface ReplyTarget {
 
 function TypingIndicator({ nickname }: { nickname: string }) {
   return (
-    <div className="flex min-h-[40px] flex-shrink-0 items-center px-6 pb-2 pt-1 max-[1300px]:px-6 z-10">
+    <div className="flex min-h-[40px] flex-shrink-0 items-center px-6 pb-2 pt-1 z-10">
       <div className="inline-flex items-center gap-2 rounded-full border border-white/5 dark:border-white/10 bg-card/60 backdrop-blur-xl px-3.5 py-1.5 text-xs text-muted-foreground shadow-[0_8px_30px_-12px_rgba(0,0,0,0.12)] ring-1 ring-inset ring-black/5 dark:ring-white/5 transition-all animate-in fade-in slide-in-from-bottom-2 duration-300">
         <span className="font-semibold text-foreground tracking-tight">{nickname}</span>
-        <span className="opacity-80">печатает</span>
+        <span className="opacity-80">is typing</span>
         <span className="ml-0.5 inline-flex items-center gap-1">
           <span className="h-1 w-1 rounded-full bg-primary/80 animate-bounce" />
           <span className="h-1 w-1 rounded-full bg-primary/80 animate-bounce [animation-delay:0.2s]" />
@@ -160,7 +160,7 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
       })();
 
       return (
-        <div className="flex z-20 items-center justify-between border-b border-border/40 bg-background/60 pl-6 py-4 backdrop-blur-2xl shadow-[0_1px_0_0_rgba(255,255,255,0.03)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.02)] max-[1300px]:px-6">
+        <div className="flex z-20 items-center justify-between border-b border-border/40 bg-background/60 px-6 py-4 backdrop-blur-2xl shadow-[0_1px_0_0_rgba(255,255,255,0.03)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.02)]">
           <div className="flex items-center gap-3">
             <Avatar 
               name={partner.display_name || partner.username} 
@@ -204,7 +204,7 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
       const roomId = activeChat.roomId;
       const roomPreview = roomPreviews[roomId];
       return (
-        <div className="flex z-20 items-center justify-between border-b border-border/40 bg-background/60 pl-6 py-4 backdrop-blur-2xl shadow-[0_1px_0_0_rgba(255,255,255,0.03)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.02)] max-[1300px]:px-6">
+        <div className="flex z-20 items-center justify-between border-b border-border/40 bg-background/60 px-6 py-4 backdrop-blur-2xl shadow-[0_1px_0_0_rgba(255,255,255,0.03)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.02)]">
           <div className="flex items-center gap-3">
             <Avatar 
               name={roomPreview?.name || `#${roomId}`} 
@@ -235,10 +235,10 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-background/50 relative">
-      <div className="absolute inset-0 pointer-events-none z-0 opacity-[0.03] dark:opacity-[0.02] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.85\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\'/%3E%3C/svg%3E")' }} />
+      <div className="absolute inset-0 pointer-events-none z-0 opacity-[0.03] dark:opacity-[0.02] mix-blend-overlay bg-noise" />
       {renderHeader()}
 
-      <div dir="ltr" className="relative flex-1 overflow-hidden pl-6 max-[1300px]:px-6">
+      <div dir="ltr" className="relative flex-1 overflow-hidden px-6">
         <MessageList
           key={chatId}
           messages={messages}

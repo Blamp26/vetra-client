@@ -20,7 +20,7 @@ export function useServerMembers(serverId: number | null) {
       const data = await serversApi.getMembers(serverId);
       setMembers(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки участников");
+      setError(e instanceof Error ? e.message : "Error loading members");
     } finally {
       setIsLoading(false);
     }
@@ -35,7 +35,7 @@ export function useServerMembers(serverId: number | null) {
 
     const unsubAdded = socketManager.onServerMemberAdded((payload) => {
       if (payload.server_id === serverId) {
-        load(); // Просто перегружаем список для простоты
+        load(); // Simply reload the list for simplicity
       }
     });
 
@@ -67,7 +67,7 @@ export function useServerMembers(serverId: number | null) {
         await serversApi.removeMember(serverId, userId);
         setMembers((prev) => prev.filter((m) => m.user_id !== userId));
       } catch (err: any) {
-        // Если пользователь уже удален (404), просто обновляем локальный список
+        // If user is already removed (404), just update local list
         if (err?.status === 404 || err?.message?.includes("404")) {
           setMembers((prev) => prev.filter((m) => m.user_id !== userId));
         } else {

@@ -6,8 +6,8 @@ interface AuthenticatedImageProps extends React.ImgHTMLAttributes<HTMLImageEleme
 }
 
 /**
- * Компонент для загрузки изображений с Bearer-токеном.
- * Реализует ручную ленивую загрузку (lazy loading) через IntersectionObserver.
+ * Component for loading images with a Bearer token.
+ * Implements manual lazy loading via IntersectionObserver.
  */
 export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...props }) => {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
@@ -16,7 +16,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...
   const containerRef = useRef<HTMLDivElement>(null);
   const authToken = useAppStore((s) => s.authToken);
 
-  // Intersection Observer для ленивой загрузки
+  // Intersection Observer for lazy loading
   useEffect(() => {
     if (objectUrl || error || isInView) return;
 
@@ -27,7 +27,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...
           observer.disconnect();
         }
       },
-      { rootMargin: '200px' } // Начинаем загрузку за 200px до появления в области видимости
+      { rootMargin: '200px' } // Start loading 200px before appearing in viewport
     );
 
     if (containerRef.current) {

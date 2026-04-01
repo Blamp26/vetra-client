@@ -1,6 +1,6 @@
 /**
- * Возвращает время (HH:MM) если дата сегодня, иначе дату (MMM DD).
- * Внутренний хелпер; используется formatPreviewTime и formatLastSeen.
+ * Returns time (HH:MM) if the date is today, otherwise date (MMM DD).
+ * Internal helper; used by formatPreviewTime and formatLastSeen.
  */
 function timeOrDate(iso: string): { formatted: string; isToday: boolean } {
   const date = new Date(iso);
@@ -12,8 +12,8 @@ function timeOrDate(iso: string): { formatted: string; isToday: boolean } {
 }
 
 /**
- * Используется в Sidebar для превью последнего сообщения.
- * null/undefined → пустая строка.
+ * Used in Sidebar for the last message preview.
+ * null/undefined → empty string.
  */
 export function formatPreviewTime(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -31,7 +31,7 @@ export function formatLastSeen(iso: string | null | undefined): string {
 }
 
 /**
- * Форматирует секунды в MM:SS (для звонков).
+ * Formats seconds into MM:SS (for calls).
  */
 export function formatCallTime(totalSeconds: number): string {
   const mins = Math.floor(totalSeconds / 60);

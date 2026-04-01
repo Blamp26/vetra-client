@@ -69,11 +69,11 @@ export function SidebarFooter({
         {(callStatus === 'active' || callStatus === 'calling' || callStatus === 'ringing') && (
           <div className="mb-3 flex items-center justify-between rounded-[1.2rem] border border-border/70 bg-background/80 px-2.5 py-2">
             <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-online/10 text-online">
                 <Rss className="h-4 w-4" aria-hidden="true" />
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="text-xs font-medium text-emerald-500 truncate">
+                <span className="text-xs font-medium text-online truncate">
                   {callStatus === 'active' ? 'Voice Connected' : 
                    callStatus === 'calling' ? 'Calling...' : 'Incoming call'}
                 </span>
@@ -91,7 +91,7 @@ export function SidebarFooter({
                   <button 
                     onClick={onAcceptCall}
                     title="Accept call"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 text-white transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.96]"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-online text-white transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.96]"
                   >
                     <Phone className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -108,9 +108,9 @@ export function SidebarFooter({
               {(callStatus === 'active' || callStatus === 'calling') && (
                 <>
                   <div className="flex items-end gap-0.5 h-3 px-1">
-                    <div className="w-0.5 bg-emerald-500 rounded-full animate-pulse" style={{ height: "8px", animationDelay: "100ms", animationDuration: "400ms" }}></div>
-                    <div className="w-0.5 bg-emerald-500 rounded-full animate-pulse" style={{ height: "12px", animationDelay: "200ms", animationDuration: "400ms" }}></div>
-                    <div className="w-0.5 bg-emerald-500 rounded-full animate-pulse" style={{ height: "6px", animationDelay: "300ms", animationDuration: "400ms" }}></div>
+                    <div className="w-0.5 bg-online rounded-full animate-pulse h-2 [animation-delay:100ms] [animation-duration:400ms]"></div>
+                    <div className="w-0.5 bg-online rounded-full animate-pulse h-3 [animation-delay:200ms] [animation-duration:400ms]"></div>
+                    <div className="w-0.5 bg-online rounded-full animate-pulse h-1.5 [animation-delay:300ms] [animation-duration:400ms]"></div>
                   </div>
                   <button 
                     onClick={() => callStatus === 'calling' ? onHangUp() : setConfirmHangUp(true)}

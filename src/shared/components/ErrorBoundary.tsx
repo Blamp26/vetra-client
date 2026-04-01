@@ -26,16 +26,16 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: "20px", color: "var(--error, red)", background: "var(--bg-primary, #111)", height: "100vh" }}>
-          <h2>Упс, что-то сломалось в интерфейсе 🤕</h2>
-          <details style={{ whiteSpace: "pre-wrap", marginTop: "10px", color: "var(--text-secondary, #ccc)" }}>
+        <div className="flex h-screen flex-col items-center justify-center bg-background p-8 text-destructive">
+          <h2 className="text-xl font-bold tracking-tight">Oops, something broke in the interface 🤕</h2>
+          <details className="mt-4 max-w-full overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/50 p-4 text-xs text-muted-foreground">
             {this.state.error?.toString()}
           </details>
           <button
             onClick={() => window.location.reload()}
-            style={{ marginTop: "20px", padding: "8px 16px", cursor: "pointer" }}
+            className="mt-6 inline-flex h-10 items-center justify-center rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all hover:opacity-90 active:scale-95"
           >
-            Перезагрузить приложение
+            Reload Application
           </button>
         </div>
       );
