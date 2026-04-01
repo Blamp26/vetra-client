@@ -66,75 +66,66 @@ export function MessageContextMenu({
   return (
     <div
       className="fixed z-floating bg-popover border border-border flex flex-col w-64"
-      style={{
-        top: data.y,
-        left: data.x,
-      }}
+      style={{ top: data.y, left: data.x }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Reactions panel */}
-      <div className="flex flex-col border-b border-border">
-        <div className="flex items-center px-1 py-1">
-          <div className="flex flex-1 items-center justify-start gap-1">
-            {EMOJIS.map((e) => (
-              <button
-                key={e}
-                onClick={() => {
-                  onToggleReaction(data.msgId, e);
-                  onClose();
-                }}
-                className="bg-transparent border border-transparent p-1 flex items-center justify-center hover:border-border"
-              >
-                <Emoji emoji={e} size={18} />
-              </button>
-            ))}
-          </div>
-          <div className="border-l border-border h-4 mx-1" />
-          <button 
-            onClick={() => setIsPickerExpanded(!isPickerExpanded)}
-            className="p-1 text-muted-foreground hover:text-foreground"
-          >
-            {isPickerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+      {/* Reactions bar */}
+      <div className="flex items-center border-b border-border px-1 py-1">
+        <div className="flex flex-1 items-center gap-1">
+          {EMOJIS.map((e) => (
+            <button
+              key={e}
+              onClick={() => { onToggleReaction(data.msgId, e); onClose(); }}
+              className="p-1 flex items-center justify-center hover:bg-accent"
+            >
+              <Emoji emoji={e} size={18} />
+            </button>
+          ))}
         </div>
+        <div className="border-l border-border h-4 mx-1" />
+        <button
+          onClick={() => setIsPickerExpanded(!isPickerExpanded)}
+          className="p-1 text-muted-foreground hover:text-foreground"
+        >
+          {isPickerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
       </div>
 
       <div className="relative min-h-[200px]">
-        {/* Menu items list */}
         {!isPickerExpanded && (
           <div className="flex flex-col p-1">
             <button
               onClick={() => { onReply(); onClose(); }}
-              className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
+              className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
             >
               <Reply className="h-4 w-4 mr-3 text-muted-foreground" />
-              <span>Reply</span>
+              Reply
             </button>
-            
+
             {data.hasText && (
               <button
                 onClick={() => { onCopy(); onClose(); }}
-                className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
+                className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
               >
                 <Copy className="h-4 w-4 mr-3 text-muted-foreground" />
-                <span>Copy</span>
+                Copy
               </button>
             )}
 
             <button
               onClick={() => { onForward(); onClose(); }}
-              className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
+              className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
             >
               <Forward className="h-4 w-4 mr-3 text-muted-foreground" />
-              <span>Forward</span>
+              Forward
             </button>
 
             <button
               onClick={() => { onSelect(); onClose(); }}
-              className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
+              className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
             >
               <CheckSquare className="h-4 w-4 mr-3 text-muted-foreground" />
-              <span>Select</span>
+              Select
             </button>
 
             {data.isOwn && (
@@ -142,57 +133,29 @@ export function MessageContextMenu({
                 {canEdit && (
                   <button
                     onClick={() => { onEdit(); onClose(); }}
-                    className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-popover-foreground text-sm hover:bg-accent"
+                    className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
                   >
                     <Edit2 className="h-4 w-4 mr-3 text-muted-foreground" />
-                    <span>Edit</span>
+                    Edit
                   </button>
                 )}
-                
+
                 <div className="border-t border-border my-1" />
-                
+
                 <button
                   onClick={() => { onDelete(); onClose(); }}
-                  className="flex items-center w-full px-3 py-2 text-left bg-transparent border-none text-destructive text-sm hover:bg-destructive/10"
+                  className="flex items-center w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
                 >
-                  <Trash2 className="h-4 w-4 mr-3 text-destructive" />
-                  <span>Delete</span>
+                  <Trash2 className="h-4 w-4 mr-3" />
+                  Delete
                 </button>
               </>
             )}
           </div>
         )}
 
-        {/* Emoji picker */}
         {isPickerExpanded && (
-          <div 
-            ref={pickerRef}
-            className="h-[300px] bg-popover"
-          >
-            <style>{`
-              .EmojiPickerReact { 
-                border: none !important; 
-                box-shadow: none !important; 
-                display: block !important;
-                height: 100% !important;
-                background: transparent !important;
-              }
-              .epr-main { display: block !important; }
-              .epr-header { padding: 8px !important; background: var(--card) !important; }
-              .epr-search-container { background-color: var(--card) !important; }
-              .EmojiPickerReact {
-                --epr-bg-color: var(--card) !important;
-                --epr-category-label-bg-color: var(--card) !important;
-                --epr-text-color: var(--foreground) !important;
-                --epr-search-input-bg-color: var(--muted) !important;
-                --epr-search-input-text-color: var(--foreground) !important;
-              }
-              .epr-body { padding: 0 8px !important; }
-              .epr-header-overlay, .epr-category-nav, .epr-skin-tone-picker { display: none !important; }
-              .epr-emoji-category-label { position: static !important; font-size: 10px !important; font-weight: bold !important; text-transform: uppercase !important; }
-              .EmojiPickerReact input { border: 1px solid var(--border) !important; }
-              .EmojiPickerReact::-webkit-scrollbar { display: none !important; }
-            `}</style>
+          <div ref={pickerRef} className="h-[300px]">
             <EmojiPicker
               width="100%"
               height="100%"

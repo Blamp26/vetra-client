@@ -30,12 +30,11 @@ export const ActiveCallWindow = ({
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-background/50 z-modal">
       <div className="flex flex-col items-center gap-4 p-8 bg-card border border-border min-w-[280px]">
-        
-        <div className="w-20 h-20 bg-primary flex items-center justify-center border border-border relative">
+
+        <div className="w-20 h-20 bg-primary flex items-center justify-center border border-border">
           <span className="text-2xl font-normal text-primary-foreground select-none">
             {remoteUsername.charAt(0).toUpperCase()}
           </span>
-          <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-online border border-background" />
         </div>
 
         <div className="text-center space-y-1">
@@ -51,7 +50,7 @@ export const ActiveCallWindow = ({
         <div className="flex gap-4 mt-2">
           <button
             className={cn(
-              "w-12 h-12 border border-border cursor-pointer flex items-center justify-center",
+              "w-12 h-12 border border-border flex items-center justify-center",
               isMuted ? "bg-destructive text-destructive-foreground" : "bg-background text-foreground"
             )}
             onClick={onMuteToggle}
@@ -76,7 +75,7 @@ export const ActiveCallWindow = ({
           </button>
 
           <button
-            className="w-12 h-12 border border-border cursor-pointer flex items-center justify-center bg-destructive text-destructive-foreground"
+            className="w-12 h-12 border border-border flex items-center justify-center bg-destructive text-destructive-foreground"
             onClick={onHangUp}
             aria-label="Hang Up"
           >

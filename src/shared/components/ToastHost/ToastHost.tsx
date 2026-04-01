@@ -44,17 +44,15 @@ export function ToastHost() {
       className="fixed left-6 bottom-24 z-toast pointer-events-none"
       aria-live="polite"
     >
-      <div
-        className="max-w-[340px] bg-card/60 backdrop-blur-3xl border border-white/10 dark:border-white/5 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.3)] rounded-[1.5rem] p-4 px-5 pointer-events-auto ring-1 ring-inset ring-white/10 animate-in slide-in-from-bottom-8 fade-in duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]"
-      >
+      <div className="max-w-[340px] bg-card border border-border p-4 pointer-events-auto">
         <div className="flex items-start gap-3">
-          <div className="w-1.5 h-6 rounded-full bg-primary mt-0.5 shrink-0" />
+          <div className="w-1 self-stretch bg-primary shrink-0" />
           <div className="flex flex-col gap-0.5">
-            <div className="font-extrabold text-[0.9rem] text-foreground tracking-tight leading-tight">
+            <div className="text-sm text-foreground">
               {toast.title}
             </div>
             {toast.body && (
-              <div className="text-[0.8rem] font-medium text-muted-foreground/80 leading-snug">
+              <div className="text-xs text-muted-foreground">
                 {toast.body}
               </div>
             )}
@@ -64,4 +62,3 @@ export function ToastHost() {
     </div>
   );
 }
-

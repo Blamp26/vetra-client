@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { Avatar } from "@/shared/components/Avatar";
 import { cn } from "@/shared/utils/cn";
-import { Video, MonitorUp, Settings, Mic, MicOff, Headphones, HeadphoneOff, Phone, PhoneOff, Rss } from "lucide-react";
+import { Settings, Mic, MicOff, Headphones, HeadphoneOff, Phone, PhoneOff } from "lucide-react";
 import type { CallStatus } from "@/features/calling/hooks/useCall.types";
 import { ProfileModal } from "@/features/profile/components/ProfileModal/ProfileModal";
 import { ConfirmModal } from "@/shared/components/ConfirmModal/ConfirmModal";
@@ -50,14 +50,14 @@ export function SidebarFooter({
   const statusText = useMemo(() => {
     if (!soundEnabled) return "Sound muted";
     if (!micEnabled) return "Microphone muted";
-    
+
     const statusMap: Record<string, string> = {
       online: "Online",
       away: "Away",
       dnd: "Do Not Disturb",
       offline: "Offline"
     };
-    
+
     return statusMap[currentStatus] || "Offline";
   }, [micEnabled, soundEnabled, currentStatus]);
 
@@ -66,34 +66,29 @@ export function SidebarFooter({
   return (
     <div className="border-t border-border bg-card p-2">
       <div className="flex flex-col gap-2">
+
         {(callStatus === 'active' || callStatus === 'calling' || callStatus === 'ringing') && (
           <div className="flex items-center justify-between border border-border p-2 bg-background">
-            <div className="flex items-center gap-2">
-              <Rss className="h-4 w-4 text-online" />
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs text-online truncate">
-                  {callStatus === 'active' ? 'Connected' : 
-                   callStatus === 'calling' ? 'Calling...' : 'In-call'}
-                </span>
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground truncate">{remoteUsername || "User"}</span>
-                  {callStatus === 'active' && (
-                    <span className="text-[10px] text-muted-foreground">({formatCallTime(callSeconds)})</span>
-                  )}
-                </div>
-              </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs text-muted-foreground">
+                {callStatus === 'active'
+                  ? `${remoteUsername || "User"} · ${formatCallTime(callSeconds)}`
+                  : callStatus === 'calling'
+                  ? `Calling ${remoteUsername || "User"}...`
+                  : `Incoming · ${remoteUsername || "User"}`}
+              </span>
             </div>
             <div className="flex items-center gap-1">
               {callStatus === 'ringing' && (
                 <>
-                  <button 
+                  <button
                     onClick={onAcceptCall}
                     title="Accept"
                     className="flex h-7 w-7 items-center justify-center bg-online text-white"
                   >
                     <Phone className="h-4 w-4" />
                   </button>
-                  <button 
+                  <button
                     onClick={onRejectCall}
                     title="Reject"
                     className="flex h-7 w-7 items-center justify-center bg-destructive text-destructive-foreground"
@@ -102,9 +97,8 @@ export function SidebarFooter({
                   </button>
                 </>
               )}
-
               {(callStatus === 'active' || callStatus === 'calling') && (
-                <button 
+                <button
                   onClick={() => callStatus === 'calling' ? onHangUp() : setConfirmHangUp(true)}
                   title="Hang up"
                   className="flex h-7 w-7 items-center justify-center bg-destructive text-destructive-foreground"
@@ -116,27 +110,12 @@ export function SidebarFooter({
           </div>
         )}
 
-        <div className="flex gap-1">
-          <button 
-            disabled 
-            className="flex h-8 flex-1 items-center justify-center border border-border bg-background text-muted-foreground opacity-50"
-          >
-            <Video className="h-4 w-4" />
-          </button>
-          <button 
-            disabled 
-            className="flex h-8 flex-1 items-center justify-center border border-border bg-background text-muted-foreground opacity-50"
-          >
-            <MonitorUp className="h-4 w-4" />
-          </button>
-        </div>
-
         <div className="flex items-center justify-between border border-border bg-background p-1.5">
           <div className="flex cursor-pointer items-center gap-2" onClick={() => setShowProfile(true)}>
-            <Avatar 
-              name={displayName} 
-              src={currentUser?.avatar_url} 
-              className="h-7 w-7 text-[10px]" 
+            <Avatar
+              name={displayName}
+              src={currentUser?.avatar_url}
+              className="h-7 w-7 text-[10px]"
               status={currentStatus as any}
             />
             <div className="flex flex-col min-w-0">
@@ -150,9 +129,9 @@ export function SidebarFooter({
               )}>{statusText}</span>
             </div>
           </div>
-          
+
           <div className="flex items-center">
-            <button 
+            <button
               onClick={() => {
                 toggleMic();
                 if (callStatus === 'active' && onMuteToggle) {
@@ -164,14 +143,14 @@ export function SidebarFooter({
             >
               {isMicMuted ? <MicOff className="h-3.5 w-3.5 text-destructive" /> : <Mic className="h-3.5 w-3.5" />}
             </button>
-            <button 
+            <button
               onClick={() => toggleSound()}
               title="Sound"
               className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:bg-accent"
             >
               {soundEnabled ? <Headphones className="h-3.5 w-3.5" /> : <HeadphoneOff className="h-3.5 w-3.5 text-destructive" />}
             </button>
-            <button 
+            <button
               onClick={onOpenSettings}
               title="Settings"
               className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:bg-accent"

@@ -27,15 +27,15 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="flex h-screen flex-col items-center justify-center bg-background p-8 text-destructive">
-          <h2 className="text-xl font-bold tracking-tight">Oops, something broke in the interface 🤕</h2>
-          <details className="mt-4 max-w-full overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/50 p-4 text-xs text-muted-foreground">
+          <h2 className="text-xl font-normal">Something went wrong</h2>
+          <details className="mt-4 max-w-full overflow-auto whitespace-pre-wrap border border-border bg-muted p-4 text-xs text-muted-foreground">
             {this.state.error?.toString()}
           </details>
           <button
             onClick={() => window.location.reload()}
-            className="mt-6 inline-flex h-10 items-center justify-center rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all hover:opacity-90 active:scale-95"
+            className="mt-6 px-6 py-2 bg-primary text-primary-foreground text-sm border border-primary"
           >
-            Reload Application
+            Reload
           </button>
         </div>
       );

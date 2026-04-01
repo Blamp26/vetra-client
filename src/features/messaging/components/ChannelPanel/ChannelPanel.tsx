@@ -27,16 +27,16 @@ export function ChannelPanel({ serverId }: Props) {
   const channelUnread        = useAppStore((s: RootState) => s.channelUnread);
   const resetChannelUnread   = useAppStore((s: RootState) => s.resetChannelUnread);
 
-  const [showCreate,     setShowCreate]     = useState(false);
-  const [showSettings,   setShowSettings]   = useState(false);
-  const [newChannelName, setNewChannelName] = useState("");
-  const [isCreating,     setIsCreating]     = useState(false);
-  const [createError,    setCreateError]    = useState<string | null>(null);
+  const [showCreate,      setShowCreate]      = useState(false);
+  const [showSettings,    setShowSettings]    = useState(false);
+  const [newChannelName,  setNewChannelName]  = useState("");
+  const [isCreating,      setIsCreating]      = useState(false);
+  const [createError,     setCreateError]     = useState<string | null>(null);
   const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleting,      setIsDeleting]      = useState(false);
 
   const server    = servers[serverId];
-  const isOwner = currentUser?.id === server?.created_by;
+  const isOwner   = currentUser?.id === server?.created_by;
   const channels  = serverChannels[serverId];
   const isLoading = channelsLoading[serverId] ?? false;
 
@@ -107,10 +107,10 @@ export function ChannelPanel({ serverId }: Props) {
     setIsDeleting(true);
     try {
       await roomsApi.delete(channelToDelete.id);
-      
+
       const updatedChannels = (serverChannels[serverId] || []).filter(ch => ch.id !== channelToDelete.id);
       setServerChannels(serverId, updatedChannels);
-      
+
       if (activeChat?.type === "channel" && activeChat.channelId === channelToDelete.id) {
         setActiveChat(null);
       }
@@ -132,14 +132,11 @@ export function ChannelPanel({ serverId }: Props) {
     <>
       <div className="w-[320px] bg-background border-r border-border flex-shrink-0 flex flex-col overflow-hidden h-full">
         {/* Header */}
-        <div className="p-4 border-b border-border bg-muted/20 flex-shrink-0 flex items-center justify-between">
+        <div className="p-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-             <div className="relative">
-              <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-normal inline-flex items-center justify-center shrink-0 border border-border">
-                {server?.name?.[0]?.toUpperCase() ?? "?"}
-              </span>
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-online border border-background" />
-            </div>
+            <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-normal inline-flex items-center justify-center shrink-0 border border-border">
+              {server?.name?.[0]?.toUpperCase() ?? "?"}
+            </span>
             <span className="text-sm font-normal truncate text-foreground">
               {server?.name ?? "Server"}
             </span>
@@ -169,7 +166,7 @@ export function ChannelPanel({ serverId }: Props) {
 
         {/* Inline create form */}
         {showCreate && (
-          <div className="p-4 border-b border-border bg-muted/10 flex-shrink-0">
+          <div className="p-4 border-b border-border flex-shrink-0">
             {createError && (
               <div className="bg-destructive/10 border border-destructive/20 p-2 text-destructive text-[10px] mb-2">
                 {createError}
@@ -225,10 +222,9 @@ export function ChannelPanel({ serverId }: Props) {
                     <button
                       className={cn(
                         "flex items-center gap-2 w-full p-2 text-left text-sm border",
-                        activeChannelId === ch.id 
-                          ? "bg-accent border-border text-foreground" 
-                          : "bg-transparent border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                        hasUnread && "font-normal text-foreground"
+                        activeChannelId === ch.id
+                          ? "bg-accent border-border text-foreground"
+                          : "bg-transparent border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       )}
                       onClick={() => handleChannelClick(ch.id)}
                     >
@@ -238,10 +234,10 @@ export function ChannelPanel({ serverId }: Props) {
                         <div className="w-1.5 h-1.5 bg-primary shrink-0" />
                       )}
                     </button>
-                    
+
                     {isOwner && (
                       <button
-                        className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center bg-destructive/10 text-destructive border border-transparent opacity-0 group-hover/channel:opacity-100 hover:bg-destructive hover:text-white"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-destructive opacity-0 group-hover/channel:opacity-100 hover:bg-destructive hover:text-white"
                         onClick={(e) => {
                           e.stopPropagation();
                           setChannelToDelete(ch);
