@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vite
 import { renderHook, act } from '@testing-library/react';
 import { useCall } from './useCall';
 import { useAppStore } from "@/store";
+import { callSignalingService } from '../services/callSignalingService';
 
 // ----------------------------------------------------------------------
 // Моки модулей
@@ -15,10 +16,25 @@ vi.mock('../services/webrtcService', () => {
         this.startCall = vi.fn().mockResolvedValue(undefined);
         this.acceptCall = vi.fn().mockResolvedValue(undefined);
         this.handleAnswer = vi.fn().mockResolvedValue(undefined);
+        this.collectDiagnostics = vi.fn().mockResolvedValue({
+            connectionState: 'unknown',
+            iceConnectionState: 'unknown',
+            iceGatheringState: 'unknown',
+            signalingState: 'unknown',
+            selectedCandidatePair: null,
+        });
         this.addIceCandidate = vi.fn();
         this.hangUp = vi.fn();
         this.onRemoteStream = null;
         this.onCallIdReceived = null;
+        this.onDiagnosticsChange = null;
+        this.getDiagnosticsSnapshot = vi.fn().mockReturnValue({
+            connectionState: 'unknown',
+            iceConnectionState: 'unknown',
+            iceGatheringState: 'unknown',
+            signalingState: 'unknown',
+            selectedCandidatePair: null,
+        });
         this.localStream = null;
         return this;
     });
@@ -48,16 +64,19 @@ const createMockChannel = () => ({
         }),
     }),
     leave: vi.fn(),
+    off: vi.fn(),
 });
 
 beforeEach(() => {
+    callSignalingService.disconnect();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     vi.useFakeTimers();
 
     MockWebRTCService.mockClear();
 
     mockUserChannel = {
-        on: vi.fn(),
+        on: vi.fn().mockReturnValue(101),
         push: vi.fn(),
         off: vi.fn(),
     };
@@ -146,7 +165,42 @@ describe('useCall', () => {
         expect(callChannel.on).toHaveBeenCalledWith('offer', expect.any(Function));
 
         unmount();
-        expect(callChannel.leave).toHaveBeenCalled();
+        expect(callChannel.leave).not.toHaveBeenCalled();
+    });
+
+    it('does not duplicate signaling listeners for the same socket initialization', () => {
+        callSignalingService.initialize(mockSocketManager.socket, mockUserChannel, currentUserId);
+
+        const firstCallChannel = mockSocketManager.socket.channel.mock.results[0].value;
+        expect(firstCallChannel.on).toHaveBeenCalledTimes(4);
+        expect(mockUserChannel.on).toHaveBeenCalledTimes(1);
+
+        callSignalingService.initialize(mockSocketManager.socket, mockUserChannel, currentUserId);
+
+        expect(mockSocketManager.socket.channel).toHaveBeenCalledTimes(1);
+        expect(firstCallChannel.on).toHaveBeenCalledTimes(4);
+        expect(mockUserChannel.on).toHaveBeenCalledTimes(1);
+    });
+
+    it('rebinds signaling listeners when a new socket is created for the same user', () => {
+        callSignalingService.initialize(mockSocketManager.socket, mockUserChannel, currentUserId);
+
+        const firstCallChannel = mockSocketManager.socket.channel.mock.results[0].value;
+        const nextUserChannel = {
+            on: vi.fn().mockReturnValue(202),
+            push: vi.fn(),
+            off: vi.fn(),
+        };
+        const nextCallChannel = createMockChannel();
+        const nextSocket = { channel: vi.fn().mockReturnValue(nextCallChannel) } as any;
+
+        callSignalingService.initialize(nextSocket, nextUserChannel as any, currentUserId);
+
+        expect(firstCallChannel.leave).toHaveBeenCalled();
+        expect(mockUserChannel.off).toHaveBeenCalledWith('incoming_call', expect.any(Number));
+        expect(nextSocket.channel).toHaveBeenCalledWith(`call:${currentUserId}`, {});
+        expect(nextCallChannel.on).toHaveBeenCalledWith('offer', expect.any(Function));
+        expect(nextUserChannel.on).toHaveBeenCalledWith('incoming_call', expect.any(Function));
     });
 
     describe('startCall', () => {
@@ -231,6 +285,36 @@ describe('useCall', () => {
             expect(result.current.remoteUserId).toBe(3);
             expect(result.current.callId).toBe('call-123');
         });
+
+        it('clears stale call state after logout and re-login', () => {
+            const { result, rerender } = renderHook(({ userId }) => useCall(userId), {
+                initialProps: { userId: currentUserId },
+            });
+            const incomingCallHandler = mockUserChannel.on.mock.calls.find(
+                (c: any[]) => c[0] === 'incoming_call'
+            )?.[1];
+
+            act(() => {
+                incomingCallHandler({ from_user_id: 3, from_username: 'caller', call_id: 'call-123' });
+            });
+
+            expect(result.current.status).toBe('ringing');
+
+            act(() => {
+                rerender({ userId: 0 });
+            });
+
+            expect(result.current.status).toBe('idle');
+            expect(result.current.remoteUserId).toBeNull();
+            expect(result.current.callId).toBeNull();
+
+            act(() => {
+                rerender({ userId: 4 });
+            });
+
+            expect(result.current.status).toBe('idle');
+            expect(result.current.remoteUserId).toBeNull();
+        });
     });
 
     describe('offer', () => {
@@ -256,6 +340,39 @@ describe('useCall', () => {
             });
             const service = MockWebRTCService.mock.results[0]?.value;
             expect(service.acceptCall).toHaveBeenCalledWith('test-sdp');
+        });
+
+        it('создаёт incoming call state из pending offer, полученного до монтирования хука', async () => {
+            callSignalingService.initialize(mockSocketManager.socket, mockUserChannel, currentUserId);
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const offerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'offer')?.[1];
+
+            act(() => {
+                offerHandler({
+                    sdp: 'early-offer-sdp',
+                    from_user_id: 2,
+                    from_username: 'caller',
+                    call_id: 'call-early',
+                });
+            });
+
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            expect(result.current.status).toBe('ringing');
+            expect(result.current.remoteUserId).toBe(2);
+            expect(result.current.remoteUsername).toBe('caller');
+            expect(result.current.callId).toBe('call-early');
+
+            act(() => {
+                result.current.acceptCall();
+                result.current.acceptCall();
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            expect(MockWebRTCService).toHaveBeenCalledTimes(1);
+            expect(service.acceptCall).toHaveBeenCalledTimes(1);
+            expect(service.acceptCall).toHaveBeenCalledWith('early-offer-sdp');
+            expect(callSignalingService.consumePendingOffer()).toBeNull();
         });
     });
 
@@ -293,6 +410,93 @@ describe('useCall', () => {
                 });
             }
             expect(service.addIceCandidate).toHaveBeenCalledWith({ candidate: 'c' });
+        });
+    });
+
+    describe('diagnostics polling', () => {
+        it('updates diagnostics from unknown to relay during an active call', async () => {
+            vi.stubEnv('DEV', true);
+            vi.stubEnv('VITE_WEBRTC_SHOW_DIAGNOSTICS', 'true');
+
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            service.collectDiagnostics.mockImplementation(async () => {
+                service.onDiagnosticsChange?.({
+                    connectionState: 'connected',
+                    iceConnectionState: 'connected',
+                    iceGatheringState: 'complete',
+                    signalingState: 'stable',
+                    selectedCandidatePair: {
+                        candidatePairId: 'pair-1',
+                        localCandidateId: 'local-1',
+                        remoteCandidateId: 'remote-1',
+                        localCandidateType: 'relay',
+                        state: 'succeeded',
+                        nominated: true,
+                    },
+                });
+                return service.getDiagnosticsSnapshot();
+            });
+
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+            });
+
+            expect(result.current.diagnostics.selectedLocalCandidateType).toBe('unknown');
+
+            await act(async () => {
+                vi.advanceTimersByTime(1500);
+                await Promise.resolve();
+            });
+
+            expect(service.collectDiagnostics).toHaveBeenCalled();
+            expect(result.current.diagnostics.selectedLocalCandidateType).toBe('relay');
+        });
+
+        it('stops diagnostics refresh after hangup and unmount', async () => {
+            vi.stubEnv('DEV', true);
+            vi.stubEnv('VITE_WEBRTC_SHOW_DIAGNOSTICS', 'true');
+
+            const { result, unmount } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+            });
+
+            await act(async () => {
+                vi.advanceTimersByTime(1500);
+                await Promise.resolve();
+            });
+            expect(service.collectDiagnostics).toHaveBeenCalledTimes(1);
+
+            act(() => {
+                result.current.hangUp();
+            });
+
+            await act(async () => {
+                vi.advanceTimersByTime(3000);
+                await Promise.resolve();
+            });
+            expect(service.collectDiagnostics).toHaveBeenCalledTimes(1);
+
+            unmount();
+            await act(async () => {
+                vi.advanceTimersByTime(3000);
+                await Promise.resolve();
+            });
+            expect(service.collectDiagnostics).toHaveBeenCalledTimes(1);
         });
     });
 

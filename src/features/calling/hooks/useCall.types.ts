@@ -23,6 +23,14 @@ export interface HangUpPayload {
     from_user_id: number;
 }
 
+export interface CallDiagnostics {
+    connectionState: RTCPeerConnectionState | 'unknown';
+    iceConnectionState: RTCIceConnectionState | 'unknown';
+    iceGatheringState: RTCIceGatheringState | 'unknown';
+    signalingState: RTCSignalingState | 'unknown';
+    selectedLocalCandidateType: 'host' | 'srflx' | 'relay' | 'unknown';
+}
+
 // ── Публичный интерфейс хука ─────────────────────────────────────────────────
 
 export interface UseCallReturn {
@@ -33,6 +41,7 @@ export interface UseCallReturn {
     isMuted: boolean;
     remoteStream: MediaStream | null;
     seconds: number;
+    diagnostics: CallDiagnostics;
     startCall: (targetUserId: number) => void;
     acceptCall: () => void;
     rejectCall: () => void;

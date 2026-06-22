@@ -1,19 +1,37 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Channel } from 'phoenix';
 import { useAppStore } from '@/store';
-import { WebRTCService } from '../services/webrtcService';
-import type {
-    CallStatus,
-    UseCallReturn,
-    IncomingCallPayload,
-    AnswerPayload,
-    IceCandidatePayload,
-} from './useCall.types';
+import { WebRTCService, type WebRTCDiagnostics } from '../services/webrtcService';
+import { callSignalingService, type OfferPayload } from '../services/callSignalingService';
+import type { CallDiagnostics, CallStatus, UseCallReturn } from './useCall.types';
+
+const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
+    connectionState: 'unknown',
+    iceConnectionState: 'unknown',
+    iceGatheringState: 'unknown',
+    signalingState: 'unknown',
+    selectedLocalCandidateType: 'unknown',
+};
+
+const DIAGNOSTICS_POLL_INTERVAL_MS = 1500;
+
+function shouldPollDiagnostics(): boolean {
+    return import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === 'true';
+}
+
+function mapDiagnostics(diagnostics: WebRTCDiagnostics): CallDiagnostics {
+    return {
+        connectionState: diagnostics.connectionState,
+        iceConnectionState: diagnostics.iceConnectionState,
+        iceGatheringState: diagnostics.iceGatheringState,
+        signalingState: diagnostics.signalingState,
+        selectedLocalCandidateType: diagnostics.selectedCandidatePair?.localCandidateType ?? 'unknown',
+    };
+}
 
 export function useCall(currentUserId: number): UseCallReturn {
     const socketManager = useAppStore((s) => s.socketManager);
 
-    // ── State ──────────────────────────────────────────────────────────────────
     const [status, setStatus] = useState<CallStatus>('idle');
     const [remoteUserId, setRemoteUserId] = useState<number | null>(null);
     const [remoteUsername, setRemoteUsername] = useState<string | null>(null);
@@ -21,29 +39,48 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [isMuted, setIsMuted] = useState(false);
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const [seconds, setSeconds] = useState(0);
+    const [diagnostics, setDiagnostics] = useState<CallDiagnostics>(EMPTY_CALL_DIAGNOSTICS);
 
-    // ── Refs (don't trigger re-render, needed inside callbacks) ────────────────
     const callChannelRef = useRef<Channel | null>(null);
     const webrtcRef = useRef<WebRTCService | null>(null);
     const endedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const offerSdpRef = useRef<string | null>(null);
+    const previousUserIdRef = useRef<number | null>(null);
 
-    // ── Helper: end call locally ──────────────────────────────────────────────
+    const clearCallState = useCallback(() => {
+        if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
+        endedTimerRef.current = null;
+        webrtcRef.current?.hangUp();
+        webrtcRef.current = null;
+        callChannelRef.current = null;
+        offerSdpRef.current = null;
+        setStatus('idle');
+        setRemoteUserId(null);
+        setRemoteUsername(null);
+        setCallId(null);
+        setRemoteStream(null);
+        setIsMuted(false);
+        setSeconds(0);
+        setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
+    }, []);
+
     const resetAfterDelay = useCallback(() => {
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
         setStatus('ended');
         endedTimerRef.current = setTimeout(() => {
-            setStatus('idle');
-            setRemoteUserId(null);
-            setRemoteUsername(null);
-            setCallId(null);
-            setRemoteStream(null);
-            setIsMuted(false);
-            webrtcRef.current = null;
-            setSeconds(0);
+            clearCallState();
         }, 2000);
+    }, [clearCallState]);
+
+    const handleOffer = useCallback((payload: OfferPayload) => {
+        offerSdpRef.current = payload.sdp;
+        setRemoteUserId((prev) => prev ?? payload.from_user_id);
+        setRemoteUsername((prev) => prev ?? payload.from_username);
+        setCallId((prev) => prev ?? payload.call_id ?? null);
+        setStatus((prev) => prev === 'idle' ? 'ringing' : prev);
+        callSignalingService.clearPendingOffer(payload);
     }, []);
 
-    // Timer for active call
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (status === 'active') {
@@ -51,74 +88,84 @@ export function useCall(currentUserId: number): UseCallReturn {
                 setSeconds((prev) => prev + 1);
             }, 1000);
         } else if (status !== 'ended') {
-            // Reset only if not "ended", because in ended we want to see the call duration for another 2 seconds
             setSeconds(0);
         }
+
         return () => {
             if (interval) clearInterval(interval);
         };
     }, [status]);
 
-    // ── Mount: connect call channel and subscribe to signaling events ──────────
     useEffect(() => {
-        if (!socketManager) return;
+        if (!shouldPollDiagnostics() || status !== 'active') return;
 
-        const channel = socketManager.socket.channel(`call:${currentUserId}`, {});
+        const interval = setInterval(() => {
+            void webrtcRef.current?.collectDiagnostics();
+        }, DIAGNOSTICS_POLL_INTERVAL_MS);
 
-        // "answer" — we were answered (we were the caller)
-        channel.on('answer', (payload: AnswerPayload) => {
-            webrtcRef.current?.handleAnswer(payload.sdp);
-            setRemoteUsername(payload.from_username);
-            setStatus('active');
-        });
+        return () => {
+            clearInterval(interval);
+        };
+    }, [status]);
 
-        // "ice_candidate" — remote peer sent a candidate
-        channel.on('ice_candidate', (payload: IceCandidatePayload) => {
-            webrtcRef.current?.addIceCandidate(payload.candidate);
-        });
+    useEffect(() => {
+        const previousUserId = previousUserIdRef.current;
+        const userChanged =
+            previousUserId !== null &&
+            currentUserId > 0 &&
+            previousUserId !== currentUserId;
 
-        // "hang_up" — peer hung up
-        channel.on('hang_up', () => {
-            webrtcRef.current?.hangUp();
-            resetAfterDelay();
-        });
+        previousUserIdRef.current = currentUserId > 0 ? currentUserId : null;
 
-        channel.join()
-            .receive('ok', () => console.log('[useCall] call channel joined'))
-            .receive('error', (r) => console.error('[useCall] call channel join error', r));
+        if (!socketManager || currentUserId <= 0 || userChanged) {
+            clearCallState();
+        }
 
-        callChannelRef.current = channel;
+        if (!socketManager || currentUserId <= 0) return;
 
-        // "incoming_call" comes via user-channel (server does Endpoint.broadcast)
-        const unsubIncoming = socketManager.userChannel.on(
-            'incoming_call',
-            (payload: IncomingCallPayload) => {
-                // DEBUG
+        callSignalingService.initialize(socketManager.socket, socketManager.userChannel, currentUserId);
+        callChannelRef.current = callSignalingService.getChannel();
+
+        const unsubs = [
+            callSignalingService.onAnswer((payload) => {
+                webrtcRef.current?.handleAnswer(payload.sdp);
+                setRemoteUsername(payload.from_username);
+                setStatus('active');
+            }),
+            callSignalingService.onIceCandidate((payload) => {
+                webrtcRef.current?.addIceCandidate(payload.candidate);
+            }),
+            callSignalingService.onHangUp(() => {
+                webrtcRef.current?.hangUp();
+                resetAfterDelay();
+            }),
+            callSignalingService.onIncomingCall((payload) => {
                 console.log('[useCall] incoming_call received', payload);
                 setStatus('ringing');
                 setRemoteUserId(payload.from_user_id);
                 setRemoteUsername(payload.from_username);
                 setCallId(payload.call_id);
-            },
-        );
+            }),
+            callSignalingService.onOffer(handleOffer),
+        ];
+
+        const pendingOffer = callSignalingService.consumePendingOffer();
+        if (pendingOffer) {
+            handleOffer(pendingOffer);
+        }
 
         return () => {
-            channel.leave();
             callChannelRef.current = null;
-            // Phoenix channel.on не возвращает unsubscribe-функцию — снимаем через off
-            socketManager.userChannel.off('incoming_call', unsubIncoming as number);
+            unsubs.forEach((unsub) => unsub());
             if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
         };
-    }, [socketManager, currentUserId, resetAfterDelay]);
+    }, [socketManager, currentUserId, clearCallState, handleOffer, resetAfterDelay]);
 
-    // ── startCall ──────────────────────────────────────────────────────────────
     const startCall = useCallback((targetUserId: number) => {
-        // DEBUG
-        console.log('[useCall] startCall → targetUserId:', targetUserId, '| current status:', status);
+        console.log('[useCall] startCall -> targetUserId:', targetUserId, '| current status:', status);
         const channel = callChannelRef.current;
         if (!channel || status !== 'idle') return;
 
-        // Блокировка звонка себе 
         if (targetUserId === currentUserId) {
             console.warn('[useCall] Cannot call yourself');
             return;
@@ -129,12 +176,13 @@ export function useCall(currentUserId: number): UseCallReturn {
 
         const service = new WebRTCService(channel, currentUserId, targetUserId);
         service.onRemoteStream = (stream) => setRemoteStream(stream);
-        service.onCallIdReceived = (callId) => setCallId(callId);
+        service.onCallIdReceived = (nextCallId) => setCallId(nextCallId);
+        service.onDiagnosticsChange = (nextDiagnostics) => setDiagnostics(mapDiagnostics(nextDiagnostics));
         webrtcRef.current = service;
+        setDiagnostics(mapDiagnostics(service.getDiagnosticsSnapshot()));
 
         service.startCall()
             .then(() => {
-                // Таймаут 30с если никто не ответил 
                 endedTimerRef.current = setTimeout(() => {
                     if (webrtcRef.current) {
                         console.warn('[useCall] Call timeout');
@@ -149,32 +197,27 @@ export function useCall(currentUserId: number): UseCallReturn {
             });
     }, [status, currentUserId, resetAfterDelay]);
 
-    // ── acceptCall ─────────────────────────────────────────────────────────────
     const acceptCall = useCallback(() => {
-        // remoteSdp пока неизвестен здесь — придёт через channel event "offer".
-        // Реальная логика: на incoming_call мы сохраняем remoteSdp из offer payload,
-        // но сервер шлёт incoming_call отдельно от самого SDP offer.
-        // Поэтому acceptCall вызывается ПОСЛЕ того как получен SDP.
-        // Храним его в ref, а не в state — нет смысла в ре-рендере.
         const channel = callChannelRef.current;
         const remote = remoteUserId;
         if (!channel || !remote || status !== 'ringing') return;
 
-        const service = new WebRTCService(channel, currentUserId, remote);
-
-        service.onRemoteStream = (stream) => {
-            setRemoteStream(stream);
-        };
-
-        webrtcRef.current = service;
-        setStatus('active');
-
-        // remoteSdp берётся из offerSdpRef (заполняется ниже при получении "offer")
         const sdp = offerSdpRef.current;
         if (!sdp) {
             console.warn('[useCall] acceptCall called before offer SDP received');
             return;
         }
+
+        const service = new WebRTCService(channel, currentUserId, remote);
+        service.onRemoteStream = (stream) => {
+            setRemoteStream(stream);
+        };
+        service.onDiagnosticsChange = (nextDiagnostics) => setDiagnostics(mapDiagnostics(nextDiagnostics));
+
+        webrtcRef.current = service;
+        setStatus('active');
+        offerSdpRef.current = null;
+        setDiagnostics(mapDiagnostics(service.getDiagnosticsSnapshot()));
 
         service.acceptCall(sdp).catch((err) => {
             console.error('[useCall] acceptCall failed', err);
@@ -182,34 +225,30 @@ export function useCall(currentUserId: number): UseCallReturn {
         });
     }, [status, remoteUserId, currentUserId, resetAfterDelay]);
 
-    // ── rejectCall ─────────────────────────────────────────────────────────────
     const rejectCall = useCallback(() => {
         const channel = callChannelRef.current;
         if (channel && callId && remoteUserId) {
             channel.push('hang_up', { call_id: callId, to_user_id: remoteUserId });
         }
+        offerSdpRef.current = null;
         resetAfterDelay();
     }, [callId, remoteUserId, resetAfterDelay]);
 
-    // ── hangUp ─────────────────────────────────────────────────────────────────
     const hangUp = useCallback(() => {
         const channel = callChannelRef.current;
         if (channel && callId && remoteUserId) {
             channel.push('hang_up', { call_id: callId, to_user_id: remoteUserId });
         }
         webrtcRef.current?.hangUp();
+        offerSdpRef.current = null;
         resetAfterDelay();
     }, [callId, remoteUserId, resetAfterDelay]);
 
-    // ── toggleMute ─────────────────────────────────────────────────────────────
     const toggleMute = useCallback(() => {
         const service = webrtcRef.current;
         if (!service) return;
 
-        // WebRTCService не хранит localStream публично, но можно добавить геттер.
-        // Пока работаем через внутренний доступ через тип any.
         const localStream: MediaStream | null = (service as unknown as { localStream: MediaStream | null }).localStream;
-
         if (!localStream) return;
 
         const audioTrack = localStream.getAudioTracks()[0];
@@ -219,25 +258,6 @@ export function useCall(currentUserId: number): UseCallReturn {
         setIsMuted(!audioTrack.enabled);
     }, []);
 
-    // ── Ref для хранения SDP offer от вызывающего ─────────────────────────────
-    // (заполняется при получении события "offer" на call-канале)
-    const offerSdpRef = useRef<string | null>(null);
-
-    useEffect(() => {
-        const channel = callChannelRef.current;
-        if (!channel) return;
-
-        // "offer" приходит callee-у через broadcast_from! на call-канале
-        channel.on('offer', (payload: { sdp: string; from_user_id: number; from_username: string }) => {
-            offerSdpRef.current = payload.sdp;
-            // Если remoteUserId ещё не установлен (incoming_call пришёл без SDP),
-            // дополним его здесь
-            setRemoteUserId((prev) => prev ?? payload.from_user_id);
-            setRemoteUsername((prev) => prev ?? payload.from_username);
-        });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [socketManager]); // перепривязать при смене socketManager
-
     return {
         status,
         remoteUserId,
@@ -246,6 +266,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         isMuted,
         remoteStream,
         seconds,
+        diagnostics,
         startCall,
         acceptCall,
         rejectCall,

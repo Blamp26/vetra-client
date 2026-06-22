@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { formatCallTime } from '@/utils/formatDate';
+import type { CallDiagnostics } from '../../hooks/useCall.types';
 
 interface ActiveCallWindowProps {
   remoteStream: MediaStream | null;
   remoteUsername: string;
   seconds: number;
   isMuted: boolean;
+  diagnostics: CallDiagnostics;
   onMuteToggle: () => void;
   onHangUp: () => void;
 }
@@ -16,10 +18,13 @@ export const ActiveCallWindow = ({
   remoteUsername,
   seconds,
   isMuted,
+  diagnostics,
   onMuteToggle,
   onHangUp,
 }: ActiveCallWindowProps) => {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const shouldShowDiagnostics =
+    import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === 'true';
 
   useEffect(() => {
     if (audioRef.current && remoteStream) {
@@ -44,6 +49,31 @@ export const ActiveCallWindow = ({
             <span>{formatCallTime(seconds)}</span>
           </div>
         </div>
+
+        {shouldShowDiagnostics && (
+          <div
+            className="w-full max-w-[260px] border border-border bg-background/80 px-3 py-2 text-[11px] text-muted-foreground"
+            data-testid="webrtc-diagnostics"
+          >
+            <div className="mb-1 font-medium uppercase tracking-wide text-foreground">WebRTC Debug</div>
+            <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
+              <span>connection</span>
+              <span>{diagnostics.connectionState}</span>
+              <span>ice</span>
+              <span>{diagnostics.iceConnectionState}</span>
+              <span>gathering</span>
+              <span>{diagnostics.iceGatheringState}</span>
+              <span>signaling</span>
+              <span>{diagnostics.signalingState}</span>
+              <span>candidate</span>
+              <span className={cn(
+                diagnostics.selectedLocalCandidateType === 'relay' && 'text-foreground font-medium',
+              )}>
+                {diagnostics.selectedLocalCandidateType}
+              </span>
+            </div>
+          </div>
+        )}
 
         <audio ref={audioRef} autoPlay hidden />
 

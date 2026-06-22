@@ -1,9 +1,115 @@
 import { Channel } from 'phoenix';
 import { getState } from '@/store';
 
-const ICE_SERVERS: RTCIceServer[] = [
-    { urls: 'stun:stun.l.google.com:19302' },
-];
+const DEFAULT_STUN_URL = 'stun:stun.l.google.com:19302';
+
+export type SelectedCandidateType = 'host' | 'srflx' | 'relay' | 'unknown';
+
+export interface CandidatePairDiagnostics {
+    candidatePairId: string | null;
+    localCandidateId: string | null;
+    remoteCandidateId: string | null;
+    localCandidateType: SelectedCandidateType;
+    state: string | null;
+    nominated: boolean;
+}
+
+export interface WebRTCDiagnostics {
+    connectionState: RTCPeerConnectionState | 'unknown';
+    iceConnectionState: RTCIceConnectionState | 'unknown';
+    iceGatheringState: RTCIceGatheringState | 'unknown';
+    signalingState: RTCSignalingState | 'unknown';
+    selectedCandidatePair: CandidatePairDiagnostics | null;
+}
+
+type StatsValue = {
+    id?: string;
+    type?: string;
+    selected?: boolean;
+    nominated?: boolean;
+    state?: string;
+    localCandidateId?: string;
+    remoteCandidateId?: string;
+    candidateType?: string;
+};
+
+const EMPTY_DIAGNOSTICS: WebRTCDiagnostics = {
+    connectionState: 'unknown',
+    iceConnectionState: 'unknown',
+    iceGatheringState: 'unknown',
+    signalingState: 'unknown',
+    selectedCandidatePair: null,
+};
+
+function readEnvValue(value?: string): string | null {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+}
+
+function cloneDiagnostics(diagnostics: WebRTCDiagnostics): WebRTCDiagnostics {
+    return {
+        ...diagnostics,
+        selectedCandidatePair: diagnostics.selectedCandidatePair
+            ? { ...diagnostics.selectedCandidatePair }
+            : null,
+    };
+}
+
+function getStatsValues(stats: { values?: () => IterableIterator<StatsValue> } | null | undefined): StatsValue[] {
+    if (!stats?.values) return [];
+    return Array.from(stats.values());
+}
+
+function isCandidatePairSelected(stat: StatsValue): boolean {
+    return stat.type === 'candidate-pair' && (stat.selected === true || stat.nominated === true || stat.state === 'succeeded');
+}
+
+export function classifyCandidateType(candidateType?: string | null): SelectedCandidateType {
+    if (candidateType === 'host' || candidateType === 'srflx' || candidateType === 'relay') {
+        return candidateType;
+    }
+    return 'unknown';
+}
+
+export function inspectSelectedCandidatePairFromStats(
+    stats: { values?: () => IterableIterator<StatsValue> } | null | undefined,
+): CandidatePairDiagnostics | null {
+    const values = getStatsValues(stats);
+    if (values.length === 0) return null;
+
+    const selectedPair = values.find((stat) => isCandidatePairSelected(stat));
+    if (!selectedPair) return null;
+
+    const localCandidate = values.find((stat) => stat.id === selectedPair.localCandidateId);
+
+    return {
+        candidatePairId: selectedPair.id ?? null,
+        localCandidateId: selectedPair.localCandidateId ?? null,
+        remoteCandidateId: selectedPair.remoteCandidateId ?? null,
+        localCandidateType: classifyCandidateType(localCandidate?.candidateType),
+        state: selectedPair.state ?? null,
+        nominated: Boolean(selectedPair.nominated),
+    };
+}
+
+export function buildIceServers(): RTCIceServer[] {
+    const stunUrl = readEnvValue(import.meta.env.VITE_WEBRTC_STUN_URL) ?? DEFAULT_STUN_URL;
+    const turnUrl = readEnvValue(import.meta.env.VITE_WEBRTC_TURN_URL);
+    const turnUsername = readEnvValue(import.meta.env.VITE_WEBRTC_TURN_USERNAME);
+    const turnCredential = readEnvValue(import.meta.env.VITE_WEBRTC_TURN_CREDENTIAL);
+
+    const iceServers: RTCIceServer[] = [{ urls: stunUrl }];
+
+    if (turnUrl && turnUsername && turnCredential) {
+        iceServers.push({
+            urls: turnUrl,
+            username: turnUsername,
+            credential: turnCredential,
+        });
+    }
+
+    return iceServers;
+}
 
 export class WebRTCService {
     private peerConnection: RTCPeerConnection | null = null;
@@ -13,9 +119,11 @@ export class WebRTCService {
     private remoteUserId: number;
     private iceCandidateQueue: RTCIceCandidateInit[] = [];
     private remoteDescriptionSet = false;
+    private diagnostics: WebRTCDiagnostics = cloneDiagnostics(EMPTY_DIAGNOSTICS);
 
     public onRemoteStream: (stream: MediaStream) => void = () => { };
     public onCallIdReceived: ((callId: string) => void) | null = null;
+    public onDiagnosticsChange: ((diagnostics: WebRTCDiagnostics) => void) | null = null;
 
     constructor(channel: Channel, localUserId: number, remoteUserId: number) {
         this.channel = channel;
@@ -43,6 +151,7 @@ export class WebRTCService {
             new RTCSessionDescription({ type: 'offer', sdp: remoteSdp })
         );
         this.remoteDescriptionSet = true;
+        await this.refreshDiagnostics();
         await this.flushIceCandidateQueue();
 
         const answer = await this.peerConnection!.createAnswer();
@@ -62,6 +171,7 @@ export class WebRTCService {
             new RTCSessionDescription({ type: 'answer', sdp })
         );
         this.remoteDescriptionSet = true;
+        await this.refreshDiagnostics();
         await this.flushIceCandidateQueue();
     }
 
@@ -73,9 +183,32 @@ export class WebRTCService {
         }
         try {
             await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            await this.refreshDiagnostics();
         } catch (err) {
             console.error('[WebRTC] Failed to add ICE candidate:', err);
         }
+    }
+
+    getDiagnosticsSnapshot(): WebRTCDiagnostics {
+        return cloneDiagnostics(this.diagnostics);
+    }
+
+    async collectDiagnostics(): Promise<WebRTCDiagnostics> {
+        await this.refreshDiagnostics();
+        return this.getDiagnosticsSnapshot();
+    }
+
+    hangUp(): void {
+        if (this.peerConnection) {
+            this.peerConnection.close();
+        }
+        this.peerConnection = null;
+        this.localStream?.getTracks().forEach(track => track.stop());
+        this.localStream = null;
+        this.iceCandidateQueue = [];
+        this.remoteDescriptionSet = false;
+        this.diagnostics = cloneDiagnostics(EMPTY_DIAGNOSTICS);
+        this.emitDiagnostics();
     }
 
     private async flushIceCandidateQueue(): Promise<void> {
@@ -87,31 +220,27 @@ export class WebRTCService {
                 console.error('[WebRTC] Failed to flush ICE candidate:', err);
             }
         }
-    }
-
-    hangUp(): void {
-        this.peerConnection?.close();
-        this.peerConnection = null;
-        this.localStream?.getTracks().forEach(track => track.stop());
-        this.localStream = null;
-        this.iceCandidateQueue = [];
-        this.remoteDescriptionSet = false;
+        await this.refreshDiagnostics();
     }
 
     private async initPeerConnection(): Promise<void> {
         const state = getState();
         const inputId = state.selectedInputDeviceId || 'default';
-        
+
         this.localStream = await navigator.mediaDevices.getUserMedia({
             audio: { deviceId: inputId !== 'default' ? { exact: inputId } : undefined },
             video: false,
         });
-        this.peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        this.peerConnection = new RTCPeerConnection({ iceServers: buildIceServers() });
+        this.attachDiagnosticsListeners(this.peerConnection);
         this.localStream.getTracks().forEach(track => {
             this.peerConnection!.addTrack(track, this.localStream!);
         });
         this.peerConnection.onicecandidate = (event) => {
-            if (!event.candidate) return;
+            if (!event.candidate) {
+                void this.refreshDiagnostics();
+                return;
+            }
             const callId = `${this.remoteUserId}:${this.localUserId}`;
             this.channel.push('ice_candidate', {
                 candidate: event.candidate,
@@ -124,5 +253,79 @@ export class WebRTCService {
                 this.onRemoteStream(event.streams[0]);
             }
         };
+        await this.refreshDiagnostics();
+    }
+
+    private attachDiagnosticsListeners(peerConnection: RTCPeerConnection): void {
+        peerConnection.onconnectionstatechange = () => {
+            void this.refreshDiagnostics();
+        };
+        peerConnection.oniceconnectionstatechange = () => {
+            void this.refreshDiagnostics();
+        };
+        peerConnection.onicegatheringstatechange = () => {
+            void this.refreshDiagnostics();
+        };
+        peerConnection.onsignalingstatechange = () => {
+            void this.refreshDiagnostics();
+        };
+    }
+
+    private emitDiagnostics(): void {
+        const snapshot = this.getDiagnosticsSnapshot();
+        this.onDiagnosticsChange?.(snapshot);
+        this.logDiagnostics(snapshot);
+    }
+
+    private async refreshDiagnostics(): Promise<void> {
+        const peerConnection = this.peerConnection;
+        if (!peerConnection) {
+            this.diagnostics = cloneDiagnostics(EMPTY_DIAGNOSTICS);
+            this.emitDiagnostics();
+            return;
+        }
+
+        const nextDiagnostics: WebRTCDiagnostics = {
+            connectionState: peerConnection.connectionState ?? 'unknown',
+            iceConnectionState: peerConnection.iceConnectionState ?? 'unknown',
+            iceGatheringState: peerConnection.iceGatheringState ?? 'unknown',
+            signalingState: peerConnection.signalingState ?? 'unknown',
+            selectedCandidatePair: null,
+        };
+
+        try {
+            if (typeof peerConnection.getStats === 'function') {
+                const stats = await peerConnection.getStats();
+                nextDiagnostics.selectedCandidatePair = inspectSelectedCandidatePairFromStats(stats);
+            }
+        } catch {
+            nextDiagnostics.selectedCandidatePair = null;
+        }
+
+        const previousSerialized = JSON.stringify(this.diagnostics);
+        const nextSerialized = JSON.stringify(nextDiagnostics);
+        this.diagnostics = nextDiagnostics;
+
+        if (previousSerialized !== nextSerialized) {
+            this.emitDiagnostics();
+        }
+    }
+
+    private logDiagnostics(diagnostics: WebRTCDiagnostics): void {
+        if (!import.meta.env.DEV) return;
+        console.log('[WebRTC] diagnostics', {
+            connectionState: diagnostics.connectionState,
+            iceConnectionState: diagnostics.iceConnectionState,
+            iceGatheringState: diagnostics.iceGatheringState,
+            signalingState: diagnostics.signalingState,
+            selectedCandidatePair: diagnostics.selectedCandidatePair
+                ? {
+                    candidatePairId: diagnostics.selectedCandidatePair.candidatePairId,
+                    localCandidateType: diagnostics.selectedCandidatePair.localCandidateType,
+                    state: diagnostics.selectedCandidatePair.state,
+                    nominated: diagnostics.selectedCandidatePair.nominated,
+                }
+                : null,
+        });
     }
 }

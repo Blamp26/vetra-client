@@ -59,7 +59,7 @@ function EmptyState({
 
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
-  const { status, remoteStream, remoteUsername, remoteUserId, isMuted, seconds, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
+  const { status, remoteStream, remoteUsername, remoteUserId, isMuted, seconds, diagnostics, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
   const activeChat = useAppStore((s) => s.activeChat);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
@@ -247,6 +247,7 @@ function App() {
           remoteUsername={remoteUsername ?? `User #${remoteUserId}`}
           seconds={seconds}
           isMuted={isMuted}
+          diagnostics={diagnostics}
           onMuteToggle={toggleMute}
           onHangUp={hangUp}
         />

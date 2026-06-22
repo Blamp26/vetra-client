@@ -8,6 +8,7 @@ import type {
   MessageDeletedPayload,
   ReactionUpdatedPayload,
 } from "@/shared/types";
+import { callSignalingService } from "@/features/calling/services/callSignalingService";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "ws://localhost:4000/socket";
 
@@ -141,6 +142,7 @@ export async function connectSocket(token: string, userId: number): Promise<Sock
   socket.connect();
 
   const userChannel = socket.channel(`user:${userId}`, {});
+  callSignalingService.initialize(socket, userChannel, userId);
 
   // ── User channel buses ───────────────────────────────────────────
 
@@ -418,6 +420,7 @@ export async function connectSocket(token: string, userId: number): Promise<Sock
     },
 
     disconnect() {
+      callSignalingService.disconnect();
       roomChannels.forEach((ch) => ch.leave());
       roomChannels.clear();
       userChannel.leave();
