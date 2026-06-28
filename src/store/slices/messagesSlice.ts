@@ -52,6 +52,20 @@ function patchConv(
   };
 }
 
+function patchConvIfChanged(
+  record: Record<number, ConversationState>,
+  id: number,
+  patch: Partial<ConversationState>,
+): Record<number, ConversationState> {
+  const current = record[id] ?? DEFAULT_CONV;
+  const changed = Object.entries(patch).some(
+    ([key, value]) => current[key as keyof ConversationState] !== value,
+  );
+
+  if (!changed) return record;
+  return patchConv(record, id, patch);
+}
+
 export interface MessagesSlice {
   conversations: Record<number, ConversationState>;
   conversationPreviews: Record<number, ConversationPreview>;
@@ -186,14 +200,22 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
     }),
 
   setConversationLoading: (partnerId, isLoading) =>
-    set((state: any) => ({
-      conversations: patchConv(state.conversations, partnerId, { isLoading }),
-    })),
+    set((state: any) => {
+      const conversations = patchConvIfChanged(state.conversations, partnerId, {
+        isLoading,
+      });
+      if (conversations === state.conversations) return state;
+      return { conversations };
+    }),
 
   setConversationHasMore: (partnerId, hasMore) =>
-    set((state: any) => ({
-      conversations: patchConv(state.conversations, partnerId, { hasMore }),
-    })),
+    set((state: any) => {
+      const conversations = patchConvIfChanged(state.conversations, partnerId, {
+        hasMore,
+      });
+      if (conversations === state.conversations) return state;
+      return { conversations };
+    }),
 
   editMessage: ({ id, content, edited_at, recipient_id, sender_id }) =>
     set((state: any) => {

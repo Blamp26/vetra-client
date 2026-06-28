@@ -19,6 +19,20 @@ function patchConv(
   };
 }
 
+function patchConvIfChanged(
+  record: Record<number, ConversationState>,
+  id: number,
+  patch: Partial<ConversationState>,
+): Record<number, ConversationState> {
+  const current = record[id] ?? DEFAULT_CONV;
+  const changed = Object.entries(patch).some(
+    ([key, value]) => current[key as keyof ConversationState] !== value,
+  );
+
+  if (!changed) return record;
+  return patchConv(record, id, patch);
+}
+
 function patchSet(s: Set<number>, id: number, add: boolean): Set<number> {
   const next = new Set(s);
   add ? next.add(id) : next.delete(id);
@@ -135,14 +149,26 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
     }),
 
   setRoomConversationLoading: (roomId, isLoading) =>
-    set((state: any) => ({
-      roomConversations: patchConv(state.roomConversations, roomId, { isLoading }),
-    })),
+    set((state: any) => {
+      const roomConversations = patchConvIfChanged(
+        state.roomConversations,
+        roomId,
+        { isLoading },
+      );
+      if (roomConversations === state.roomConversations) return state;
+      return { roomConversations };
+    }),
 
   setRoomConversationHasMore: (roomId, hasMore) =>
-    set((state: any) => ({
-      roomConversations: patchConv(state.roomConversations, roomId, { hasMore }),
-    })),
+    set((state: any) => {
+      const roomConversations = patchConvIfChanged(
+        state.roomConversations,
+        roomId,
+        { hasMore },
+      );
+      if (roomConversations === state.roomConversations) return state;
+      return { roomConversations };
+    }),
 
   setTypingRoomMember:   (userId) => set((state: any) => ({ typingRoomMemberIds: patchSet(state.typingRoomMemberIds, userId, true)  })),
   clearTypingRoomMember: (userId) => set((state: any) => ({ typingRoomMemberIds: patchSet(state.typingRoomMemberIds, userId, false) })),

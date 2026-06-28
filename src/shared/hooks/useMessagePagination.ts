@@ -27,8 +27,9 @@ export function useMessagePagination(
   state:         MessagePaginationState | null,
   fetchPage:     (limit: number, beforeId?: number) => Promise<Message[]>,
   actions:       MessagePaginationActions,
+  conversationKey?: string | null,
 ) {
-  const loadedRef  = useRef<Set<number>>(new Set());
+  const loadedRef  = useRef<Set<string>>(new Set());
 
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
@@ -38,12 +39,13 @@ export function useMessagePagination(
   const messages  = state?.messages  ?? [];
   const isLoading = state?.isLoading ?? false;
   const hasMore   = state?.hasMore   ?? true;
+  const loadKey = conversationKey ?? (id !== null ? String(id) : null);
 
   useEffect(() => {
-    if (!id || !currentUserId) return;
-    if (loadedRef.current.has(id)) return;
+    if (!id || !currentUserId || !loadKey) return;
+    if (loadedRef.current.has(loadKey)) return;
 
-    loadedRef.current.add(id);
+    loadedRef.current.add(loadKey);
     actionsRef.current.init();
     actionsRef.current.setLoading(true);
 
@@ -54,7 +56,7 @@ export function useMessagePagination(
       })
       .catch(console.error)
       .finally(() => actionsRef.current.setLoading(false));
-  }, [id, currentUserId]);
+  }, [id, currentUserId, loadKey]);
 
   const loadMore = useCallback(async () => {
     if (!id || !currentUserId || isLoading || !hasMore || messages.length === 0) return;

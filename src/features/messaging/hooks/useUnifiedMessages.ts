@@ -179,12 +179,16 @@ export function useUnifiedMessages(context: ChatContext | null) {
     prependMessages,
   ]);
 
+  const conversationKey =
+    contextType && id ? `${contextType}:${id}` : null;
+
   const { messages, isLoading, hasMore, loadMore } = useMessagePagination(
     id,
     currentUser?.id ?? null,
     conversation,
     fetchPage,
     actions!,
+    conversationKey,
   );
 
   // Effect for read status and joining room channels
