@@ -1,26 +1,37 @@
-import { get, post, put } from './base';
-import { User, Server, ResourceRef } from '@/shared/types';
+import { get, post, put } from "./base";
+import { User, Server, ResourceRef } from "@/shared/types";
 
-export interface RegisterPayload { username: string; password: string; }
-export interface LoginPayload    { username: string; password: string; }
+export interface RegisterPayload {
+  username: string;
+  password: string;
+}
+export interface LoginPayload {
+  username: string;
+  password: string;
+}
 
 // Сервер теперь возвращает { user, token }
 export interface AuthResponse {
-  user:  User;
+  user: User;
   token: string;
 }
 
 export interface UpdateProfilePayload {
-  username?:     string;
+  username?: string;
   display_name?: string | null;
-  bio?:          string | null;
-  avatar_url?:   string | null;
-  status?:       'online' | 'away' | 'dnd' | 'offline';
+  bio?: string | null;
+  avatar_url?: string | null;
+  status?: "online" | "away" | "dnd" | "offline";
 }
 
 export interface GlobalSearchResult {
-  users:   User[];
+  users: User[];
   servers: Server[];
+}
+
+export interface SocketTicketResponse {
+  socket_ticket?: string;
+  expires_in?: number;
 }
 
 export const authApi = {
@@ -45,5 +56,9 @@ export const authApi = {
   // id в URL остаётся для корректного REST-маршрута
   updateProfile(userId: number, payload: UpdateProfilePayload): Promise<User> {
     return put<User>(`/users/${userId}/profile`, payload);
+  },
+
+  createSocketTicket(): Promise<SocketTicketResponse> {
+    return post<SocketTicketResponse>("/auth/socket-ticket", {});
   },
 };
