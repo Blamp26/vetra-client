@@ -11,6 +11,36 @@ import {
   Server,
 } from "@/shared/types";
 
+function sameSearchResults(
+  a: { users: User[]; servers: Server[] },
+  b: { users: User[]; servers: Server[] },
+): boolean {
+  if (
+    a.users.length !== b.users.length ||
+    a.servers.length !== b.servers.length
+  ) {
+    return false;
+  }
+
+  const sameUsers = a.users.every((user, index) => {
+    const next = b.users[index];
+    return (
+      user.id === next?.id &&
+      (user.public_id ?? null) === (next?.public_id ?? null)
+    );
+  });
+
+  if (!sameUsers) return false;
+
+  return a.servers.every((server, index) => {
+    const next = b.servers[index];
+    return (
+      server.id === next?.id &&
+      (server.public_id ?? null) === (next?.public_id ?? null)
+    );
+  });
+}
+
 function patchConv(
   record: Record<number, ConversationState>,
   id: number,
@@ -77,8 +107,16 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
   selectedMessageIds: [],
   forwardingMessageIds: null,
 
-  setSearchResults: (results) => set({ searchResults: results }),
-  setIsSearching: (searching) => set({ isSearching: searching }),
+  setSearchResults: (results) =>
+    set((state: any) => {
+      if (sameSearchResults(state.searchResults, results)) return state;
+      return { searchResults: results };
+    }),
+  setIsSearching: (searching) =>
+    set((state: any) => {
+      if (state.isSearching === searching) return state;
+      return { isSearching: searching };
+    }),
 
   startEditing: (message, chatType, targetId) =>
     set({
