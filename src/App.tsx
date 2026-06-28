@@ -9,9 +9,9 @@ import { SettingsPage } from "@/features/settings/components/SettingsPage/Settin
 import { useSocketEvents } from "@/features/messaging/hooks/useSocketEvents";
 import { useAuthHydration } from "@/shared/hooks/useAuthHydration";
 import {
+  activeChatKey,
   buildHashForActiveChat,
   resolveHashToActiveChat,
-  sameActiveChat,
 } from "@/shared/utils/chatRoutes";
 import { useCall } from "./features/calling/hooks/useCall";
 
@@ -85,6 +85,7 @@ function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const [showSettings, setShowSettings] = useState(false);
+  const currentActiveChatKey = activeChatKey(activeChat);
 
   useEffect(() => {
     const syncUrlToStore = () => {
@@ -106,7 +107,7 @@ function App() {
         return;
       }
 
-      if (!sameActiveChat(activeChat, resolved)) {
+      if (activeChatKey(resolved) !== currentActiveChatKey) {
         setActiveChat(resolved);
       }
     };
@@ -115,7 +116,7 @@ function App() {
     window.addEventListener("hashchange", syncUrlToStore);
     return () => window.removeEventListener("hashchange", syncUrlToStore);
   }, [
-    activeChat,
+    currentActiveChatKey,
     currentUser,
     conversationPreviews,
     roomPreviews,
@@ -142,6 +143,7 @@ function App() {
       window.history.replaceState(null, "", newHash);
     }
   }, [
+    currentActiveChatKey,
     activeChat,
     currentUser,
     conversationPreviews,
@@ -172,6 +174,7 @@ function App() {
     }
   }, [
     showSettings,
+    currentActiveChatKey,
     activeChat,
     currentUser,
     conversationPreviews,

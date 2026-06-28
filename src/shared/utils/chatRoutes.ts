@@ -7,7 +7,7 @@ import type {
   Server,
   User,
 } from "@/shared/types";
-import { parseNumericRef, roomRef, serverRef, userRef, withFallbackRef } from "@/shared/utils/refs";
+import { parseNumericRef, roomRef, serverRef, userRef } from "@/shared/utils/refs";
 
 type SearchResults = {
   users: User[];
@@ -24,31 +24,33 @@ export interface ChatRouteLookup {
   searchResults: SearchResults;
 }
 
-function sameRef(a?: ResourceRef, b?: ResourceRef): boolean {
-  return (a ?? null) === (b ?? null);
+function preferredRouteRef(
+  fallbackId: number,
+  explicitRef?: ResourceRef | null,
+  entity?: { public_id?: string | null } | null,
+): ResourceRef {
+  return entity?.public_id ?? explicitRef ?? fallbackId;
+}
+
+export function activeChatKey(chat: ActiveChat | null): string {
+  if (!chat) return "none";
+
+  switch (chat.type) {
+    case "direct":
+      return `direct:${chat.partnerId}`;
+    case "room":
+      return `room:${chat.roomId}`;
+    case "server":
+      return `server:${chat.serverId}`;
+    case "channel":
+      return `channel:${chat.serverId}:${chat.channelId}`;
+    case "settings":
+      return "settings";
+  }
 }
 
 export function sameActiveChat(a: ActiveChat | null, b: ActiveChat | null): boolean {
-  if (a === b) return true;
-  if (!a || !b || a.type !== b.type) return false;
-
-  switch (a.type) {
-    case "direct":
-      return a.partnerId === (b as typeof a).partnerId && sameRef(a.partnerRef, (b as typeof a).partnerRef);
-    case "room":
-      return a.roomId === (b as typeof a).roomId && sameRef(a.roomRef, (b as typeof a).roomRef);
-    case "server":
-      return a.serverId === (b as typeof a).serverId && sameRef(a.serverRef, (b as typeof a).serverRef);
-    case "channel":
-      return (
-        a.serverId === (b as typeof a).serverId &&
-        a.channelId === (b as typeof a).channelId &&
-        sameRef(a.serverRef, (b as typeof a).serverRef) &&
-        sameRef(a.channelRef, (b as typeof a).channelRef)
-      );
-    case "settings":
-      return true;
-  }
+  return activeChatKey(a) === activeChatKey(b);
 }
 
 function findConversationUserById(lookup: ChatRouteLookup, id: number): { id: number; public_id?: string | null } | null {
@@ -180,20 +182,20 @@ export function buildHashForActiveChat(chat: ActiveChat | null, lookup: ChatRout
   switch (chat.type) {
     case "direct": {
       const target = findConversationUserById(lookup, chat.partnerId);
-      return `#/${withFallbackRef(chat.partnerId, chat.partnerRef, target)}`;
+      return `#/${preferredRouteRef(chat.partnerId, chat.partnerRef, target)}`;
     }
     case "room": {
       const target = findRoomById(lookup, chat.roomId);
-      return `#/r/${withFallbackRef(chat.roomId, chat.roomRef, target)}`;
+      return `#/r/${preferredRouteRef(chat.roomId, chat.roomRef, target)}`;
     }
     case "server": {
       const target = findServerById(lookup, chat.serverId);
-      return `#/s/${withFallbackRef(chat.serverId, chat.serverRef, target)}`;
+      return `#/s/${preferredRouteRef(chat.serverId, chat.serverRef, target)}`;
     }
     case "channel": {
       const server = findServerById(lookup, chat.serverId);
       const channel = findRoomById(lookup, chat.channelId);
-      return `#/s/${withFallbackRef(chat.serverId, chat.serverRef, server)}/${withFallbackRef(chat.channelId, chat.channelRef, channel)}`;
+      return `#/s/${preferredRouteRef(chat.serverId, chat.serverRef, server)}/${preferredRouteRef(chat.channelId, chat.channelRef, channel)}`;
     }
     case "settings":
       return "#/settings";
