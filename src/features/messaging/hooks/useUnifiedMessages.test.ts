@@ -71,7 +71,7 @@ function makeState() {
       },
     },
     roomConversations: {},
-    roomPreviews: {},
+    roomPreviews: {} as Record<number, any>,
     initConversation: vi.fn(),
     setConversationMessages: vi.fn(),
     prependMessages: vi.fn(),
@@ -129,5 +129,62 @@ describe("useUnifiedMessages", () => {
 
     expect(markReadViaChannelMock).toHaveBeenCalledTimes(1);
     expect(state.resetUnread).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-join a room channel when the room preview map changes only", () => {
+    const state = makeState();
+    const joinRoomChannel = vi.fn();
+
+    state.socketManager = {
+      ...state.socketManager,
+      joinRoomChannel,
+    };
+    state.roomPreviews = {
+      9: {
+        id: 9,
+        public_id: "room-public-id",
+        name: "general",
+        created_by: 1,
+        server_id: 5,
+        inserted_at: "2026-06-28T00:00:00Z",
+        unread_count: 0,
+        last_message_at: null,
+        last_message: null,
+      },
+    };
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+
+    const { rerender } = renderHook(
+      ({ context }) => useUnifiedMessages(context),
+      {
+        initialProps: {
+          context: {
+            type: "room" as const,
+            roomId: 9,
+            roomRef: "room-public-id",
+          },
+        },
+      },
+    );
+
+    expect(joinRoomChannel).toHaveBeenCalledTimes(1);
+
+    state.roomPreviews = {
+      ...state.roomPreviews,
+      9: {
+        ...state.roomPreviews[9],
+        last_message_at: "2026-06-28T00:01:00Z",
+      },
+    };
+
+    rerender({
+      context: { type: "room" as const, roomId: 9, roomRef: "room-public-id" },
+    });
+
+    expect(joinRoomChannel).toHaveBeenCalledTimes(1);
   });
 });

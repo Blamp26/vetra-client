@@ -1,4 +1,4 @@
-import { StateCreator } from 'zustand';
+import { StateCreator } from "zustand";
 
 export interface ChannelsSlice {
   channelUnread: Record<number, number>;
@@ -7,7 +7,9 @@ export interface ChannelsSlice {
   setChannelUnread: (channelId: number, count: number) => void;
 }
 
-export const createChannelsSlice: StateCreator<any, [], [], ChannelsSlice> = (set) => ({
+export const createChannelsSlice: StateCreator<any, [], [], ChannelsSlice> = (
+  set,
+) => ({
   channelUnread: {},
 
   incrementChannelUnread: (channelId) =>
@@ -20,6 +22,7 @@ export const createChannelsSlice: StateCreator<any, [], [], ChannelsSlice> = (se
 
   resetChannelUnread: (channelId) =>
     set((state: any) => {
+      if (!(channelId in state.channelUnread)) return state;
       const { [channelId]: _, ...rest } = state.channelUnread;
       return { channelUnread: rest };
     }),

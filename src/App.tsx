@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useAppStore } from "@/store";
 import { AuthPage } from "@/features/registration/AuthPage";
 import { Sidebar } from "@/features/messaging/components/Sidebar";
@@ -8,11 +8,15 @@ import { ChannelPanel } from "@/features/messaging/components/ChannelPanel/Chann
 import { SettingsPage } from "@/features/settings/components/SettingsPage/SettingsPage";
 import { useSocketEvents } from "@/features/messaging/hooks/useSocketEvents";
 import { useAuthHydration } from "@/shared/hooks/useAuthHydration";
-import { buildHashForActiveChat, resolveHashToActiveChat, sameActiveChat } from "@/shared/utils/chatRoutes";
-import { useCall } from './features/calling/hooks/useCall';
+import {
+  buildHashForActiveChat,
+  resolveHashToActiveChat,
+  sameActiveChat,
+} from "@/shared/utils/chatRoutes";
+import { useCall } from "./features/calling/hooks/useCall";
 
-import { IncomingCallModal } from './features/calling/components/IncomingCallModal';
-import { ActiveCallWindow } from './features/calling/components/ActiveCallWindow';
+import { IncomingCallModal } from "./features/calling/components/IncomingCallModal";
+import { ActiveCallWindow } from "./features/calling/components/ActiveCallWindow";
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 
 function EmptyState({
@@ -37,12 +41,8 @@ function EmptyState({
             {eyebrow}
           </span>
           <div className="space-y-1">
-            <h2 className="text-xl font-normal text-foreground">
-              {title}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {description}
-            </p>
+            <h2 className="text-xl font-normal text-foreground">{title}</h2>
+            <p className="text-sm text-muted-foreground">{description}</p>
           </div>
           {actionLabel && onAction && (
             <button
@@ -60,7 +60,20 @@ function EmptyState({
 
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
-  const { status, remoteStream, remoteUsername, remoteUserId, isMuted, seconds, diagnostics, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
+  const {
+    status,
+    remoteStream,
+    remoteUsername,
+    remoteUserId,
+    isMuted,
+    seconds,
+    diagnostics,
+    toggleMute,
+    hangUp,
+    acceptCall,
+    rejectCall,
+    startCall,
+  } = useCall(currentUser?.id ?? 0);
   const activeChat = useAppStore((s) => s.activeChat);
   const conversationPreviews = useAppStore((s) => s.conversationPreviews);
   const roomPreviews = useAppStore((s) => s.roomPreviews);
@@ -76,7 +89,7 @@ function App() {
   useEffect(() => {
     const syncUrlToStore = () => {
       const hash = window.location.hash;
-      if (!hash || hash === '#') return;
+      if (!hash || hash === "#") return;
 
       const resolved = resolveHashToActiveChat(hash, {
         activeChat,
@@ -99,8 +112,8 @@ function App() {
     };
 
     syncUrlToStore();
-    window.addEventListener('hashchange', syncUrlToStore);
-    return () => window.removeEventListener('hashchange', syncUrlToStore);
+    window.addEventListener("hashchange", syncUrlToStore);
+    return () => window.removeEventListener("hashchange", syncUrlToStore);
   }, [
     activeChat,
     currentUser,
@@ -126,14 +139,22 @@ function App() {
     });
 
     if (newHash && window.location.hash !== newHash) {
-      window.history.replaceState(null, '', newHash);
+      window.history.replaceState(null, "", newHash);
     }
-  }, [activeChat, currentUser, conversationPreviews, roomPreviews, servers, serverChannels, searchResults]);
+  }, [
+    activeChat,
+    currentUser,
+    conversationPreviews,
+    roomPreviews,
+    servers,
+    serverChannels,
+    searchResults,
+  ]);
 
   useEffect(() => {
-    if (showSettings && window.location.hash !== '#/settings') {
-      window.history.replaceState(null, '', '#/settings');
-    } else if (!showSettings && window.location.hash === '#/settings') {
+    if (showSettings && window.location.hash !== "#/settings") {
+      window.history.replaceState(null, "", "#/settings");
+    } else if (!showSettings && window.location.hash === "#/settings") {
       if (activeChat) {
         const newHash = buildHashForActiveChat(activeChat, {
           activeChat,
@@ -144,12 +165,21 @@ function App() {
           serverChannels,
           searchResults,
         });
-        window.history.replaceState(null, '', newHash || '#');
+        window.history.replaceState(null, "", newHash || "#");
       } else {
-        window.history.replaceState(null, '', '#');
+        window.history.replaceState(null, "", "#");
       }
     }
-  }, [showSettings, activeChat, currentUser, conversationPreviews, roomPreviews, servers, serverChannels, searchResults]);
+  }, [
+    showSettings,
+    activeChat,
+    currentUser,
+    conversationPreviews,
+    roomPreviews,
+    servers,
+    serverChannels,
+    searchResults,
+  ]);
 
   useEffect(() => {
     if (audioRef.current && remoteStream) {
@@ -166,21 +196,32 @@ function App() {
     activeChat?.type === "server" || activeChat?.type === "channel";
 
   const channelPanelServerId =
-    activeChat?.type === "server" ? activeChat.serverId :
-      activeChat?.type === "channel" ? activeChat.serverId :
-        null;
+    activeChat?.type === "server"
+      ? activeChat.serverId
+      : activeChat?.type === "channel"
+        ? activeChat.serverId
+        : null;
 
   if (channelPanelServerId !== null) {
     lastServerIdRef.current = channelPanelServerId;
   }
   const persistedServerId = lastServerIdRef.current;
 
-  const chatTarget =
-    activeChat?.type === "channel"
-      ? { type: "room" as const, roomId: activeChat.channelId }
-      : activeChat?.type === "server"
-        ? null
-        : activeChat;
+  const chatTarget = useMemo(() => {
+    if (activeChat?.type === "channel") {
+      return {
+        type: "room" as const,
+        roomId: activeChat.channelId,
+        roomRef: activeChat.channelRef,
+      };
+    }
+
+    if (activeChat?.type === "server") {
+      return null;
+    }
+
+    return activeChat;
+  }, [activeChat]);
 
   if (!currentUser) {
     return <AuthPage />;
@@ -188,23 +229,15 @@ function App() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-      <audio
-        ref={audioRef}
-        autoPlay
-        hidden
-      />
-      
+      <audio ref={audioRef} autoPlay hidden />
+
       <div className="flex h-full w-[400px] flex-shrink-0 flex-col border-r border-border bg-sidebar">
         <div className="flex flex-1 overflow-hidden">
-          <Sidebar
-            isServerMode={showChannelPanel}
-          />
+          <Sidebar isServerMode={showChannelPanel} />
 
           {showChannelPanel && persistedServerId !== null && (
             <div className="w-[320px] border-l border-border">
-              <ChannelPanel
-                serverId={persistedServerId}
-              />
+              <ChannelPanel serverId={persistedServerId} />
             </div>
           )}
         </div>
@@ -221,11 +254,11 @@ function App() {
           onOpenSettings={() => setShowSettings(true)}
         />
       </div>
-      
+
       <div className="flex min-w-0 flex-1 overflow-hidden">
         {chatTarget ? (
-          <ChatWindow 
-            activeChat={chatTarget} 
+          <ChatWindow
+            activeChat={chatTarget}
             callStatus={status}
             onStartCall={startCall}
           />
@@ -248,11 +281,9 @@ function App() {
         )}
       </div>
 
-      {showSettings && (
-        <SettingsPage onClose={() => setShowSettings(false)} />
-      )}
+      {showSettings && <SettingsPage onClose={() => setShowSettings(false)} />}
 
-      {status === 'ringing' && (
+      {status === "ringing" && (
         <IncomingCallModal
           callerName={remoteUsername ?? `User #${remoteUserId}`}
           onAccept={acceptCall}
@@ -260,7 +291,7 @@ function App() {
         />
       )}
 
-      {status === 'active' && (
+      {status === "active" && (
         <ActiveCallWindow
           remoteStream={remoteStream}
           remoteUsername={remoteUsername ?? `User #${remoteUserId}`}

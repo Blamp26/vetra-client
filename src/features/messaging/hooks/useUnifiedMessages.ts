@@ -106,11 +106,16 @@ export function useUnifiedMessages(context: ChatContext | null) {
   );
 
   const conversation = useMemo(() => {
-    if (!context) return null;
-    return isRoom
-      ? roomConversations[context.roomId]
-      : conversations[context.partnerId];
-  }, [context, isRoom, roomConversations, conversations]);
+    if (contextType === "room" && roomId !== null) {
+      return roomConversations[roomId] ?? null;
+    }
+
+    if (contextType === "direct" && directPartnerId !== null) {
+      return conversations[directPartnerId] ?? null;
+    }
+
+    return null;
+  }, [contextType, roomId, directPartnerId, roomConversations, conversations]);
 
   const fetchPage = useCallback(
     (limit: number, beforeId?: number) => {

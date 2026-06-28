@@ -69,26 +69,29 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
     activeChat.type === "direct" ? activeChat.partnerId : null;
   const activePartnerRef =
     activeChat.type === "direct" ? activeChat.partnerRef : undefined;
+  const activeRoomId = activeChat.type === "room" ? activeChat.roomId : null;
+  const activeRoomRef =
+    activeChat.type === "room" ? activeChat.roomRef : undefined;
   const directPreviewPublicId =
     activePartnerId !== null
       ? conversationPreviews[activePartnerId]?.partner_public_id
       : undefined;
 
   const chatContext = useMemo((): ChatContext | null => {
-    if (activeChat.type === "direct")
+    if (activePartnerId !== null)
       return {
         type: "direct",
-        partnerId: activeChat.partnerId,
-        partnerRef: activeChat.partnerRef,
+        partnerId: activePartnerId,
+        partnerRef: activePartnerRef,
       };
-    if (activeChat.type === "room")
+    if (activeRoomId !== null)
       return {
         type: "room",
-        roomId: activeChat.roomId,
-        roomRef: activeChat.roomRef,
+        roomId: activeRoomId,
+        roomRef: activeRoomRef,
       };
     return null;
-  }, [activeChat]);
+  }, [activePartnerId, activePartnerRef, activeRoomId, activeRoomRef]);
 
   const { messages, isLoading, hasMore, loadMore, sendMessage } =
     useUnifiedMessages(chatContext);
