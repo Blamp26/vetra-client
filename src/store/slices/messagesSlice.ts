@@ -1,20 +1,20 @@
-import { StateCreator } from 'zustand';
-import { 
-  Message, 
-  MessageStatus, 
-  ConversationPreview, 
-  MessageEditedPayload, 
+import { StateCreator } from "zustand";
+import {
+  Message,
+  MessageStatus,
+  ConversationPreview,
+  MessageEditedPayload,
   MessageDeletedPayload,
   ConversationState,
   DEFAULT_CONV,
   User,
-  Server
-} from '@/shared/types';
+  Server,
+} from "@/shared/types";
 
 function patchConv(
   record: Record<number, ConversationState>,
-  id:     number,
-  patch:  Partial<ConversationState>,
+  id: number,
+  patch: Partial<ConversationState>,
 ): Record<number, ConversationState> {
   return {
     ...record,
@@ -25,22 +25,26 @@ function patchConv(
 export interface MessagesSlice {
   conversations: Record<number, ConversationState>;
   conversationPreviews: Record<number, ConversationPreview>;
-  searchResults: { users: User[], servers: Server[] };
+  searchResults: { users: User[]; servers: Server[] };
   isSearching: boolean;
-  editingMessage: { 
-    id: number; 
-    content: string; 
-    chatType: 'direct' | 'room'; 
-    targetId: number; 
+  editingMessage: {
+    id: number;
+    content: string;
+    chatType: "direct" | "room";
+    targetId: number;
   } | null;
   selectionMode: boolean;
   selectedMessageIds: number[];
   forwardingMessageIds: number[] | null;
 
-  setSearchResults: (results: { users: User[], servers: Server[] }) => void;
+  setSearchResults: (results: { users: User[]; servers: Server[] }) => void;
   setIsSearching: (searching: boolean) => void;
-  startEditing: (message: Message, chatType: 'direct' | 'room', targetId: number) => void; 
-  cancelEditing: () => void; 
+  startEditing: (
+    message: Message,
+    chatType: "direct" | "room",
+    targetId: number,
+  ) => void;
+  cancelEditing: () => void;
   setSelectionMode: (enabled: boolean) => void;
   toggleMessageSelection: (messageId: number) => void;
   clearSelection: () => void;
@@ -60,7 +64,10 @@ export interface MessagesSlice {
   toggleDirectReaction: (payload: any) => void;
 }
 
-export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (set, get) => ({
+export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
+  set,
+  get,
+) => ({
   conversations: {},
   conversationPreviews: {},
   searchResults: { users: [], servers: [] },
@@ -73,22 +80,22 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
   setSearchResults: (results) => set({ searchResults: results }),
   setIsSearching: (searching) => set({ isSearching: searching }),
 
-  startEditing: (message, chatType, targetId) => 
-    set({ 
-      editingMessage: { 
-        id: message.id, 
-        content: message.content ?? "", 
-        chatType, 
-        targetId, 
-      }, 
-    }), 
+  startEditing: (message, chatType, targetId) =>
+    set({
+      editingMessage: {
+        id: message.id,
+        content: message.content ?? "",
+        chatType,
+        targetId,
+      },
+    }),
 
-  cancelEditing: () => set({ editingMessage: null }), 
+  cancelEditing: () => set({ editingMessage: null }),
 
-  setSelectionMode: (enabled) => 
-    set({ 
-      selectionMode: enabled, 
-      selectedMessageIds: enabled ? get().selectedMessageIds : [] 
+  setSelectionMode: (enabled) =>
+    set({
+      selectionMode: enabled,
+      selectedMessageIds: enabled ? get().selectedMessageIds : [],
     }),
 
   toggleMessageSelection: (messageId) => {
@@ -97,13 +104,14 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
     set({
       selectedMessageIds: isSelected
         ? selectedMessageIds.filter((id: number) => id !== messageId)
-        : [...selectedMessageIds, messageId]
+        : [...selectedMessageIds, messageId],
     });
   },
 
   clearSelection: () => set({ selectionMode: false, selectedMessageIds: [] }),
 
-  setForwardingMessages: (messageIds) => set({ forwardingMessageIds: messageIds }),
+  setForwardingMessages: (messageIds) =>
+    set({ forwardingMessageIds: messageIds }),
 
   initConversation: (partnerId) => {
     if (get().conversations[partnerId]) return;
@@ -156,7 +164,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
         recipient_id != null
           ? sender_id === currentId
             ? recipient_id
-            : sender_id ?? null
+            : (sender_id ?? null)
           : null;
       if (partnerId == null) return state;
 
@@ -166,7 +174,9 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
       return {
         conversations: patchConv(state.conversations, partnerId, {
           messages: conv.messages.map((m: Message) =>
-            m.id === id ? { ...m, content, edited_at: edited_at ?? m.edited_at } : m
+            m.id === id
+              ? { ...m, content, edited_at: edited_at ?? m.edited_at }
+              : m,
           ),
         }),
       };
@@ -179,7 +189,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
         recipient_id != null
           ? sender_id === currentId
             ? recipient_id
-            : sender_id ?? null
+            : (sender_id ?? null)
           : null;
       if (partnerId == null) return state;
 
@@ -198,7 +208,10 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
     set((state: any) => {
       // 1. Обновляем сообщения в активных чатах
       const nextConversations: Record<number, ConversationState> = {};
-      for (const [key, conv] of Object.entries(state.conversations) as [string, ConversationState][]) {
+      for (const [key, conv] of Object.entries(state.conversations) as [
+        string,
+        ConversationState,
+      ][]) {
         const partnerId = Number(key);
         let changed = false;
         const nextMessages = conv.messages.map((m: Message) => {
@@ -215,36 +228,41 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
 
       // 2. Обновляем статус последнего сообщения в списке превью
       const nextPreviews: Record<number, ConversationPreview> = {};
-      for (const [key, preview] of Object.entries(state.conversationPreviews) as [string, ConversationPreview][]) {
+      for (const [key, preview] of Object.entries(
+        state.conversationPreviews,
+      ) as [string, ConversationPreview][]) {
         const partnerId = Number(key);
         if (preview.last_message && idSet.has(preview.last_message.id)) {
           nextPreviews[partnerId] = {
             ...preview,
-            last_message: { ...preview.last_message, status }
+            last_message: { ...preview.last_message, status },
           };
         } else {
           nextPreviews[partnerId] = preview;
         }
       }
 
-      return { 
+      return {
         conversations: nextConversations,
-        conversationPreviews: nextPreviews
+        conversationPreviews: nextPreviews,
       };
     });
   },
 
   setPreviews: (previews) =>
     set({
-      conversationPreviews: Object.fromEntries(previews.map((p) => [p.partner_id, p])),
+      conversationPreviews: Object.fromEntries(
+        previews.map((p) => [p.partner_id, p]),
+      ),
     }),
 
   upsertPreview: (preview) =>
     set((state: any) => {
       const existing = state.conversationPreviews[preview.partner_id];
-      const newUnread = preview.unread_count === 0 
-        ? 0 
-        : (existing?.unread_count ?? 0) + (preview.unread_count ?? 0);
+      const newUnread =
+        preview.unread_count === 0
+          ? 0
+          : (existing?.unread_count ?? 0) + (preview.unread_count ?? 0);
 
       return {
         conversationPreviews: {
@@ -262,6 +280,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
     set((state: any) => {
       const existing = state.conversationPreviews[partnerId];
       if (!existing) return state;
+      if (existing.unread_count === 0) return state;
       return {
         conversationPreviews: {
           ...state.conversationPreviews,
@@ -277,17 +296,17 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (se
         partner_id != null
           ? sender_id === currentId
             ? partner_id
-            : sender_id ?? null
+            : (sender_id ?? null)
           : null;
       if (targetPartnerId == null) return state;
 
       const conv = state.conversations[targetPartnerId];
       if (!conv) return state;
-      
+
       return {
         conversations: patchConv(state.conversations, targetPartnerId, {
           messages: conv.messages.map((m: Message) =>
-            m.id === message_id ? { ...m, reactions } : m
+            m.id === message_id ? { ...m, reactions } : m,
           ),
         }),
       };

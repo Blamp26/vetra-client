@@ -64,6 +64,15 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
   const [partner, setPartner] = useState<User | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
+  const activeChatType = activeChat.type;
+  const activePartnerId =
+    activeChat.type === "direct" ? activeChat.partnerId : null;
+  const activePartnerRef =
+    activeChat.type === "direct" ? activeChat.partnerRef : undefined;
+  const directPreviewPublicId =
+    activePartnerId !== null
+      ? conversationPreviews[activePartnerId]?.partner_public_id
+      : undefined;
 
   const chatContext = useMemo((): ChatContext | null => {
     if (activeChat.type === "direct")
@@ -90,27 +99,30 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
       : activeChat.type === "room"
         ? activeChat.roomId
         : 0;
+  const directPartnerRef = useMemo(
+    () =>
+      activePartnerId !== null
+        ? withFallbackRef(
+            activePartnerId,
+            activePartnerRef,
+            directPreviewPublicId
+              ? {
+                  id: activePartnerId,
+                  public_id: directPreviewPublicId,
+                }
+              : undefined,
+          )
+        : null,
+    [activePartnerId, activePartnerRef, directPreviewPublicId],
+  );
 
   useEffect(() => {
     setReplyTo(null);
     setIsSearchOpen(false);
-    if (activeChat.type === "direct") {
+    if (activeChatType === "direct" && activePartnerId !== null) {
       let cancelled = false;
       authApi
-        .getUser(
-          withFallbackRef(
-            activeChat.partnerId,
-            activeChat.partnerRef,
-            conversationPreviews[activeChat.partnerId]
-              ? {
-                  id: activeChat.partnerId,
-                  public_id:
-                    conversationPreviews[activeChat.partnerId]
-                      .partner_public_id,
-                }
-              : undefined,
-          ),
-        )
+        .getUser(directPartnerRef ?? activePartnerId)
         .then((user: User) => {
           if (!cancelled) setPartner(user);
         });
@@ -120,49 +132,25 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
     } else {
       setPartner(null);
     }
-  }, [activeChat, conversationPreviews]);
+  }, [activeChatType, activePartnerId, directPartnerRef]);
 
   const handleTypingStart = useCallback(() => {
     if (!socketManager || !chatContext) return;
     if (chatContext.type === "direct") {
-      socketManager.sendTypingStart(
-        withFallbackRef(
-          chatContext.partnerId,
-          chatContext.partnerRef,
-          conversationPreviews[chatContext.partnerId]
-            ? {
-                id: chatContext.partnerId,
-                public_id:
-                  conversationPreviews[chatContext.partnerId].partner_public_id,
-              }
-            : undefined,
-        ),
-      );
+      socketManager.sendTypingStart(directPartnerRef ?? chatContext.partnerId);
     } else {
       socketManager.sendRoomTypingStart(chatContext.roomId);
     }
-  }, [socketManager, chatContext, conversationPreviews]);
+  }, [socketManager, chatContext, directPartnerRef]);
 
   const handleTypingStop = useCallback(() => {
     if (!socketManager || !chatContext) return;
     if (chatContext.type === "direct") {
-      socketManager.sendTypingStop(
-        withFallbackRef(
-          chatContext.partnerId,
-          chatContext.partnerRef,
-          conversationPreviews[chatContext.partnerId]
-            ? {
-                id: chatContext.partnerId,
-                public_id:
-                  conversationPreviews[chatContext.partnerId].partner_public_id,
-              }
-            : undefined,
-        ),
-      );
+      socketManager.sendTypingStop(directPartnerRef ?? chatContext.partnerId);
     } else {
       socketManager.sendRoomTypingStop(chatContext.roomId);
     }
-  }, [socketManager, chatContext, conversationPreviews]);
+  }, [socketManager, chatContext, directPartnerRef]);
 
   const typingNickname = useMemo(() => {
     if (activeChat.type === "direct") {
