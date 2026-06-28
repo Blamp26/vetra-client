@@ -10,35 +10,59 @@ import { formatPreviewTime } from "@/utils/formatDate";
 import { Avatar } from "@/shared/components/Avatar";
 import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
-import { roomChatForPreview, serverChatForServer } from "@/shared/utils/chatRoutes";
+import {
+  roomChatForPreview,
+  serverChatForServer,
+} from "@/shared/utils/chatRoutes";
+import { resolvePresenceStatus } from "@/shared/utils/presence";
 
 interface SidebarProps {
   isServerMode?: boolean;
 }
 
 type SidebarItem =
-  | { kind: "direct"; id: number; name: string; time: string; preview: string; unread: number; isOnline: boolean; status?: 'online' | 'away' | 'dnd' | 'offline' | null }
-  | { kind: "room";   id: number; name: string; time: string; preview: string; unread: number };
+  | {
+      kind: "direct";
+      id: number;
+      name: string;
+      time: string;
+      preview: string;
+      unread: number;
+      isOnline: boolean;
+      status?: "online" | "away" | "dnd" | "offline" | null;
+    }
+  | {
+      kind: "room";
+      id: number;
+      name: string;
+      time: string;
+      preview: string;
+      unread: number;
+    };
 
-export function Sidebar({
-  isServerMode = false,
-}: SidebarProps) {
-  const currentUser          = useAppStore((s: RootState) => s.currentUser);
-  const activeChat           = useAppStore((s: RootState) => s.activeChat);
-  const conversationPreviews = useAppStore((s: RootState) => s.conversationPreviews);
-  const roomPreviews         = useAppStore((s: RootState) => s.roomPreviews);
-  const onlineUserIds        = useAppStore((s: RootState) => s.onlineUserIds);
-  const userStatuses         = useAppStore((s: RootState) => s.userStatuses);
-  const servers              = useAppStore((s: RootState) => s.servers);
-  const setServers           = useAppStore((s: RootState) => s.setServers);
-  const setActiveChat        = useAppStore((s: RootState) => s.setActiveChat);
-  const activeModal          = useAppStore((s: RootState) => s.activeModal);
-  const openModal            = useAppStore((s: RootState) => s.openModal);
-  const closeModal           = useAppStore((s: RootState) => s.closeModal);
+export function Sidebar({ isServerMode = false }: SidebarProps) {
+  const currentUser = useAppStore((s: RootState) => s.currentUser);
+  const activeChat = useAppStore((s: RootState) => s.activeChat);
+  const conversationPreviews = useAppStore(
+    (s: RootState) => s.conversationPreviews,
+  );
+  const roomPreviews = useAppStore((s: RootState) => s.roomPreviews);
+  const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
+  const userStatuses = useAppStore((s: RootState) => s.userStatuses);
+  const lastSeenAt = useAppStore((s: RootState) => s.lastSeenAt);
+  const servers = useAppStore((s: RootState) => s.servers);
+  const setServers = useAppStore((s: RootState) => s.setServers);
+  const setActiveChat = useAppStore((s: RootState) => s.setActiveChat);
+  const activeModal = useAppStore((s: RootState) => s.activeModal);
+  const openModal = useAppStore((s: RootState) => s.openModal);
+  const closeModal = useAppStore((s: RootState) => s.closeModal);
 
   const [showProfile, setShowProfile] = useState(false);
 
-  const getPreviewText = (content?: string | null, mediaFileId?: string | null) => {
+  const getPreviewText = (
+    content?: string | null,
+    mediaFileId?: string | null,
+  ) => {
     if (content && content.trim().length > 0) return content;
     if (mediaFileId) return "Attachment";
     return "No messages yet";
@@ -52,32 +76,42 @@ export function Sidebar({
       .catch((err) => console.error("Failed to load servers:", err));
   }, [currentUser, setServers]);
 
-  const directItems: SidebarItem[] = Object.values(conversationPreviews).map((p) => ({
-    kind:     "direct",
-    id:       p.partner_id,
-    name:     p.partner_display_name ?? p.partner_username,
-    time:     p.last_message.inserted_at,
-    preview:  getPreviewText(p.last_message.content, p.last_message.media_file_id),
-    unread:   p.unread_count,
-    isOnline: onlineUserIds.has(Number(p.partner_id)),
-    status:   userStatuses[Number(p.partner_id)] || "offline",
-  }));
+  const directItems: SidebarItem[] = Object.values(conversationPreviews).map(
+    (p) => ({
+      kind: "direct",
+      id: p.partner_id,
+      name: p.partner_display_name ?? p.partner_username,
+      time: p.last_message.inserted_at,
+      preview: getPreviewText(
+        p.last_message.content,
+        p.last_message.media_file_id,
+      ),
+      unread: p.unread_count,
+      isOnline: onlineUserIds.has(Number(p.partner_id)),
+      status: resolvePresenceStatus({
+        userId: Number(p.partner_id),
+        onlineUserIds,
+        userStatuses,
+        lastSeenAt: lastSeenAt[Number(p.partner_id)],
+      }),
+    }),
+  );
 
   const roomItems: SidebarItem[] = Object.values(roomPreviews)
     .filter((r) => r.server_id == null)
     .map((r) => ({
-      kind:    "room",
-      id:      r.id,
-      name:    r.name,
-      time:    r.last_message_at ?? r.inserted_at,
+      kind: "room",
+      id: r.id,
+      name: r.name,
+      time: r.last_message_at ?? r.inserted_at,
       preview: r.last_message
         ? getPreviewText(r.last_message.content, r.last_message.media_file_id)
         : "No messages yet",
-      unread:  r.unread_count,
+      unread: r.unread_count,
     }));
 
   const allItems = [...directItems, ...roomItems].sort(
-    (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()
+    (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
   );
 
   const serverList = Object.values(servers);
@@ -91,7 +125,11 @@ export function Sidebar({
 
   const handleItemClick = (item: SidebarItem) => {
     if (item.kind === "direct") {
-      setActiveChat({ type: "direct", partnerId: item.id, partnerRef: conversationPreviews[item.id]?.partner_public_id ?? item.id });
+      setActiveChat({
+        type: "direct",
+        partnerId: item.id,
+        partnerRef: conversationPreviews[item.id]?.partner_public_id ?? item.id,
+      });
     } else {
       const roomPreview = roomPreviews[item.id];
       if (roomPreview) {
@@ -103,7 +141,9 @@ export function Sidebar({
   };
 
   return (
-    <div className={cn("flex h-full w-full flex-col", isServerMode && "w-[60px]")}>
+    <div
+      className={cn("flex h-full w-full flex-col", isServerMode && "w-[60px]")}
+    >
       {!isServerMode && (
         <div className="p-2 border-b border-border">
           <div className="flex items-center justify-between">
@@ -117,7 +157,9 @@ export function Sidebar({
       {!isServerMode && serverList.length > 0 && (
         <div className="p-2 border-b border-border">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs uppercase text-muted-foreground">Servers</span>
+            <span className="text-xs uppercase text-muted-foreground">
+              Servers
+            </span>
             <button onClick={() => openModal("CREATE_SERVER")}>+</button>
           </div>
           <div className="space-y-1">
@@ -144,13 +186,17 @@ export function Sidebar({
               onClick={() => handleItemClick(item)}
               className={cn(
                 "flex w-full items-center gap-2 p-2 text-left border border-transparent",
-                isActive && "border-border bg-card"
+                isActive && "border-border bg-card",
               )}
             >
               <Avatar
                 name={item.name}
                 size="medium"
-                status={item.kind === "direct" ? (item.status || (item.isOnline ? "online" : "offline")) : null}
+                status={
+                  item.kind === "direct"
+                    ? item.status || (item.isOnline ? "online" : "offline")
+                    : null
+                }
               />
               {!isServerMode && (
                 <div className="min-w-0 flex-1">
@@ -175,8 +221,12 @@ export function Sidebar({
         })}
       </div>
 
-      {activeModal === "CREATE_ROOM" && <CreateRoomModal onClose={closeModal} />}
-      {activeModal === "CREATE_SERVER" && <CreateServerModal onClose={closeModal} />}
+      {activeModal === "CREATE_ROOM" && (
+        <CreateRoomModal onClose={closeModal} />
+      )}
+      {activeModal === "CREATE_SERVER" && (
+        <CreateServerModal onClose={closeModal} />
+      )}
       {activeModal === "CREATE_PICKER" && (
         <CreatePickerModal
           onClose={closeModal}

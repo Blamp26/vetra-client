@@ -2,11 +2,23 @@ import { useMemo, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { Avatar } from "@/shared/components/Avatar";
 import { cn } from "@/shared/utils/cn";
-import { Settings, Mic, MicOff, Headphones, HeadphoneOff, Phone, PhoneOff } from "lucide-react";
+import {
+  Settings,
+  Mic,
+  MicOff,
+  Headphones,
+  HeadphoneOff,
+  Phone,
+  PhoneOff,
+} from "lucide-react";
 import type { CallStatus } from "@/features/calling/hooks/useCall.types";
 import { ProfileModal } from "@/features/profile/components/ProfileModal/ProfileModal";
 import { ConfirmModal } from "@/shared/components/ConfirmModal/ConfirmModal";
 import { formatCallTime } from "@/utils/formatDate";
+import {
+  getPresenceLabel,
+  resolvePresenceStatus,
+} from "@/shared/utils/presence";
 
 interface SidebarFooterProps {
   callStatus: CallStatus;
@@ -29,7 +41,7 @@ export function SidebarFooter({
   onHangUp,
   onAcceptCall,
   onRejectCall,
-  onOpenSettings
+  onOpenSettings,
 }: SidebarFooterProps) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
@@ -44,42 +56,44 @@ export function SidebarFooter({
 
   const displayName = currentUser?.display_name || currentUser?.username || "?";
   const userId = Number(currentUser?.id);
-  const isOnline = currentUser ? onlineUserIds.has(userId) : false;
-  const currentStatus = userStatuses[userId] || currentUser?.status || (isOnline ? "online" : "offline");
+  const currentStatus = currentUser
+    ? resolvePresenceStatus({
+        userId,
+        onlineUserIds,
+        userStatuses,
+        fallbackStatus: currentUser.status,
+        lastSeenAt: currentUser.last_seen_at,
+        preferFallbackStatusWhenUnknown: true,
+      })
+    : "offline";
 
   const statusText = useMemo(() => {
     if (!soundEnabled) return "Sound muted";
     if (!micEnabled) return "Microphone muted";
 
-    const statusMap: Record<string, string> = {
-      online: "Online",
-      away: "Away",
-      dnd: "Do Not Disturb",
-      offline: "Offline"
-    };
-
-    return statusMap[currentStatus] || "Offline";
+    return getPresenceLabel(currentStatus);
   }, [micEnabled, soundEnabled, currentStatus]);
 
-  const isMicMuted = callStatus === 'active' ? isMuted : !micEnabled;
+  const isMicMuted = callStatus === "active" ? isMuted : !micEnabled;
 
   return (
     <div className="border-t border-border bg-card p-2">
       <div className="flex flex-col gap-2">
-
-        {(callStatus === 'active' || callStatus === 'calling' || callStatus === 'ringing') && (
+        {(callStatus === "active" ||
+          callStatus === "calling" ||
+          callStatus === "ringing") && (
           <div className="flex items-center justify-between border border-border p-2 bg-background">
             <div className="flex flex-col min-w-0">
               <span className="text-xs text-muted-foreground">
-                {callStatus === 'active'
+                {callStatus === "active"
                   ? `${remoteUsername || "User"} · ${formatCallTime(callSeconds)}`
-                  : callStatus === 'calling'
-                  ? `Calling ${remoteUsername || "User"}...`
-                  : `Incoming · ${remoteUsername || "User"}`}
+                  : callStatus === "calling"
+                    ? `Calling ${remoteUsername || "User"}...`
+                    : `Incoming · ${remoteUsername || "User"}`}
               </span>
             </div>
             <div className="flex items-center gap-1">
-              {callStatus === 'ringing' && (
+              {callStatus === "ringing" && (
                 <>
                   <button
                     onClick={onAcceptCall}
@@ -97,9 +111,13 @@ export function SidebarFooter({
                   </button>
                 </>
               )}
-              {(callStatus === 'active' || callStatus === 'calling') && (
+              {(callStatus === "active" || callStatus === "calling") && (
                 <button
-                  onClick={() => callStatus === 'calling' ? onHangUp() : setConfirmHangUp(true)}
+                  onClick={() =>
+                    callStatus === "calling"
+                      ? onHangUp()
+                      : setConfirmHangUp(true)
+                  }
                   title="Hang up"
                   className="flex h-7 w-7 items-center justify-center bg-destructive text-destructive-foreground"
                 >
@@ -111,7 +129,10 @@ export function SidebarFooter({
         )}
 
         <div className="flex items-center justify-between border border-border bg-background p-1.5">
-          <div className="flex cursor-pointer items-center gap-2" onClick={() => setShowProfile(true)}>
+          <div
+            className="flex cursor-pointer items-center gap-2"
+            onClick={() => setShowProfile(true)}
+          >
             <Avatar
               name={displayName}
               src={currentUser?.avatar_url}
@@ -119,14 +140,23 @@ export function SidebarFooter({
               status={currentStatus as any}
             />
             <div className="flex flex-col min-w-0">
-              <span className="text-xs font-normal truncate">{displayName}</span>
-              <span className={cn(
-                "text-[10px] truncate",
-                currentStatus === "online" ? "text-online" :
-                currentStatus === "away" ? "text-away" :
-                currentStatus === "dnd" ? "text-busy" :
-                "text-muted-foreground"
-              )}>{statusText}</span>
+              <span className="text-xs font-normal truncate">
+                {displayName}
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] truncate",
+                  currentStatus === "online"
+                    ? "text-online"
+                    : currentStatus === "away"
+                      ? "text-away"
+                      : currentStatus === "dnd"
+                        ? "text-busy"
+                        : "text-muted-foreground",
+                )}
+              >
+                {statusText}
+              </span>
             </div>
           </div>
 
@@ -134,21 +164,29 @@ export function SidebarFooter({
             <button
               onClick={() => {
                 toggleMic();
-                if (callStatus === 'active' && onMuteToggle) {
+                if (callStatus === "active" && onMuteToggle) {
                   onMuteToggle();
                 }
               }}
               title="Mic"
               className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:bg-accent"
             >
-              {isMicMuted ? <MicOff className="h-3.5 w-3.5 text-destructive" /> : <Mic className="h-3.5 w-3.5" />}
+              {isMicMuted ? (
+                <MicOff className="h-3.5 w-3.5 text-destructive" />
+              ) : (
+                <Mic className="h-3.5 w-3.5" />
+              )}
             </button>
             <button
               onClick={() => toggleSound()}
               title="Sound"
               className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:bg-accent"
             >
-              {soundEnabled ? <Headphones className="h-3.5 w-3.5" /> : <HeadphoneOff className="h-3.5 w-3.5 text-destructive" />}
+              {soundEnabled ? (
+                <Headphones className="h-3.5 w-3.5" />
+              ) : (
+                <HeadphoneOff className="h-3.5 w-3.5 text-destructive" />
+              )}
             </button>
             <button
               onClick={onOpenSettings}

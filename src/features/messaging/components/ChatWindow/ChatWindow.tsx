@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useUnifiedMessages, type ChatContext } from "@/features/messaging/hooks/useUnifiedMessages";
+import {
+  useUnifiedMessages,
+  type ChatContext,
+} from "@/features/messaging/hooks/useUnifiedMessages";
 import { useAppStore, type RootState } from "@/store";
 import { authApi } from "@/api/auth";
 import { MessageList } from "../MessageList/MessageList";
@@ -8,10 +11,14 @@ import { MessageSearch } from "../MessageSearch/MessageSearch";
 import { formatLastSeen } from "@/utils/formatDate";
 import type { ActiveChat, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
-import { CallButton } from '@/features/calling/components/CallButton';
-import type { CallStatus } from '@/features/calling/hooks/useCall.types';
+import { CallButton } from "@/features/calling/components/CallButton";
+import type { CallStatus } from "@/features/calling/hooks/useCall.types";
 import { cn } from "@/shared/utils/cn";
 import { withFallbackRef } from "@/shared/utils/refs";
+import {
+  getPresenceLabel,
+  resolvePresenceStatus,
+} from "@/shared/utils/presence";
 
 interface Props {
   activeChat: ActiveChat;
@@ -20,9 +27,9 @@ interface Props {
 }
 
 interface ReplyTarget {
-  id:      number;
+  id: number;
   content: string;
-  author:  string;
+  author: string;
 }
 
 function TypingIndicator({ nickname }: { nickname: string }) {
@@ -37,50 +44,79 @@ function TypingIndicator({ nickname }: { nickname: string }) {
 export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
-  
+
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
   const userStatuses = useAppStore((s: RootState) => s.userStatuses);
   const lastSeenAt = useAppStore((s: RootState) => s.lastSeenAt);
   const typingPartnerIds = useAppStore((s: RootState) => s.typingPartnerIds);
-  
+
   const roomPreviews = useAppStore((s: RootState) => s.roomPreviews);
-  const conversationPreviews = useAppStore((s: RootState) => s.conversationPreviews);
-  const typingRoomMemberIds = useAppStore((s: RootState) => s.typingRoomMemberIds);
-  const typingRoomMemberInfo = useAppStore((s: RootState) => s.typingRoomMemberInfo);
+  const conversationPreviews = useAppStore(
+    (s: RootState) => s.conversationPreviews,
+  );
+  const typingRoomMemberIds = useAppStore(
+    (s: RootState) => s.typingRoomMemberIds,
+  );
+  const typingRoomMemberInfo = useAppStore(
+    (s: RootState) => s.typingRoomMemberInfo,
+  );
 
   const [partner, setPartner] = useState<User | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
 
   const chatContext = useMemo((): ChatContext | null => {
-    if (activeChat.type === "direct") return { type: "direct", partnerId: activeChat.partnerId, partnerRef: activeChat.partnerRef };
-    if (activeChat.type === "room") return { type: "room", roomId: activeChat.roomId, roomRef: activeChat.roomRef };
+    if (activeChat.type === "direct")
+      return {
+        type: "direct",
+        partnerId: activeChat.partnerId,
+        partnerRef: activeChat.partnerRef,
+      };
+    if (activeChat.type === "room")
+      return {
+        type: "room",
+        roomId: activeChat.roomId,
+        roomRef: activeChat.roomRef,
+      };
     return null;
   }, [activeChat]);
 
-  const { messages, isLoading, hasMore, loadMore, sendMessage } = useUnifiedMessages(chatContext);
+  const { messages, isLoading, hasMore, loadMore, sendMessage } =
+    useUnifiedMessages(chatContext);
 
-  const chatId = activeChat.type === "direct" 
-    ? activeChat.partnerId 
-    : (activeChat.type === "room" ? activeChat.roomId : 0);
+  const chatId =
+    activeChat.type === "direct"
+      ? activeChat.partnerId
+      : activeChat.type === "room"
+        ? activeChat.roomId
+        : 0;
 
   useEffect(() => {
     setReplyTo(null);
     setIsSearchOpen(false);
     if (activeChat.type === "direct") {
       let cancelled = false;
-      authApi.getUser(
-        withFallbackRef(
-          activeChat.partnerId,
-          activeChat.partnerRef,
-          conversationPreviews[activeChat.partnerId]
-            ? { id: activeChat.partnerId, public_id: conversationPreviews[activeChat.partnerId].partner_public_id }
-            : undefined,
-        ),
-      ).then((user: User) => {
-        if (!cancelled) setPartner(user);
-      });
-      return () => { cancelled = true; };
+      authApi
+        .getUser(
+          withFallbackRef(
+            activeChat.partnerId,
+            activeChat.partnerRef,
+            conversationPreviews[activeChat.partnerId]
+              ? {
+                  id: activeChat.partnerId,
+                  public_id:
+                    conversationPreviews[activeChat.partnerId]
+                      .partner_public_id,
+                }
+              : undefined,
+          ),
+        )
+        .then((user: User) => {
+          if (!cancelled) setPartner(user);
+        });
+      return () => {
+        cancelled = true;
+      };
     } else {
       setPartner(null);
     }
@@ -94,7 +130,11 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
           chatContext.partnerId,
           chatContext.partnerRef,
           conversationPreviews[chatContext.partnerId]
-            ? { id: chatContext.partnerId, public_id: conversationPreviews[chatContext.partnerId].partner_public_id }
+            ? {
+                id: chatContext.partnerId,
+                public_id:
+                  conversationPreviews[chatContext.partnerId].partner_public_id,
+              }
             : undefined,
         ),
       );
@@ -111,7 +151,11 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
           chatContext.partnerId,
           chatContext.partnerRef,
           conversationPreviews[chatContext.partnerId]
-            ? { id: chatContext.partnerId, public_id: conversationPreviews[chatContext.partnerId].partner_public_id }
+            ? {
+                id: chatContext.partnerId,
+                public_id:
+                  conversationPreviews[chatContext.partnerId].partner_public_id,
+              }
             : undefined,
         ),
       );
@@ -123,7 +167,7 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
   const typingNickname = useMemo(() => {
     if (activeChat.type === "direct") {
       return typingPartnerIds.has(activeChat.partnerId) && partner
-        ? (partner.display_name || partner.username)
+        ? partner.display_name || partner.username
         : null;
     } else if (activeChat.type === "room") {
       const names: string[] = [];
@@ -134,39 +178,45 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
       return names.length > 0 ? names.join(", ") : null;
     }
     return null;
-  }, [activeChat, typingPartnerIds, partner, typingRoomMemberIds, typingRoomMemberInfo]);
+  }, [
+    activeChat,
+    typingPartnerIds,
+    partner,
+    typingRoomMemberIds,
+    typingRoomMemberInfo,
+  ]);
 
   if (!currentUser) return null;
 
   const renderHeader = () => {
     if (activeChat.type === "direct") {
-      if (!partner) return <div className="p-4 border-b border-border">Loading...</div>;
+      if (!partner)
+        return <div className="p-4 border-b border-border">Loading...</div>;
 
-      const isOnline = onlineUserIds.has(activeChat.partnerId);
-      const currentStatus = userStatuses[activeChat.partnerId] || partner.status || (isOnline ? "online" : "offline");
-      
+      const resolvedLastSeenAt =
+        lastSeenAt[activeChat.partnerId] ?? partner.last_seen_at;
+      const currentStatus = resolvePresenceStatus({
+        userId: activeChat.partnerId,
+        onlineUserIds,
+        userStatuses,
+        fallbackStatus: partner.status,
+        lastSeenAt: resolvedLastSeenAt,
+      });
+
       const statusLine = (() => {
-        if (isOnline) {
-          const statusMap: Record<string, string> = {
-            online: "Online",
-            away: "Away",
-            dnd: "Do Not Disturb",
-            offline: "Offline"
-          };
-          return statusMap[currentStatus] || "Online";
+        if (currentStatus !== "offline") {
+          return getPresenceLabel(currentStatus);
         }
-        const storeLastSeen = lastSeenAt[activeChat.partnerId];
-        if (storeLastSeen) return formatLastSeen(storeLastSeen);
-        if (partner.last_seen_at) return formatLastSeen(partner.last_seen_at);
+        if (resolvedLastSeenAt) return formatLastSeen(resolvedLastSeenAt);
         return "Offline";
       })();
 
       return (
         <div className="flex items-center justify-between border-b border-border p-2">
           <div className="flex items-center gap-2">
-            <Avatar 
-              name={partner.display_name || partner.username} 
-              src={partner.avatar_url} 
+            <Avatar
+              name={partner.display_name || partner.username}
+              src={partner.avatar_url}
               size="medium"
               status={currentStatus as any}
             />
@@ -174,20 +224,29 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
               <h3 className="text-sm font-normal">
                 {partner.display_name || partner.username}
               </h3>
-              <p className={cn(
-                "text-[10px]", 
-                currentStatus === "online" ? "text-online" :
-                currentStatus === "away" ? "text-away" :
-                currentStatus === "dnd" ? "text-busy" :
-                "text-muted-foreground"
-              )}>
+              <p
+                className={cn(
+                  "text-[10px]",
+                  currentStatus === "online"
+                    ? "text-online"
+                    : currentStatus === "away"
+                      ? "text-away"
+                      : currentStatus === "dnd"
+                        ? "text-busy"
+                        : "text-muted-foreground",
+                )}
+              >
                 {statusLine}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <CallButton
-              targetUserId={partner?.public_id ?? activeChat.partnerRef ?? activeChat.partnerId}
+              targetUserId={
+                partner?.public_id ??
+                activeChat.partnerRef ??
+                activeChat.partnerId
+              }
               targetUsername={partner.display_name || partner.username}
               status={callStatus}
               onCall={onStartCall}
@@ -202,10 +261,7 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
       return (
         <div className="flex items-center justify-between border-b border-border p-2">
           <div className="flex items-center gap-2">
-            <Avatar 
-              name={roomPreview?.name || `#${roomId}`} 
-              size="medium"
-            />
+            <Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />
             <div>
               <h3 className="text-sm font-normal">
                 {roomPreview?.name || `Room #${roomId}`}
@@ -250,10 +306,10 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
       />
 
       {isSearchOpen && (
-        <MessageSearch 
-          targetId={chatId} 
+        <MessageSearch
+          targetId={chatId}
           type={activeChat.type === "direct" ? "direct" : "room"}
-          onClose={() => setIsSearchOpen(false)} 
+          onClose={() => setIsSearchOpen(false)}
           onJumpTo={(id) => console.log("Jump to message:", id)}
         />
       )}
