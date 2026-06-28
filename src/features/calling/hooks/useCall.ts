@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Channel } from 'phoenix';
 import { useAppStore } from '@/store';
+import type { ResourceRef } from '@/shared/types';
 import { WebRTCService, type WebRTCDiagnostics } from '../services/webrtcService';
 import { callSignalingService, type OfferPayload } from '../services/callSignalingService';
 import type { CallDiagnostics, CallStatus, UseCallReturn } from './useCall.types';
@@ -31,9 +32,10 @@ function mapDiagnostics(diagnostics: WebRTCDiagnostics): CallDiagnostics {
 
 export function useCall(currentUserId: number): UseCallReturn {
     const socketManager = useAppStore((s) => s.socketManager);
+    const currentUserCallRef = useAppStore((s) => s.currentUser?.public_id ?? s.currentUser?.id ?? null);
 
     const [status, setStatus] = useState<CallStatus>('idle');
-    const [remoteUserId, setRemoteUserId] = useState<number | null>(null);
+    const [remoteUserId, setRemoteUserId] = useState<ResourceRef | null>(null);
     const [remoteUsername, setRemoteUsername] = useState<string | null>(null);
     const [callId, setCallId] = useState<string | null>(null);
     const [isMuted, setIsMuted] = useState(false);
@@ -123,7 +125,12 @@ export function useCall(currentUserId: number): UseCallReturn {
 
         if (!socketManager || currentUserId <= 0) return;
 
-        callSignalingService.initialize(socketManager.socket, socketManager.userChannel, currentUserId);
+        callSignalingService.initialize(
+            socketManager.socket,
+            socketManager.userChannel,
+            currentUserId,
+            currentUserCallRef ?? currentUserId,
+        );
         callChannelRef.current = callSignalingService.getChannel();
 
         const unsubs = [
@@ -159,14 +166,14 @@ export function useCall(currentUserId: number): UseCallReturn {
             unsubs.forEach((unsub) => unsub());
             if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
         };
-    }, [socketManager, currentUserId, clearCallState, handleOffer, resetAfterDelay]);
+    }, [socketManager, currentUserCallRef, currentUserId, clearCallState, handleOffer, resetAfterDelay]);
 
-    const startCall = useCallback((targetUserId: number) => {
+    const startCall = useCallback((targetUserId: ResourceRef) => {
         console.log('[useCall] startCall -> targetUserId:', targetUserId, '| current status:', status);
         const channel = callChannelRef.current;
         if (!channel || status !== 'idle') return;
 
-        if (targetUserId === currentUserId) {
+        if (typeof targetUserId === 'number' && targetUserId === currentUserId) {
             console.warn('[useCall] Cannot call yourself');
             return;
         }

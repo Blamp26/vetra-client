@@ -1,4 +1,5 @@
 import type { Channel, Socket } from 'phoenix';
+import type { ResourceRef } from '@/shared/types';
 import type {
     AnswerPayload,
     IceCandidatePayload,
@@ -7,13 +8,13 @@ import type {
 
 export interface OfferPayload {
     sdp: string;
-    from_user_id: number;
+    from_user_id: ResourceRef;
     from_username: string;
     call_id?: string;
 }
 
 export interface HangUpPayload {
-    from_user_id: number;
+    from_user_id: ResourceRef;
     call_id?: string;
 }
 
@@ -38,6 +39,7 @@ class CallSignalingService {
     private channel: Channel | null = null;
     private userChannel: Channel | null = null;
     private currentUserId: number | null = null;
+    private currentUserCallRef: ResourceRef | null = null;
     private incomingCallRef: number | null = null;
     private pendingOffer: OfferPayload | null = null;
 
@@ -47,12 +49,13 @@ class CallSignalingService {
     private readonly iceCandidateBus = createBus<IceCandidatePayload>();
     private readonly hangUpBus = createBus<HangUpPayload>();
 
-    initialize(socket: Socket, userChannel: Channel, currentUserId: number): void {
+    initialize(socket: Socket, userChannel: Channel, currentUserId: number, currentUserCallRef: ResourceRef = currentUserId): void {
         if (
             this.channel &&
             this.socket === socket &&
             this.userChannel === userChannel &&
-            this.currentUserId === currentUserId
+            this.currentUserId === currentUserId &&
+            this.currentUserCallRef === currentUserCallRef
         ) {
             return;
         }
@@ -60,8 +63,9 @@ class CallSignalingService {
         this.disconnect();
         this.socket = socket;
         this.currentUserId = currentUserId;
+        this.currentUserCallRef = currentUserCallRef;
 
-        const channel = socket.channel(`call:${currentUserId}`, {});
+        const channel = socket.channel(`call:${currentUserCallRef}`, {});
         channel.on('offer', (payload: OfferPayload) => {
             this.pendingOffer = payload;
             this.offerBus.emit(payload);
@@ -98,6 +102,7 @@ class CallSignalingService {
         this.channel = null;
         this.userChannel = null;
         this.currentUserId = null;
+        this.currentUserCallRef = null;
         this.incomingCallRef = null;
         this.pendingOffer = null;
     }

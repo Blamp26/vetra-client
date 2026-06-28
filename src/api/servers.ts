@@ -1,5 +1,5 @@
 import { get, post, del } from './base';
-import { Server, Channel, ServerMember } from '@/shared/types';
+import { Server, Channel, ServerMember, ResourceRef } from '@/shared/types';
 
 export const serversApi = {
   getList(): Promise<Server[]> {
@@ -10,27 +10,27 @@ export const serversApi = {
     return post<Server>("/servers", { name });
   },
 
-  getChannels(serverId: number): Promise<Channel[]> {
-    return get<Channel[]>(`/servers/${serverId}/channels`);
+  getChannels(serverRef: ResourceRef): Promise<Channel[]> {
+    return get<Channel[]>(`/servers/${serverRef}/channels`);
   },
 
-  createChannel(serverId: number, name: string): Promise<Channel> {
-    return post<Channel>(`/servers/${serverId}/channels`, { name });
+  createChannel(serverRef: ResourceRef, name: string): Promise<Channel> {
+    return post<Channel>(`/servers/${serverRef}/channels`, { name });
   },
 
-  getMembers(serverId: number): Promise<ServerMember[]> {
-    return get<ServerMember[]>(`/servers/${serverId}/members`);
+  getMembers(serverRef: ResourceRef): Promise<ServerMember[]> {
+    return get<ServerMember[]>(`/servers/${serverRef}/members`);
   },
 
-  addMember(serverId: number, userId: number): Promise<void> {
-    return post<void>(`/servers/${serverId}/members`, { user_id: userId });
+  addMember(serverRef: ResourceRef, userRef: ResourceRef): Promise<void> {
+    return post<void>(`/servers/${serverRef}/members`, { user_id: userRef });
   },
 
-  removeMember(serverId: number, userId: number): Promise<void> {
-    return del<void>(`/servers/${serverId}/members/${userId}`);
+  removeMember(serverRef: ResourceRef, userRef: ResourceRef): Promise<void> {
+    return del<void>(`/servers/${serverRef}/members/${userRef}`);
   },
 
-  delete(serverId: number): Promise<void> {
-    return del<void>(`/servers/${serverId}`);
+  delete(serverRef: ResourceRef): Promise<void> {
+    return del<void>(`/servers/${serverRef}`);
   }
 };

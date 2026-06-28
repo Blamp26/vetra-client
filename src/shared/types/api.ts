@@ -4,12 +4,14 @@
 
 export interface User {
   id:           number;
+  public_id?:   string | null;
   username:     string;        // уникальный логин
   display_name: string | null; // никнейм (не уникальный)
   bio:          string | null;
   avatar_url:   string | null;
   status:       'online' | 'away' | 'dnd' | 'offline';
   last_seen_at: string | null;
+  inserted_at?: string;
 }
 
 export type MessageStatus = "sent" | "delivered" | "read" | "error";
@@ -25,8 +27,11 @@ export interface Message {
   id:                      number;
   content:                 string | null;
   sender_id:               number;
+  sender_public_id?:       string | null;
   recipient_id:            number | null;
+  recipient_public_id?:    string | null;
   room_id:                 number | null;
+  room_public_id?:         string | null;
   reply_to_id?:            number | null;
   status:                  MessageStatus;
   inserted_at:             string;
@@ -50,23 +55,32 @@ export interface MessageEditedPayload {
   content:       string;
   edited_at:     string;
   recipient_id?: number | null;
+  recipient_public_id?: string | null;
   sender_id?:    number;
+  sender_public_id?: string | null;
   room_id?:      number | null;
+  room_public_id?: string | null;
 }
 
 export interface MessageDeletedPayload {
   id:            number;
   recipient_id?: number | null;
+  recipient_public_id?: string | null;
   sender_id?:    number;
+  sender_public_id?: string | null;
   room_id?:      number | null;
+  room_public_id?: string | null;
 }
 
 export interface ReactionUpdatedPayload {
   message_id: number;
   reactions:  MessageReactionGroup[];
   partner_id?: number;
+  partner_public_id?: string | null;
   sender_id?:  number;
+  sender_public_id?: string | null;
   room_id?:    number;
+  room_public_id?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +89,7 @@ export interface ReactionUpdatedPayload {
 
 export interface ConversationPreview {
   partner_id:           number;
+  partner_public_id?:   string | null;
   partner_username:     string;
   partner_display_name: string | null;
   unread_count:         number;
@@ -83,6 +98,7 @@ export interface ConversationPreview {
     content:     string | null;
     inserted_at: string;
     sender_id:   number;
+    sender_public_id?: string | null;
     status:      MessageStatus;
     media_file_id?:   string | null;
     media_mime_type?: string | null;
@@ -91,17 +107,23 @@ export interface ConversationPreview {
 
 export interface Room {
   id: number;
+  public_id?: string | null;
   name: string;
   created_by: number;
+  created_by_public_id?: string | null;
   server_id: number | null;
+  server_public_id?: string | null;
   inserted_at: string;
 }
 
 export interface RoomPreview {
   id: number;
+  public_id?: string | null;
   name: string;
   created_by: number;
+  created_by_public_id?: string | null;
   server_id: number | null;
+  server_public_id?: string | null;
   inserted_at: string;
   unread_count: number;
   last_message_at: string | null;
@@ -110,12 +132,14 @@ export interface RoomPreview {
     content:     string | null;
     inserted_at: string;
     sender_id:   number;
+    sender_public_id?: string | null;
     status:      MessageStatus;
     media_file_id?:   string | null;
     media_mime_type?: string | null;
   } | null;
   members?: Array<{
     id: number;
+    public_id?: string | null;
     username: string;
     display_name: string | null;
     avatar_url: string | null;
@@ -128,13 +152,16 @@ export interface RoomPreview {
 
 export interface Server {
   id: number;
+  public_id?: string | null;
   name: string;
   created_by: number;
+  created_by_public_id?: string | null;
   inserted_at: string;
 }
 
 export interface ServerMember {
   user_id:      number;
+  user_public_id?: string | null;
   username:     string;
   display_name: string | null;
   avatar_url:   string | null;

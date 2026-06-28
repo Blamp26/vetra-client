@@ -1,14 +1,15 @@
 // src/features/calling/components/CallButton/CallButton.tsx
 
 import type { CallStatus } from '../../hooks/useCall.types';
+import type { ResourceRef } from '@/shared/types';
 import { Phone } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 
 interface Props {
-  targetUserId: number;
+  targetUserId: ResourceRef;
   targetUsername: string;
   status: CallStatus;
-  onCall: (targetUserId: number) => void;
+  onCall: (targetUserId: ResourceRef) => void;
   className?: string;
 }
 

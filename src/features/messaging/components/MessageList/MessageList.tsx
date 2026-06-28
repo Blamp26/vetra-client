@@ -6,6 +6,8 @@ import { ForwardModal } from "../ForwardModal";
 import { sendMessageViaChannel } from "@/services/socket";
 import { ImageLightbox } from "@/shared/components/ImageLightbox";
 import { cn } from "@/shared/utils/cn";
+import { roomChatForPreview } from "@/shared/utils/chatRoutes";
+import { withFallbackRef } from "@/shared/utils/refs";
 
 import { MessageItem } from "./MessageItem";
 import { MessageContextMenu } from "./MessageContextMenu";
@@ -17,8 +19,8 @@ interface Props {
   hasMore:       boolean;
   onLoadMore:    () => void;
   chatContext:
-    | { type: "direct"; partnerId: number }
-    | { type: "room";   roomId: number };
+    | { type: "direct"; partnerId: number; partnerRef?: string | number }
+    | { type: "room";   roomId: number; roomRef?: string | number };
   onReply?: (target: { id: number; content: string; author: string }) => void;
 }
 
@@ -60,6 +62,8 @@ export function MessageList({
     deleteRoomMessage,
     messageReactions,
     startEditing,
+    conversationPreviews,
+    roomPreviews,
   } = useAppStore((s: RootState) => ({
     selectionMode: s.selectionMode,
     selectedMessageIds: s.selectedMessageIds,
@@ -74,6 +78,8 @@ export function MessageList({
     deleteRoomMessage: s.deleteRoomMessage,
     messageReactions: s.messageReactions,
     startEditing: s.startEditing,
+    conversationPreviews: s.conversationPreviews,
+    roomPreviews: s.roomPreviews,
   }), true);
 
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
@@ -107,14 +113,24 @@ export function MessageList({
       if (chatContext.type === "room") {
         await socketManager.toggleReaction(chatContext.roomId, msgId, emoji);
       } else {
-        await socketManager.toggleDirectReaction(chatContext.partnerId, msgId, emoji);
+        await socketManager.toggleDirectReaction(
+          withFallbackRef(
+            chatContext.partnerId,
+            chatContext.partnerRef,
+            conversationPreviews[chatContext.partnerId]
+              ? { id: chatContext.partnerId, public_id: conversationPreviews[chatContext.partnerId].partner_public_id }
+              : undefined,
+          ),
+          msgId,
+          emoji,
+        );
       }
     } catch (err) {
       console.error("Toggle reaction failed:", err);
     } finally {
       setContextMenu(null);
     }
-  }, [socketManager, chatContext]);
+  }, [socketManager, chatContext, conversationPreviews]);
 
   useEffect(() => {
     if (isFirstLoad.current && messages.length > 0) {
@@ -173,7 +189,14 @@ export function MessageList({
     setIsDeleting(true);
     try {
       if (chatContext.type === "direct") {
-        await socketManager.deleteMessage(chatContext.partnerId, msgToDelete);
+        const partnerRef = withFallbackRef(
+          chatContext.partnerId,
+          chatContext.partnerRef,
+          conversationPreviews[chatContext.partnerId]
+            ? { id: chatContext.partnerId, public_id: conversationPreviews[chatContext.partnerId].partner_public_id }
+            : undefined,
+        );
+        await socketManager.deleteMessage(partnerRef, msgToDelete);
         deleteMessage({ id: msgToDelete, recipient_id: chatContext.partnerId });
       } else {
         await socketManager.deleteRoomMessage(chatContext.roomId, msgToDelete);
@@ -185,7 +208,7 @@ export function MessageList({
     } finally {
       setIsDeleting(false);
     }
-  }, [msgToDelete, socketManager, chatContext, deleteMessage, deleteRoomMessage]);
+  }, [msgToDelete, socketManager, chatContext, deleteMessage, deleteRoomMessage, conversationPreviews]);
 
   const handleCopy = useCallback(async () => {
     if (!contextMenu || !contextMenu.hasText || !contextMenu.content) return;
@@ -220,7 +243,7 @@ export function MessageList({
     setContextMenu(null);
   }, [contextMenu, setForwardingMessages]);
 
-  const handlePerformForward = useCallback(async (target: { type: 'direct' | 'room', id: number }) => {
+  const handlePerformForward = useCallback(async (target: { type: 'direct' | 'room', id: number; ref?: string | number | null }) => {
     if (!forwardingMessageIds || forwardingMessageIds.length === 0 || !socketManager) return;
     try {
       for (const msgId of forwardingMessageIds) {
@@ -228,15 +251,16 @@ export function MessageList({
         if (!msg) continue;
         const payload = { content: msg.content, mediaFileId: msg.media_file_id };
         if (target.type === 'direct') {
-          await sendMessageViaChannel(socketManager.userChannel, target.id, payload);
+          await sendMessageViaChannel(socketManager.userChannel, target.ref ?? target.id, payload);
         } else {
           await socketManager.sendRoomMessageViaChannel(target.id, payload);
         }
       }
       if (target.type === 'direct') {
-        setActiveChat({ type: 'direct', partnerId: target.id });
+        setActiveChat({ type: 'direct', partnerId: target.id, partnerRef: target.ref ?? target.id });
       } else {
-        setActiveChat({ type: 'room', roomId: target.id });
+        const roomPreview = roomPreviews[target.id];
+        setActiveChat(roomPreview ? roomChatForPreview(roomPreview) : { type: 'room', roomId: target.id, roomRef: target.ref ?? target.id });
       }
     } catch (err) {
       console.error("Forwarding failed:", err);
@@ -244,7 +268,7 @@ export function MessageList({
       setForwardingMessages(null);
       clearSelection();
     }
-  }, [forwardingMessageIds, socketManager, messagesById, setActiveChat, clearSelection, setForwardingMessages]);
+  }, [forwardingMessageIds, socketManager, messagesById, setActiveChat, clearSelection, setForwardingMessages, roomPreviews]);
 
   const formatTime = (iso: string) =>
     new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });

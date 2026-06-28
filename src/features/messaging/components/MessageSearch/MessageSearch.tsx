@@ -5,6 +5,7 @@ import { useAppStore } from "@/store";
 import type { Message } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { Search, X, Loader2, MessageSquare } from "lucide-react";
+import { withFallbackRef } from "@/shared/utils/refs";
 
 interface Props {
   targetId: number;
@@ -15,6 +16,8 @@ interface Props {
 
 export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
   const currentUser = useAppStore((s) => s.currentUser);
+  const conversationPreviews = useAppStore((s) => s.conversationPreviews);
+  const roomPreviews = useAppStore((s) => s.roomPreviews);
 
   const [query,   setQuery]   = useState("");
   const [results, setResults] = useState<Message[]>([]);
@@ -47,8 +50,20 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
         try {
           const msgs = 
             type === "room" 
-              ? await roomsApi.search(targetId, val.trim())
-              : await messagesApi.search(targetId, val.trim());
+              ? await roomsApi.search(
+                  withFallbackRef(targetId, undefined, roomPreviews[targetId]),
+                  val.trim(),
+                )
+              : await messagesApi.search(
+                  withFallbackRef(
+                    targetId,
+                    undefined,
+                    conversationPreviews[targetId]
+                      ? { id: targetId, public_id: conversationPreviews[targetId].partner_public_id }
+                      : undefined,
+                  ),
+                  val.trim(),
+                );
           setResults(msgs);
         } catch {
           setError("Search error.");
@@ -57,7 +72,7 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
         }
       }, 400);
     },
-    [targetId, type, currentUser]
+    [targetId, type, currentUser, conversationPreviews, roomPreviews]
   );
 
   return (

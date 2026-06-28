@@ -3,18 +3,19 @@ import { useAppStore, type RootState } from "@/store";
 import type { User, Server } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { Search, X } from "lucide-react";
+import { directChatForUser, serverChatForServer } from "@/shared/utils/chatRoutes";
 
 export function UserSearch() {
   const { query, setQuery, searchResults, isSearching, clearSearch } = useUserSearch();
   const setActiveChat = useAppStore((s: RootState) => s.setActiveChat);
 
   const handleSelectUser = (user: User) => {
-    setActiveChat({ type: "direct", partnerId: user.id });
+    setActiveChat(directChatForUser(user));
     clearSearch();
   };
 
   const handleSelectServer = (server: Server) => {
-    setActiveChat({ type: "server", serverId: server.id });
+    setActiveChat(serverChatForServer(server));
     clearSearch();
   };
 

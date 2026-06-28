@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Avatar } from "@/shared/components/Avatar/Avatar";
 
 interface Props {
-  onForward: (target: { type: 'direct' | 'room', id: number }) => void;
+  onForward: (target: { type: 'direct' | 'room', id: number; ref?: string | number | null }) => void;
   onCancel: () => void;
 }
 
@@ -17,12 +17,14 @@ export function ForwardModal({ onForward, onCancel }: Props) {
     ...Object.values(conversationPreviews).map(p => ({
       type: 'direct' as const,
       id: p.partner_id,
+      ref: p.partner_public_id ?? p.partner_id,
       name: p.partner_display_name || p.partner_username,
       avatar: null, 
     })),
     ...Object.values(roomPreviews).map(r => ({
       type: 'room' as const,
       id: r.id,
+      ref: r.public_id ?? r.id,
       name: r.name,
       avatar: null,
     }))

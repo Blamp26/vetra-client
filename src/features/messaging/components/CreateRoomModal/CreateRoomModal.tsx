@@ -4,6 +4,8 @@ import { authApi } from "@/api/auth";
 import { roomsApi } from "@/api/rooms";
 import type { User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
+import { roomChatForPreview } from "@/shared/utils/chatRoutes";
+import { userRef } from "@/shared/utils/refs";
 
 interface Props {
   onClose: () => void;
@@ -65,14 +67,17 @@ export function CreateRoomModal({ onClose }: Props) {
     setIsCreating(true);
     setError(null);
     try {
-      const memberIds = selectedUsers.map((u) => u.id);
+      const memberIds = selectedUsers.map((u) => userRef(u) ?? u.id);
       const room = await roomsApi.create(name.trim(), memberIds);
 
       upsertRoomPreview({
         id: room.id,
+        public_id: room.public_id,
         name: room.name,
         created_by: room.created_by,
+        created_by_public_id: room.created_by_public_id,
         server_id: null,
+        server_public_id: null,
         inserted_at: room.inserted_at,
         unread_count: 0,
         last_message_at: null,
@@ -80,10 +85,22 @@ export function CreateRoomModal({ onClose }: Props) {
       });
 
       if (socketManager) {
-        try { await socketManager.joinRoomChannel(room.id); } catch { /* non-critical */ }
+        try { await socketManager.joinRoomChannel(room.id, room.public_id ?? room.id); } catch { /* non-critical */ }
       }
 
-      setActiveChat({ type: "room", roomId: room.id });
+      setActiveChat(roomChatForPreview({
+        id: room.id,
+        public_id: room.public_id,
+        name: room.name,
+        created_by: room.created_by,
+        created_by_public_id: room.created_by_public_id,
+        server_id: null,
+        server_public_id: null,
+        inserted_at: room.inserted_at,
+        unread_count: 0,
+        last_message_at: null,
+        last_message: null,
+      }));
       onClose();
     } catch (err) {
       setError("Create failed");

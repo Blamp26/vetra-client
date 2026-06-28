@@ -25,7 +25,11 @@ export function useAuthHydration() {
 
     (async () => {
       try {
-        const manager = await connectSocket(authToken, currentUser.id);
+        const manager = await connectSocket(
+          authToken,
+          currentUser.id,
+          currentUser.public_id ?? currentUser.id,
+        );
         if (cancelled) {
           manager.disconnect();
           return;

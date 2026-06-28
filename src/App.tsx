@@ -8,6 +8,7 @@ import { ChannelPanel } from "@/features/messaging/components/ChannelPanel/Chann
 import { SettingsPage } from "@/features/settings/components/SettingsPage/SettingsPage";
 import { useSocketEvents } from "@/features/messaging/hooks/useSocketEvents";
 import { useAuthHydration } from "@/shared/hooks/useAuthHydration";
+import { buildHashForActiveChat, resolveHashToActiveChat, sameActiveChat } from "@/shared/utils/chatRoutes";
 import { useCall } from './features/calling/hooks/useCall';
 
 import { IncomingCallModal } from './features/calling/components/IncomingCallModal';
@@ -61,6 +62,11 @@ function App() {
   const currentUser = useAppStore((s) => s.currentUser);
   const { status, remoteStream, remoteUsername, remoteUserId, isMuted, seconds, diagnostics, toggleMute, hangUp, acceptCall, rejectCall, startCall } = useCall(currentUser?.id ?? 0);
   const activeChat = useAppStore((s) => s.activeChat);
+  const conversationPreviews = useAppStore((s) => s.conversationPreviews);
+  const roomPreviews = useAppStore((s) => s.roomPreviews);
+  const servers = useAppStore((s) => s.servers);
+  const serverChannels = useAppStore((s) => s.serverChannels);
+  const searchResults = useAppStore((s) => s.searchResults);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -72,65 +78,78 @@ function App() {
       const hash = window.location.hash;
       if (!hash || hash === '#') return;
 
-      const parts = hash.replace('#/', '').split('/');
-      const p1 = parts[0];
-      const id1 = Number(p1);
+      const resolved = resolveHashToActiveChat(hash, {
+        activeChat,
+        currentUser,
+        conversationPreviews,
+        roomPreviews,
+        servers,
+        serverChannels,
+        searchResults,
+      });
 
-      if (!isNaN(id1)) {
-        setActiveChat({ type: 'direct', partnerId: id1 });
-      } else if (p1 === 'r' && parts[1]) {
-        setActiveChat({ type: 'room', roomId: Number(parts[1]) });
-      } else if (p1 === 's' && parts[1]) {
-        if (parts[2]) {
-          setActiveChat({ type: 'channel', serverId: Number(parts[1]), channelId: Number(parts[2]) });
-        } else {
-          setActiveChat({ type: 'server', serverId: Number(parts[1]) });
-        }
-      } else if (p1 === 'settings') {
+      if (resolved?.type === "settings") {
         setShowSettings(true);
+        return;
+      }
+
+      if (!sameActiveChat(activeChat, resolved)) {
+        setActiveChat(resolved);
       }
     };
 
     syncUrlToStore();
     window.addEventListener('hashchange', syncUrlToStore);
     return () => window.removeEventListener('hashchange', syncUrlToStore);
-  }, [setActiveChat]);
+  }, [
+    activeChat,
+    currentUser,
+    conversationPreviews,
+    roomPreviews,
+    searchResults,
+    serverChannels,
+    servers,
+    setActiveChat,
+  ]);
 
   useEffect(() => {
     if (!activeChat) return;
 
-    let newHash = '';
-    switch (activeChat.type) {
-      case 'direct':  newHash = `#/${activeChat.partnerId}`; break;
-      case 'room':    newHash = `#/r/${activeChat.roomId}`; break;
-      case 'server':  newHash = `#/s/${activeChat.serverId}`; break;
-      case 'channel': newHash = `#/s/${activeChat.serverId}/${activeChat.channelId}`; break;
-      case 'settings': newHash = `#/settings`; break;
-    }
+    const newHash = buildHashForActiveChat(activeChat, {
+      activeChat,
+      currentUser,
+      conversationPreviews,
+      roomPreviews,
+      servers,
+      serverChannels,
+      searchResults,
+    });
 
     if (newHash && window.location.hash !== newHash) {
       window.history.replaceState(null, '', newHash);
     }
-  }, [activeChat]);
+  }, [activeChat, currentUser, conversationPreviews, roomPreviews, servers, serverChannels, searchResults]);
 
   useEffect(() => {
     if (showSettings && window.location.hash !== '#/settings') {
       window.history.replaceState(null, '', '#/settings');
     } else if (!showSettings && window.location.hash === '#/settings') {
       if (activeChat) {
-        let newHash = '';
-        switch (activeChat.type) {
-          case 'direct':  newHash = `#/${activeChat.partnerId}`; break;
-          case 'room':    newHash = `#/r/${activeChat.roomId}`; break;
-          case 'server':  newHash = `#/s/${activeChat.serverId}`; break;
-          case 'channel': newHash = `#/s/${activeChat.serverId}/${activeChat.channelId}`; break;
-        }
+        const newHash = buildHashForActiveChat(activeChat, {
+          activeChat,
+          currentUser,
+          conversationPreviews,
+          roomPreviews,
+          servers,
+          serverChannels,
+          searchResults,
+        });
         window.history.replaceState(null, '', newHash || '#');
       } else {
         window.history.replaceState(null, '', '#');
       }
     }
-  }, [showSettings, activeChat]);
+  }, [showSettings, activeChat, currentUser, conversationPreviews, roomPreviews, servers, serverChannels, searchResults]);
 
   useEffect(() => {
     if (audioRef.current && remoteStream) {

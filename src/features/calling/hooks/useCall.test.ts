@@ -262,8 +262,10 @@ describe('useCall', () => {
             expect(service.hangUp).toHaveBeenCalled();
             expect(result.current.status).toBe('ended');
 
-            act(() => {
+            await act(async () => {
                 vi.advanceTimersByTime(2000);
+                vi.runOnlyPendingTimers();
+                await Promise.resolve();
             });
             expect(result.current.status).toBe('idle');
             expect(result.current.remoteUserId).toBeNull();
@@ -516,8 +518,10 @@ describe('useCall', () => {
             }
             expect(service.hangUp).toHaveBeenCalled();
             expect(result.current.status).toBe('ended');
-            act(() => {
+            await act(async () => {
                 vi.advanceTimersByTime(2000);
+                vi.runOnlyPendingTimers();
+                await Promise.resolve();
             });
             expect(result.current.status).toBe('idle');
             expect(result.current.remoteUserId).toBeNull();
@@ -572,8 +576,10 @@ describe('useCall', () => {
             });
             expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
             expect(result.current.status).toBe('ended');
-            act(() => {
+            await act(async () => {
                 vi.advanceTimersByTime(2000);
+                vi.runOnlyPendingTimers();
+                await Promise.resolve();
             });
             expect(result.current.status).toBe('idle');
             expect(result.current.remoteUserId).toBeNull();
@@ -606,8 +612,10 @@ describe('useCall', () => {
             expect(service.hangUp).toHaveBeenCalled();
             expect(result.current.status).toBe('ended');
 
-            act(() => {
+            await act(async () => {
                 vi.advanceTimersByTime(2000);
+                vi.runOnlyPendingTimers();
+                await Promise.resolve();
             });
             expect(result.current.status).toBe('idle');
         });

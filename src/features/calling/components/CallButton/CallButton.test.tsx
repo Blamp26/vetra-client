@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { CallButton } from './CallButton';
 import type { CallStatus } from '../../hooks/useCall.types';
+import type { ResourceRef } from '@/shared/types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ function renderButton(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('CallButton', () => {
-  let onCall: Mock<(targetUserId: number) => void>;
+  let onCall: Mock<(targetUserId: ResourceRef) => void>;
 
   beforeEach(() => {
     onCall = vi.fn();

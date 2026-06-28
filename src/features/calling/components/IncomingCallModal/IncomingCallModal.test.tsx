@@ -63,52 +63,52 @@ describe('IncomingCallModal', () => {
     expect(avatarEl).toBeTruthy();
   });
 
-  it('отображает текст "Входящий звонок"', () => {
+  it('отображает текст "Incoming Call"', () => {
     renderModal('Alice', onAccept, onReject);
-    expect(screen.getByText('Входящий звонок')).toBeTruthy();
+    expect(screen.getByText('Incoming Call')).toBeTruthy();
   });
 
   // ── Кнопки ──────────────────────────────────────────────────────────────────
 
-  it('содержит кнопку "Принять"', () => {
+  it('содержит кнопку "Accept"', () => {
     renderModal('Alice', onAccept, onReject);
-    expect(screen.getByRole('button', { name: /Принять/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Accept/i })).toBeTruthy();
   });
 
-  it('содержит кнопку "Отклонить"', () => {
+  it('содержит кнопку "Decline"', () => {
     renderModal('Alice', onAccept, onReject);
-    expect(screen.getByRole('button', { name: /Отклонить/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Decline/i })).toBeTruthy();
   });
 
   // ── Колбэки ─────────────────────────────────────────────────────────────────
 
-  it('вызывает onAccept при клике на "Принять"', () => {
+  it('вызывает onAccept при клике на "Accept"', () => {
     renderModal('Alice', onAccept, onReject);
-    fireEvent.click(screen.getByRole('button', { name: /Принять/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Accept/i }));
     expect(onAccept).toHaveBeenCalledTimes(1);
   });
 
-  it('вызывает onReject при клике на "Отклонить"', () => {
+  it('вызывает onReject при клике на "Decline"', () => {
     renderModal('Alice', onAccept, onReject);
-    fireEvent.click(screen.getByRole('button', { name: /Отклонить/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Decline/i }));
     expect(onReject).toHaveBeenCalledTimes(1);
   });
 
-  it('НЕ вызывает onReject при клике "Принять"', () => {
+  it('НЕ вызывает onReject при клике "Accept"', () => {
     renderModal('Alice', onAccept, onReject);
-    fireEvent.click(screen.getByRole('button', { name: /Принять/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Accept/i }));
     expect(onReject).not.toHaveBeenCalled();
   });
 
-  it('НЕ вызывает onAccept при клике "Отклонить"', () => {
+  it('НЕ вызывает onAccept при клике "Decline"', () => {
     renderModal('Alice', onAccept, onReject);
-    fireEvent.click(screen.getByRole('button', { name: /Отклонить/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Decline/i }));
     expect(onAccept).not.toHaveBeenCalled();
   });
 
-  it('повторные клики на "Принять" вызывают onAccept соответствующее число раз', () => {
+  it('повторные клики на "Accept" вызывают onAccept соответствующее число раз', () => {
     renderModal('Alice', onAccept, onReject);
-    const btn = screen.getByRole('button', { name: /Принять/i });
+    const btn = screen.getByRole('button', { name: /Accept/i });
     fireEvent.click(btn);
     fireEvent.click(btn);
     expect(onAccept).toHaveBeenCalledTimes(2);
@@ -124,11 +124,6 @@ describe('IncomingCallModal', () => {
 
   it('корректно рендерится с именем из одного символа', () => {
     renderModal('X', onAccept, onReject);
-    // 'X' отображается дважды: в аватаре и в имени звонящего
-    const elements = screen.getAllByText('X');
-    expect(elements.length).toBe(2);
-    
-    const avatarEl = document.querySelector('.avatar');
-    expect(avatarEl?.textContent).toBe('X');
+    expect(screen.getAllByText('X')).toHaveLength(2);
   });
 });

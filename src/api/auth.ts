@@ -1,5 +1,5 @@
 import { get, post, put } from './base';
-import { User, Server } from '@/shared/types';
+import { User, Server, ResourceRef } from '@/shared/types';
 
 export interface RegisterPayload { username: string; password: string; }
 export interface LoginPayload    { username: string; password: string; }
@@ -38,8 +38,8 @@ export const authApi = {
     return get<GlobalSearchResult>(`/users/search?${params}`);
   },
 
-  getUser(userId: number): Promise<User> {
-    return get<User>(`/users/${userId}`);
+  getUser(userRef: ResourceRef): Promise<User> {
+    return get<User>(`/users/${userRef}`);
   },
 
   // id в URL остаётся для корректного REST-маршрута

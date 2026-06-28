@@ -11,11 +11,12 @@ import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from '@/features/calling/components/CallButton';
 import type { CallStatus } from '@/features/calling/hooks/useCall.types';
 import { cn } from "@/shared/utils/cn";
+import { withFallbackRef } from "@/shared/utils/refs";
 
 interface Props {
   activeChat: ActiveChat;
   callStatus: CallStatus;
-  onStartCall: (targetUserId: number) => void;
+  onStartCall: (targetUserId: string | number) => void;
 }
 
 interface ReplyTarget {
@@ -43,6 +44,7 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
   const typingPartnerIds = useAppStore((s: RootState) => s.typingPartnerIds);
   
   const roomPreviews = useAppStore((s: RootState) => s.roomPreviews);
+  const conversationPreviews = useAppStore((s: RootState) => s.conversationPreviews);
   const typingRoomMemberIds = useAppStore((s: RootState) => s.typingRoomMemberIds);
   const typingRoomMemberInfo = useAppStore((s: RootState) => s.typingRoomMemberInfo);
 
@@ -51,8 +53,8 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
 
   const chatContext = useMemo((): ChatContext | null => {
-    if (activeChat.type === "direct") return { type: "direct", partnerId: activeChat.partnerId };
-    if (activeChat.type === "room") return { type: "room", roomId: activeChat.roomId };
+    if (activeChat.type === "direct") return { type: "direct", partnerId: activeChat.partnerId, partnerRef: activeChat.partnerRef };
+    if (activeChat.type === "room") return { type: "room", roomId: activeChat.roomId, roomRef: activeChat.roomRef };
     return null;
   }, [activeChat]);
 
@@ -67,32 +69,56 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
     setIsSearchOpen(false);
     if (activeChat.type === "direct") {
       let cancelled = false;
-      authApi.getUser(activeChat.partnerId).then((user: User) => {
+      authApi.getUser(
+        withFallbackRef(
+          activeChat.partnerId,
+          activeChat.partnerRef,
+          conversationPreviews[activeChat.partnerId]
+            ? { id: activeChat.partnerId, public_id: conversationPreviews[activeChat.partnerId].partner_public_id }
+            : undefined,
+        ),
+      ).then((user: User) => {
         if (!cancelled) setPartner(user);
       });
       return () => { cancelled = true; };
     } else {
       setPartner(null);
     }
-  }, [activeChat]);
+  }, [activeChat, conversationPreviews]);
 
   const handleTypingStart = useCallback(() => {
     if (!socketManager || !chatContext) return;
     if (chatContext.type === "direct") {
-      socketManager.sendTypingStart(chatContext.partnerId);
+      socketManager.sendTypingStart(
+        withFallbackRef(
+          chatContext.partnerId,
+          chatContext.partnerRef,
+          conversationPreviews[chatContext.partnerId]
+            ? { id: chatContext.partnerId, public_id: conversationPreviews[chatContext.partnerId].partner_public_id }
+            : undefined,
+        ),
+      );
     } else {
       socketManager.sendRoomTypingStart(chatContext.roomId);
     }
-  }, [socketManager, chatContext]);
+  }, [socketManager, chatContext, conversationPreviews]);
 
   const handleTypingStop = useCallback(() => {
     if (!socketManager || !chatContext) return;
     if (chatContext.type === "direct") {
-      socketManager.sendTypingStop(chatContext.partnerId);
+      socketManager.sendTypingStop(
+        withFallbackRef(
+          chatContext.partnerId,
+          chatContext.partnerRef,
+          conversationPreviews[chatContext.partnerId]
+            ? { id: chatContext.partnerId, public_id: conversationPreviews[chatContext.partnerId].partner_public_id }
+            : undefined,
+        ),
+      );
     } else {
       socketManager.sendRoomTypingStop(chatContext.roomId);
     }
-  }, [socketManager, chatContext]);
+  }, [socketManager, chatContext, conversationPreviews]);
 
   const typingNickname = useMemo(() => {
     if (activeChat.type === "direct") {
@@ -161,7 +187,7 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
           </div>
           <div className="flex items-center gap-2">
             <CallButton
-              targetUserId={activeChat.partnerId}
+              targetUserId={partner?.public_id ?? activeChat.partnerRef ?? activeChat.partnerId}
               targetUsername={partner.display_name || partner.username}
               status={callStatus}
               onCall={onStartCall}

@@ -3,6 +3,7 @@ import { useAppStore, type RootState } from "@/store";
 import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
+import { withFallbackRef } from "@/shared/utils/refs";
  
 interface ReplyTarget { id: number; content: string; author: string; } 
  
@@ -36,8 +37,9 @@ interface Props {
  
    const editingMessage = useAppStore((s: RootState) => s.editingMessage); 
    const cancelEditing = useAppStore((s: RootState) => s.cancelEditing); 
-   const socketManager = useAppStore((s: RootState) => s.socketManager); 
-   const activeChat = useAppStore((s: RootState) => s.activeChat); 
+  const socketManager = useAppStore((s: RootState) => s.socketManager); 
+  const activeChat = useAppStore((s: RootState) => s.activeChat); 
+  const conversationPreviews = useAppStore((s: RootState) => s.conversationPreviews);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const authToken = useAppStore((s: RootState) => s.authToken);
  
@@ -112,7 +114,17 @@ interface Props {
          const { id, chatType, targetId } = editingMessage; 
  
          if (chatType === 'direct') { 
-           await socketManager.editMessage(targetId, id, trimmed); 
+           await socketManager.editMessage(
+             withFallbackRef(
+               targetId,
+               undefined,
+               conversationPreviews[targetId]
+                 ? { id: targetId, public_id: conversationPreviews[targetId].partner_public_id }
+                 : undefined,
+             ),
+             id,
+             trimmed,
+           ); 
          } else { 
            await socketManager.editRoomMessage(targetId, id, trimmed); 
          } 

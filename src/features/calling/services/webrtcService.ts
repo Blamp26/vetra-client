@@ -1,5 +1,6 @@
 import { Channel } from 'phoenix';
 import { getState } from '@/store';
+import type { ResourceRef } from '@/shared/types';
 
 const DEFAULT_STUN_URL = 'stun:stun.l.google.com:19302';
 
@@ -116,7 +117,7 @@ export class WebRTCService {
     private localStream: MediaStream | null = null;
     private channel: Channel;
     private localUserId: number;
-    private remoteUserId: number;
+    private remoteUserId: ResourceRef;
     private iceCandidateQueue: RTCIceCandidateInit[] = [];
     private remoteDescriptionSet = false;
     private diagnostics: WebRTCDiagnostics = cloneDiagnostics(EMPTY_DIAGNOSTICS);
@@ -125,7 +126,7 @@ export class WebRTCService {
     public onCallIdReceived: ((callId: string) => void) | null = null;
     public onDiagnosticsChange: ((diagnostics: WebRTCDiagnostics) => void) | null = null;
 
-    constructor(channel: Channel, localUserId: number, remoteUserId: number) {
+    constructor(channel: Channel, localUserId: number, remoteUserId: ResourceRef) {
         this.channel = channel;
         this.localUserId = localUserId;
         this.remoteUserId = remoteUserId;

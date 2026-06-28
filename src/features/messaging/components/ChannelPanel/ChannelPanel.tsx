@@ -7,6 +7,8 @@ import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import type { Channel } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { Settings, Trash2, Plus } from "lucide-react";
+import { channelChatForChannel } from "@/shared/utils/chatRoutes";
+import { roomRef, serverRef } from "@/shared/utils/refs";
 
 interface Props {
   serverId: number;
@@ -45,20 +47,24 @@ export function ChannelPanel({ serverId }: Props) {
 
     setChannelsLoading(serverId, true);
     serversApi
-      .getChannels(serverId)
+      .getChannels(serverRef(server) ?? serverId)
       .then((fetched) => setServerChannels(serverId, fetched))
       .catch((err) => {
         console.error("Failed to load channels:", err);
         setServerChannels(serverId, []);
       })
       .finally(() => setChannelsLoading(serverId, false));
-  }, [serverId, channels, setChannelsLoading, setServerChannels]);
+  }, [serverId, channels, server, setChannelsLoading, setServerChannels]);
 
-  const handleChannelClick = async (channelId: number) => {
-    resetChannelUnread(channelId);
-    setActiveChat({ type: "channel", channelId, serverId });
+  const handleChannelClick = async (channel: Channel) => {
+    resetChannelUnread(channel.id);
+    if (server) {
+      setActiveChat(channelChatForChannel(server, channel));
+    } else {
+      setActiveChat({ type: "channel", channelId: channel.id, serverId, channelRef: roomRef(channel), serverRef: serverRef(server) ?? serverId });
+    }
     if (socketManager) {
-      try { await socketManager.joinRoomChannel(channelId); } catch { /* non-critical */ }
+      try { await socketManager.joinRoomChannel(channel.id, roomRef(channel) ?? channel.id); } catch { /* non-critical */ }
     }
   };
 
@@ -73,15 +79,18 @@ export function ChannelPanel({ serverId }: Props) {
     setCreateError(null);
 
     try {
-      const channel = await serversApi.createChannel(serverId, trimmed);
+      const channel = await serversApi.createChannel(serverRef(server) ?? serverId, trimmed);
 
       addServerChannel(serverId, channel);
 
       upsertRoomPreview({
         id: channel.id,
+        public_id: channel.public_id,
         name: channel.name,
         created_by: channel.created_by,
+        created_by_public_id: channel.created_by_public_id,
         server_id: channel.server_id,
+        server_public_id: channel.server_public_id,
         inserted_at: channel.inserted_at,
         unread_count: 0,
         last_message_at: null,
@@ -89,12 +98,16 @@ export function ChannelPanel({ serverId }: Props) {
       });
 
       if (socketManager) {
-        try { await socketManager.joinRoomChannel(channel.id); } catch { /* non-critical */ }
+        try { await socketManager.joinRoomChannel(channel.id, roomRef(channel) ?? channel.id); } catch { /* non-critical */ }
       }
 
       setNewChannelName("");
       setShowCreate(false);
-      setActiveChat({ type: "channel", channelId: channel.id, serverId });
+      if (server) {
+        setActiveChat(channelChatForChannel(server, channel));
+      } else {
+        setActiveChat({ type: "channel", channelId: channel.id, serverId, channelRef: roomRef(channel) ?? channel.id, serverRef: serverRef(server) ?? serverId });
+      }
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create channel.");
     } finally {
@@ -106,7 +119,7 @@ export function ChannelPanel({ serverId }: Props) {
     if (!currentUser || !channelToDelete) return;
     setIsDeleting(true);
     try {
-      await roomsApi.delete(channelToDelete.id);
+      await roomsApi.delete(roomRef(channelToDelete) ?? channelToDelete.id);
 
       const updatedChannels = (serverChannels[serverId] || []).filter(ch => ch.id !== channelToDelete.id);
       setServerChannels(serverId, updatedChannels);
@@ -226,7 +239,7 @@ export function ChannelPanel({ serverId }: Props) {
                           ? "bg-accent border-border text-foreground"
                           : "bg-transparent border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       )}
-                      onClick={() => handleChannelClick(ch.id)}
+                      onClick={() => handleChannelClick(ch)}
                     >
                       <span className="text-muted-foreground opacity-50">#</span>
                       <span className="flex-1 truncate">{ch.name}</span>

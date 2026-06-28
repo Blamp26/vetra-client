@@ -7,6 +7,7 @@ import type {
   MessageEditedPayload,
   MessageDeletedPayload,
   ReactionUpdatedPayload,
+  ResourceRef,
 } from "@/shared/types";
 import { callSignalingService } from "@/features/calling/services/callSignalingService";
 
@@ -80,13 +81,13 @@ export interface SocketManager {
 
   updateStatus: (status: 'online' | 'away' | 'dnd' | 'offline') => void;
 
-  sendTypingStart: (recipientId: number) => void;
-  sendTypingStop:  (recipientId: number) => void;
+  sendTypingStart: (recipientRef: ResourceRef) => void;
+  sendTypingStop:  (recipientRef: ResourceRef) => void;
 
-  editMessage:   (recipientId: number, messageId: number, content: string) => Promise<MessageEditedPayload>;
-  deleteMessage: (recipientId: number, messageId: number) => Promise<{ id: number }>;
+  editMessage:   (recipientRef: ResourceRef, messageId: number, content: string) => Promise<MessageEditedPayload>;
+  deleteMessage: (recipientRef: ResourceRef, messageId: number) => Promise<{ id: number }>;
 
-  joinRoomChannel:            (roomId: number) => Promise<void>;
+  joinRoomChannel:            (roomId: number, roomTopicRef?: ResourceRef) => Promise<void>;
   leaveRoomChannel:           (roomId: number) => void;
   sendRoomMessageViaChannel:  (roomId: number, payload: OutgoingMessagePayload) => Promise<Message>;
   sendRoomTypingStart:        (roomId: number) => void;
@@ -100,7 +101,7 @@ export interface SocketManager {
   editRoomMessage:            (roomId: number, messageId: number, content: string) => Promise<MessageEditedPayload>;
   deleteRoomMessage:          (roomId: number, messageId: number) => Promise<{ id: number }>;
   toggleReaction:             (roomId: number, messageId: number, emoji: string) => Promise<ReactionUpdatedPayload>;
-  toggleDirectReaction: (partnerId: number, messageId: number, emoji: string) => Promise<ReactionUpdatedPayload>;
+  toggleDirectReaction: (partnerRef: ResourceRef, messageId: number, emoji: string) => Promise<ReactionUpdatedPayload>;
 
   disconnect: () => void;
 }
@@ -133,7 +134,7 @@ interface RoomBus {
 
 // ── connectSocket ─────────────────────────────────────────────────────────────
 
-export async function connectSocket(token: string, userId: number): Promise<SocketManager> {
+export async function connectSocket(token: string, userId: number, callUserRef: ResourceRef = userId): Promise<SocketManager> {
   const socket = new Socket(SOCKET_URL, {
     params: { token },
     reconnectAfterMs: (tries: number) =>
@@ -142,7 +143,7 @@ export async function connectSocket(token: string, userId: number): Promise<Sock
   socket.connect();
 
   const userChannel = socket.channel(`user:${userId}`, {});
-  callSignalingService.initialize(socket, userChannel, userId);
+  callSignalingService.initialize(socket, userChannel, userId, callUserRef);
 
   // ── User channel buses ───────────────────────────────────────────
 
@@ -288,46 +289,46 @@ export async function connectSocket(token: string, userId: number): Promise<Sock
     updateStatus: (status) =>
       userChannel.push("update_status", { status }),
 
-    sendTypingStart: (rid) =>
-      userChannel.push("typing_start", { recipient_id: rid }),
-    sendTypingStop: (recipientId) =>
-      userChannel.push("typing_stop", { recipient_id: recipientId }),
+    sendTypingStart: (recipientRef) =>
+      userChannel.push("typing_start", { recipient_id: recipientRef }),
+    sendTypingStop: (recipientRef) =>
+      userChannel.push("typing_stop", { recipient_id: recipientRef }),
 
-    editMessage(recipientId, messageId, content) {
+    editMessage(recipientRef, messageId, content) {
       return new Promise((resolve, reject) => {
         userChannel
-          .push("edit_message", { message_id: messageId, content, recipient_id: recipientId })
+          .push("edit_message", { message_id: messageId, content, recipient_id: recipientRef })
           .receive("ok",      (p: MessageEditedPayload) => resolve(p))
           .receive("error",   (r) => reject(new Error(r?.reason ?? "Edit failed")))
           .receive("timeout", () => reject(new Error("Edit timed out")));
       });
     },
 
-    deleteMessage(recipientId, messageId) {
+    deleteMessage(recipientRef, messageId) {
       return new Promise((resolve, reject) => {
         userChannel
-          .push("delete_message", { message_id: messageId, recipient_id: recipientId })
+          .push("delete_message", { message_id: messageId, recipient_id: recipientRef })
           .receive("ok",      (p: { id: number }) => resolve(p))
           .receive("error",   (r) => reject(new Error(r?.reason ?? "Delete failed")))
           .receive("timeout", () => reject(new Error("Delete timed out")));
       });
     },
 
-    toggleDirectReaction(partnerId, messageId, emoji) {
+    toggleDirectReaction(partnerRef, messageId, emoji) {
       return new Promise((resolve, reject) => {
         userChannel
-          .push("toggle_reaction", { message_id: messageId, emoji, partner_id: partnerId })
+          .push("toggle_reaction", { message_id: messageId, emoji, partner_id: partnerRef })
           .receive("ok",      (p: ReactionUpdatedPayload) => resolve(p))
           .receive("error",   (r) => reject(new Error(r?.reason ?? "Reaction failed")))
           .receive("timeout", () => reject(new Error("Reaction timed out")));
       });
     },
 
-    async joinRoomChannel(roomId) {
+    async joinRoomChannel(roomId, roomTopicRef = roomId) {
       if (roomChannels.has(roomId)) return;
 
       const bus     = ensureRoomBus(roomId);
-      const channel = socket.channel(`room:${roomId}`, {});
+      const channel = socket.channel(`room:${roomTopicRef}`, {});
 
       channel.on("new_room_message", (p: Message)                => bus.message.emit(p));
       channel.on("typing_start",     (p: RoomTypingPayload)      => bus.typingStart.emit(p));
@@ -433,13 +434,13 @@ export async function connectSocket(token: string, userId: number): Promise<Sock
 
 export function sendMessageViaChannel(
   channel:     Channel,
-  recipientId: number,
+  recipientRef: ResourceRef,
   payload:     OutgoingMessagePayload,
 ): Promise<Message> {
   return new Promise((resolve, reject) => {
     channel
       .push("send_message", {
-        recipient_id: recipientId,
+        recipient_id: recipientRef,
         content: payload.content ?? null,
         media_file_id: payload.mediaFileId ?? null,
         reply_to_id: payload.replyToId ?? null
@@ -452,6 +453,6 @@ export function sendMessageViaChannel(
   });
 }
 
-export function markReadViaChannel(channel: Channel, partnerId: number): void {
-  channel.push("mark_read", { partner_id: partnerId });
+export function markReadViaChannel(channel: Channel, partnerRef: ResourceRef): void {
+  channel.push("mark_read", { partner_id: partnerRef });
 }

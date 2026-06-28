@@ -1,5 +1,5 @@
 import { get } from './base';
-import { Message, ConversationPreview } from '@/shared/types';
+import { Message, ConversationPreview, ResourceRef } from '@/shared/types';
 
 export interface ConversationParams {
   limit?:    number;
@@ -8,22 +8,22 @@ export interface ConversationParams {
 
 export const messagesApi = {
   // current_user_id убран — токен в заголовке идентифицирует пользователя
-  getConversation(otherUserId: number, params: ConversationParams = {}): Promise<Message[]> {
+  getConversation(otherUserRef: ResourceRef, params: ConversationParams = {}): Promise<Message[]> {
     const searchParams = new URLSearchParams({
       limit: String(params.limit ?? 50),
     });
     if (params.beforeId !== undefined) {
       searchParams.set("before_id", String(params.beforeId));
     }
-    return get<Message[]>(`/conversations/${otherUserId}?${searchParams}`);
+    return get<Message[]>(`/conversations/${otherUserRef}?${searchParams}`);
   },
 
   getList(): Promise<ConversationPreview[]> {
     return get<ConversationPreview[]>("/conversations");
   },
 
-  search(otherUserId: number, query: string): Promise<Message[]> {
+  search(otherUserRef: ResourceRef, query: string): Promise<Message[]> {
     const params = new URLSearchParams({ q: query });
-    return get<Message[]>(`/conversations/${otherUserId}/search?${params}`);
+    return get<Message[]>(`/conversations/${otherUserRef}/search?${params}`);
   },
 };

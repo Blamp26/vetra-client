@@ -88,12 +88,18 @@ export function useSocketEvents() {
 
             if (isActive && focused) {
               // Если чат активен и окно в фокусе — помечаем сразу как прочитанное
-              markReadViaChannel(socketManager.userChannel, partnerId);
+              markReadViaChannel(
+                socketManager.userChannel,
+                msg.sender_id === currentUser.id
+                  ? msg.recipient_public_id ?? partnerId
+                  : msg.sender_public_id ?? partnerId,
+              );
               resetUnread(partnerId);
             } else {
               // Иначе увеличиваем счетчик непрочитанных в превью
               upsertPreview({
                 partner_id: partnerId,
+                partner_public_id: msg.sender_public_id,
                 partner_username: msg.sender_username || "Unknown",
                 partner_display_name: msg.sender_display_name || null,
                 unread_count: 1, // Store will increment this
@@ -102,6 +108,7 @@ export function useSocketEvents() {
                   content: msg.content,
                   inserted_at: msg.inserted_at,
                   sender_id: msg.sender_id,
+                  sender_public_id: msg.sender_public_id,
                   status: msg.status,
                 },
               });
@@ -116,6 +123,7 @@ export function useSocketEvents() {
                     getState().setActiveChat({
                       type: "direct",
                       partnerId: msg.sender_id,
+                      partnerRef: msg.sender_public_id ?? msg.sender_id,
                     });
                   },
                 });
@@ -126,6 +134,7 @@ export function useSocketEvents() {
           // Если это наше сообщение (отправленное с другого устройства)
           upsertPreview({
             partner_id: partnerId,
+            partner_public_id: msg.recipient_public_id,
             partner_username: msg.recipient_username || "Unknown",
             partner_display_name: msg.recipient_display_name || null,
             unread_count: 0,
@@ -134,6 +143,7 @@ export function useSocketEvents() {
               content: msg.content,
               inserted_at: msg.inserted_at,
               sender_id: msg.sender_id,
+              sender_public_id: msg.sender_public_id,
               status: msg.status,
             },
           });
@@ -146,7 +156,7 @@ export function useSocketEvents() {
       const state = getState();
       const active = state.activeChat;
       if (active?.type === "direct" && active.partnerId) {
-        markReadViaChannel(socketManager.userChannel, active.partnerId);
+        markReadViaChannel(socketManager.userChannel, active.partnerRef ?? active.partnerId);
         resetUnread(active.partnerId);
       }
     };
@@ -171,11 +181,13 @@ export function useSocketEvents() {
       appendRoomMessage(roomId, msg);
       upsertRoomPreview({
         id: roomId,
+        public_id: msg.room_public_id,
         last_message: {
           id: msg.id,
           content: msg.content,
           inserted_at: msg.inserted_at,
           sender_id: msg.sender_id,
+          sender_public_id: msg.sender_public_id,
           status: msg.status,
         },
       });
@@ -206,6 +218,7 @@ export function useSocketEvents() {
                 getState().setActiveChat({
                   type: "room",
                   roomId,
+                  roomRef: msg.room_public_id ?? roomId,
                 });
               },
             });

@@ -8,6 +8,7 @@ import type { Server } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { Avatar } from "@/shared/components/Avatar";
 import { Plus, X } from "lucide-react";
+import { serverRef, userRef } from "@/shared/utils/refs";
 
 interface Props {
   server:  Server;
@@ -46,14 +47,14 @@ export function ServerSettingsModal({ server, onClose }: Props) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const { members, isLoading, error, addMember, removeMember } = useServerMembers(server.id);
+  const { members, isLoading, error, addMember, removeMember } = useServerMembers(server);
   const isOwner = currentUser?.id === server.created_by;
 
-  async function handleAddMember(userId: number) {
+  async function handleAddMember(userId: number | string) {
     setSearchError(null);
     setIsDropdownOpen(false);
     try {
-      if ((members || []).some((m) => m.user_id === userId)) {
+      if ((members || []).some((m) => m.user_id === userId || m.user_public_id === userId)) {
         setSearchError("User already in server");
         return;
       }
@@ -68,7 +69,7 @@ export function ServerSettingsModal({ server, onClose }: Props) {
     if (!currentUser) return;
     setLeaving(true);
     try {
-      await serversApi.removeMember(server.id, currentUser.id);
+      await serversApi.removeMember(serverRef(server) ?? server.id, userRef(currentUser) ?? currentUser.id);
       const updated = await serversApi.getList();
       setServers(updated);
       const active = getState().activeChat;
@@ -87,7 +88,7 @@ export function ServerSettingsModal({ server, onClose }: Props) {
     if (!currentUser) return;
     setDeleting(true);
     try {
-      await serversApi.delete(server.id);
+      await serversApi.delete(serverRef(server) ?? server.id);
       const updated = await serversApi.getList();
       setServers(updated);
       const active = getState().activeChat;
@@ -106,7 +107,8 @@ export function ServerSettingsModal({ server, onClose }: Props) {
     if (memberToKick === null) return;
     setIsKicking(true);
     try {
-      await removeMember(memberToKick);
+      const kickedMember = members.find((member) => member.user_id === memberToKick);
+      await removeMember(kickedMember?.user_public_id ?? memberToKick);
       setMemberToKick(null);
     } catch (e) {
       alert("Kick failed");
@@ -157,7 +159,7 @@ export function ServerSettingsModal({ server, onClose }: Props) {
                   {isDropdownOpen && searchResults?.users?.length > 0 && (
                     <div className="absolute top-full left-0 right-0 z-[100] bg-popover border border-border mt-1 max-h-[200px] overflow-y-auto">
                       {searchResults.users.map((u) => (
-                        <div key={u.id} onClick={() => handleAddMember(u.id)} className="p-2 cursor-pointer flex items-center gap-2 hover:bg-accent">
+                        <div key={u.id} onClick={() => handleAddMember(u.public_id ?? u.id)} className="p-2 cursor-pointer flex items-center gap-2 hover:bg-accent">
                           <Avatar name={u.display_name || u.username} size="small" />
                           <div className="flex-1 text-sm">{u.display_name || u.username}</div>
                           <Plus className="h-4 w-4" />

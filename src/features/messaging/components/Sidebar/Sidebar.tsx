@@ -10,6 +10,7 @@ import { formatPreviewTime } from "@/utils/formatDate";
 import { Avatar } from "@/shared/components/Avatar";
 import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
+import { roomChatForPreview, serverChatForServer } from "@/shared/utils/chatRoutes";
 
 interface SidebarProps {
   isServerMode?: boolean;
@@ -30,6 +31,7 @@ export function Sidebar({
   const userStatuses         = useAppStore((s: RootState) => s.userStatuses);
   const servers              = useAppStore((s: RootState) => s.servers);
   const setServers           = useAppStore((s: RootState) => s.setServers);
+  const setActiveChat        = useAppStore((s: RootState) => s.setActiveChat);
   const activeModal          = useAppStore((s: RootState) => s.activeModal);
   const openModal            = useAppStore((s: RootState) => s.openModal);
   const closeModal           = useAppStore((s: RootState) => s.closeModal);
@@ -89,9 +91,14 @@ export function Sidebar({
 
   const handleItemClick = (item: SidebarItem) => {
     if (item.kind === "direct") {
-      window.location.hash = `/${item.id}`;
+      setActiveChat({ type: "direct", partnerId: item.id, partnerRef: conversationPreviews[item.id]?.partner_public_id ?? item.id });
     } else {
-      window.location.hash = `/r/${item.id}`;
+      const roomPreview = roomPreviews[item.id];
+      if (roomPreview) {
+        setActiveChat(roomChatForPreview(roomPreview));
+      } else {
+        setActiveChat({ type: "room", roomId: item.id });
+      }
     }
   };
 
@@ -117,7 +124,7 @@ export function Sidebar({
             {serverList.map((server) => (
               <button
                 key={server.id}
-                onClick={() => { window.location.hash = `/s/${server.id}`; }}
+                onClick={() => setActiveChat(serverChatForServer(server))}
                 className="flex w-full items-center gap-2 p-1 text-left"
               >
                 <Avatar name={server.name} size="small" />

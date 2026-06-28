@@ -4,10 +4,11 @@ import { messagesApi } from "@/api/messages";
 import { roomsApi } from "@/api/rooms";
 import { markReadViaChannel, sendMessageViaChannel } from "@/services/socket";
 import { useMessagePagination } from "@/shared/hooks/useMessagePagination";
+import { withFallbackRef } from "@/shared/utils/refs";
 
 export type ChatContext = 
-  | { type: "direct"; partnerId: number }
-  | { type: "room";   roomId: number };
+  | { type: "direct"; partnerId: number; partnerRef?: string | number }
+  | { type: "room";   roomId: number; roomRef?: string | number };
 
 /**
  * Unified hook for handling both direct messages and room messages.
@@ -19,7 +20,9 @@ export function useUnifiedMessages(context: ChatContext | null) {
   
   // Slices
   const conversations = useAppStore((s: RootState) => s.conversations);
+  const conversationPreviews = useAppStore((s: RootState) => s.conversationPreviews);
   const roomConversations = useAppStore((s: RootState) => s.roomConversations);
+  const roomPreviews = useAppStore((s: RootState) => s.roomPreviews);
   
   // Actions
   const initConversation = useAppStore((s: RootState) => s.initConversation);
@@ -52,12 +55,25 @@ export function useUnifiedMessages(context: ChatContext | null) {
     (limit: number, beforeId?: number) => {
       if (!id || !currentUser || !context) return Promise.resolve([]);
       if (context.type === "room") {
-        return roomsApi.getMessages(context.roomId, limit, beforeId);
+        return roomsApi.getMessages(
+          withFallbackRef(context.roomId, context.roomRef, roomPreviews[context.roomId]),
+          limit,
+          beforeId,
+        );
       } else {
-        return messagesApi.getConversation(context.partnerId, { limit, beforeId });
+        return messagesApi.getConversation(
+          withFallbackRef(
+            context.partnerId,
+            context.partnerRef,
+            conversationPreviews[context.partnerId]
+              ? { id: context.partnerId, public_id: conversationPreviews[context.partnerId].partner_public_id }
+              : undefined,
+          ),
+          { limit, beforeId },
+        );
       }
     },
-    [id, currentUser, context],
+    [id, currentUser, context, roomPreviews, conversationPreviews],
   );
 
   const actions = useMemo(() => {
@@ -100,10 +116,22 @@ export function useUnifiedMessages(context: ChatContext | null) {
     if (!id || !socketManager || !context) return;
 
     if (context.type === "direct") {
-      markReadViaChannel(socketManager.userChannel, context.partnerId);
+      markReadViaChannel(
+        socketManager.userChannel,
+        withFallbackRef(
+          context.partnerId,
+          context.partnerRef,
+          conversationPreviews[context.partnerId]
+            ? { id: context.partnerId, public_id: conversationPreviews[context.partnerId].partner_public_id }
+            : undefined,
+        ),
+      );
       resetUnread(context.partnerId);
     } else {
-      socketManager.joinRoomChannel(context.roomId);
+      socketManager.joinRoomChannel(
+        context.roomId,
+        withFallbackRef(context.roomId, context.roomRef, roomPreviews[context.roomId]),
+      );
       
       // Local room events that aren't global (edited, deleted, reactions)
       // Note: Room message append is handled globally in useSocketEvents
@@ -118,7 +146,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
         socketManager.leaveRoomChannel(context.roomId);
       };
     }
-  }, [id, socketManager, context, resetUnread, editRoomMessage, deleteRoomMessage, toggleRoomReaction]);
+  }, [id, socketManager, context, resetUnread, editRoomMessage, deleteRoomMessage, toggleRoomReaction, conversationPreviews, roomPreviews]);
 
   const sendMessage = useCallback(
     async (
@@ -140,7 +168,13 @@ export function useUnifiedMessages(context: ChatContext | null) {
       } else {
         const message = await sendMessageViaChannel(
           socketManager.userChannel,
-          context.partnerId,
+          withFallbackRef(
+            context.partnerId,
+            context.partnerRef,
+            conversationPreviews[context.partnerId]
+              ? { id: context.partnerId, public_id: conversationPreviews[context.partnerId].partner_public_id }
+              : undefined,
+          ),
           {
             content,
             mediaFileId: payload.mediaFileId ?? null,
@@ -150,7 +184,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
         appendMessage(context.partnerId, message);
       }
     },
-    [id, socketManager, currentUser, context, appendRoomMessage, appendMessage],
+    [id, socketManager, currentUser, context, appendRoomMessage, appendMessage, conversationPreviews],
   );
 
   return { messages, isLoading, hasMore, loadMore, sendMessage };

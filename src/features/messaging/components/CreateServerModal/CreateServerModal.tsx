@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { serversApi } from "@/api/servers";
+import { serverChatForServer } from "@/shared/utils/chatRoutes";
 
 interface Props {
   onClose: () => void;
@@ -30,7 +31,7 @@ export function CreateServerModal({ onClose }: Props) {
     try {
       const server = await serversApi.create(trimmed);
       upsertServer(server);
-      setActiveChat({ type: "server", serverId: server.id });
+      setActiveChat(serverChatForServer(server));
       onClose();
     } catch (err) {
       setError("Create failed");
