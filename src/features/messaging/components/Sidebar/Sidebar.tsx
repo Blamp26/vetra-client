@@ -129,13 +129,13 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
         type: "direct",
         partnerId: item.id,
         partnerRef: conversationPreviews[item.id]?.partner_public_id ?? item.id,
-      });
+      }, "sidebar-direct-click");
     } else {
       const roomPreview = roomPreviews[item.id];
       if (roomPreview) {
-        setActiveChat(roomChatForPreview(roomPreview));
+        setActiveChat(roomChatForPreview(roomPreview), "sidebar-room-click");
       } else {
-        setActiveChat({ type: "room", roomId: item.id });
+        setActiveChat({ type: "room", roomId: item.id }, "sidebar-room-click");
       }
     }
   };
@@ -166,7 +166,12 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
             {serverList.map((server) => (
               <button
                 key={server.id}
-                onClick={() => setActiveChat(serverChatForServer(server))}
+                onClick={() =>
+                  setActiveChat(
+                    serverChatForServer(server),
+                    "sidebar-server-click",
+                  )
+                }
                 className="flex w-full items-center gap-2 p-1 text-left"
               >
                 <Avatar name={server.name} size="small" />

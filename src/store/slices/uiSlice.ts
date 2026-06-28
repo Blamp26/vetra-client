@@ -5,6 +5,7 @@ import { ActiveChat, MessageReactionGroup } from "@/shared/types";
 import { Theme } from "@/themes";
 import { storage, STORAGE_KEYS } from "@/shared/utils/storage";
 import { sameActiveChat } from "@/shared/utils/chatRoutes";
+import { debugActiveChatTransition } from "@/shared/utils/activeChatDebug";
 
 export type ModalType = "CREATE_PICKER" | "CREATE_SERVER" | "CREATE_ROOM";
 
@@ -14,7 +15,7 @@ export interface UISlice {
   messageReactions: Record<number, MessageReactionGroup[]>;
   theme: Theme;
 
-  setActiveChat: (chat: ActiveChat | null) => void;
+  setActiveChat: (chat: ActiveChat | null, source?: string) => void;
   openModal: (modal: ModalType) => void;
   closeModal: () => void;
   setMessageReactions: (
@@ -30,8 +31,9 @@ export const createUISlice: StateCreator<any, [], [], UISlice> = (set) => ({
   messageReactions: {},
   theme: (storage.getString(STORAGE_KEYS.THEME) as Theme) || "light",
 
-  setActiveChat: (chat) =>
+  setActiveChat: (chat, source) =>
     set((state: any) => {
+      debugActiveChatTransition(source, state.activeChat, chat);
       if (sameActiveChat(state.activeChat, chat)) return state;
       return { activeChat: chat };
     }),

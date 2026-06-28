@@ -85,44 +85,65 @@ function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [routeHash, setRouteHash] = useState(() =>
+    typeof window !== "undefined" ? window.location.hash || "#" : "#",
+  );
   const currentActiveChatKey = activeChatKey(activeChat);
+  const currentActiveChatKeyRef = useRef(currentActiveChatKey);
 
   useEffect(() => {
-    const syncUrlToStore = () => {
-      const hash = window.location.hash;
-      if (!hash || hash === "#") return;
+    currentActiveChatKeyRef.current = currentActiveChatKey;
+  }, [currentActiveChatKey]);
 
-      const resolved = resolveHashToActiveChat(hash, {
-        activeChat,
+  useEffect(() => {
+    const syncHashState = () => {
+      const nextHash = window.location.hash || "#";
+      setRouteHash((prev) => (prev === nextHash ? prev : nextHash));
+    };
+
+    syncHashState();
+    window.addEventListener("hashchange", syncHashState);
+    return () => window.removeEventListener("hashchange", syncHashState);
+  }, []);
+
+  const routeTarget = useMemo(
+    () =>
+      resolveHashToActiveChat(routeHash, {
+        activeChat: null,
         currentUser,
         conversationPreviews,
         roomPreviews,
         servers,
         serverChannels,
         searchResults,
-      });
+      }),
+    [
+      routeHash,
+      currentUser,
+      conversationPreviews,
+      roomPreviews,
+      servers,
+      serverChannels,
+      searchResults,
+    ],
+  );
+  const routeTargetKey = activeChatKey(routeTarget);
 
-      if (resolved?.type === "settings") {
-        setShowSettings(true);
-        return;
-      }
+  useEffect(() => {
+    if (!routeHash || routeHash === "#") return;
 
-      if (activeChatKey(resolved) !== currentActiveChatKey) {
-        setActiveChat(resolved);
-      }
-    };
+    if (routeTarget?.type === "settings") {
+      setShowSettings(true);
+      return;
+    }
 
-    syncUrlToStore();
-    window.addEventListener("hashchange", syncUrlToStore);
-    return () => window.removeEventListener("hashchange", syncUrlToStore);
+    if (routeTarget && routeTargetKey !== currentActiveChatKeyRef.current) {
+      setActiveChat(routeTarget, "app-hash-read");
+    }
   }, [
-    currentActiveChatKey,
-    currentUser,
-    conversationPreviews,
-    roomPreviews,
-    searchResults,
-    serverChannels,
-    servers,
+    routeHash,
+    routeTarget,
+    routeTargetKey,
     setActiveChat,
   ]);
 
@@ -139,11 +160,11 @@ function App() {
       searchResults,
     });
 
-    if (newHash && window.location.hash !== newHash) {
+    if (newHash && routeHash !== newHash) {
       window.history.replaceState(null, "", newHash);
+      setRouteHash(newHash);
     }
   }, [
-    currentActiveChatKey,
     activeChat,
     currentUser,
     conversationPreviews,
@@ -151,12 +172,14 @@ function App() {
     servers,
     serverChannels,
     searchResults,
+    routeHash,
   ]);
 
   useEffect(() => {
-    if (showSettings && window.location.hash !== "#/settings") {
+    if (showSettings && routeHash !== "#/settings") {
       window.history.replaceState(null, "", "#/settings");
-    } else if (!showSettings && window.location.hash === "#/settings") {
+      setRouteHash("#/settings");
+    } else if (!showSettings && routeHash === "#/settings") {
       if (activeChat) {
         const newHash = buildHashForActiveChat(activeChat, {
           activeChat,
@@ -168,13 +191,14 @@ function App() {
           searchResults,
         });
         window.history.replaceState(null, "", newHash || "#");
+        setRouteHash(newHash || "#");
       } else {
         window.history.replaceState(null, "", "#");
+        setRouteHash("#");
       }
     }
   }, [
     showSettings,
-    currentActiveChatKey,
     activeChat,
     currentUser,
     conversationPreviews,
@@ -182,6 +206,7 @@ function App() {
     servers,
     serverChannels,
     searchResults,
+    routeHash,
   ]);
 
   useEffect(() => {

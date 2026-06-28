@@ -59,9 +59,21 @@ export function ChannelPanel({ serverId }: Props) {
   const handleChannelClick = async (channel: Channel) => {
     resetChannelUnread(channel.id);
     if (server) {
-      setActiveChat(channelChatForChannel(server, channel));
+      setActiveChat(
+        channelChatForChannel(server, channel),
+        "channel-panel-channel-click",
+      );
     } else {
-      setActiveChat({ type: "channel", channelId: channel.id, serverId, channelRef: roomRef(channel), serverRef: serverRef(server) ?? serverId });
+      setActiveChat(
+        {
+          type: "channel",
+          channelId: channel.id,
+          serverId,
+          channelRef: roomRef(channel),
+          serverRef: serverRef(server) ?? serverId,
+        },
+        "channel-panel-channel-click",
+      );
     }
     if (socketManager) {
       try { await socketManager.joinRoomChannel(channel.id, roomRef(channel) ?? channel.id); } catch { /* non-critical */ }
@@ -104,9 +116,21 @@ export function ChannelPanel({ serverId }: Props) {
       setNewChannelName("");
       setShowCreate(false);
       if (server) {
-        setActiveChat(channelChatForChannel(server, channel));
+        setActiveChat(
+          channelChatForChannel(server, channel),
+          "channel-panel-create-channel-success",
+        );
       } else {
-        setActiveChat({ type: "channel", channelId: channel.id, serverId, channelRef: roomRef(channel) ?? channel.id, serverRef: serverRef(server) ?? serverId });
+        setActiveChat(
+          {
+            type: "channel",
+            channelId: channel.id,
+            serverId,
+            channelRef: roomRef(channel) ?? channel.id,
+            serverRef: serverRef(server) ?? serverId,
+          },
+          "channel-panel-create-channel-success",
+        );
       }
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create channel.");
@@ -125,7 +149,7 @@ export function ChannelPanel({ serverId }: Props) {
       setServerChannels(serverId, updatedChannels);
 
       if (activeChat?.type === "channel" && activeChat.channelId === channelToDelete.id) {
-        setActiveChat(null);
+        setActiveChat(null, "channel-panel-delete-active-channel");
       }
       setChannelToDelete(null);
     } catch (err) {

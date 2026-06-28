@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   activeChatKey,
   buildHashForActiveChat,
+  resolveHashToActiveChat,
   sameActiveChat,
 } from "./chatRoutes";
 
@@ -89,5 +90,54 @@ describe("chatRoutes", () => {
         channelRef: "chn-9",
       }),
     ).toBe("channel:5:9");
+  });
+
+  it("resolves a channel hash directly to a channel chat", () => {
+    expect(
+      resolveHashToActiveChat("#/s/1/9", {
+        activeChat: null,
+        currentUser: null,
+        conversationPreviews: {},
+        roomPreviews: {},
+        servers: {
+          1: {
+            id: 1,
+            name: "Alpha",
+            created_by: 1,
+            inserted_at: "2026-06-28T00:00:00Z",
+          },
+        },
+        serverChannels: {},
+        searchResults: { users: [], servers: [] },
+      }),
+    ).toEqual({
+      type: "channel",
+      serverId: 1,
+      channelId: 9,
+      serverRef: "1",
+      channelRef: "9",
+    });
+  });
+
+  it("does not fall back to the parent server when a channel hash cannot be resolved yet", () => {
+    expect(
+      resolveHashToActiveChat("#/s/srv-1/chn-9", {
+        activeChat: null,
+        currentUser: null,
+        conversationPreviews: {},
+        roomPreviews: {},
+        servers: {
+          1: {
+            id: 1,
+            public_id: "srv-1",
+            name: "Alpha",
+            created_by: 1,
+            inserted_at: "2026-06-28T00:00:00Z",
+          },
+        },
+        serverChannels: {},
+        searchResults: { users: [], servers: [] },
+      }),
+    ).toBeNull();
   });
 });

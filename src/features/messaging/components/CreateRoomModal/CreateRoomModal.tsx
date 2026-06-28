@@ -88,19 +88,22 @@ export function CreateRoomModal({ onClose }: Props) {
         try { await socketManager.joinRoomChannel(room.id, room.public_id ?? room.id); } catch { /* non-critical */ }
       }
 
-      setActiveChat(roomChatForPreview({
-        id: room.id,
-        public_id: room.public_id,
-        name: room.name,
-        created_by: room.created_by,
-        created_by_public_id: room.created_by_public_id,
-        server_id: null,
-        server_public_id: null,
-        inserted_at: room.inserted_at,
-        unread_count: 0,
-        last_message_at: null,
-        last_message: null,
-      }));
+      setActiveChat(
+        roomChatForPreview({
+          id: room.id,
+          public_id: room.public_id,
+          name: room.name,
+          created_by: room.created_by,
+          created_by_public_id: room.created_by_public_id,
+          server_id: null,
+          server_public_id: null,
+          inserted_at: room.inserted_at,
+          unread_count: 0,
+          last_message_at: null,
+          last_message: null,
+        }),
+        "create-room-modal-success",
+      );
       onClose();
     } catch (err) {
       setError("Create failed");

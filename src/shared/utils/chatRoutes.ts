@@ -156,7 +156,7 @@ export function resolveHashToActiveChat(hash: string, lookup: ChatRouteLookup): 
     if (third) {
       const resolvedChannelId = resolveChannelId(lookup, resolvedServerId, third);
       if (resolvedChannelId === null) {
-        return { type: "server", serverId: resolvedServerId, serverRef: second };
+        return null;
       }
 
       return {

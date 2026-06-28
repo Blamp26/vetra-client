@@ -74,7 +74,7 @@ export function ServerSettingsModal({ server, onClose }: Props) {
       setServers(updated);
       const active = getState().activeChat;
       if (active && (active.type === "server" || active.type === "channel") && active.serverId === server.id) {
-        setActiveChat(null);
+        setActiveChat(null, "server-settings-leave-server");
       }
       onClose();
     } catch (e) {
@@ -93,7 +93,7 @@ export function ServerSettingsModal({ server, onClose }: Props) {
       setServers(updated);
       const active = getState().activeChat;
       if (active && (active.type === "server" || active.type === "channel") && active.serverId === server.id) {
-        setActiveChat(null);
+        setActiveChat(null, "server-settings-delete-server");
       }
       onClose();
     } catch (e) {
