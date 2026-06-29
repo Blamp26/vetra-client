@@ -121,6 +121,7 @@ function buildConfig() {
     vus: envInt("VETRA_LOAD_VUS", 10),
     durationSeconds: envInt("VETRA_LOAD_DURATION_SECONDS", 60),
     messagesPerSecond: envNumber("VETRA_LOAD_MESSAGES_PER_SECOND", 5),
+    messageTimeoutMs: envInt("VETRA_LOAD_MESSAGE_TIMEOUT_MS", 15000),
     rampBatchSize: envInt("VETRA_LOAD_RAMP_BATCH_SIZE", 25),
     rampBatchDelayMs: envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
     startupTimeoutMs: envInt("VETRA_LOAD_STARTUP_TIMEOUT_MS", 15000),
@@ -159,6 +160,7 @@ function buildConfig() {
     mode,
     writeEnabled,
     writeResults: env.VETRA_LOAD_WRITE_RESULTS !== "0",
+    maxErrorDetails: envInt("VETRA_LOAD_MAX_ERROR_DETAILS", 50),
   };
 
   config.roomBatchTimeoutMs = envInt(
@@ -473,8 +475,14 @@ function createMetrics(mode, vus, durationSeconds) {
     expectedCloses: 0,
     cleanupCloses: 0,
     earlySocketDisconnects: 0,
+    earlySocketDisconnectsByPhase: {},
     unexpectedDisconnects: 0,
+    unexpectedDisconnectsByPhase: {},
+    socketCloseCodes: {},
+    socketCloseReasons: {},
+    socketCloseDetailsSample: [],
     runtimeSocketErrors: 0,
+    messageFailureDetailsSample: [],
     disconnectCount: 0,
     connectLatenciesMs: [],
     joinLatenciesMs: [],
@@ -523,6 +531,14 @@ function recordSocketConnectFailure(metrics, error) {
   }
 }
 
+function pushLimitedSample(target, value) {
+  if (target.length >= config.maxErrorDetails) {
+    return;
+  }
+
+  target.push(value);
+}
+
 function isSocketTicketError(error) {
   return (
     error instanceof Error &&
@@ -542,6 +558,117 @@ function recordBroadcast(metrics, topicType, event) {
 function recalculateDisconnectCount(metrics) {
   metrics.disconnectCount =
     metrics.cleanupCloses + metrics.earlySocketDisconnects;
+}
+
+function incrementCounter(map, key) {
+  map[key] = (map[key] ?? 0) + 1;
+}
+
+function getSocketState(session) {
+  try {
+    return session.socket?.connectionState?.() ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function getChannelState(channel) {
+  if (!channel) return "missing";
+  try {
+    if (channel.isJoined?.()) return "joined";
+    if (channel.isJoining?.()) return "joining";
+    if (channel.isLeaving?.()) return "leaving";
+    if (channel.isClosed?.()) return "closed";
+    if (channel.isErrored?.()) return "errored";
+  } catch {}
+  return "unknown";
+}
+
+function getRoomJoinState(session) {
+  const roomChannels = [...session.roomChannels.values()];
+  if (roomChannels.length === 0) {
+    return "not_joined";
+  }
+
+  if (roomChannels.some((channel) => getChannelState(channel) === "joined")) {
+    return "joined";
+  }
+
+  return roomChannels.map((channel) => getChannelState(channel)).join(",");
+}
+
+function resolveSessionPhase(session) {
+  if (session.currentPhase && session.currentPhase !== "unknown") {
+    return session.currentPhase;
+  }
+  if (session.cleanupStarted || isCleaningUp) return "cleanup";
+  if (!session.connected) return "startup";
+  if (!session.joined) return "user_join";
+  if (session.currentSendInFlight) return "sending";
+  if (session.lastRoomJoinAttempted && !session.canSendMessages) return "room_join";
+  if (session.canSendMessages) return "ready";
+  return "unknown";
+}
+
+function recordSocketClose(metrics, session, event = null) {
+  const phase = resolveSessionPhase(session);
+  const uptimeMs =
+    session.socketOpenedAt !== null
+      ? Math.round(performance.now() - session.socketOpenedAt)
+      : null;
+  const code =
+    typeof event?.code === "number"
+      ? String(event.code)
+      : session.socket?.closeWasClean === false
+        ? "unclean"
+        : "unknown";
+  const reason =
+    typeof event?.reason === "string" && event.reason
+      ? event.reason
+      : "unknown";
+  const wasExpectedCleanup = !!session.expectedClose;
+  const detail = {
+    vuId: session.label,
+    phase,
+    uptimeMs,
+    wasExpectedCleanup,
+    closeCode: typeof event?.code === "number" ? event.code : null,
+    closeReason:
+      typeof event?.reason === "string" && event.reason ? event.reason : null,
+    socketState: getSocketState(session),
+    userChannelJoined: !!session.joined,
+    roomChannelJoined: session.roomChannels.size > 0,
+    eligibleForMessageSending: !!session.canSendMessages,
+    userChannelState: getChannelState(session.userChannel),
+    roomChannelState: getRoomJoinState(session),
+  };
+
+  incrementCounter(metrics.socketCloseCodes, code);
+  incrementCounter(metrics.socketCloseReasons, reason);
+
+  if (!wasExpectedCleanup && phase !== "cleanup") {
+    incrementCounter(metrics.earlySocketDisconnectsByPhase, phase);
+    if (!session.hadControlledRoomJoinFailure) {
+      incrementCounter(metrics.unexpectedDisconnectsByPhase, phase);
+    }
+    pushLimitedSample(metrics.socketCloseDetailsSample, detail);
+  }
+}
+
+function recordMessageFailure(metrics, session, error, elapsedMs, activeSenderCount, activeReceiverCount) {
+  pushLimitedSample(metrics.messageFailureDetailsSample, {
+    vuId: session.label,
+    errorType: error instanceof Error ? error.message : String(error),
+    elapsedMs: Math.round(elapsedMs),
+    activeSenderCount,
+    activeReceiverCount,
+    socketConnected: getSocketState(session) === "open",
+    socketState: getSocketState(session),
+    userChannelState: getChannelState(session.userChannel),
+    roomChannelState: getRoomJoinState(session),
+    phase: resolveSessionPhase(session),
+    eligibleForMessageSending: !!session.canSendMessages,
+  });
 }
 
 function percentile(sorted, ratio) {
@@ -605,8 +732,14 @@ function summarizeMetrics(metrics) {
     expectedCloses: metrics.expectedCloses,
     cleanupCloses: metrics.cleanupCloses,
     earlySocketDisconnects: metrics.earlySocketDisconnects,
+    earlySocketDisconnectsByPhase: metrics.earlySocketDisconnectsByPhase,
     unexpectedDisconnects: metrics.unexpectedDisconnects,
+    unexpectedDisconnectsByPhase: metrics.unexpectedDisconnectsByPhase,
+    socketCloseCodes: metrics.socketCloseCodes,
+    socketCloseReasons: metrics.socketCloseReasons,
+    socketCloseDetailsSample: metrics.socketCloseDetailsSample,
     runtimeSocketErrors: metrics.runtimeSocketErrors,
+    messageFailureDetailsSample: metrics.messageFailureDetailsSample,
     approximateMessagesPerSecond: approxMessagesPerSecond(metrics),
     latenciesMs: buildLatencyStats(metrics.ackLatenciesMs),
     connectLatenciesMs: buildLatencyStats(metrics.connectLatenciesMs),
@@ -657,8 +790,22 @@ function printSummary(metrics) {
   console.log(`expected closes: ${summary.expectedCloses}`);
   console.log(`cleanup closes: ${summary.cleanupCloses}`);
   console.log(`early socket disconnects: ${summary.earlySocketDisconnects}`);
+  console.log(
+    `early socket disconnects by phase: ${JSON.stringify(summary.earlySocketDisconnectsByPhase)}`,
+  );
   console.log(`unexpected disconnects: ${summary.unexpectedDisconnects}`);
+  console.log(
+    `unexpected disconnects by phase: ${JSON.stringify(summary.unexpectedDisconnectsByPhase)}`,
+  );
+  console.log(`socket close codes: ${JSON.stringify(summary.socketCloseCodes)}`);
+  console.log(`socket close reasons: ${JSON.stringify(summary.socketCloseReasons)}`);
+  console.log(
+    `socket close details sample: ${JSON.stringify(summary.socketCloseDetailsSample)}`,
+  );
   console.log(`runtime socket errors: ${summary.runtimeSocketErrors}`);
+  console.log(
+    `message failure details sample: ${JSON.stringify(summary.messageFailureDetailsSample)}`,
+  );
   console.log(`approx msg/sec: ${summary.approximateMessagesPerSecond}`);
   console.log(
     `ack latency ms: p50=${summary.latenciesMs.p50 ?? "-"} p95=${summary.latenciesMs.p95 ?? "-"} p99=${summary.latenciesMs.p99 ?? "-"} max=${summary.latenciesMs.max ?? "-"}`,
@@ -1127,13 +1274,13 @@ function joinChannel(channel, label, metrics, timeoutMs = null) {
   });
 }
 
-function pushOk(channel, event, payload, label, metrics) {
+function pushOk(channel, event, payload, label, metrics, timeoutMs = config.messageTimeoutMs) {
   const startedAt = performance.now();
   metrics.messagesAttempted += 1;
 
   return new Promise((resolve, reject) => {
     channel
-      .push(event, payload)
+      .push(event, payload, timeoutMs)
       .receive("ok", (response) => {
         metrics.messagesAcked += 1;
         metrics.ackLatenciesMs.push(performance.now() - startedAt);
@@ -1221,6 +1368,11 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     cleanupStarted: false,
     connected: false,
     joined: false,
+    currentPhase: "startup",
+    socketOpenedAt: null,
+    canSendMessages: false,
+    currentSendInFlight: false,
+    lastRoomJoinAttempted: false,
     hadControlledRoomJoinFailure: false,
     expectedClose: false,
     closeObserved: false,
@@ -1236,13 +1388,16 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     });
     session.socket = socket;
 
-    socket.onClose(() => {
+    socket.onClose((event) => {
       if (session.closeObserved) {
         return;
       }
 
       session.closeObserved = true;
+      session.currentPhase = session.expectedClose ? "cleanup" : resolveSessionPhase(session);
       activeSessions.delete(session);
+
+      recordSocketClose(metrics, session, event);
 
       if (!session.connected || !session.joined) {
         recalculateDisconnectCount(metrics);
@@ -1290,6 +1445,8 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     metrics.totalSocketConnects += 1;
     metrics.connectLatenciesMs.push(connectLatency);
     session.connected = true;
+    session.socketOpenedAt = performance.now();
+    session.currentPhase = "user_join";
 
     const userChannel = socket.channel(`user:${auth.user.id}`, {});
     session.userChannel = userChannel;
@@ -1312,6 +1469,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     session.joined = true;
     metrics.startedVus += 1;
     metrics.successfulUserChannelJoins += 1;
+    session.currentPhase = "ready";
 
     return session;
   } catch (error) {
@@ -1325,6 +1483,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
 
 function closeSession(session, metrics = session.metricsRef) {
   session.cleanupStarted = true;
+  session.currentPhase = "cleanup";
   if (metrics) {
     markSessionExpectedClose(session, metrics);
   }
@@ -1485,6 +1644,7 @@ function createRoomJoinAttempt(session, target, metrics, vuIndex) {
     metrics.failedJoins += 1;
     metrics.failedRoomJoins += 1;
     metrics.controlledRoomJoinFailures += 1;
+    session.currentPhase = "room_join";
     session.hadControlledRoomJoinFailure = true;
     recordRoomJoinFailure(metrics, wrappedError);
     cleanupRoomChannel(session, target.roomId, roomChannel);
@@ -1503,6 +1663,8 @@ function createRoomJoinAttempt(session, target, metrics, vuIndex) {
     metrics.successfulRoomJoins += 1;
     metrics.joinLatenciesMs.push(performance.now() - startedAt);
     session.roomChannels.set(target.roomId, roomChannel);
+    session.canSendMessages = true;
+    session.currentPhase = "ready";
     return true;
   };
 
@@ -1515,6 +1677,8 @@ function createRoomJoinAttempt(session, target, metrics, vuIndex) {
   });
 
   try {
+    session.lastRoomJoinAttempted = true;
+    session.currentPhase = "room_join";
     if (session.roomChannels.has(target.roomId)) {
       roomChannel = session.roomChannels.get(target.roomId);
       succeed();
@@ -1624,8 +1788,14 @@ async function joinRoomChannels(sessions, metrics, target) {
 
 async function joinRoomForStartup(session, metrics, target, vuIndex) {
   metrics.requestedRoomJoins += 1;
+  session.lastRoomJoinAttempted = true;
+  session.currentPhase = "room_join";
   const attempt = createRoomJoinAttempt(session, target, metrics, vuIndex);
   const result = await attempt.promise;
+  if (result.ok) {
+    session.canSendMessages = true;
+    session.currentPhase = "ready";
+  }
   return result.ok;
 }
 
@@ -1847,6 +2017,9 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
   const ticker = createTicker(async () => {
     const session = roomJoinedSessions[sendIndex % roomJoinedSessions.length];
     sendIndex += 1;
+    session.currentSendInFlight = true;
+    session.currentPhase = "sending";
+    const sendStartedAt = performance.now();
 
     try {
       const roomChannel = await ensureRoomChannel(session, target, metrics);
@@ -1862,9 +2035,28 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
         },
         "channel load message",
         metrics,
+        config.messageTimeoutMs,
       );
     } catch (error) {
+      const activeSenderCount = roomJoinedSessions.filter(
+        (candidate) =>
+          candidate.canSendMessages && getSocketState(candidate) === "open",
+      ).length;
+      const activeReceiverCount = roomJoinedSessions.filter(
+        (candidate) => getSocketState(candidate) === "open",
+      ).length;
+      recordMessageFailure(
+        metrics,
+        session,
+        error,
+        performance.now() - sendStartedAt,
+        activeSenderCount,
+        activeReceiverCount,
+      );
       recordError(metrics, error);
+    } finally {
+      session.currentSendInFlight = false;
+      session.currentPhase = session.canSendMessages ? "ready" : resolveSessionPhase(session);
     }
   }, intervalMs);
 
