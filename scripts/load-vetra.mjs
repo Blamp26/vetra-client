@@ -383,11 +383,13 @@ function createMetrics(mode, vus, durationSeconds) {
     receivedBroadcasts: 0,
     expectedCloses: 0,
     unexpectedDisconnects: 0,
+    runtimeSocketErrors: 0,
     disconnectCount: 0,
     connectLatenciesMs: [],
     joinLatenciesMs: [],
     ackLatenciesMs: [],
     errorsByType: {},
+    startupErrorsByType: {},
     serverMonitor: {
       enabled: false,
       samples: [],
@@ -399,6 +401,11 @@ function createMetrics(mode, vus, durationSeconds) {
 function recordError(metrics, error) {
   const key = error instanceof Error ? error.message : String(error);
   metrics.errorsByType[key] = (metrics.errorsByType[key] ?? 0) + 1;
+}
+
+function recordStartupError(metrics, error) {
+  const key = error instanceof Error ? error.message : String(error);
+  metrics.startupErrorsByType[key] = (metrics.startupErrorsByType[key] ?? 0) + 1;
 }
 
 function percentile(sorted, ratio) {
@@ -449,11 +456,13 @@ function summarizeMetrics(metrics) {
     disconnectCount,
     expectedCloses: metrics.expectedCloses,
     unexpectedDisconnects: metrics.unexpectedDisconnects,
+    runtimeSocketErrors: metrics.runtimeSocketErrors,
     approximateMessagesPerSecond: approxMessagesPerSecond(metrics),
     latenciesMs: buildLatencyStats(metrics.ackLatenciesMs),
     connectLatenciesMs: buildLatencyStats(metrics.connectLatenciesMs),
     joinLatenciesMs: buildLatencyStats(metrics.joinLatenciesMs),
     errorsByType: metrics.errorsByType,
+    startupErrorsByType: metrics.startupErrorsByType,
     serverMetrics: summarizeServerMonitor(metrics.serverMonitor),
   };
 }
@@ -476,6 +485,7 @@ function printSummary(metrics) {
   console.log(`disconnect count: ${summary.disconnectCount}`);
   console.log(`expected closes: ${summary.expectedCloses}`);
   console.log(`unexpected disconnects: ${summary.unexpectedDisconnects}`);
+  console.log(`runtime socket errors: ${summary.runtimeSocketErrors}`);
   console.log(`approx msg/sec: ${summary.approximateMessagesPerSecond}`);
   console.log(
     `ack latency ms: p50=${summary.latenciesMs.p50 ?? "-"} p95=${summary.latenciesMs.p95 ?? "-"} p99=${summary.latenciesMs.p99 ?? "-"} max=${summary.latenciesMs.max ?? "-"}`,
@@ -486,7 +496,9 @@ function printSummary(metrics) {
   console.log(
     `join latency ms: p50=${summary.joinLatenciesMs.p50 ?? "-"} p95=${summary.joinLatenciesMs.p95 ?? "-"} p99=${summary.joinLatenciesMs.p99 ?? "-"} max=${summary.joinLatenciesMs.max ?? "-"}`,
   );
-  console.log(`errors by type: ${JSON.stringify(summary.errorsByType)}`);
+  console.log(
+    `startup errors by type: ${JSON.stringify(summary.startupErrorsByType)}`,
+  );
 
   if (summary.serverMetrics.enabled) {
     console.log("\n[load] Server metrics");
@@ -625,7 +637,7 @@ function parseServerSample(output) {
   const values = parseKeyValueOutput(output);
   const rssKiB = parseNumberOrNull(values.rssKiB);
   const vszKiB = parseNumberOrNull(values.vszKiB);
-  const sample = {
+  return {
     timestamp: values.timestamp ?? new Date().toISOString(),
     pid: parseNumberOrNull(values.pid),
     cpuPercent: parseNumberOrNull(values.cpuPercent),
@@ -637,8 +649,42 @@ function parseServerSample(output) {
     tcpPortConnections: parseNumberOrNull(values.tcpPortConnections),
     etime: values.etime ?? null,
   };
+}
 
-  return sample;
+function validateServerSample(sample) {
+  if (sample.pid === null) {
+    return "missing pid";
+  }
+
+  if (sample.cpuPercent === null) {
+    return "missing cpuPercent";
+  }
+
+  if (sample.memPercent === null) {
+    return "missing memPercent";
+  }
+
+  if (sample.rssBytes === null) {
+    return "missing rssBytes";
+  }
+
+  if (sample.vszBytes === null) {
+    return "missing vszBytes";
+  }
+
+  if (sample.availableMemBytes === null) {
+    return "missing availableMemBytes";
+  }
+
+  if (sample.usedMemBytes === null) {
+    return "missing usedMemBytes";
+  }
+
+  if (sample.tcpPortConnections === null) {
+    return "missing tcpPortConnections";
+  }
+
+  return null;
 }
 
 function buildRemoteMonitorScript() {
@@ -654,28 +700,55 @@ echo "timestamp=$timestamp"
 echo "pid=$pid"
 
 if [ -n "$pid" ] && [ "$pid" != "0" ]; then
-  ps_line=$(ps -p "$pid" -o %cpu=,%mem=,rss=,vsz=,etime= 2>/dev/null | head -n 1 | xargs || true)
-  if [ -n "$ps_line" ]; then
-    set -- $ps_line
-    echo "cpuPercent=$1"
-    echo "memPercent=$2"
-    echo "rssKiB=$3"
-    echo "vszKiB=$4"
-    echo "etime=$5"
-  fi
+  ps -p "$pid" -o pcpu= -o pmem= -o rss= -o vsz= -o etime= 2>/dev/null | awk '
+    NF >= 5 {
+      print "cpuPercent=" $1
+      print "memPercent=" $2
+      print "rssKiB=" $3
+      print "vszKiB=" $4
+      print "etime=" $5
+      found=1
+    }
+    END {
+      if (!found) {
+        print "psParseError=1"
+      }
+    }
+  '
+else
+  echo "psParseError=1"
 fi
 
-mem_line=$(free -b | awk 'NR==2 {print $3" "$7}' 2>/dev/null || true)
-set -- $mem_line
-echo "usedMemBytes=\${1:-}"
-echo "availableMemBytes=\${2:-}"
+if free -b >/dev/null 2>&1; then
+  free -b | awk '
+    NR == 2 {
+      print "usedMemBytes=" $3
+      print "availableMemBytes=" $7
+      found=1
+    }
+    END {
+      if (!found) {
+        print "freeParseError=1"
+      }
+    }
+  '
+else
+  echo "freeParseError=1"
+fi
 
 if ss -tan "sport = :$port" >/dev/null 2>&1; then
-  tcp=$(ss -tan "sport = :$port" 2>/dev/null | tail -n +2 | wc -l)
+  tcp=$(ss -tan "sport = :$port" 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')
+elif ss -tan >/dev/null 2>&1; then
+  tcp=$(ss -tan 2>/dev/null | grep -c ":$port " || true)
 else
-  tcp=$(ss -tan 2>/dev/null | grep -c ":$port ")
+  tcp=
 fi
-echo "tcpPortConnections=$tcp"
+
+if [ -n "$tcp" ]; then
+  echo "tcpPortConnections=$tcp"
+else
+  echo "ssParseError=1"
+fi
 `.trim();
 }
 
@@ -708,7 +781,32 @@ function createServerMonitor(metrics) {
           timeout: config.monitorSshTimeoutMs,
         },
       );
-      metrics.serverMonitor.samples.push(parseServerSample(stdout));
+      const sample = parseServerSample(stdout);
+      const validationError = validateServerSample(sample);
+      if (validationError) {
+        const message = `server monitor parse failed: ${validationError}`;
+        metrics.serverMonitor.errors.push({
+          timestamp: sample.timestamp,
+          message,
+        });
+        if (!warned) {
+          warn(
+            `${message}; sample=${JSON.stringify({
+              pid: sample.pid,
+              cpuPercent: sample.cpuPercent,
+              memPercent: sample.memPercent,
+              rssBytes: sample.rssBytes,
+              vszBytes: sample.vszBytes,
+              availableMemBytes: sample.availableMemBytes,
+              usedMemBytes: sample.usedMemBytes,
+              tcpPortConnections: sample.tcpPortConnections,
+              etime: sample.etime,
+            })}`,
+          );
+          warned = true;
+        }
+      }
+      metrics.serverMonitor.samples.push(sample);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : String(error);
@@ -839,6 +937,21 @@ function onSocketOpen(socket) {
   });
 }
 
+function markSessionExpectedClose(session, metrics) {
+  if (
+    session.socket &&
+    session.connected &&
+    session.joined &&
+    !session.closeObserved &&
+    !session.expectedClose
+  ) {
+    session.expectedClose = true;
+    metrics.expectedCloses += 1;
+    metrics.disconnectCount =
+      metrics.expectedCloses + metrics.unexpectedDisconnects;
+  }
+}
+
 async function openUserSession(label, auth, metrics, timeoutMs) {
   if (typeof WebSocket === "undefined") {
     fail("This Node runtime does not expose a global WebSocket implementation.");
@@ -847,11 +960,16 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
   const session = {
     label,
     auth,
+    metricsRef: metrics,
     socket: null,
     userChannel: null,
     roomChannels: new Map(),
     callChannel: null,
     cleanupStarted: false,
+    connected: false,
+    joined: false,
+    expectedClose: false,
+    closeObserved: false,
   };
 
   try {
@@ -864,17 +982,40 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     session.socket = socket;
 
     socket.onClose(() => {
-      if (session.cleanupStarted) {
-        metrics.expectedCloses += 1;
-      } else {
+      if (session.closeObserved) {
+        return;
+      }
+
+      session.closeObserved = true;
+
+      if (!session.connected || !session.joined) {
+        metrics.disconnectCount =
+          metrics.expectedCloses + metrics.unexpectedDisconnects;
+        return;
+      }
+
+      if (!session.cleanupStarted && !session.expectedClose) {
         metrics.unexpectedDisconnects += 1;
       }
+
       metrics.disconnectCount =
         metrics.expectedCloses + metrics.unexpectedDisconnects;
     });
 
     socket.onError((error) => {
-      recordError(metrics, error instanceof Error ? error : new Error("Socket error"));
+      if (!session.connected || !session.joined) {
+        return;
+      }
+
+      if (session.cleanupStarted || session.expectedClose) {
+        return;
+      }
+
+      metrics.runtimeSocketErrors += 1;
+      recordError(
+        metrics,
+        error instanceof Error ? error : new Error("Socket error"),
+      );
     });
 
     const connectLatency = await withTimeout(
@@ -889,6 +1030,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     );
     metrics.totalSocketConnects += 1;
     metrics.connectLatenciesMs.push(connectLatency);
+    session.connected = true;
 
     const userChannel = socket.channel(`user:${auth.user.id}`, {});
     session.userChannel = userChannel;
@@ -908,17 +1050,21 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
       metrics,
       timeoutMs,
     );
+    session.joined = true;
     metrics.startedVus += 1;
 
     return session;
   } catch (error) {
-    closeSession(session);
+    closeSession(session, metrics);
     throw error;
   }
 }
 
-function closeSession(session) {
+function closeSession(session, metrics = session.metricsRef) {
   session.cleanupStarted = true;
+  if (metrics) {
+    markSessionExpectedClose(session, metrics);
+  }
 
   try {
     session.callChannel?.leave();
@@ -1067,7 +1213,7 @@ async function createSessions(primaryAuth, metrics) {
           metrics.startupFailures += 1;
           const wrappedError =
             error instanceof Error ? error : new Error(String(error));
-          recordError(metrics, wrappedError);
+          recordStartupError(metrics, wrappedError);
           info(`Failed to start VU ${cursor + 1}: ${wrappedError.message}`);
           return { ok: false, error: wrappedError, label };
         }
@@ -1082,7 +1228,7 @@ async function createSessions(primaryAuth, metrics) {
           result.reason instanceof Error
             ? result.reason
             : new Error(String(result.reason));
-        recordError(metrics, wrappedError);
+        recordStartupError(metrics, wrappedError);
         continue;
       }
 
@@ -1370,7 +1516,7 @@ async function runCallSignalingMode(primarySessions, metrics, secondaryAuth) {
     await sleep(config.durationSeconds * 1000);
     ticker.stop();
   } finally {
-    closeSession(callee);
+    closeSession(callee, metrics);
   }
 }
 
@@ -1456,7 +1602,7 @@ async function main() {
   } finally {
     await serverMonitor?.stop();
     for (const session of sessions) {
-      closeSession(session);
+      closeSession(session, metrics);
     }
     if (sessions.length > 0) {
       await sleep(250);
