@@ -218,6 +218,8 @@ Copy `.env.load.example` to `.env.load`, fill in the LAN backend URLs plus `VETR
 
 Set `VETRA_LOAD_SERVER_MONITOR=1` to sample the Ubuntu backend over SSH during the test. The built-in monitor uses `VETRA_LOAD_SERVER_SSH`, `VETRA_LOAD_SERVER_SERVICE`, `VETRA_LOAD_SERVER_PORT`, and `VETRA_LOAD_SERVER_SAMPLE_INTERVAL_MS` to collect service PID, process CPU/RAM, available RAM, and TCP connection counts. SSH monitor failures are logged as warnings and recorded in the JSON summary without aborting the load run.
 
+Use `VETRA_LOAD_STARTUP_TIMEOUT_MS` to cap each VU startup step (`socket-ticket`, socket connect, user-channel join) so ramp-up cannot hang forever. Use `VETRA_LOAD_MONITOR_SSH_TIMEOUT_MS` to cap each SSH sample separately so server monitoring cannot block the main load run.
+
 Safe connect-only load test:
 
 ```bash

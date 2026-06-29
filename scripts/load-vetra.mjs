@@ -110,6 +110,7 @@ function buildConfig() {
     messagesPerSecond: envNumber("VETRA_LOAD_MESSAGES_PER_SECOND", 5),
     rampBatchSize: envInt("VETRA_LOAD_RAMP_BATCH_SIZE", 25),
     rampBatchDelayMs: envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
+    startupTimeoutMs: envInt("VETRA_LOAD_STARTUP_TIMEOUT_MS", 15000),
     serverMonitorEnabled: env.VETRA_LOAD_SERVER_MONITOR === "1",
     serverSsh: env.VETRA_LOAD_SERVER_SSH || "superadmin@192.168.88.26",
     serverService:
@@ -118,6 +119,10 @@ function buildConfig() {
     serverSampleIntervalMs: envInt(
       "VETRA_LOAD_SERVER_SAMPLE_INTERVAL_MS",
       1000,
+    ),
+    monitorSshTimeoutMs: envInt(
+      "VETRA_LOAD_MONITOR_SSH_TIMEOUT_MS",
+      5000,
     ),
     mode,
     writeEnabled,
@@ -135,6 +140,11 @@ function buildConfig() {
 
 let config = null;
 let loadPrefix = "";
+let shutdownRequested = false;
+let interruptResolver = null;
+const interruptPromise = new Promise((resolve) => {
+  interruptResolver = resolve;
+});
 
 function execFileAsync(command, args, options = {}) {
   return new Promise((resolvePromise, rejectPromise) => {
@@ -153,6 +163,46 @@ function execFileAsync(command, args, options = {}) {
 
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function requestShutdown(reason = "SIGINT") {
+  if (shutdownRequested) return;
+  shutdownRequested = true;
+  warn(`${reason} received. Stopping load test and cleaning up active sockets.`);
+  interruptResolver?.();
+}
+
+function makeStepTimeoutError(step, timeoutMs) {
+  return new Error(`${step} timeout after ${timeoutMs}ms`);
+}
+
+function withTimeout(promiseFactory, step, timeoutMs, onTimeout) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(async () => {
+      if (settled) return;
+      settled = true;
+      try {
+        await onTimeout?.();
+      } catch {}
+      reject(makeStepTimeoutError(step, timeoutMs));
+    }, timeoutMs);
+
+    Promise.resolve()
+      .then(() => promiseFactory())
+      .then((value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
 }
 
 function authHeaders(token) {
@@ -243,13 +293,14 @@ async function login(apiBaseUrl, username, password, label) {
   return response;
 }
 
-async function createSocketTicket(apiBaseUrl, auth) {
+async function createSocketTicket(apiBaseUrl, auth, options = {}) {
   const ticket = await fetchJson(`${apiBaseUrl}/auth/socket-ticket`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...authHeaders(auth.token),
     },
+    signal: options.signal,
     body: JSON.stringify({}),
   });
 
@@ -258,6 +309,21 @@ async function createSocketTicket(apiBaseUrl, auth) {
   }
 
   return ticket;
+}
+
+async function createSocketTicketWithTimeout(auth, timeoutMs) {
+  const controller = new AbortController();
+  return withTimeout(
+    () =>
+      createSocketTicket(config.apiUrl, auth, {
+        signal: controller.signal,
+      }),
+    "socket-ticket request",
+    timeoutMs,
+    async () => {
+      controller.abort();
+    },
+  );
 }
 
 async function fetchConversationPreviews(apiBaseUrl, auth) {
@@ -307,6 +373,7 @@ function createMetrics(mode, vus, durationSeconds) {
     durationSeconds,
     startedAt: new Date().toISOString(),
     startedVus: 0,
+    startupFailures: 0,
     totalSocketConnects: 0,
     successfulJoins: 0,
     failedJoins: 0,
@@ -367,7 +434,10 @@ function summarizeMetrics(metrics) {
     metrics.expectedCloses + metrics.unexpectedDisconnects;
   return {
     duration: metrics.durationSeconds,
+    requestedVus: metrics.vus,
     virtualUsers: metrics.vus,
+    startedVus: metrics.startedVus,
+    startupFailures: metrics.startupFailures,
     targetMode: metrics.mode,
     totalSocketConnects: metrics.totalSocketConnects,
     successfulJoins: metrics.successfulJoins,
@@ -393,8 +463,9 @@ function printSummary(metrics) {
   console.log("\n[load] Summary");
   console.log(`mode: ${summary.targetMode}`);
   console.log(`duration: ${summary.duration}s`);
-  console.log(`virtual users: ${summary.virtualUsers}`);
-  console.log(`started VUs: ${metrics.startedVus}`);
+  console.log(`requested VUs: ${summary.requestedVus}`);
+  console.log(`started VUs: ${summary.startedVus}`);
+  console.log(`startup failures: ${summary.startupFailures}`);
   console.log(`socket connects: ${summary.totalSocketConnects}`);
   console.log(`successful joins: ${summary.successfulJoins}`);
   console.log(`failed joins: ${summary.failedJoins}`);
@@ -634,7 +705,7 @@ function createServerMonitor(metrics) {
           buildRemoteMonitorScript(),
         ],
         {
-          timeout: Math.max(1000, config.serverSampleIntervalMs - 100),
+          timeout: config.monitorSshTimeoutMs,
         },
       );
       metrics.serverMonitor.samples.push(parseServerSample(stdout));
@@ -676,25 +747,47 @@ function createServerMonitor(metrics) {
   };
 }
 
-function joinChannel(channel, label, metrics) {
+function joinChannel(channel, label, metrics, timeoutMs = null) {
   return new Promise((resolve, reject) => {
+    let settled = false;
     const joinStartedAt = performance.now();
+    const timer =
+      timeoutMs === null
+        ? null
+        : setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            metrics.failedJoins += 1;
+            try {
+              channel.leave();
+            } catch {}
+            reject(makeStepTimeoutError("socket join", timeoutMs));
+          }, timeoutMs);
+
+    const settle = (callback) => (value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      callback(value);
+    };
 
     channel
       .join()
-      .receive("ok", (payload) => {
+      .receive("ok", settle((payload) => {
         metrics.successfulJoins += 1;
         metrics.joinLatenciesMs.push(performance.now() - joinStartedAt);
         resolve(payload);
-      })
-      .receive("error", (resp) => {
+      }))
+      .receive("error", settle((resp) => {
         metrics.failedJoins += 1;
         reject(new Error(`${label} join failed: ${resp?.reason ?? "unknown error"}`));
-      })
-      .receive("timeout", () => {
+      }))
+      .receive("timeout", settle(() => {
         metrics.failedJoins += 1;
         reject(new Error(`${label} join timed out`));
-      });
+      }));
   });
 }
 
@@ -746,12 +839,11 @@ function onSocketOpen(socket) {
   });
 }
 
-async function openUserSession(label, auth, metrics) {
+async function openUserSession(label, auth, metrics, timeoutMs) {
   if (typeof WebSocket === "undefined") {
     fail("This Node runtime does not expose a global WebSocket implementation.");
   }
 
-  const ticket = await createSocketTicket(config.apiUrl, auth);
   const session = {
     label,
     auth,
@@ -762,47 +854,67 @@ async function openUserSession(label, auth, metrics) {
     cleanupStarted: false,
   };
 
-  const socket = new Socket(config.socketUrl, {
-    params: { socket_ticket: ticket.socket_ticket },
-    transport: WebSocket,
-    reconnectAfterMs: () => 10000,
-  });
-  session.socket = socket;
+  try {
+    const ticket = await createSocketTicketWithTimeout(auth, timeoutMs);
+    const socket = new Socket(config.socketUrl, {
+      params: { socket_ticket: ticket.socket_ticket },
+      transport: WebSocket,
+      reconnectAfterMs: () => 10000,
+    });
+    session.socket = socket;
 
-  socket.onClose(() => {
-    if (session.cleanupStarted) {
-      metrics.expectedCloses += 1;
-    } else {
-      metrics.unexpectedDisconnects += 1;
-    }
-    metrics.disconnectCount =
-      metrics.expectedCloses + metrics.unexpectedDisconnects;
-  });
+    socket.onClose(() => {
+      if (session.cleanupStarted) {
+        metrics.expectedCloses += 1;
+      } else {
+        metrics.unexpectedDisconnects += 1;
+      }
+      metrics.disconnectCount =
+        metrics.expectedCloses + metrics.unexpectedDisconnects;
+    });
 
-  socket.onError((error) => {
-    recordError(metrics, error instanceof Error ? error : new Error("Socket error"));
-  });
+    socket.onError((error) => {
+      recordError(metrics, error instanceof Error ? error : new Error("Socket error"));
+    });
 
-  const connectLatency = await onSocketOpen(socket);
-  metrics.totalSocketConnects += 1;
-  metrics.connectLatenciesMs.push(connectLatency);
+    const connectLatency = await withTimeout(
+      () => onSocketOpen(socket),
+      "socket connect",
+      timeoutMs,
+      async () => {
+        try {
+          socket.disconnect();
+        } catch {}
+      },
+    );
+    metrics.totalSocketConnects += 1;
+    metrics.connectLatenciesMs.push(connectLatency);
 
-  const userChannel = socket.channel(`user:${auth.user.id}`, {});
-  session.userChannel = userChannel;
-  userChannel.on("new_message", () => {
-    metrics.receivedBroadcasts += 1;
-  });
-  userChannel.on("new_room_message", () => {
-    metrics.receivedBroadcasts += 1;
-  });
-  userChannel.on("incoming_call", () => {
-    metrics.receivedBroadcasts += 1;
-  });
+    const userChannel = socket.channel(`user:${auth.user.id}`, {});
+    session.userChannel = userChannel;
+    userChannel.on("new_message", () => {
+      metrics.receivedBroadcasts += 1;
+    });
+    userChannel.on("new_room_message", () => {
+      metrics.receivedBroadcasts += 1;
+    });
+    userChannel.on("incoming_call", () => {
+      metrics.receivedBroadcasts += 1;
+    });
 
-  await joinChannel(userChannel, `${label} user:${auth.user.id}`, metrics);
-  metrics.startedVus += 1;
+    await joinChannel(
+      userChannel,
+      `${label} user:${auth.user.id}`,
+      metrics,
+      timeoutMs,
+    );
+    metrics.startedVus += 1;
 
-  return session;
+    return session;
+  } catch (error) {
+    closeSession(session);
+    throw error;
+  }
 }
 
 function closeSession(session) {
@@ -927,6 +1039,10 @@ async function createSessions(primaryAuth, metrics) {
   const sessions = [];
 
   for (let index = 0; index < config.vus; index += config.rampBatchSize) {
+    if (shutdownRequested) {
+      break;
+    }
+
     const batchEnd = Math.min(config.vus, index + config.rampBatchSize);
     const batchIndices = [];
 
@@ -934,27 +1050,67 @@ async function createSessions(primaryAuth, metrics) {
       batchIndices.push(cursor);
     }
 
-    try {
-      const batchSessions = await Promise.all(
-        batchIndices.map((cursor) =>
-          openUserSession(`vu-${cursor + 1}`, primaryAuth, metrics),
-        ),
-      );
-      sessions.push(...batchSessions);
-      info(`Started ${sessions.length}/${config.vus} VUs`);
-    } catch (error) {
-      if (isSocketTicketRateLimit(error)) {
-        fail(
-          `socket-ticket rate limited before target VU count was reached; reduce VETRA_LOAD_RAMP_BATCH_SIZE or increase VETRA_LOAD_RAMP_BATCH_DELAY_MS (started ${sessions.length}/${config.vus} VUs)`,
-        );
+    info(`Starting VUs ${index + 1}-${batchEnd}/${config.vus}`);
+
+    const batchResults = await Promise.allSettled(
+      batchIndices.map(async (cursor) => {
+        const label = `vu-${cursor + 1}`;
+        try {
+          const session = await openUserSession(
+            label,
+            primaryAuth,
+            metrics,
+            config.startupTimeoutMs,
+          );
+          return { ok: true, session, label };
+        } catch (error) {
+          metrics.startupFailures += 1;
+          const wrappedError =
+            error instanceof Error ? error : new Error(String(error));
+          recordError(metrics, wrappedError);
+          info(`Failed to start VU ${cursor + 1}: ${wrappedError.message}`);
+          return { ok: false, error: wrappedError, label };
+        }
+      }),
+    );
+
+    let sawRateLimit = false;
+    for (const result of batchResults) {
+      if (result.status !== "fulfilled") {
+        metrics.startupFailures += 1;
+        const wrappedError =
+          result.reason instanceof Error
+            ? result.reason
+            : new Error(String(result.reason));
+        recordError(metrics, wrappedError);
+        continue;
       }
 
-      throw error;
+      if (result.value.ok) {
+        sessions.push(result.value.session);
+        continue;
+      }
+
+      if (isSocketTicketRateLimit(result.value.error)) {
+        sawRateLimit = true;
+      }
     }
 
-    if (batchEnd < config.vus) {
+    info(`Started ${sessions.length}/${config.vus} VUs, failed ${metrics.startupFailures}`);
+
+    if (sawRateLimit) {
+      warn(
+        `socket-ticket rate limited before target VU count was reached; reduce VETRA_LOAD_RAMP_BATCH_SIZE or increase VETRA_LOAD_RAMP_BATCH_DELAY_MS (started ${sessions.length}/${config.vus} VUs)`,
+      );
+    }
+
+    if (batchEnd < config.vus && !shutdownRequested) {
       await sleep(config.rampBatchDelayMs);
     }
+  }
+
+  if (sessions.length === 0) {
+    fail("No virtual users started successfully.");
   }
 
   return sessions;
@@ -992,7 +1148,12 @@ function createTicker(callback, intervalMs) {
 }
 
 async function sleep(ms) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+  if (shutdownRequested) return;
+
+  await Promise.race([
+    new Promise((resolve) => setTimeout(resolve, ms)),
+    interruptPromise,
+  ]);
 }
 
 function isSocketTicketRateLimit(error) {
@@ -1131,7 +1292,12 @@ async function runCallSignalingMode(primarySessions, metrics, secondaryAuth) {
   }
 
   warn("Write mode enabled. This will send signaling-only [load-test] offer/answer/ice/hang_up events.");
-  const callee = await openUserSession("callee", secondaryAuth, metrics);
+  const callee = await openUserSession(
+    "callee",
+    secondaryAuth,
+    metrics,
+    config.startupTimeoutMs,
+  );
   try {
     await ensureCallChannel(callee, metrics);
 
@@ -1224,6 +1390,10 @@ async function runSoakMode(sessions, metrics, target) {
     clearInterval(statsTicker);
   }
 }
+
+process.once("SIGINT", () => {
+  requestShutdown("SIGINT");
+});
 
 async function main() {
   config = buildConfig();
