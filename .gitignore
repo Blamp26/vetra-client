@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .env.smoke
 .env.smoke.local
+.env.load
+.env.load.local
+load-results/

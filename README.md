@@ -211,3 +211,33 @@ npm run check:release:tauri
 ```
 
 The release wrappers reuse `VETRA_SMOKE_API_URL` and `VETRA_SMOKE_SOCKET_URL` as `VITE_API_URL` and `VITE_SOCKET_URL` when those build variables are not already set.
+
+## Developer Load Checks
+
+Copy `.env.load.example` to `.env.load`, fill in the LAN backend URLs plus `VETRA_LOAD_USERNAME` and `VETRA_LOAD_PASSWORD`, and keep `.env.load` out of git. The load tool reuses the same username/password login flow and socket-ticket flow as the app and smoke tests.
+
+Safe connect-only load test:
+
+```bash
+npm run load:lan
+```
+
+Channel-message load mode:
+
+```bash
+npm run load:lan:messages
+```
+
+Call-signaling load mode:
+
+```bash
+npm run load:lan:calls
+```
+
+Low-rate soak mode:
+
+```bash
+npm run load:lan:soak
+```
+
+Default behavior is non-destructive. Set `VETRA_LOAD_WRITE=1` only when you intentionally want to send tagged `[load-test]` messages or signaling events. Real media load is peer-to-peer/TURN and is not the same as backend signaling load. JSON summaries are written to `load-results/` by default.

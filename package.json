@@ -10,6 +10,10 @@
     "tauri": "tauri",
     "smoke:lan": "node scripts/smoke-vetra.mjs",
     "smoke:lan:write": "node scripts/smoke-vetra.mjs --write",
+    "load:lan": "node scripts/load-vetra.mjs",
+    "load:lan:messages": "node scripts/load-vetra.mjs --mode channel-messages",
+    "load:lan:calls": "node scripts/load-vetra.mjs --mode call-signaling",
+    "load:lan:soak": "node scripts/load-vetra.mjs --mode soak",
     "check:release": "node scripts/check-release.mjs",
     "check:release:tauri": "node scripts/check-release-tauri.mjs"
   },

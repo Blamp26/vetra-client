@@ -32,10 +32,10 @@ export function parseEnvFile(filePath) {
   return values;
 }
 
-export function loadSmokeEnv(cwd = process.cwd()) {
+export function loadEnvFiles(names, cwd = process.cwd()) {
   const fileEnv = {};
 
-  for (const name of [".env.smoke", ".env.smoke.local"]) {
+  for (const name of names) {
     const filePath = resolve(cwd, name);
     if (existsSync(filePath)) {
       Object.assign(fileEnv, parseEnvFile(filePath));
@@ -43,6 +43,14 @@ export function loadSmokeEnv(cwd = process.cwd()) {
   }
 
   return { ...fileEnv, ...process.env };
+}
+
+export function loadSmokeEnv(cwd = process.cwd()) {
+  return loadEnvFiles([".env.smoke", ".env.smoke.local"], cwd);
+}
+
+export function loadLoadEnv(cwd = process.cwd()) {
+  return loadEnvFiles([".env.load", ".env.load.local"], cwd);
 }
 
 export function applyBuildEnv(baseEnv) {
