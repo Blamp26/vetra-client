@@ -123,6 +123,7 @@ function buildConfig() {
       "VETRA_LOAD_ROOM_JOIN_TIMEOUT_MS",
       envInt("VETRA_LOAD_STARTUP_TIMEOUT_MS", 15000),
     ),
+    roomBatchTimeoutMs: null,
     serverMonitorEnabled: env.VETRA_LOAD_SERVER_MONITOR === "1",
     serverSsh: env.VETRA_LOAD_SERVER_SSH || "superadmin@192.168.88.26",
     serverService:
@@ -142,6 +143,11 @@ function buildConfig() {
     writeEnabled,
     writeResults: env.VETRA_LOAD_WRITE_RESULTS !== "0",
   };
+
+  config.roomBatchTimeoutMs = envInt(
+    "VETRA_LOAD_ROOM_BATCH_TIMEOUT_MS",
+    config.roomJoinTimeoutMs + 5000,
+  );
 
   config.serverSsh = String(config.serverSsh ?? "").trim();
   config.serverService = String(config.serverService ?? "").trim();
@@ -1209,6 +1215,19 @@ function closeSession(session, metrics = session.metricsRef) {
   } catch {}
 }
 
+function cleanupRoomChannel(session, roomId, channel = null) {
+  const activeChannel = channel ?? session.roomChannels.get(roomId) ?? null;
+  session.roomChannels.delete(roomId);
+
+  if (!activeChannel) {
+    return;
+  }
+
+  try {
+    activeChannel.leave();
+  } catch {}
+}
+
 function cleanupSessions(metrics, sessions) {
   isCleaningUp = true;
   const cleanupTargets =
@@ -1301,6 +1320,105 @@ async function ensureRoomChannel(session, target, metrics) {
   return roomChannel;
 }
 
+function createRoomJoinAttempt(session, target, metrics, vuIndex) {
+  assertRoomTarget(target.roomId, target.roomRef);
+
+  let settled = false;
+  let roomChannel = null;
+  let resolveAttempt = null;
+  const startedAt = performance.now();
+  const label = `${session.label} room:${target.roomRef}`;
+  const promise = new Promise((resolve) => {
+    resolveAttempt = resolve;
+  });
+
+  const finish = (result) => {
+    if (settled) {
+      return false;
+    }
+
+    settled = true;
+    resolveAttempt(result);
+    return true;
+  };
+
+  const fail = (error) => {
+    const wrappedError =
+      error instanceof Error ? error : new Error(String(error));
+
+    if (!finish({ ok: false, session, error: wrappedError })) {
+      return false;
+    }
+
+    metrics.failedJoins += 1;
+    metrics.failedRoomJoins += 1;
+    recordRoomJoinFailure(metrics, wrappedError);
+    cleanupRoomChannel(session, target.roomId, roomChannel);
+    info(
+      `Failed room join for VU ${vuIndex} (${session.label}): ${wrappedError.message}`,
+    );
+    return true;
+  };
+
+  const succeed = () => {
+    if (!finish({ ok: true, session })) {
+      return false;
+    }
+
+    metrics.successfulJoins += 1;
+    metrics.successfulRoomJoins += 1;
+    metrics.joinLatenciesMs.push(performance.now() - startedAt);
+    session.roomChannels.set(target.roomId, roomChannel);
+    return true;
+  };
+
+  const timeout = setTimeout(() => {
+    fail(makeStepTimeoutError("room join", config.roomJoinTimeoutMs));
+  }, config.roomJoinTimeoutMs);
+
+  promise.finally(() => {
+    clearTimeout(timeout);
+  });
+
+  try {
+    if (session.roomChannels.has(target.roomId)) {
+      roomChannel = session.roomChannels.get(target.roomId);
+      succeed();
+    } else {
+      roomChannel = session.socket.channel(`room:${target.roomRef}`, {});
+      roomChannel.on("new_room_message", () => {
+        metrics.receivedBroadcasts += 1;
+      });
+      roomChannel
+        .join()
+        .receive("ok", () => {
+          succeed();
+        })
+        .receive("error", (resp) => {
+          fail(new Error(`${label} join failed: ${resp?.reason ?? "unknown error"}`));
+        })
+        .receive("timeout", () => {
+          fail(new Error(`${label} join timed out`));
+        });
+    }
+  } catch (error) {
+    fail(error);
+  }
+
+  return {
+    promise,
+    isSettled() {
+      return settled;
+    },
+    failBatchTimeout(timeoutMs) {
+      fail(new Error(`room join batch timeout after ${timeoutMs}ms`));
+    },
+    failInterrupted(reason = "room join interrupted by SIGINT") {
+      fail(new Error(reason));
+    },
+  };
+}
+
 async function joinRoomChannels(sessions, metrics, target) {
   const joinedSessions = [];
 
@@ -1319,39 +1437,42 @@ async function joinRoomChannels(sessions, metrics, target) {
 
     metrics.requestedRoomJoins += batchSessions.length;
 
-    const batchResults = await Promise.allSettled(
-      batchSessions.map(async (session, batchIndex) => {
-        try {
-          await ensureRoomChannel(session, target, metrics);
-          metrics.successfulRoomJoins += 1;
-          return { ok: true, session };
-        } catch (error) {
-          metrics.failedRoomJoins += 1;
-          const wrappedError =
-            error instanceof Error ? error : new Error(String(error));
-          recordRoomJoinFailure(metrics, wrappedError);
-          const vuIndex = index + batchIndex + 1;
-          info(
-            `Failed room join for VU ${vuIndex} (${session.label}): ${wrappedError.message}`,
-          );
-          return { ok: false, session, error: wrappedError };
-        }
-      }),
+    const attempts = batchSessions.map((session, batchIndex) =>
+      createRoomJoinAttempt(session, target, metrics, index + batchIndex + 1),
     );
+    const batchPromise = Promise.allSettled(
+      attempts.map((attempt) => attempt.promise),
+    );
+    const batchTimeout = setTimeout(() => {
+      const pendingAttempts = attempts.filter((attempt) => !attempt.isSettled());
+      if (pendingAttempts.length === 0) {
+        return;
+      }
+
+      info(
+        `Room join batch ${index + 1}-${batchEnd}/${sessions.length} timed out after ${config.roomBatchTimeoutMs}ms; marking ${pendingAttempts.length} pending VUs failed`,
+      );
+
+      for (const attempt of pendingAttempts) {
+        attempt.failBatchTimeout(config.roomBatchTimeoutMs);
+      }
+    }, config.roomBatchTimeoutMs);
+
+    const batchResults = await Promise.race([
+      batchPromise,
+      interruptPromise.then(async () => {
+        const pendingAttempts = attempts.filter((attempt) => !attempt.isSettled());
+        for (const attempt of pendingAttempts) {
+          attempt.failInterrupted();
+        }
+        return batchPromise;
+      }),
+    ]);
+    clearTimeout(batchTimeout);
 
     for (const result of batchResults) {
       if (result.status === "fulfilled" && result.value.ok) {
         joinedSessions.push(result.value.session);
-        continue;
-      }
-
-      if (result.status === "rejected") {
-        metrics.failedRoomJoins += 1;
-        const wrappedError =
-          result.reason instanceof Error
-            ? result.reason
-            : new Error(String(result.reason));
-        recordRoomJoinFailure(metrics, wrappedError);
       }
     }
 
