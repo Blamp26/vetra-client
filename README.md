@@ -184,7 +184,7 @@ Works on **Windows**, **macOS**, and **Linux**.
 
 ## Developer Smoke Checks
 
-Copy `.env.smoke.example` to `.env.smoke`, fill in the LAN backend URLs and test-user credentials, and keep `.env.smoke` out of git. The smoke login currently uses the same `username` field as the app.
+Copy `.env.smoke.example` to `.env.smoke`, fill in the LAN backend URLs plus `VETRA_SMOKE_USERNAME` and `VETRA_SMOKE_PASSWORD`, and keep `.env.smoke` out of git. The smoke login uses the same `username` field as the app.
 
 Read-only smoke:
 

@@ -343,22 +343,19 @@ function firstArrayItem(value) {
 }
 
 async function main() {
-  const apiBaseUrl = requireEnv("VETRA_SMOKE_API_URL").replace(/\/+$/, "");
-  const socketUrl = requireEnv("VETRA_SMOKE_SOCKET_URL");
-  const primaryUsername =
-    env.VETRA_SMOKE_USER_USERNAME || env.VETRA_SMOKE_USER_EMAIL || "";
-  const primaryPassword = env.VETRA_SMOKE_USER_PASSWORD || "";
-  const secondaryUsername =
-    env.VETRA_SMOKE_SECOND_USER_USERNAME ||
-    env.VETRA_SMOKE_SECOND_USER_EMAIL ||
-    "";
-  const secondaryPassword = env.VETRA_SMOKE_SECOND_USER_PASSWORD || "";
+  const primaryUsername = env.VETRA_SMOKE_USERNAME || "";
+  const primaryPassword = env.VETRA_SMOKE_PASSWORD || "";
+  const secondaryUsername = env.VETRA_SMOKE_SECOND_USERNAME || "";
+  const secondaryPassword = env.VETRA_SMOKE_SECOND_PASSWORD || "";
 
   if (!primaryUsername || !primaryPassword) {
     fail(
-      "Missing primary smoke credentials. Set VETRA_SMOKE_USER_USERNAME (or VETRA_SMOKE_USER_EMAIL) and VETRA_SMOKE_USER_PASSWORD in .env.smoke or the shell environment.",
+      "Missing primary smoke credentials. Set VETRA_SMOKE_USERNAME and VETRA_SMOKE_PASSWORD in .env.smoke or the shell environment.",
     );
   }
+
+  const apiBaseUrl = requireEnv("VETRA_SMOKE_API_URL").replace(/\/+$/, "");
+  const socketUrl = requireEnv("VETRA_SMOKE_SOCKET_URL");
 
   const smokePrefix = `[smoke-test] ${new Date().toISOString()}`;
 
