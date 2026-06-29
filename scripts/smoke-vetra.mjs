@@ -30,6 +30,29 @@ function skip(message) {
   console.log(`[skip] ${message}`);
 }
 
+function assertSmokeContent(content) {
+  if (!content || !content.startsWith("[smoke-test]")) {
+    fail("Smoke write content must start with [smoke-test].");
+  }
+}
+
+function assertRoomTarget(roomId, roomRef) {
+  if (roomId === null || roomId === undefined || roomId === "") {
+    fail("Missing room/channel numeric id for smoke write.");
+  }
+
+  if (roomRef === null || roomRef === undefined || roomRef === "") {
+    fail("Missing room/channel ref for smoke write.");
+  }
+
+  const normalizedRef = String(roomRef);
+  if (normalizedRef.startsWith("[smoke-test]")) {
+    fail(
+      `Invalid room/channel ref "${normalizedRef}". Smoke message content was passed as the room topic.`,
+    );
+  }
+}
+
 function authHeaders(token) {
   return token
     ? {
@@ -269,13 +292,16 @@ async function searchUsers(apiBaseUrl, auth, query) {
   return result ?? { users: [], servers: [] };
 }
 
-async function sendDirectSmokeMessage(userChannel, recipientRef) {
+async function sendDirectSmokeMessage(userChannel, recipientRef, smokePrefix) {
+  const content = `${smokePrefix} direct message`;
+  assertSmokeContent(content);
+
   const response = await pushOk(
     userChannel,
     "send_message",
     {
       recipient_id: recipientRef,
-      content: `${smokePrefix} direct message`,
+      content,
       media_file_id: null,
       reply_to_id: null,
     },
@@ -290,15 +316,24 @@ async function sendDirectSmokeMessage(userChannel, recipientRef) {
   return response;
 }
 
-async function sendRoomSmokeMessage(socket, roomId, roomRef) {
+async function joinRoomSmokeChannel(socket, roomId, roomRef) {
+  assertRoomTarget(roomId, roomRef);
+
   const roomChannel = socket.channel(`room:${roomRef}`, {});
   await joinChannel(roomChannel, `room:${roomRef}`);
+
+  return roomChannel;
+}
+
+async function sendRoomSmokeMessage(roomChannel, smokePrefix) {
+  const content = `${smokePrefix} channel message`;
+  assertSmokeContent(content);
 
   const response = await pushOk(
     roomChannel,
     "send_message",
     {
-      content: `${smokePrefix} channel message`,
+      content,
       media_file_id: null,
       reply_to_id: null,
     },
@@ -310,7 +345,7 @@ async function sendRoomSmokeMessage(socket, roomId, roomRef) {
   }
 
   ok(`Sent channel smoke message ${response.id}`);
-  return { roomChannel, message: response, roomId };
+  return response;
 }
 
 async function toggleDirectReaction(userChannel, recipientRef, messageId, emoji) {
@@ -501,16 +536,18 @@ async function main() {
     }
 
     if (firstChannel) {
+      const roomId = firstChannel.id;
       const roomRef = firstChannel.public_id ?? firstChannel.id;
-      const roomSmoke = await sendRoomSmokeMessage(
+      const roomChannel = await joinRoomSmokeChannel(
         socketSession.socket,
+        roomId,
         roomRef,
-        smokePrefix,
       );
-      await toggleRoomReaction(roomSmoke.roomChannel, roomSmoke.message.id, "✅");
-      await toggleRoomReaction(roomSmoke.roomChannel, roomSmoke.message.id, "✅");
-      roomSmoke.roomChannel.leave();
-      ok(`Added and removed a reaction on channel smoke message ${roomSmoke.message.id}`);
+      const roomMessage = await sendRoomSmokeMessage(roomChannel, smokePrefix);
+      await toggleRoomReaction(roomChannel, roomMessage.id, "✅");
+      await toggleRoomReaction(roomChannel, roomMessage.id, "✅");
+      roomChannel.leave();
+      ok(`Added and removed a reaction on channel smoke message ${roomMessage.id}`);
     } else {
       skip("Write-mode channel message check skipped because no server channel was available");
     }
