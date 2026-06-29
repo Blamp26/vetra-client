@@ -214,7 +214,7 @@ The release wrappers reuse `VETRA_SMOKE_API_URL` and `VETRA_SMOKE_SOCKET_URL` as
 
 ## Developer Load Checks
 
-Copy `.env.load.example` to `.env.load`, fill in the LAN backend URLs plus `VETRA_LOAD_USERNAME` and `VETRA_LOAD_PASSWORD`, and keep `.env.load` out of git. The load tool reuses the same username/password login flow and socket-ticket flow as the app and smoke tests.
+Copy `.env.load.example` to `.env.load`, fill in the LAN backend URLs plus `VETRA_LOAD_USERNAME` and `VETRA_LOAD_PASSWORD`, and keep `.env.load` out of git. The load tool reuses the same username/password login flow and socket-ticket flow as the app and smoke tests. Large VU startups are ramped by `VETRA_LOAD_RAMP_BATCH_SIZE` and `VETRA_LOAD_RAMP_BATCH_DELAY_MS` so socket-ticket requests do not burst all at once.
 
 Safe connect-only load test:
 

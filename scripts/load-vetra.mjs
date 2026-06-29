@@ -107,6 +107,8 @@ function buildConfig() {
     vus: envInt("VETRA_LOAD_VUS", 10),
     durationSeconds: envInt("VETRA_LOAD_DURATION_SECONDS", 60),
     messagesPerSecond: envNumber("VETRA_LOAD_MESSAGES_PER_SECOND", 5),
+    rampBatchSize: envInt("VETRA_LOAD_RAMP_BATCH_SIZE", 25),
+    rampBatchDelayMs: envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
     mode,
     writeEnabled,
     writeResults: env.VETRA_LOAD_WRITE_RESULTS !== "0",
@@ -275,6 +277,7 @@ function createMetrics(mode, vus, durationSeconds) {
     vus,
     durationSeconds,
     startedAt: new Date().toISOString(),
+    startedVus: 0,
     totalSocketConnects: 0,
     successfulJoins: 0,
     failedJoins: 0,
@@ -350,6 +353,7 @@ function printSummary(metrics) {
   console.log(`mode: ${summary.targetMode}`);
   console.log(`duration: ${summary.duration}s`);
   console.log(`virtual users: ${summary.virtualUsers}`);
+  console.log(`started VUs: ${metrics.startedVus}`);
   console.log(`socket connects: ${summary.totalSocketConnects}`);
   console.log(`successful joins: ${summary.successfulJoins}`);
   console.log(`failed joins: ${summary.failedJoins}`);
@@ -498,6 +502,7 @@ async function openUserSession(label, auth, metrics) {
   });
 
   await joinChannel(userChannel, `${label} user:${auth.user.id}`, metrics);
+  metrics.startedVus += 1;
 
   return {
     label,
@@ -628,8 +633,35 @@ async function ensureCallChannel(session, metrics) {
 async function createSessions(primaryAuth, metrics) {
   const sessions = [];
 
-  for (let index = 0; index < config.vus; index += 1) {
-    sessions.push(await openUserSession(`vu-${index + 1}`, primaryAuth, metrics));
+  for (let index = 0; index < config.vus; index += config.rampBatchSize) {
+    const batchEnd = Math.min(config.vus, index + config.rampBatchSize);
+    const batchIndices = [];
+
+    for (let cursor = index; cursor < batchEnd; cursor += 1) {
+      batchIndices.push(cursor);
+    }
+
+    try {
+      const batchSessions = await Promise.all(
+        batchIndices.map((cursor) =>
+          openUserSession(`vu-${cursor + 1}`, primaryAuth, metrics),
+        ),
+      );
+      sessions.push(...batchSessions);
+      info(`Started ${sessions.length}/${config.vus} VUs`);
+    } catch (error) {
+      if (isSocketTicketRateLimit(error)) {
+        fail(
+          `socket-ticket rate limited before target VU count was reached; reduce VETRA_LOAD_RAMP_BATCH_SIZE or increase VETRA_LOAD_RAMP_BATCH_DELAY_MS (started ${sessions.length}/${config.vus} VUs)`,
+        );
+      }
+
+      throw error;
+    }
+
+    if (batchEnd < config.vus) {
+      await sleep(config.rampBatchDelayMs);
+    }
   }
 
   return sessions;
@@ -668,6 +700,14 @@ function createTicker(callback, intervalMs) {
 
 async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isSocketTicketRateLimit(error) {
+  return (
+    error instanceof Error &&
+    error.message.includes("/auth/socket-ticket") &&
+    error.message.includes("HTTP 429")
+  );
 }
 
 async function runConnectMode(sessions) {
