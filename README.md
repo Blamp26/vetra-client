@@ -216,6 +216,8 @@ The release wrappers reuse `VETRA_SMOKE_API_URL` and `VETRA_SMOKE_SOCKET_URL` as
 
 Copy `.env.load.example` to `.env.load`, fill in the LAN backend URLs plus `VETRA_LOAD_USERNAME` and `VETRA_LOAD_PASSWORD`, and keep `.env.load` out of git. The load tool reuses the same username/password login flow and socket-ticket flow as the app and smoke tests. Large VU startups are ramped by `VETRA_LOAD_RAMP_BATCH_SIZE` and `VETRA_LOAD_RAMP_BATCH_DELAY_MS` so socket-ticket requests do not burst all at once.
 
+Set `VETRA_LOAD_SERVER_MONITOR=1` to sample the Ubuntu backend over SSH during the test. The built-in monitor uses `VETRA_LOAD_SERVER_SSH`, `VETRA_LOAD_SERVER_SERVICE`, `VETRA_LOAD_SERVER_PORT`, and `VETRA_LOAD_SERVER_SAMPLE_INTERVAL_MS` to collect service PID, process CPU/RAM, available RAM, and TCP connection counts. SSH monitor failures are logged as warnings and recorded in the JSON summary without aborting the load run.
+
 Safe connect-only load test:
 
 ```bash

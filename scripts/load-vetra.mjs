@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { execFile } from "node:child_process";
 import { Socket } from "phoenix";
 import { loadLoadEnv } from "./shared.mjs";
 
@@ -109,6 +110,15 @@ function buildConfig() {
     messagesPerSecond: envNumber("VETRA_LOAD_MESSAGES_PER_SECOND", 5),
     rampBatchSize: envInt("VETRA_LOAD_RAMP_BATCH_SIZE", 25),
     rampBatchDelayMs: envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
+    serverMonitorEnabled: env.VETRA_LOAD_SERVER_MONITOR === "1",
+    serverSsh: env.VETRA_LOAD_SERVER_SSH || "superadmin@192.168.88.26",
+    serverService:
+      env.VETRA_LOAD_SERVER_SERVICE || "vetra-server.service",
+    serverPort: envInt("VETRA_LOAD_SERVER_PORT", 4000),
+    serverSampleIntervalMs: envInt(
+      "VETRA_LOAD_SERVER_SAMPLE_INTERVAL_MS",
+      1000,
+    ),
     mode,
     writeEnabled,
     writeResults: env.VETRA_LOAD_WRITE_RESULTS !== "0",
@@ -125,6 +135,25 @@ function buildConfig() {
 
 let config = null;
 let loadPrefix = "";
+
+function execFileAsync(command, args, options = {}) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    execFile(command, args, options, (error, stdout, stderr) => {
+      if (error) {
+        rejectPromise(
+          new Error(stderr?.trim() || error.message || "execFile failed"),
+        );
+        return;
+      }
+
+      resolvePromise({ stdout, stderr });
+    });
+  });
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
 
 function authHeaders(token) {
   return token
@@ -285,11 +314,18 @@ function createMetrics(mode, vus, durationSeconds) {
     messagesAcked: 0,
     messagesFailed: 0,
     receivedBroadcasts: 0,
+    expectedCloses: 0,
+    unexpectedDisconnects: 0,
     disconnectCount: 0,
     connectLatenciesMs: [],
     joinLatenciesMs: [],
     ackLatenciesMs: [],
     errorsByType: {},
+    serverMonitor: {
+      enabled: false,
+      samples: [],
+      errors: [],
+    },
   };
 }
 
@@ -327,6 +363,8 @@ function approxMessagesPerSecond(metrics) {
 }
 
 function summarizeMetrics(metrics) {
+  const disconnectCount =
+    metrics.expectedCloses + metrics.unexpectedDisconnects;
   return {
     duration: metrics.durationSeconds,
     virtualUsers: metrics.vus,
@@ -338,12 +376,15 @@ function summarizeMetrics(metrics) {
     messagesAcked: metrics.messagesAcked,
     messagesFailed: metrics.messagesFailed,
     receivedBroadcasts: metrics.receivedBroadcasts,
-    disconnectCount: metrics.disconnectCount,
+    disconnectCount,
+    expectedCloses: metrics.expectedCloses,
+    unexpectedDisconnects: metrics.unexpectedDisconnects,
     approximateMessagesPerSecond: approxMessagesPerSecond(metrics),
     latenciesMs: buildLatencyStats(metrics.ackLatenciesMs),
     connectLatenciesMs: buildLatencyStats(metrics.connectLatenciesMs),
     joinLatenciesMs: buildLatencyStats(metrics.joinLatenciesMs),
     errorsByType: metrics.errorsByType,
+    serverMetrics: summarizeServerMonitor(metrics.serverMonitor),
   };
 }
 
@@ -362,6 +403,8 @@ function printSummary(metrics) {
   console.log(`messages failed: ${summary.messagesFailed}`);
   console.log(`received broadcasts: ${summary.receivedBroadcasts}`);
   console.log(`disconnect count: ${summary.disconnectCount}`);
+  console.log(`expected closes: ${summary.expectedCloses}`);
+  console.log(`unexpected disconnects: ${summary.unexpectedDisconnects}`);
   console.log(`approx msg/sec: ${summary.approximateMessagesPerSecond}`);
   console.log(
     `ack latency ms: p50=${summary.latenciesMs.p50 ?? "-"} p95=${summary.latenciesMs.p95 ?? "-"} p99=${summary.latenciesMs.p99 ?? "-"} max=${summary.latenciesMs.max ?? "-"}`,
@@ -373,6 +416,27 @@ function printSummary(metrics) {
     `join latency ms: p50=${summary.joinLatenciesMs.p50 ?? "-"} p95=${summary.joinLatenciesMs.p95 ?? "-"} p99=${summary.joinLatenciesMs.p99 ?? "-"} max=${summary.joinLatenciesMs.max ?? "-"}`,
   );
   console.log(`errors by type: ${JSON.stringify(summary.errorsByType)}`);
+
+  if (summary.serverMetrics.enabled) {
+    console.log("\n[load] Server metrics");
+    console.log(`samples: ${summary.serverMetrics.sampleCount}`);
+    console.log(
+      `cpu %: avg=${summary.serverMetrics.cpu.avg ?? "-"} p95=${summary.serverMetrics.cpu.p95 ?? "-"} max=${summary.serverMetrics.cpu.max ?? "-"}`,
+    );
+    console.log(
+      `rss MB: avg=${summary.serverMetrics.rssMb.avg ?? "-"} max=${summary.serverMetrics.rssMb.max ?? "-"}`,
+    );
+    console.log(
+      `mem %: avg=${summary.serverMetrics.memPercent.avg ?? "-"} max=${summary.serverMetrics.memPercent.max ?? "-"}`,
+    );
+    console.log(
+      `available RAM GB min=${summary.serverMetrics.availableRamGbMin ?? "-"}`,
+    );
+    console.log(
+      `tcp :${config.serverPort} connections: avg=${summary.serverMetrics.tcpConnections.avg ?? "-"} max=${summary.serverMetrics.tcpConnections.max ?? "-"}`,
+    );
+    console.log(`monitor errors: ${summary.serverMetrics.monitorErrors}`);
+  }
 }
 
 function writeResults(metrics) {
@@ -394,6 +458,222 @@ function writeResults(metrics) {
     JSON.stringify({ config, summary: summarizeMetrics(metrics), metrics }, null, 2),
   );
   info(`Wrote JSON results to ${filePath}`);
+}
+
+function average(values) {
+  if (values.length === 0) return null;
+  return Number(
+    (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2),
+  );
+}
+
+function max(values) {
+  if (values.length === 0) return null;
+  return Number(Math.max(...values).toFixed(2));
+}
+
+function min(values) {
+  if (values.length === 0) return null;
+  return Number(Math.min(...values).toFixed(2));
+}
+
+function summarizeServerMonitor(serverMonitor) {
+  const enabled = !!serverMonitor?.enabled;
+  const samples = serverMonitor?.samples ?? [];
+  const errors = serverMonitor?.errors ?? [];
+  const cpuValues = samples
+    .map((sample) => sample.cpuPercent)
+    .filter((value) => Number.isFinite(value));
+  const rssMbValues = samples
+    .map((sample) =>
+      Number.isFinite(sample.rssBytes) ? sample.rssBytes / (1024 * 1024) : null,
+    )
+    .filter((value) => value !== null);
+  const memPercentValues = samples
+    .map((sample) => sample.memPercent)
+    .filter((value) => Number.isFinite(value));
+  const availableRamGbValues = samples
+    .map((sample) =>
+      Number.isFinite(sample.availableMemBytes)
+        ? sample.availableMemBytes / (1024 * 1024 * 1024)
+        : null,
+    )
+    .filter((value) => value !== null);
+  const tcpValues = samples
+    .map((sample) => sample.tcpPortConnections)
+    .filter((value) => Number.isFinite(value));
+
+  return {
+    enabled,
+    sampleCount: samples.length,
+    cpu: {
+      avg: average(cpuValues),
+      p95: buildLatencyStats(cpuValues).p95,
+      max: max(cpuValues),
+    },
+    rssMb: {
+      avg: average(rssMbValues),
+      max: max(rssMbValues),
+    },
+    memPercent: {
+      avg: average(memPercentValues),
+      max: max(memPercentValues),
+    },
+    availableRamGbMin: min(availableRamGbValues),
+    tcpConnections: {
+      avg: average(tcpValues),
+      max: max(tcpValues),
+    },
+    monitorErrors: errors.length,
+  };
+}
+
+function parseKeyValueOutput(output) {
+  const values = {};
+
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) continue;
+    const key = line.slice(0, separatorIndex);
+    const value = line.slice(separatorIndex + 1);
+    values[key] = value;
+  }
+
+  return values;
+}
+
+function parseNumberOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseServerSample(output) {
+  const values = parseKeyValueOutput(output);
+  const rssKiB = parseNumberOrNull(values.rssKiB);
+  const vszKiB = parseNumberOrNull(values.vszKiB);
+  const sample = {
+    timestamp: values.timestamp ?? new Date().toISOString(),
+    pid: parseNumberOrNull(values.pid),
+    cpuPercent: parseNumberOrNull(values.cpuPercent),
+    memPercent: parseNumberOrNull(values.memPercent),
+    rssBytes: rssKiB !== null ? rssKiB * 1024 : null,
+    vszBytes: vszKiB !== null ? vszKiB * 1024 : null,
+    availableMemBytes: parseNumberOrNull(values.availableMemBytes),
+    usedMemBytes: parseNumberOrNull(values.usedMemBytes),
+    tcpPortConnections: parseNumberOrNull(values.tcpPortConnections),
+    etime: values.etime ?? null,
+  };
+
+  return sample;
+}
+
+function buildRemoteMonitorScript() {
+  const service = shellQuote(config.serverService);
+  const port = shellQuote(config.serverPort);
+
+  return `
+service=${service}
+port=${port}
+timestamp=$(date -Iseconds)
+pid=$(systemctl show "$service" -p MainPID --value 2>/dev/null || true)
+echo "timestamp=$timestamp"
+echo "pid=$pid"
+
+if [ -n "$pid" ] && [ "$pid" != "0" ]; then
+  ps_line=$(ps -p "$pid" -o %cpu=,%mem=,rss=,vsz=,etime= 2>/dev/null | head -n 1 | xargs || true)
+  if [ -n "$ps_line" ]; then
+    set -- $ps_line
+    echo "cpuPercent=$1"
+    echo "memPercent=$2"
+    echo "rssKiB=$3"
+    echo "vszKiB=$4"
+    echo "etime=$5"
+  fi
+fi
+
+mem_line=$(free -b | awk 'NR==2 {print $3" "$7}' 2>/dev/null || true)
+set -- $mem_line
+echo "usedMemBytes=\${1:-}"
+echo "availableMemBytes=\${2:-}"
+
+if ss -tan "sport = :$port" >/dev/null 2>&1; then
+  tcp=$(ss -tan "sport = :$port" 2>/dev/null | tail -n +2 | wc -l)
+else
+  tcp=$(ss -tan 2>/dev/null | grep -c ":$port ")
+fi
+echo "tcpPortConnections=$tcp"
+`.trim();
+}
+
+function createServerMonitor(metrics) {
+  if (!config.serverMonitorEnabled) {
+    return null;
+  }
+
+  metrics.serverMonitor.enabled = true;
+
+  let stopped = false;
+  let timer = null;
+  let inFlight = false;
+  let warned = false;
+
+  const runSample = async () => {
+    if (stopped || inFlight) return;
+    inFlight = true;
+
+    try {
+      const { stdout } = await execFileAsync(
+        "ssh",
+        [
+          config.serverSsh,
+          "sh",
+          "-lc",
+          buildRemoteMonitorScript(),
+        ],
+        {
+          timeout: Math.max(1000, config.serverSampleIntervalMs - 100),
+        },
+      );
+      metrics.serverMonitor.samples.push(parseServerSample(stdout));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      metrics.serverMonitor.errors.push({
+        timestamp: new Date().toISOString(),
+        message,
+      });
+      if (!warned) {
+        warn(
+          `server monitor sample failed; continuing load test without crashing (${message})`,
+        );
+        warned = true;
+      }
+    } finally {
+      inFlight = false;
+      if (!stopped) {
+        timer = setTimeout(runSample, config.serverSampleIntervalMs);
+      }
+    }
+  };
+
+  return {
+    start() {
+      runSample();
+    },
+    async stop() {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      while (inFlight) {
+        await sleep(50);
+      }
+    },
+  };
 }
 
 function joinChannel(channel, label, metrics) {
@@ -472,14 +752,31 @@ async function openUserSession(label, auth, metrics) {
   }
 
   const ticket = await createSocketTicket(config.apiUrl, auth);
+  const session = {
+    label,
+    auth,
+    socket: null,
+    userChannel: null,
+    roomChannels: new Map(),
+    callChannel: null,
+    cleanupStarted: false,
+  };
+
   const socket = new Socket(config.socketUrl, {
     params: { socket_ticket: ticket.socket_ticket },
     transport: WebSocket,
     reconnectAfterMs: () => 10000,
   });
+  session.socket = socket;
 
   socket.onClose(() => {
-    metrics.disconnectCount += 1;
+    if (session.cleanupStarted) {
+      metrics.expectedCloses += 1;
+    } else {
+      metrics.unexpectedDisconnects += 1;
+    }
+    metrics.disconnectCount =
+      metrics.expectedCloses + metrics.unexpectedDisconnects;
   });
 
   socket.onError((error) => {
@@ -491,6 +788,7 @@ async function openUserSession(label, auth, metrics) {
   metrics.connectLatenciesMs.push(connectLatency);
 
   const userChannel = socket.channel(`user:${auth.user.id}`, {});
+  session.userChannel = userChannel;
   userChannel.on("new_message", () => {
     metrics.receivedBroadcasts += 1;
   });
@@ -504,17 +802,12 @@ async function openUserSession(label, auth, metrics) {
   await joinChannel(userChannel, `${label} user:${auth.user.id}`, metrics);
   metrics.startedVus += 1;
 
-  return {
-    label,
-    auth,
-    socket,
-    userChannel,
-    roomChannels: new Map(),
-    callChannel: null,
-  };
+  return session;
 }
 
 function closeSession(session) {
+  session.cleanupStarted = true;
+
   try {
     session.callChannel?.leave();
   } catch {}
@@ -961,8 +1254,10 @@ async function main() {
 
   const metrics = createMetrics(config.mode, config.vus, config.durationSeconds);
   const sessions = [];
+  const serverMonitor = createServerMonitor(metrics);
 
   try {
+    serverMonitor?.start();
     const targets = await resolveTargets(primaryAuth, secondaryAuth);
     sessions.push(...(await createSessions(primaryAuth, metrics)));
 
@@ -989,8 +1284,12 @@ async function main() {
     recordError(metrics, error);
     throw error;
   } finally {
+    await serverMonitor?.stop();
     for (const session of sessions) {
       closeSession(session);
+    }
+    if (sessions.length > 0) {
+      await sleep(250);
     }
   }
 
