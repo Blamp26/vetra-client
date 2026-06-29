@@ -79,6 +79,18 @@ function envNumber(name, fallback) {
   return parsed;
 }
 
+function envFlag(name, fallback) {
+  const raw = env[name];
+  if (raw === undefined || raw === null || raw === "") {
+    return fallback;
+  }
+
+  if (raw === "1" || raw === "true") return true;
+  if (raw === "0" || raw === "false") return false;
+
+  fail(`Environment variable ${name} must be 1, 0, true, or false.`);
+}
+
 function buildConfig() {
   const mode = args.mode || env.VETRA_LOAD_MODE || "connect";
   const allowedModes = new Set([
@@ -97,6 +109,7 @@ function buildConfig() {
     args.write === "1" ||
     args.write === "true" ||
     env.VETRA_LOAD_WRITE === "1";
+  const joinRoomDuringStartupDefault = mode === "channel-messages";
 
   const config = {
     apiUrl: env.VETRA_LOAD_API_URL?.replace(/\/+$/, "") || "",
@@ -118,6 +131,10 @@ function buildConfig() {
     roomRampBatchDelayMs: envInt(
       "VETRA_LOAD_ROOM_RAMP_BATCH_DELAY_MS",
       envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
+    ),
+    joinRoomDuringStartup: envFlag(
+      "VETRA_LOAD_JOIN_ROOM_DURING_STARTUP",
+      joinRoomDuringStartupDefault,
     ),
     roomJoinTimeoutMs: envInt(
       "VETRA_LOAD_ROOM_JOIN_TIMEOUT_MS",
@@ -362,19 +379,26 @@ async function createSocketTicket(apiBaseUrl, auth, options = {}) {
   return ticket;
 }
 
-async function createSocketTicketWithTimeout(auth, timeoutMs) {
+async function createSocketTicketWithTimeout(auth, metrics, timeoutMs) {
   const controller = new AbortController();
-  return withTimeout(
-    () =>
-      createSocketTicket(config.apiUrl, auth, {
-        signal: controller.signal,
-      }),
-    "socket-ticket request",
-    timeoutMs,
-    async () => {
-      controller.abort();
-    },
-  );
+  metrics.socketTicketRequests += 1;
+
+  try {
+    return await withTimeout(
+      () =>
+        createSocketTicket(config.apiUrl, auth, {
+          signal: controller.signal,
+        }),
+      "socket-ticket request",
+      timeoutMs,
+      async () => {
+        controller.abort();
+      },
+    );
+  } catch (error) {
+    recordSocketTicketFailure(metrics, error);
+    throw error;
+  }
 }
 
 async function fetchConversationPreviews(apiBaseUrl, auth) {
@@ -426,6 +450,11 @@ function createMetrics(mode, vus, durationSeconds) {
     startedVus: 0,
     startupFailures: 0,
     totalSocketConnects: 0,
+    socketTicketRequests: 0,
+    socketTicketFailures: 0,
+    socketTicketFailuresByType: {},
+    socketConnectDeniedExpiredTicket: 0,
+    socketConnectFailuresByType: {},
     requestedUserChannelJoins: 0,
     successfulUserChannelJoins: 0,
     failedUserChannelJoins: 0,
@@ -475,6 +504,31 @@ function recordRoomJoinFailure(metrics, error) {
   const key = error instanceof Error ? error.message : String(error);
   metrics.roomJoinFailuresByType[key] =
     (metrics.roomJoinFailuresByType[key] ?? 0) + 1;
+}
+
+function recordSocketTicketFailure(metrics, error) {
+  const key = error instanceof Error ? error.message : String(error);
+  metrics.socketTicketFailures += 1;
+  metrics.socketTicketFailuresByType[key] =
+    (metrics.socketTicketFailuresByType[key] ?? 0) + 1;
+}
+
+function recordSocketConnectFailure(metrics, error) {
+  const key = error instanceof Error ? error.message : String(error);
+  metrics.socketConnectFailuresByType[key] =
+    (metrics.socketConnectFailuresByType[key] ?? 0) + 1;
+
+  if (key.includes("expired_socket_ticket")) {
+    metrics.socketConnectDeniedExpiredTicket += 1;
+  }
+}
+
+function isSocketTicketError(error) {
+  return (
+    error instanceof Error &&
+    (error.message.includes("/auth/socket-ticket") ||
+      error.message.includes("socket-ticket request"))
+  );
 }
 
 function recordBroadcast(metrics, topicType, event) {
@@ -527,6 +581,11 @@ function summarizeMetrics(metrics) {
     startupFailures: metrics.startupFailures,
     targetMode: metrics.mode,
     totalSocketConnects: metrics.totalSocketConnects,
+    socketTicketRequests: metrics.socketTicketRequests,
+    socketTicketFailures: metrics.socketTicketFailures,
+    socketTicketFailuresByType: metrics.socketTicketFailuresByType,
+    socketConnectDeniedExpiredTicket: metrics.socketConnectDeniedExpiredTicket,
+    socketConnectFailuresByType: metrics.socketConnectFailuresByType,
     requestedUserChannelJoins: metrics.requestedUserChannelJoins,
     successfulUserChannelJoins: metrics.successfulUserChannelJoins,
     failedUserChannelJoins: metrics.failedUserChannelJoins,
@@ -568,6 +627,11 @@ function printSummary(metrics) {
   console.log(`started VUs: ${summary.startedVus}`);
   console.log(`startup failures: ${summary.startupFailures}`);
   console.log(`socket connects: ${summary.totalSocketConnects}`);
+  console.log(`socket ticket requests: ${summary.socketTicketRequests}`);
+  console.log(`socket ticket failures: ${summary.socketTicketFailures}`);
+  console.log(
+    `socket connect denied expired ticket: ${summary.socketConnectDeniedExpiredTicket}`,
+  );
   console.log(
     `user channel joins: ${summary.successfulUserChannelJoins}/${summary.requestedUserChannelJoins}`,
   );
@@ -607,6 +671,12 @@ function printSummary(metrics) {
   );
   console.log(
     `startup errors by type: ${JSON.stringify(summary.startupErrorsByType)}`,
+  );
+  console.log(
+    `socket ticket failures by type: ${JSON.stringify(summary.socketTicketFailuresByType)}`,
+  );
+  console.log(
+    `socket connect failures by type: ${JSON.stringify(summary.socketConnectFailuresByType)}`,
   );
   console.log(
     `room join failures by type: ${JSON.stringify(summary.roomJoinFailuresByType)}`,
@@ -1088,18 +1158,33 @@ function onSocketOpen(socket) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const startedAt = performance.now();
-
-    socket.onOpen(() => {
+    const settle = (callback) => (value) => {
       if (settled) return;
       settled = true;
+      callback(value);
+    };
+
+    socket.onOpen(settle(() => {
       resolve(performance.now() - startedAt);
-    });
+    }));
 
-    socket.onError((error) => {
-      if (settled) return;
-      settled = true;
-      reject(error instanceof Error ? error : new Error("Socket open failed"));
-    });
+    socket.onError(settle((error) => {
+      reject(
+        error instanceof Error
+          ? error
+          : new Error(`Socket open failed: ${JSON.stringify(error)}`),
+      );
+    }));
+
+    socket.onClose(settle((event) => {
+      const code =
+        typeof event?.code === "number" ? `code=${event.code}` : "code=unknown";
+      const reason =
+        typeof event?.reason === "string" && event.reason
+          ? ` reason=${event.reason}`
+          : "";
+      reject(new Error(`Socket closed before open (${code}${reason})`));
+    }));
 
     socket.connect();
   });
@@ -1143,11 +1228,11 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
   activeSessions.add(session);
 
   try {
-    const ticket = await createSocketTicketWithTimeout(auth, timeoutMs);
+    const ticket = await createSocketTicketWithTimeout(auth, metrics, timeoutMs);
     const socket = new Socket(config.socketUrl, {
-      params: { socket_ticket: ticket.socket_ticket },
+      params: () => ({ socket_ticket: ticket.socket_ticket }),
       transport: WebSocket,
-      reconnectAfterMs: () => 10000,
+      reconnectAfterMs: () => 60 * 60 * 1000,
     });
     session.socket = socket;
 
@@ -1165,6 +1250,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
       }
 
       if (!isCleaningUp && !session.cleanupStarted && !session.expectedClose) {
+        socket.reconnectTimer?.reset?.();
         metrics.earlySocketDisconnects += 1;
         if (!session.hadControlledRoomJoinFailure) {
           metrics.unexpectedDisconnects += 1;
@@ -1195,6 +1281,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
       "socket connect",
       timeoutMs,
       async () => {
+        socket.reconnectTimer?.reset?.();
         try {
           socket.disconnect();
         } catch {}
@@ -1228,6 +1315,9 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
 
     return session;
   } catch (error) {
+    if (!isSocketTicketError(error) && !session.connected) {
+      recordSocketConnectFailure(metrics, error);
+    }
     closeSession(session, metrics);
     throw error;
   }
@@ -1532,6 +1622,13 @@ async function joinRoomChannels(sessions, metrics, target) {
   return joinedSessions;
 }
 
+async function joinRoomForStartup(session, metrics, target, vuIndex) {
+  metrics.requestedRoomJoins += 1;
+  const attempt = createRoomJoinAttempt(session, target, metrics, vuIndex);
+  const result = await attempt.promise;
+  return result.ok;
+}
+
 async function ensureCallChannel(session, metrics) {
   if (session.callChannel) return session.callChannel;
 
@@ -1555,8 +1652,12 @@ async function ensureCallChannel(session, metrics) {
   return channel;
 }
 
-async function createSessions(primaryAuth, metrics) {
+async function createSessions(primaryAuth, metrics, options = {}) {
   const sessions = [];
+  const roomReadySessions = [];
+  const roomTarget = options.roomTarget ?? null;
+  const joinRoomDuringStartup =
+    !!options.joinRoomDuringStartup && !!roomTarget;
 
   for (let index = 0; index < config.vus; index += config.rampBatchSize) {
     if (shutdownRequested) {
@@ -1583,7 +1684,15 @@ async function createSessions(primaryAuth, metrics) {
             metrics,
             config.startupTimeoutMs,
           );
-          return { ok: true, session, label };
+          const roomJoined = joinRoomDuringStartup
+            ? await joinRoomForStartup(
+                session,
+                metrics,
+                roomTarget,
+                cursor + 1,
+              )
+            : false;
+          return { ok: true, session, label, roomJoined };
         } catch (error) {
           metrics.startupFailures += 1;
           metrics.failedUserChannelJoins += 1;
@@ -1610,6 +1719,9 @@ async function createSessions(primaryAuth, metrics) {
 
       if (result.value.ok) {
         sessions.push(result.value.session);
+        if (result.value.roomJoined) {
+          roomReadySessions.push(result.value.session);
+        }
         continue;
       }
 
@@ -1618,7 +1730,13 @@ async function createSessions(primaryAuth, metrics) {
       }
     }
 
-    info(`Started ${sessions.length}/${config.vus} VUs, failed ${metrics.startupFailures}`);
+    if (joinRoomDuringStartup) {
+      info(
+        `Started ${sessions.length}/${config.vus} VUs, room joined ${roomReadySessions.length}, failed ${metrics.failedRoomJoins}`,
+      );
+    } else {
+      info(`Started ${sessions.length}/${config.vus} VUs, failed ${metrics.startupFailures}`);
+    }
 
     if (sawRateLimit) {
       warn(
@@ -1635,7 +1753,10 @@ async function createSessions(primaryAuth, metrics) {
     fail("No virtual users started successfully.");
   }
 
-  return sessions;
+  return {
+    sessions,
+    roomReadySessions,
+  };
 }
 
 function createTicker(callback, intervalMs) {
@@ -1701,7 +1822,11 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
     return;
   }
 
-  const roomJoinedSessions = await joinRoomChannels(sessions, metrics, target);
+  const roomJoinedSessions =
+    options.roomJoinedSessions ??
+    (config.joinRoomDuringStartup
+      ? sessions.filter((session) => session.roomChannels.has(target.roomId))
+      : await joinRoomChannels(sessions, metrics, target));
 
   if (roomJoinedSessions.length === 0) {
     info("No VUs joined the room channel; cannot run channel message load");
@@ -1956,20 +2081,31 @@ async function main() {
 
   const metrics = createMetrics(config.mode, config.vus, config.durationSeconds);
   const sessions = [];
+  let roomReadySessions = [];
   const serverMonitor = createServerMonitor(metrics);
   let fatalError = null;
 
   try {
     serverMonitor?.start();
     const targets = await resolveTargets(primaryAuth, secondaryAuth);
-    sessions.push(...(await createSessions(primaryAuth, metrics)));
+    const sessionResults = await createSessions(primaryAuth, metrics, {
+      roomTarget: targets.channelTarget,
+      joinRoomDuringStartup:
+        config.mode === "channel-messages" && config.joinRoomDuringStartup,
+    });
+    sessions.push(...sessionResults.sessions);
+    roomReadySessions = sessionResults.roomReadySessions;
 
     switch (config.mode) {
       case "connect":
         await runConnectMode(sessions);
         break;
       case "channel-messages":
-        await runChannelMessageMode(sessions, metrics, targets.channelTarget);
+        await runChannelMessageMode(sessions, metrics, targets.channelTarget, {
+          roomJoinedSessions: config.joinRoomDuringStartup
+            ? roomReadySessions
+            : undefined,
+        });
         break;
       case "dm-messages":
         await runDmMessageMode(sessions, metrics, targets.directTarget);
