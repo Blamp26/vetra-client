@@ -129,13 +129,13 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
         type: "direct",
         partnerId: item.id,
         partnerRef: conversationPreviews[item.id]?.partner_public_id ?? item.id,
-      }, "sidebar-direct-click");
+      });
     } else {
       const roomPreview = roomPreviews[item.id];
       if (roomPreview) {
-        setActiveChat(roomChatForPreview(roomPreview), "sidebar-room-click");
+        setActiveChat(roomChatForPreview(roomPreview));
       } else {
-        setActiveChat({ type: "room", roomId: item.id }, "sidebar-room-click");
+        setActiveChat({ type: "room", roomId: item.id });
       }
     }
   };
@@ -167,10 +167,7 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
               <button
                 key={server.id}
                 onClick={() =>
-                  setActiveChat(
-                    serverChatForServer(server),
-                    "sidebar-server-click",
-                  )
+                  setActiveChat(serverChatForServer(server))
                 }
                 className="flex w-full items-center gap-2 p-1 text-left"
               >

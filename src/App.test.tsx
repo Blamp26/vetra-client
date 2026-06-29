@@ -121,13 +121,11 @@ describe("App hash sync", () => {
           serverRef: "1",
           channelRef: "1",
         },
-        "app-hash-read",
       ),
     );
 
     expect(setActiveChatMock).not.toHaveBeenCalledWith(
       { type: "server", serverId: 1, serverRef: "1" },
-      "app-hash-read",
     );
   });
 
@@ -158,7 +156,6 @@ describe("App hash sync", () => {
 
     expect(setActiveChatMock).not.toHaveBeenCalledWith(
       { type: "server", serverId: 1, serverRef: "1" },
-      "app-hash-read",
     );
   });
 });

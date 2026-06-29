@@ -59,10 +59,7 @@ export function ChannelPanel({ serverId }: Props) {
   const handleChannelClick = async (channel: Channel) => {
     resetChannelUnread(channel.id);
     if (server) {
-      setActiveChat(
-        channelChatForChannel(server, channel),
-        "channel-panel-channel-click",
-      );
+      setActiveChat(channelChatForChannel(server, channel));
     } else {
       setActiveChat(
         {
@@ -72,7 +69,6 @@ export function ChannelPanel({ serverId }: Props) {
           channelRef: roomRef(channel),
           serverRef: serverRef(server) ?? serverId,
         },
-        "channel-panel-channel-click",
       );
     }
     if (socketManager) {
@@ -116,10 +112,7 @@ export function ChannelPanel({ serverId }: Props) {
       setNewChannelName("");
       setShowCreate(false);
       if (server) {
-        setActiveChat(
-          channelChatForChannel(server, channel),
-          "channel-panel-create-channel-success",
-        );
+        setActiveChat(channelChatForChannel(server, channel));
       } else {
         setActiveChat(
           {
@@ -129,7 +122,6 @@ export function ChannelPanel({ serverId }: Props) {
             channelRef: roomRef(channel) ?? channel.id,
             serverRef: serverRef(server) ?? serverId,
           },
-          "channel-panel-create-channel-success",
         );
       }
     } catch (err) {
@@ -149,7 +141,7 @@ export function ChannelPanel({ serverId }: Props) {
       setServerChannels(serverId, updatedChannels);
 
       if (activeChat?.type === "channel" && activeChat.channelId === channelToDelete.id) {
-        setActiveChat(null, "channel-panel-delete-active-channel");
+        setActiveChat(null);
       }
       setChannelToDelete(null);
     } catch (err) {

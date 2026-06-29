@@ -138,7 +138,7 @@ function App() {
     }
 
     if (routeTarget && routeTargetKey !== currentActiveChatKeyRef.current) {
-      setActiveChat(routeTarget, "app-hash-read");
+      setActiveChat(routeTarget);
     }
   }, [
     routeHash,

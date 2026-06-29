@@ -259,7 +259,6 @@ export function MessageList({
       if (target.type === 'direct') {
         setActiveChat(
           { type: 'direct', partnerId: target.id, partnerRef: target.ref ?? target.id },
-          "message-forward-select-direct",
         );
       } else {
         const roomPreview = roomPreviews[target.id];
@@ -267,7 +266,6 @@ export function MessageList({
           roomPreview
             ? roomChatForPreview(roomPreview)
             : { type: 'room', roomId: target.id, roomRef: target.ref ?? target.id },
-          "message-forward-select-room",
         );
       }
     } catch (err) {

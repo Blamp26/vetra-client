@@ -31,7 +31,7 @@ export function CreateServerModal({ onClose }: Props) {
     try {
       const server = await serversApi.create(trimmed);
       upsertServer(server);
-      setActiveChat(serverChatForServer(server), "create-server-modal-success");
+      setActiveChat(serverChatForServer(server));
       onClose();
     } catch (err) {
       setError("Create failed");

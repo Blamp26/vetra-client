@@ -124,7 +124,7 @@ export function useSocketEvents() {
                       type: "direct",
                       partnerId: msg.sender_id,
                       partnerRef: msg.sender_public_id ?? msg.sender_id,
-                    }, "socket-notification-direct-click");
+                    });
                   },
                 });
               }
@@ -219,7 +219,7 @@ export function useSocketEvents() {
                   type: "room",
                   roomId,
                   roomRef: msg.room_public_id ?? roomId,
-                }, "socket-notification-room-click");
+                });
               },
             });
           }
@@ -235,14 +235,14 @@ export function useSocketEvents() {
       removeRoom(room_id);
       const active = getState().activeChat;
       if (active?.type === "room" && active.roomId === room_id) {
-        setActiveChat(null, "socket-room-deleted");
+        setActiveChat(null);
       }
     }));
     unsubs.push(socketManager.onChannelDeleted(({ channel_id }) => {
       removeRoom(channel_id); // removeRoom handles serverChannels as well
       const active = getState().activeChat;
       if (active?.type === "channel" && active.channelId === channel_id) {
-        setActiveChat(null, "socket-channel-deleted");
+        setActiveChat(null);
       }
     }));
 
@@ -262,7 +262,7 @@ export function useSocketEvents() {
           (active?.type === "server" && active.serverId === server_id) ||
           (active?.type === "channel" && active.serverId === server_id)
         ) {
-          setActiveChat(null, "socket-server-member-removed-self");
+          setActiveChat(null);
         }
       }
     }));
@@ -279,7 +279,7 @@ export function useSocketEvents() {
         removeRoom(room_id);
         const active = getState().activeChat;
         if (active?.type === "room" && active.roomId === room_id) {
-          setActiveChat(null, "socket-room-member-removed-self");
+          setActiveChat(null);
         }
       } else {
         // Someone else was removed from a room we are in.
@@ -300,7 +300,7 @@ export function useSocketEvents() {
         (active?.type === "server" && active.serverId === server_id) ||
         (active?.type === "channel" && active.serverId === server_id)
       ) {
-        setActiveChat(null, "socket-server-deleted");
+        setActiveChat(null);
       }
     }));
     unsubs.push(socketManager.onChannelCreated(({ server_id, channel }) => addServerChannel(server_id, channel)));

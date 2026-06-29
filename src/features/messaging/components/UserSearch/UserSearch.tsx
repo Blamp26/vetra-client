@@ -18,12 +18,12 @@ export function UserSearch() {
   const lastSeenAt = useAppStore((s: RootState) => s.lastSeenAt);
 
   const handleSelectUser = (user: User) => {
-    setActiveChat(directChatForUser(user), "user-search-select-user");
+    setActiveChat(directChatForUser(user));
     clearSearch();
   };
 
   const handleSelectServer = (server: Server) => {
-    setActiveChat(serverChatForServer(server), "user-search-select-server");
+    setActiveChat(serverChatForServer(server));
     clearSearch();
   };
 

@@ -102,7 +102,6 @@ export function CreateRoomModal({ onClose }: Props) {
           last_message_at: null,
           last_message: null,
         }),
-        "create-room-modal-success",
       );
       onClose();
     } catch (err) {
