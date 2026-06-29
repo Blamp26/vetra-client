@@ -99,8 +99,8 @@ function buildConfig() {
     env.VETRA_LOAD_WRITE === "1";
 
   const config = {
-    apiUrl: requireEnv("VETRA_LOAD_API_URL").replace(/\/+$/, ""),
-    socketUrl: requireEnv("VETRA_LOAD_SOCKET_URL"),
+    apiUrl: env.VETRA_LOAD_API_URL?.replace(/\/+$/, "") || "",
+    socketUrl: env.VETRA_LOAD_SOCKET_URL || "",
     username: env.VETRA_LOAD_USERNAME || "",
     password: env.VETRA_LOAD_PASSWORD || "",
     secondUsername: env.VETRA_LOAD_SECOND_USERNAME || "",
@@ -124,10 +124,27 @@ function buildConfig() {
       "VETRA_LOAD_MONITOR_SSH_TIMEOUT_MS",
       5000,
     ),
+    serverMonitorDebug: env.VETRA_LOAD_SERVER_MONITOR_DEBUG === "1",
+    serverMonitorOnly: env.VETRA_LOAD_SERVER_MONITOR_ONLY === "1",
     mode,
     writeEnabled,
     writeResults: env.VETRA_LOAD_WRITE_RESULTS !== "0",
   };
+
+  if (config.serverMonitorOnly) {
+    if (!config.serverMonitorEnabled) {
+      fail("VETRA_LOAD_SERVER_MONITOR_ONLY=1 requires VETRA_LOAD_SERVER_MONITOR=1.");
+    }
+    return config;
+  }
+
+  if (!config.apiUrl) {
+    fail("Missing required environment variable VETRA_LOAD_API_URL.");
+  }
+
+  if (!config.socketUrl) {
+    fail("Missing required environment variable VETRA_LOAD_SOCKET_URL.");
+  }
 
   if (!config.username || !config.password) {
     fail(
@@ -141,6 +158,8 @@ function buildConfig() {
 let config = null;
 let loadPrefix = "";
 let shutdownRequested = false;
+let isCleaningUp = false;
+const activeSessions = new Set();
 let interruptResolver = null;
 const interruptPromise = new Promise((resolve) => {
   interruptResolver = resolve;
@@ -648,11 +667,28 @@ function parseServerSample(output) {
     usedMemBytes: parseNumberOrNull(values.usedMemBytes),
     tcpPortConnections: parseNumberOrNull(values.tcpPortConnections),
     etime: values.etime ?? null,
+    service: values.service ?? null,
+    systemctlExitCode: parseNumberOrNull(values.systemctlExitCode),
+    systemctlStderr: values.systemctlStderr ?? null,
+    rawPid: values.rawPid ?? null,
+    psLine: values.psLine ?? null,
   };
 }
 
 function validateServerSample(sample) {
-  if (sample.pid === null) {
+  if (sample.availableMemBytes === null) {
+    return "missing availableMemBytes";
+  }
+
+  if (sample.usedMemBytes === null) {
+    return "missing usedMemBytes";
+  }
+
+  if (sample.tcpPortConnections === null) {
+    return "missing tcpPortConnections";
+  }
+
+  if (sample.pid === null || sample.pid === 0) {
     return "missing pid";
   }
 
@@ -672,51 +708,45 @@ function validateServerSample(sample) {
     return "missing vszBytes";
   }
 
-  if (sample.availableMemBytes === null) {
-    return "missing availableMemBytes";
-  }
-
-  if (sample.usedMemBytes === null) {
-    return "missing usedMemBytes";
-  }
-
-  if (sample.tcpPortConnections === null) {
-    return "missing tcpPortConnections";
-  }
-
   return null;
 }
 
 function buildRemoteMonitorScript() {
-  const service = shellQuote(config.serverService);
-  const port = shellQuote(config.serverPort);
+  const service = JSON.stringify(String(config.serverService));
+  const port = JSON.stringify(String(config.serverPort));
 
   return `
 service=${service}
 port=${port}
 timestamp=$(date -Iseconds)
-pid=$(systemctl show "$service" -p MainPID --value 2>/dev/null || true)
+systemctl_err_file=$(mktemp /tmp/vetra-monitor-systemctl.XXXXXX.err)
+pid=$(systemctl show "$service" -p MainPID --value 2>"$systemctl_err_file")
+systemctl_exit=$?
+systemctl_stderr=$(tr '\\n' ' ' < "$systemctl_err_file" | tr '\\r' ' ' | sed 's/[[:space:]]\\+/ /g; s/^ //; s/ $//')
+rm -f "$systemctl_err_file"
+pid=$(printf "%s" "$pid" | tr -d "\\r\\n")
 echo "timestamp=$timestamp"
+echo "service=$service"
+echo "systemctlExitCode=$systemctl_exit"
+echo "systemctlStderr=$systemctl_stderr"
+echo "rawPid=$pid"
 echo "pid=$pid"
 
 if [ -n "$pid" ] && [ "$pid" != "0" ]; then
-  ps -p "$pid" -o pcpu= -o pmem= -o rss= -o vsz= -o etime= 2>/dev/null | awk '
-    NF >= 5 {
-      print "cpuPercent=" $1
-      print "memPercent=" $2
-      print "rssKiB=" $3
-      print "vszKiB=" $4
-      print "etime=" $5
-      found=1
-    }
-    END {
-      if (!found) {
-        print "psParseError=1"
-      }
-    }
-  '
+  ps_line=$(ps -p "$pid" -o %cpu=,%mem=,rss=,vsz=,etime= 2>/dev/null | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  echo "psLine=$ps_line"
+  if [ -n "$ps_line" ]; then
+    IFS=',' read -r cpu_percent mem_percent rss_kib vsz_kib etime <<EOF
+$ps_line
+EOF
+    echo "cpuPercent=$(printf "%s" "$cpu_percent" | xargs)"
+    echo "memPercent=$(printf "%s" "$mem_percent" | xargs)"
+    echo "rssKiB=$(printf "%s" "$rss_kib" | xargs)"
+    echo "vszKiB=$(printf "%s" "$vsz_kib" | xargs)"
+    echo "etime=$(printf "%s" "$etime" | xargs)"
+  fi
 else
-  echo "psParseError=1"
+  echo "psLine="
 fi
 
 if free -b >/dev/null 2>&1; then
@@ -763,6 +793,7 @@ function createServerMonitor(metrics) {
   let timer = null;
   let inFlight = false;
   let warned = false;
+  let debugPrinted = false;
 
   const runSample = async () => {
     if (stopped || inFlight) return;
@@ -773,7 +804,7 @@ function createServerMonitor(metrics) {
         "ssh",
         [
           config.serverSsh,
-          "sh",
+          "bash",
           "-lc",
           buildRemoteMonitorScript(),
         ],
@@ -781,28 +812,36 @@ function createServerMonitor(metrics) {
           timeout: config.monitorSshTimeoutMs,
         },
       );
+      if (config.serverMonitorDebug && !debugPrinted) {
+        info(`server monitor raw sample:\n${stdout.trimEnd()}`);
+        debugPrinted = true;
+      }
       const sample = parseServerSample(stdout);
       const validationError = validateServerSample(sample);
       if (validationError) {
-        const message = `server monitor parse failed: ${validationError}`;
         metrics.serverMonitor.errors.push({
           timestamp: sample.timestamp,
-          message,
+          message: `server monitor parse failed: ${validationError}`,
+          details: {
+            reason: validationError,
+            service: sample.service,
+            systemctlExitCode: sample.systemctlExitCode,
+            systemctlStderr: sample.systemctlStderr,
+            rawPid: sample.rawPid,
+            psLine: sample.psLine,
+            pid: sample.pid,
+            cpuPercent: sample.cpuPercent,
+            memPercent: sample.memPercent,
+            rssBytes: sample.rssBytes,
+            vszBytes: sample.vszBytes,
+            availableMemBytes: sample.availableMemBytes,
+            usedMemBytes: sample.usedMemBytes,
+            tcpPortConnections: sample.tcpPortConnections,
+            etime: sample.etime,
+          },
         });
         if (!warned) {
-          warn(
-            `${message}; sample=${JSON.stringify({
-              pid: sample.pid,
-              cpuPercent: sample.cpuPercent,
-              memPercent: sample.memPercent,
-              rssBytes: sample.rssBytes,
-              vszBytes: sample.vszBytes,
-              availableMemBytes: sample.availableMemBytes,
-              usedMemBytes: sample.usedMemBytes,
-              tcpPortConnections: sample.tcpPortConnections,
-              etime: sample.etime,
-            })}`,
-          );
+          warn(`server monitor parse failed: ${validationError}`);
           warned = true;
         }
       }
@@ -843,6 +882,24 @@ function createServerMonitor(metrics) {
       }
     },
   };
+}
+
+async function runServerMonitorOnly() {
+  const metrics = createMetrics("monitor-only", 0, 0);
+  const serverMonitor = createServerMonitor(metrics);
+
+  if (!serverMonitor) {
+    fail("VETRA_LOAD_SERVER_MONITOR_ONLY=1 requires VETRA_LOAD_SERVER_MONITOR=1.");
+  }
+
+  serverMonitor.start();
+  await sleep(Math.max(config.serverSampleIntervalMs + 200, 1200));
+  await serverMonitor.stop();
+
+  console.log("\n[load] Monitor-only sample");
+  console.log(JSON.stringify(metrics.serverMonitor.samples[0] ?? null, null, 2));
+  console.log("\n[load] Monitor-only errors");
+  console.log(JSON.stringify(metrics.serverMonitor.errors, null, 2));
 }
 
 function joinChannel(channel, label, metrics, timeoutMs = null) {
@@ -942,7 +999,6 @@ function markSessionExpectedClose(session, metrics) {
     session.socket &&
     session.connected &&
     session.joined &&
-    !session.closeObserved &&
     !session.expectedClose
   ) {
     session.expectedClose = true;
@@ -971,6 +1027,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     expectedClose: false,
     closeObserved: false,
   };
+  activeSessions.add(session);
 
   try {
     const ticket = await createSocketTicketWithTimeout(auth, timeoutMs);
@@ -987,6 +1044,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
       }
 
       session.closeObserved = true;
+      activeSessions.delete(session);
 
       if (!session.connected || !session.joined) {
         metrics.disconnectCount =
@@ -994,7 +1052,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
         return;
       }
 
-      if (!session.cleanupStarted && !session.expectedClose) {
+      if (!isCleaningUp && !session.cleanupStarted && !session.expectedClose) {
         metrics.unexpectedDisconnects += 1;
       }
 
@@ -1007,7 +1065,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
         return;
       }
 
-      if (session.cleanupStarted || session.expectedClose) {
+      if (isCleaningUp || session.cleanupStarted || session.expectedClose) {
         return;
       }
 
@@ -1083,6 +1141,25 @@ function closeSession(session, metrics = session.metricsRef) {
   try {
     session.socket.disconnect();
   } catch {}
+}
+
+function cleanupSessions(metrics, sessions) {
+  isCleaningUp = true;
+  const cleanupTargets =
+    activeSessions.size > 0 ? [...activeSessions] : sessions;
+
+  for (const session of cleanupTargets) {
+    if (session.joined && !session.expectedClose) {
+      markSessionExpectedClose(session, metrics);
+    }
+  }
+
+  for (const session of cleanupTargets) {
+    closeSession(session, metrics);
+  }
+
+  metrics.disconnectCount =
+    metrics.expectedCloses + metrics.unexpectedDisconnects;
 }
 
 async function resolveTargets(primaryAuth, secondaryAuth) {
@@ -1544,6 +1621,13 @@ process.once("SIGINT", () => {
 async function main() {
   config = buildConfig();
   loadPrefix = `[load-test] ${new Date().toISOString()}`;
+  isCleaningUp = false;
+  activeSessions.clear();
+
+  if (config.serverMonitorOnly) {
+    await runServerMonitorOnly();
+    return;
+  }
 
   if (config.writeEnabled && config.mode !== "connect") {
     warn(
@@ -1601,9 +1685,7 @@ async function main() {
     throw error;
   } finally {
     await serverMonitor?.stop();
-    for (const session of sessions) {
-      closeSession(session, metrics);
-    }
+    cleanupSessions(metrics, sessions);
     if (sessions.length > 0) {
       await sleep(250);
     }
