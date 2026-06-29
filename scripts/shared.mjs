@@ -71,11 +71,13 @@ export async function runCommand(command, args, options = {}) {
   } = options;
 
   await new Promise((resolvePromise, rejectPromise) => {
+    const isWindowsCmd =
+      process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
     const child = spawn(command, args, {
       cwd,
       env,
       stdio: "inherit",
-      shell: false,
+      shell: isWindowsCmd,
     });
 
     child.on("error", rejectPromise);

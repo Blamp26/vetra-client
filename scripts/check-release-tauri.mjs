@@ -8,7 +8,7 @@ await runCommand(npm, ["run", "check:release"], {
   label: "npm run check:release",
 });
 
-await runCommand(npm, ["run", "tauri", "build"], {
+await runCommand(npm, ["run", "tauri", "--", "build"], {
   env,
-  label: "npm run tauri build",
+  label: "npm run tauri -- build",
 });
