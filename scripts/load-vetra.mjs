@@ -131,6 +131,20 @@ function buildConfig() {
     writeResults: env.VETRA_LOAD_WRITE_RESULTS !== "0",
   };
 
+  config.serverSsh = String(config.serverSsh ?? "").trim();
+  config.serverService = String(config.serverService ?? "").trim();
+  config.serverPort = String(config.serverPort ?? "").trim();
+
+  if (config.serverMonitorEnabled) {
+    if (!config.serverService) {
+      fail("VETRA_LOAD_SERVER_SERVICE resolved to empty");
+    }
+
+    if (!config.serverPort) {
+      fail("VETRA_LOAD_SERVER_PORT resolved to empty");
+    }
+  }
+
   if (config.serverMonitorOnly) {
     if (!config.serverMonitorEnabled) {
       fail("VETRA_LOAD_SERVER_MONITOR_ONLY=1 requires VETRA_LOAD_SERVER_MONITOR=1.");
@@ -712,8 +726,8 @@ function validateServerSample(sample) {
 }
 
 function buildRemoteMonitorScript() {
-  const service = JSON.stringify(String(config.serverService));
-  const port = JSON.stringify(String(config.serverPort));
+  const service = shellQuote(config.serverService);
+  const port = shellQuote(config.serverPort);
 
   return `
 service=${service}
@@ -782,6 +796,10 @@ fi
 `.trim();
 }
 
+function buildRemoteMonitorCommand() {
+  return `bash -lc ${shellQuote(buildRemoteMonitorScript())}`;
+}
+
 function createServerMonitor(metrics) {
   if (!config.serverMonitorEnabled) {
     return null;
@@ -800,13 +818,16 @@ function createServerMonitor(metrics) {
     inFlight = true;
 
     try {
+      if (config.serverMonitorDebug && !debugPrinted) {
+        info(
+          `server monitor config: ssh=${config.serverSsh} service=${config.serverService} port=${config.serverPort}`,
+        );
+      }
       const { stdout } = await execFileAsync(
         "ssh",
         [
           config.serverSsh,
-          "bash",
-          "-lc",
-          buildRemoteMonitorScript(),
+          buildRemoteMonitorCommand(),
         ],
         {
           timeout: config.monitorSshTimeoutMs,
