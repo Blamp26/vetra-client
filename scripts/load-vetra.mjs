@@ -706,6 +706,13 @@ function validateServerSample(sample) {
     return "missing pid";
   }
 
+  if (sample.psLine) {
+    const fields = sample.psLine.trim().split(/\s+/);
+    if (fields.length < 5) {
+      return "invalid psLine";
+    }
+  }
+
   if (sample.cpuPercent === null) {
     return "missing cpuPercent";
   }
@@ -750,14 +757,18 @@ if [ -n "$pid" ] && [ "$pid" != "0" ]; then
   ps_line=$(ps -p "$pid" -o %cpu=,%mem=,rss=,vsz=,etime= 2>/dev/null | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
   echo "psLine=$ps_line"
   if [ -n "$ps_line" ]; then
-    IFS=',' read -r cpu_percent mem_percent rss_kib vsz_kib etime <<EOF
-$ps_line
-EOF
-    echo "cpuPercent=$(printf "%s" "$cpu_percent" | xargs)"
-    echo "memPercent=$(printf "%s" "$mem_percent" | xargs)"
-    echo "rssKiB=$(printf "%s" "$rss_kib" | xargs)"
-    echo "vszKiB=$(printf "%s" "$vsz_kib" | xargs)"
-    echo "etime=$(printf "%s" "$etime" | xargs)"
+    printf '%s\n' "$ps_line" | awk '
+      NF >= 5 {
+        print "cpuPercent=" $1
+        print "memPercent=" $2
+        print "rssKiB=" $3
+        print "vszKiB=" $4
+        print "etime=" $5
+      }
+      NF > 0 && NF < 5 {
+        print "psParseError=invalid"
+      }
+    '
   fi
 else
   echo "psLine="
