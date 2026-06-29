@@ -111,6 +111,18 @@ function buildConfig() {
     rampBatchSize: envInt("VETRA_LOAD_RAMP_BATCH_SIZE", 25),
     rampBatchDelayMs: envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
     startupTimeoutMs: envInt("VETRA_LOAD_STARTUP_TIMEOUT_MS", 15000),
+    roomRampBatchSize: envInt(
+      "VETRA_LOAD_ROOM_RAMP_BATCH_SIZE",
+      envInt("VETRA_LOAD_RAMP_BATCH_SIZE", 25),
+    ),
+    roomRampBatchDelayMs: envInt(
+      "VETRA_LOAD_ROOM_RAMP_BATCH_DELAY_MS",
+      envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
+    ),
+    roomJoinTimeoutMs: envInt(
+      "VETRA_LOAD_ROOM_JOIN_TIMEOUT_MS",
+      envInt("VETRA_LOAD_STARTUP_TIMEOUT_MS", 15000),
+    ),
     serverMonitorEnabled: env.VETRA_LOAD_SERVER_MONITOR === "1",
     serverSsh: env.VETRA_LOAD_SERVER_SSH || "superadmin@192.168.88.26",
     serverService:
@@ -410,6 +422,9 @@ function createMetrics(mode, vus, durationSeconds) {
     totalSocketConnects: 0,
     successfulJoins: 0,
     failedJoins: 0,
+    requestedRoomJoins: 0,
+    successfulRoomJoins: 0,
+    failedRoomJoins: 0,
     messagesAttempted: 0,
     messagesAcked: 0,
     messagesFailed: 0,
@@ -423,6 +438,7 @@ function createMetrics(mode, vus, durationSeconds) {
     ackLatenciesMs: [],
     errorsByType: {},
     startupErrorsByType: {},
+    roomJoinFailuresByType: {},
     serverMonitor: {
       enabled: false,
       samples: [],
@@ -439,6 +455,12 @@ function recordError(metrics, error) {
 function recordStartupError(metrics, error) {
   const key = error instanceof Error ? error.message : String(error);
   metrics.startupErrorsByType[key] = (metrics.startupErrorsByType[key] ?? 0) + 1;
+}
+
+function recordRoomJoinFailure(metrics, error) {
+  const key = error instanceof Error ? error.message : String(error);
+  metrics.roomJoinFailuresByType[key] =
+    (metrics.roomJoinFailuresByType[key] ?? 0) + 1;
 }
 
 function percentile(sorted, ratio) {
@@ -482,6 +504,9 @@ function summarizeMetrics(metrics) {
     totalSocketConnects: metrics.totalSocketConnects,
     successfulJoins: metrics.successfulJoins,
     failedJoins: metrics.failedJoins,
+    requestedRoomJoins: metrics.requestedRoomJoins,
+    successfulRoomJoins: metrics.successfulRoomJoins,
+    failedRoomJoins: metrics.failedRoomJoins,
     messagesAttempted: metrics.messagesAttempted,
     messagesAcked: metrics.messagesAcked,
     messagesFailed: metrics.messagesFailed,
@@ -496,6 +521,7 @@ function summarizeMetrics(metrics) {
     joinLatenciesMs: buildLatencyStats(metrics.joinLatenciesMs),
     errorsByType: metrics.errorsByType,
     startupErrorsByType: metrics.startupErrorsByType,
+    roomJoinFailuresByType: metrics.roomJoinFailuresByType,
     serverMetrics: summarizeServerMonitor(metrics.serverMonitor),
   };
 }
@@ -511,6 +537,11 @@ function printSummary(metrics) {
   console.log(`socket connects: ${summary.totalSocketConnects}`);
   console.log(`successful joins: ${summary.successfulJoins}`);
   console.log(`failed joins: ${summary.failedJoins}`);
+  console.log(`user channel joins: ${summary.successfulJoins}/${summary.requestedVus}`);
+  console.log(
+    `room channel joins: ${summary.successfulRoomJoins}/${summary.requestedRoomJoins}`,
+  );
+  console.log(`room channel join failures: ${summary.failedRoomJoins}`);
   console.log(`messages attempted: ${summary.messagesAttempted}`);
   console.log(`messages acked: ${summary.messagesAcked}`);
   console.log(`messages failed: ${summary.messagesFailed}`);
@@ -531,6 +562,9 @@ function printSummary(metrics) {
   );
   console.log(
     `startup errors by type: ${JSON.stringify(summary.startupErrorsByType)}`,
+  );
+  console.log(
+    `room join failures by type: ${JSON.stringify(summary.roomJoinFailuresByType)}`,
   );
 
   if (summary.serverMetrics.enabled) {
@@ -1267,6 +1301,72 @@ async function ensureRoomChannel(session, target, metrics) {
   return roomChannel;
 }
 
+async function joinRoomChannels(sessions, metrics, target) {
+  const joinedSessions = [];
+
+  for (
+    let index = 0;
+    index < sessions.length;
+    index += config.roomRampBatchSize
+  ) {
+    if (shutdownRequested) {
+      break;
+    }
+
+    const batchEnd = Math.min(sessions.length, index + config.roomRampBatchSize);
+    const batchSessions = sessions.slice(index, batchEnd);
+    info(`Joining room VUs ${index + 1}-${batchEnd}/${sessions.length}`);
+
+    metrics.requestedRoomJoins += batchSessions.length;
+
+    const batchResults = await Promise.allSettled(
+      batchSessions.map(async (session, batchIndex) => {
+        try {
+          await ensureRoomChannel(session, target, metrics);
+          metrics.successfulRoomJoins += 1;
+          return { ok: true, session };
+        } catch (error) {
+          metrics.failedRoomJoins += 1;
+          const wrappedError =
+            error instanceof Error ? error : new Error(String(error));
+          recordRoomJoinFailure(metrics, wrappedError);
+          const vuIndex = index + batchIndex + 1;
+          info(
+            `Failed room join for VU ${vuIndex} (${session.label}): ${wrappedError.message}`,
+          );
+          return { ok: false, session, error: wrappedError };
+        }
+      }),
+    );
+
+    for (const result of batchResults) {
+      if (result.status === "fulfilled" && result.value.ok) {
+        joinedSessions.push(result.value.session);
+        continue;
+      }
+
+      if (result.status === "rejected") {
+        metrics.failedRoomJoins += 1;
+        const wrappedError =
+          result.reason instanceof Error
+            ? result.reason
+            : new Error(String(result.reason));
+        recordRoomJoinFailure(metrics, wrappedError);
+      }
+    }
+
+    info(
+      `Room joined ${joinedSessions.length}/${sessions.length} VUs, failed ${metrics.failedRoomJoins}`,
+    );
+
+    if (batchEnd < sessions.length && !shutdownRequested) {
+      await sleep(config.roomRampBatchDelayMs);
+    }
+  }
+
+  return joinedSessions;
+}
+
 async function ensureCallChannel(session, metrics) {
   if (session.callChannel) return session.callChannel;
 
@@ -1434,8 +1534,11 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
     return;
   }
 
-  for (const session of sessions) {
-    await ensureRoomChannel(session, target, metrics);
+  const roomJoinedSessions = await joinRoomChannels(sessions, metrics, target);
+
+  if (roomJoinedSessions.length === 0) {
+    info("No VUs joined the room channel; cannot run channel message load");
+    throw new Error("No VUs joined the room channel; cannot run channel message load");
   }
 
   if (!config.writeEnabled) {
@@ -1450,7 +1553,7 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
   let sendIndex = 0;
 
   const ticker = createTicker(async () => {
-    const session = sessions[sendIndex % sessions.length];
+    const session = roomJoinedSessions[sendIndex % roomJoinedSessions.length];
     sendIndex += 1;
 
     try {
@@ -1687,6 +1790,7 @@ async function main() {
   const metrics = createMetrics(config.mode, config.vus, config.durationSeconds);
   const sessions = [];
   const serverMonitor = createServerMonitor(metrics);
+  let fatalError = null;
 
   try {
     serverMonitor?.start();
@@ -1714,7 +1818,7 @@ async function main() {
     }
   } catch (error) {
     recordError(metrics, error);
-    throw error;
+    fatalError = error instanceof Error ? error : new Error(String(error));
   } finally {
     await serverMonitor?.stop();
     cleanupSessions(metrics, sessions);
@@ -1725,6 +1829,10 @@ async function main() {
 
   printSummary(metrics);
   writeResults(metrics);
+
+  if (fatalError) {
+    throw fatalError;
+  }
 }
 
 await main().catch((error) => {
