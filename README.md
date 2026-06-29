@@ -179,3 +179,35 @@ Works on **Windows**, **macOS**, and **Linux**.
 [![Star on GitHub](https://img.shields.io/github/stars/Blamp26/vetra-client?style=social)](https://github.com/Blamp26/vetra-client/releases)
 
 </div>
+
+---
+
+## Developer Smoke Checks
+
+Copy `.env.smoke.example` to `.env.smoke`, fill in the LAN backend URLs and test-user credentials, and keep `.env.smoke` out of git. The smoke login currently uses the same `username` field as the app.
+
+Read-only smoke:
+
+```bash
+npm run smoke:lan
+```
+
+Write smoke with tagged test messages and reaction toggles:
+
+```bash
+npm run smoke:lan:write
+```
+
+Release check without Tauri packaging:
+
+```bash
+npm run check:release
+```
+
+Release check including Tauri packaging:
+
+```bash
+npm run check:release:tauri
+```
+
+The release wrappers reuse `VETRA_SMOKE_API_URL` and `VETRA_SMOKE_SOCKET_URL` as `VITE_API_URL` and `VITE_SOCKET_URL` when those build variables are not already set.

@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "smoke:lan": "node scripts/smoke-vetra.mjs",
+    "smoke:lan:write": "node scripts/smoke-vetra.mjs --write",
+    "check:release": "node scripts/check-release.mjs",
+    "check:release:tauri": "node scripts/check-release-tauri.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
