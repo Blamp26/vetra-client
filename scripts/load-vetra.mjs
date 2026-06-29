@@ -426,16 +426,24 @@ function createMetrics(mode, vus, durationSeconds) {
     startedVus: 0,
     startupFailures: 0,
     totalSocketConnects: 0,
+    requestedUserChannelJoins: 0,
+    successfulUserChannelJoins: 0,
+    failedUserChannelJoins: 0,
     successfulJoins: 0,
     failedJoins: 0,
     requestedRoomJoins: 0,
     successfulRoomJoins: 0,
     failedRoomJoins: 0,
+    controlledRoomJoinFailures: 0,
     messagesAttempted: 0,
     messagesAcked: 0,
     messagesFailed: 0,
     receivedBroadcasts: 0,
+    receivedBroadcastsByEvent: {},
+    receivedBroadcastsByTopicType: {},
     expectedCloses: 0,
+    cleanupCloses: 0,
+    earlySocketDisconnects: 0,
     unexpectedDisconnects: 0,
     runtimeSocketErrors: 0,
     disconnectCount: 0,
@@ -469,6 +477,19 @@ function recordRoomJoinFailure(metrics, error) {
     (metrics.roomJoinFailuresByType[key] ?? 0) + 1;
 }
 
+function recordBroadcast(metrics, topicType, event) {
+  metrics.receivedBroadcasts += 1;
+  metrics.receivedBroadcastsByEvent[event] =
+    (metrics.receivedBroadcastsByEvent[event] ?? 0) + 1;
+  metrics.receivedBroadcastsByTopicType[topicType] =
+    (metrics.receivedBroadcastsByTopicType[topicType] ?? 0) + 1;
+}
+
+function recalculateDisconnectCount(metrics) {
+  metrics.disconnectCount =
+    metrics.cleanupCloses + metrics.earlySocketDisconnects;
+}
+
 function percentile(sorted, ratio) {
   if (sorted.length === 0) return null;
   const index = Math.min(
@@ -498,8 +519,6 @@ function approxMessagesPerSecond(metrics) {
 }
 
 function summarizeMetrics(metrics) {
-  const disconnectCount =
-    metrics.expectedCloses + metrics.unexpectedDisconnects;
   return {
     duration: metrics.durationSeconds,
     requestedVus: metrics.vus,
@@ -508,17 +527,25 @@ function summarizeMetrics(metrics) {
     startupFailures: metrics.startupFailures,
     targetMode: metrics.mode,
     totalSocketConnects: metrics.totalSocketConnects,
+    requestedUserChannelJoins: metrics.requestedUserChannelJoins,
+    successfulUserChannelJoins: metrics.successfulUserChannelJoins,
+    failedUserChannelJoins: metrics.failedUserChannelJoins,
     successfulJoins: metrics.successfulJoins,
     failedJoins: metrics.failedJoins,
     requestedRoomJoins: metrics.requestedRoomJoins,
     successfulRoomJoins: metrics.successfulRoomJoins,
     failedRoomJoins: metrics.failedRoomJoins,
+    controlledRoomJoinFailures: metrics.controlledRoomJoinFailures,
     messagesAttempted: metrics.messagesAttempted,
     messagesAcked: metrics.messagesAcked,
     messagesFailed: metrics.messagesFailed,
     receivedBroadcasts: metrics.receivedBroadcasts,
-    disconnectCount,
+    receivedBroadcastsByEvent: metrics.receivedBroadcastsByEvent,
+    receivedBroadcastsByTopicType: metrics.receivedBroadcastsByTopicType,
+    disconnectCount: metrics.disconnectCount,
     expectedCloses: metrics.expectedCloses,
+    cleanupCloses: metrics.cleanupCloses,
+    earlySocketDisconnects: metrics.earlySocketDisconnects,
     unexpectedDisconnects: metrics.unexpectedDisconnects,
     runtimeSocketErrors: metrics.runtimeSocketErrors,
     approximateMessagesPerSecond: approxMessagesPerSecond(metrics),
@@ -541,19 +568,31 @@ function printSummary(metrics) {
   console.log(`started VUs: ${summary.startedVus}`);
   console.log(`startup failures: ${summary.startupFailures}`);
   console.log(`socket connects: ${summary.totalSocketConnects}`);
-  console.log(`successful joins: ${summary.successfulJoins}`);
-  console.log(`failed joins: ${summary.failedJoins}`);
-  console.log(`user channel joins: ${summary.successfulJoins}/${summary.requestedVus}`);
+  console.log(
+    `user channel joins: ${summary.successfulUserChannelJoins}/${summary.requestedUserChannelJoins}`,
+  );
+  console.log(`user channel join failures: ${summary.failedUserChannelJoins}`);
   console.log(
     `room channel joins: ${summary.successfulRoomJoins}/${summary.requestedRoomJoins}`,
   );
   console.log(`room channel join failures: ${summary.failedRoomJoins}`);
+  console.log(`total successful joins: ${summary.successfulJoins}`);
+  console.log(`total failed joins: ${summary.failedJoins}`);
+  console.log(`controlled room join failures: ${summary.controlledRoomJoinFailures}`);
   console.log(`messages attempted: ${summary.messagesAttempted}`);
   console.log(`messages acked: ${summary.messagesAcked}`);
   console.log(`messages failed: ${summary.messagesFailed}`);
-  console.log(`received broadcasts: ${summary.receivedBroadcasts}`);
+  console.log(`received broadcasts total: ${summary.receivedBroadcasts}`);
+  console.log(
+    `received broadcasts by event: ${JSON.stringify(summary.receivedBroadcastsByEvent)}`,
+  );
+  console.log(
+    `received broadcasts by topic type: ${JSON.stringify(summary.receivedBroadcastsByTopicType)}`,
+  );
   console.log(`disconnect count: ${summary.disconnectCount}`);
   console.log(`expected closes: ${summary.expectedCloses}`);
+  console.log(`cleanup closes: ${summary.cleanupCloses}`);
+  console.log(`early socket disconnects: ${summary.earlySocketDisconnects}`);
   console.log(`unexpected disconnects: ${summary.unexpectedDisconnects}`);
   console.log(`runtime socket errors: ${summary.runtimeSocketErrors}`);
   console.log(`approx msg/sec: ${summary.approximateMessagesPerSecond}`);
@@ -1071,12 +1110,13 @@ function markSessionExpectedClose(session, metrics) {
     session.socket &&
     session.connected &&
     session.joined &&
-    !session.expectedClose
+    !session.expectedClose &&
+    !session.closeObserved
   ) {
     session.expectedClose = true;
     metrics.expectedCloses += 1;
-    metrics.disconnectCount =
-      metrics.expectedCloses + metrics.unexpectedDisconnects;
+    metrics.cleanupCloses += 1;
+    recalculateDisconnectCount(metrics);
   }
 }
 
@@ -1096,6 +1136,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     cleanupStarted: false,
     connected: false,
     joined: false,
+    hadControlledRoomJoinFailure: false,
     expectedClose: false,
     closeObserved: false,
   };
@@ -1119,17 +1160,18 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
       activeSessions.delete(session);
 
       if (!session.connected || !session.joined) {
-        metrics.disconnectCount =
-          metrics.expectedCloses + metrics.unexpectedDisconnects;
+        recalculateDisconnectCount(metrics);
         return;
       }
 
       if (!isCleaningUp && !session.cleanupStarted && !session.expectedClose) {
-        metrics.unexpectedDisconnects += 1;
+        metrics.earlySocketDisconnects += 1;
+        if (!session.hadControlledRoomJoinFailure) {
+          metrics.unexpectedDisconnects += 1;
+        }
       }
 
-      metrics.disconnectCount =
-        metrics.expectedCloses + metrics.unexpectedDisconnects;
+      recalculateDisconnectCount(metrics);
     });
 
     socket.onError((error) => {
@@ -1165,13 +1207,13 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     const userChannel = socket.channel(`user:${auth.user.id}`, {});
     session.userChannel = userChannel;
     userChannel.on("new_message", () => {
-      metrics.receivedBroadcasts += 1;
+      recordBroadcast(metrics, "user", "new_message");
     });
     userChannel.on("new_room_message", () => {
-      metrics.receivedBroadcasts += 1;
+      recordBroadcast(metrics, "user", "new_room_message");
     });
     userChannel.on("incoming_call", () => {
-      metrics.receivedBroadcasts += 1;
+      recordBroadcast(metrics, "user", "incoming_call");
     });
 
     await joinChannel(
@@ -1182,6 +1224,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     );
     session.joined = true;
     metrics.startedVus += 1;
+    metrics.successfulUserChannelJoins += 1;
 
     return session;
   } catch (error) {
@@ -1243,8 +1286,7 @@ function cleanupSessions(metrics, sessions) {
     closeSession(session, metrics);
   }
 
-  metrics.disconnectCount =
-    metrics.expectedCloses + metrics.unexpectedDisconnects;
+  recalculateDisconnectCount(metrics);
 }
 
 async function resolveTargets(primaryAuth, secondaryAuth) {
@@ -1313,7 +1355,7 @@ async function ensureRoomChannel(session, target, metrics) {
 
   const roomChannel = session.socket.channel(`room:${target.roomRef}`, {});
   roomChannel.on("new_room_message", () => {
-    metrics.receivedBroadcasts += 1;
+    recordBroadcast(metrics, "room", "new_room_message");
   });
   await joinChannel(roomChannel, `${session.label} room:${target.roomRef}`, metrics);
   session.roomChannels.set(target.roomId, roomChannel);
@@ -1352,6 +1394,8 @@ function createRoomJoinAttempt(session, target, metrics, vuIndex) {
 
     metrics.failedJoins += 1;
     metrics.failedRoomJoins += 1;
+    metrics.controlledRoomJoinFailures += 1;
+    session.hadControlledRoomJoinFailure = true;
     recordRoomJoinFailure(metrics, wrappedError);
     cleanupRoomChannel(session, target.roomId, roomChannel);
     info(
@@ -1387,7 +1431,7 @@ function createRoomJoinAttempt(session, target, metrics, vuIndex) {
     } else {
       roomChannel = session.socket.channel(`room:${target.roomRef}`, {});
       roomChannel.on("new_room_message", () => {
-        metrics.receivedBroadcasts += 1;
+        recordBroadcast(metrics, "room", "new_room_message");
       });
       roomChannel
         .join()
@@ -1494,16 +1538,16 @@ async function ensureCallChannel(session, metrics) {
   const callRef = session.auth.user.public_id ?? session.auth.user.id;
   const channel = session.socket.channel(`call:${callRef}`, {});
   channel.on("offer", () => {
-    metrics.receivedBroadcasts += 1;
+    recordBroadcast(metrics, "call", "offer");
   });
   channel.on("answer", () => {
-    metrics.receivedBroadcasts += 1;
+    recordBroadcast(metrics, "call", "answer");
   });
   channel.on("ice_candidate", () => {
-    metrics.receivedBroadcasts += 1;
+    recordBroadcast(metrics, "call", "ice_candidate");
   });
   channel.on("hang_up", () => {
-    metrics.receivedBroadcasts += 1;
+    recordBroadcast(metrics, "call", "hang_up");
   });
 
   await joinChannel(channel, `${session.label} call:${callRef}`, metrics);
@@ -1527,6 +1571,7 @@ async function createSessions(primaryAuth, metrics) {
     }
 
     info(`Starting VUs ${index + 1}-${batchEnd}/${config.vus}`);
+    metrics.requestedUserChannelJoins += batchIndices.length;
 
     const batchResults = await Promise.allSettled(
       batchIndices.map(async (cursor) => {
@@ -1541,6 +1586,7 @@ async function createSessions(primaryAuth, metrics) {
           return { ok: true, session, label };
         } catch (error) {
           metrics.startupFailures += 1;
+          metrics.failedUserChannelJoins += 1;
           const wrappedError =
             error instanceof Error ? error : new Error(String(error));
           recordStartupError(metrics, wrappedError);
@@ -1857,7 +1903,7 @@ async function runSoakMode(sessions, metrics, target) {
   const statsTicker = setInterval(() => {
     const summary = summarizeMetrics(metrics);
     console.log(
-      `[load] soak stats: connects=${summary.totalSocketConnects} joins=${summary.successfulJoins}/${summary.failedJoins} acked=${summary.messagesAcked} failed=${summary.messagesFailed} broadcasts=${summary.receivedBroadcasts}`,
+      `[load] soak stats: connects=${summary.totalSocketConnects} userJoins=${summary.successfulUserChannelJoins}/${summary.failedUserChannelJoins} roomJoins=${summary.successfulRoomJoins}/${summary.failedRoomJoins} acked=${summary.messagesAcked} failed=${summary.messagesFailed} broadcasts=${summary.receivedBroadcasts}`,
     );
   }, 5000);
 
