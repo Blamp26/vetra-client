@@ -508,6 +508,12 @@ function createMetrics(mode, vus, durationSeconds) {
     successfulRoomJoins: 0,
     failedRoomJoins: 0,
     controlledRoomJoinFailures: 0,
+    activeRoomSetAttempts: 0,
+    activeRoomSetSuccesses: 0,
+    activeRoomSetFailures: 0,
+    activeRoomClearAttempts: 0,
+    activeRoomClearSuccesses: 0,
+    activeRoomClearFailures: 0,
     messagesAttempted: 0,
     messagesAcked: 0,
     messagesFailed: 0,
@@ -800,6 +806,12 @@ function summarizeMetrics(metrics) {
     successfulRoomJoins: metrics.successfulRoomJoins,
     failedRoomJoins: metrics.failedRoomJoins,
     controlledRoomJoinFailures: metrics.controlledRoomJoinFailures,
+    activeRoomSetAttempts: metrics.activeRoomSetAttempts,
+    activeRoomSetSuccesses: metrics.activeRoomSetSuccesses,
+    activeRoomSetFailures: metrics.activeRoomSetFailures,
+    activeRoomClearAttempts: metrics.activeRoomClearAttempts,
+    activeRoomClearSuccesses: metrics.activeRoomClearSuccesses,
+    activeRoomClearFailures: metrics.activeRoomClearFailures,
     messagesAttempted: metrics.messagesAttempted,
     messagesAcked: metrics.messagesAcked,
     messagesFailed: metrics.messagesFailed,
@@ -866,6 +878,12 @@ function printSummary(metrics) {
   console.log(`total successful joins: ${summary.successfulJoins}`);
   console.log(`total failed joins: ${summary.failedJoins}`);
   console.log(`controlled room join failures: ${summary.controlledRoomJoinFailures}`);
+  console.log(`active room set attempts: ${summary.activeRoomSetAttempts}`);
+  console.log(`active room set successes: ${summary.activeRoomSetSuccesses}`);
+  console.log(`active room set failures: ${summary.activeRoomSetFailures}`);
+  console.log(`active room clear attempts: ${summary.activeRoomClearAttempts}`);
+  console.log(`active room clear successes: ${summary.activeRoomClearSuccesses}`);
+  console.log(`active room clear failures: ${summary.activeRoomClearFailures}`);
   console.log(`messages attempted: ${summary.messagesAttempted}`);
   console.log(`messages acked: ${summary.messagesAcked}`);
   console.log(`messages failed: ${summary.messagesFailed}`);
@@ -1409,6 +1427,26 @@ function pushOk(channel, event, payload, label, metrics, timeoutMs = config.mess
   });
 }
 
+function pushControlOk(channel, event, payload, label, timeoutMs = config.messageTimeoutMs) {
+  return new Promise((resolve, reject) => {
+    channel
+      .push(event, payload, timeoutMs)
+      .receive("ok", (response) => {
+        resolve(response);
+      })
+      .receive("error", (resp) => {
+        reject(
+          new Error(
+            `${label} failed: ${resp?.reason ?? resp?.error ?? JSON.stringify(resp)}`,
+          ),
+        );
+      })
+      .receive("timeout", () => {
+        reject(new Error(`${label} timed out`));
+      });
+  });
+}
+
 function onSocketOpen(socket) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -1479,6 +1517,8 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     currentPhase: "startup",
     socketOpenedAt: null,
     canSendMessages: false,
+    activeRoomSet: false,
+    activeRoomRef: null,
     currentSendInFlight: false,
     currentSendInFlightCount: 0,
     lastRoomJoinAttempted: false,
@@ -1590,6 +1630,60 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
   }
 }
 
+async function setActiveRoomForSession(session, target, metrics, timeoutMs = config.roomJoinTimeoutMs) {
+  if (!session?.userChannel || !session.joined || !target?.roomRef) {
+    return false;
+  }
+
+  if (session.activeRoomSet && session.activeRoomRef === target.roomRef) {
+    return true;
+  }
+
+  metrics.activeRoomSetAttempts += 1;
+
+  try {
+    await pushControlOk(
+      session.userChannel,
+      "active_room:set",
+      { room_id: target.roomRef },
+      `${session.label} active_room:set`,
+      timeoutMs,
+    );
+    session.activeRoomSet = true;
+    session.activeRoomRef = target.roomRef;
+    metrics.activeRoomSetSuccesses += 1;
+    return true;
+  } catch (error) {
+    metrics.activeRoomSetFailures += 1;
+    throw error;
+  }
+}
+
+async function clearActiveRoomForSession(session, metrics, timeoutMs = 1000) {
+  if (!session?.userChannel || !session.joined || !session.activeRoomSet) {
+    return false;
+  }
+
+  metrics.activeRoomClearAttempts += 1;
+
+  try {
+    await pushControlOk(
+      session.userChannel,
+      "active_room:clear",
+      {},
+      `${session.label} active_room:clear`,
+      timeoutMs,
+    );
+    session.activeRoomSet = false;
+    session.activeRoomRef = null;
+    metrics.activeRoomClearSuccesses += 1;
+    return true;
+  } catch {
+    metrics.activeRoomClearFailures += 1;
+    return false;
+  }
+}
+
 function closeSession(session, metrics = session.metricsRef) {
   session.cleanupStarted = true;
   session.currentPhase = "cleanup";
@@ -1629,7 +1723,7 @@ function cleanupRoomChannel(session, roomId, channel = null) {
   } catch {}
 }
 
-function cleanupSessions(metrics, sessions) {
+async function cleanupSessions(metrics, sessions) {
   isCleaningUp = true;
   const cleanupTargets =
     activeSessions.size > 0 ? [...activeSessions] : sessions;
@@ -1639,6 +1733,10 @@ function cleanupSessions(metrics, sessions) {
       markSessionExpectedClose(session, metrics);
     }
   }
+
+  await Promise.allSettled(
+    cleanupTargets.map((session) => clearActiveRoomForSession(session, metrics)),
+  );
 
   for (const session of cleanupTargets) {
     closeSession(session, metrics);
@@ -1763,18 +1861,30 @@ function createRoomJoinAttempt(session, target, metrics, vuIndex) {
     return true;
   };
 
-  const succeed = () => {
-    if (!finish({ ok: true, session })) {
+  const succeed = async () => {
+    try {
+      await setActiveRoomForSession(
+        session,
+        target,
+        metrics,
+        config.roomJoinTimeoutMs,
+      );
+
+      if (!finish({ ok: true, session })) {
+        return false;
+      }
+
+      metrics.successfulJoins += 1;
+      metrics.successfulRoomJoins += 1;
+      metrics.joinLatenciesMs.push(performance.now() - startedAt);
+      session.roomChannels.set(target.roomId, roomChannel);
+      session.canSendMessages = true;
+      session.currentPhase = "ready";
+      return true;
+    } catch (error) {
+      fail(error);
       return false;
     }
-
-    metrics.successfulJoins += 1;
-    metrics.successfulRoomJoins += 1;
-    metrics.joinLatenciesMs.push(performance.now() - startedAt);
-    session.roomChannels.set(target.roomId, roomChannel);
-    session.canSendMessages = true;
-    session.currentPhase = "ready";
-    return true;
   };
 
   const timeout = setTimeout(() => {
@@ -1790,7 +1900,7 @@ function createRoomJoinAttempt(session, target, metrics, vuIndex) {
     session.currentPhase = "room_join";
     if (session.roomChannels.has(target.roomId)) {
       roomChannel = session.roomChannels.get(target.roomId);
-      succeed();
+      void succeed();
     } else {
       roomChannel = session.socket.channel(`room:${target.roomRef}`, {});
       roomChannel.on("new_room_message", () => {
@@ -1799,7 +1909,7 @@ function createRoomJoinAttempt(session, target, metrics, vuIndex) {
       roomChannel
         .join()
         .receive("ok", () => {
-          succeed();
+          void succeed();
         })
         .receive("error", (resp) => {
           fail(new Error(`${label} join failed: ${resp?.reason ?? "unknown error"}`));
@@ -2648,7 +2758,7 @@ async function main() {
     fatalError = error instanceof Error ? error : new Error(String(error));
   } finally {
     await serverMonitor?.stop();
-    cleanupSessions(metrics, sessions);
+    await cleanupSessions(metrics, sessions);
     if (sessions.length > 0) {
       await sleep(250);
     }
