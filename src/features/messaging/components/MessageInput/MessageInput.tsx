@@ -4,6 +4,13 @@ import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { withFallbackRef } from "@/shared/utils/refs";
+import {
+  MESSAGE_ATTACHMENT_ACCEPT,
+  formatAttachmentSize,
+  getAttachmentKindLabel,
+  inferAttachmentKind,
+  validateAttachmentFile,
+} from "../../utils/attachments";
  
 interface ReplyTarget { id: number; content: string; author: string; } 
  
@@ -77,7 +84,7 @@ interface Props {
     };
   }, [previewUrl]);
 
-   const stopTyping = () => { onTypingStop?.() }; 
+  const stopTyping = () => { onTypingStop?.() }; 
  
    const handleChange = (value: string) => { 
     setContent(value); 
@@ -93,6 +100,30 @@ interface Props {
     setPreviewUrl(null);
     setPendingFile(null);
     setUploadStatus("idle");
+    setUploadProgress(0);
+    setUploadError(null);
+  };
+
+  const setPendingAttachment = (file: File) => {
+    const validationError = validateAttachmentFile(file);
+    if (validationError) {
+      cancelPreview();
+      setUploadStatus("error");
+      setUploadError(validationError);
+      return;
+    }
+
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+
+    const nextPreviewUrl =
+      inferAttachmentKind(file.type) === "photo"
+        ? URL.createObjectURL(file)
+        : null;
+
+    setPreviewUrl(nextPreviewUrl);
+    setPendingFile(file);
+    setUploadStatus("idle");
+    setUploadProgress(0);
     setUploadError(null);
   };
  
@@ -195,11 +226,7 @@ interface Props {
     event.currentTarget.value = "";
     if (!file) return;
 
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    setPendingFile(file);
-    setUploadStatus("idle");
-    setUploadError(null);
+    setPendingAttachment(file);
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -211,9 +238,7 @@ interface Props {
     const file = imageItem.getAsFile();
     if (!file) return;
 
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    setPendingFile(file);
+    setPendingAttachment(file);
   };
 
   const handleAttachClick = () => {
@@ -232,6 +257,9 @@ interface Props {
      } 
    }; 
  
+  const pendingKind = pendingFile ? inferAttachmentKind(pendingFile.type) : null;
+  const pendingKindLabel = pendingKind ? getAttachmentKindLabel(pendingKind) : null;
+
    return ( 
      <div className="flex flex-col border-t border-border bg-background"> 
        {isEditing && ( 
@@ -258,20 +286,27 @@ interface Props {
         </div>
        )}
 
-       {previewUrl && (
-         <div className="p-2 flex items-center gap-2">
-           <div className="relative border border-border p-1">
-             {pendingFile?.type.startsWith("image/") ? (
+       {pendingFile && (
+         <div className="p-2 flex items-center gap-3 border-b border-border">
+           <div className="relative border border-border p-1 shrink-0">
+             {previewUrl ? (
                <img src={previewUrl} className="w-12 h-12 object-cover" alt="preview" />
              ) : (
-               <div className="w-12 h-12 bg-muted flex items-center justify-center">File</div>
+               <div className="w-12 h-12 bg-muted flex items-center justify-center text-[10px]">
+                 {pendingKindLabel}
+               </div>
              )}
              <button 
                onClick={cancelPreview}
                className="absolute -top-2 -right-2 bg-background border border-border px-1 text-[10px]"
              >X</button>
            </div>
-           <span className="text-xs truncate">{pendingFile?.name}</span>
+           <div className="min-w-0 flex-1">
+             <div className="text-xs truncate">{pendingFile.name}</div>
+             <div className="text-[10px] text-muted-foreground">
+               {pendingKindLabel} · {formatAttachmentSize(pendingFile.size)}
+             </div>
+           </div>
          </div>
        )}
 
@@ -294,6 +329,7 @@ interface Props {
             type="file" 
             ref={fileInputRef} 
             className="hidden" 
+            accept={MESSAGE_ATTACHMENT_ACCEPT}
             onChange={handleFileChange} 
           />
 

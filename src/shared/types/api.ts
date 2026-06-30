@@ -16,6 +16,17 @@ export interface User {
 
 export type MessageStatus = "sent" | "delivered" | "read" | "error";
 
+export type AttachmentKind = "photo" | "video" | "file";
+
+export interface Attachment {
+  id: string;
+  url: string;
+  mime_type: string;
+  original_name: string | null;
+  file_size: number | null;
+  kind: AttachmentKind;
+}
+
 // Сгруппированная реакция для одного emoji на одном сообщении
 export interface MessageReactionGroup {
   emoji:    string;
@@ -42,6 +53,7 @@ export interface Message {
   recipient_display_name?: string | null;
   media_file_id?:          string | null;
   media_mime_type?:        string | null;
+  attachment?:             Attachment | null;
   sender?:                 User;
   reactions?:              MessageReactionGroup[];
 }
@@ -95,8 +107,29 @@ export interface RoomMessageSummary {
   preview: string;
   message_type: "text" | "media" | "mixed";
   media_type?: string | null;
+  attachment_kind?: AttachmentKind | null;
+  attachment_name?: string | null;
+  attachment_size?: number | null;
+  attachment_mime_type?: string | null;
   unread_delta?: number;
   mention?: boolean;
+}
+
+export interface PreviewMessage {
+  id: number;
+  content: string | null;
+  preview?: string | null;
+  inserted_at: string;
+  sender_id: number;
+  sender_public_id?: string | null;
+  status: MessageStatus;
+  media_file_id?: string | null;
+  media_mime_type?: string | null;
+  attachment?: Attachment | null;
+  attachment_kind?: AttachmentKind | null;
+  attachment_name?: string | null;
+  attachment_size?: number | null;
+  attachment_mime_type?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,16 +142,7 @@ export interface ConversationPreview {
   partner_username:     string;
   partner_display_name: string | null;
   unread_count:         number;
-  last_message: {
-    id:          number;
-    content:     string | null;
-    inserted_at: string;
-    sender_id:   number;
-    sender_public_id?: string | null;
-    status:      MessageStatus;
-    media_file_id?:   string | null;
-    media_mime_type?: string | null;
-  };
+  last_message: PreviewMessage;
 }
 
 export interface Room {
@@ -143,16 +167,7 @@ export interface RoomPreview {
   inserted_at: string;
   unread_count: number;
   last_message_at: string | null;
-  last_message: {
-    id:          number;
-    content:     string | null;
-    inserted_at: string;
-    sender_id:   number;
-    sender_public_id?: string | null;
-    status:      MessageStatus;
-    media_file_id?:   string | null;
-    media_mime_type?: string | null;
-  } | null;
+  last_message: PreviewMessage | null;
   members?: Array<{
     id: number;
     public_id?: string | null;

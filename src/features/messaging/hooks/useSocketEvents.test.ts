@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { useAppStoreMock, getStateMock, showNotificationMock } = vi.hoisted(() => ({
@@ -141,9 +141,13 @@ describe("useSocketEvents", () => {
       sender_public_id: "sender-public-id",
       sender_display_name: "Alice",
       inserted_at: "2026-06-30T12:00:00Z",
-      preview: "hello summary",
-      message_type: "text",
-      media_type: null,
+      preview: "File: report.pdf",
+      message_type: "media",
+      media_type: "application/pdf",
+      attachment_kind: "file",
+      attachment_name: "report.pdf",
+      attachment_size: 5678,
+      attachment_mime_type: "application/pdf",
       unread_delta: 1,
       mention: false,
     });
@@ -157,15 +161,77 @@ describe("useSocketEvents", () => {
         last_message_at: "2026-06-30T12:00:00Z",
         last_message: expect.objectContaining({
           id: 101,
-          content: "hello summary",
+          content: "File: report.pdf",
+          preview: "File: report.pdf",
           sender_id: 2,
-          media_mime_type: null,
+          media_mime_type: "application/pdf",
+          attachment_kind: "file",
+          attachment_name: "report.pdf",
+          attachment_size: 5678,
+          attachment_mime_type: "application/pdf",
         }),
       }),
     );
     expect(state.incrementChannelUnread).toHaveBeenCalledWith(9);
     expect(state.incrementRoomUnread).not.toHaveBeenCalled();
     expect(state.appendRoomMessage).not.toHaveBeenCalled();
+  });
+
+  it("preserves attachment metadata for direct message preview upserts", async () => {
+    const { state, handlers } = makeState();
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+    getStateMock.mockImplementation(() => state);
+
+    renderHook(() => useSocketEvents());
+
+    handlers.message?.({
+      id: 303,
+      content: null,
+      sender_id: 2,
+      sender_public_id: "sender-public-id",
+      recipient_id: 1,
+      recipient_public_id: "recipient-public-id",
+      status: "sent",
+      inserted_at: "2026-06-30T12:05:00Z",
+      sender_display_name: "Alice",
+      sender_username: "alice",
+      media_file_id: "media-file-1",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "media-file-1",
+        url: "/api/v1/media/media-file-1",
+        mime_type: "application/pdf",
+        original_name: "report.pdf",
+        file_size: 5678,
+        kind: "file",
+      },
+    });
+
+    await waitFor(() => {
+      expect(state.upsertPreview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          partner_id: 2,
+          last_message: expect.objectContaining({
+            id: 303,
+            preview: "File: report.pdf",
+            media_file_id: "media-file-1",
+            media_mime_type: "application/pdf",
+            attachment: expect.objectContaining({
+              id: "media-file-1",
+              original_name: "report.pdf",
+              mime_type: "application/pdf",
+            }),
+            attachment_kind: "file",
+            attachment_name: "report.pdf",
+            attachment_size: 5678,
+            attachment_mime_type: "application/pdf",
+          }),
+        }),
+      );
+    });
   });
 
   it("keeps legacy user-channel new_room_message as preview/unread only", async () => {

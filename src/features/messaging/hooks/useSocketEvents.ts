@@ -4,6 +4,11 @@ import type { Message, RoomMessageSummary } from "@/shared/types";
 import { showNotification } from "@/services/notifications";
 import { markReadViaChannel } from "@/services/socket";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import {
+  buildPreviewMessage,
+  buildPreviewMessageFromSummary,
+  getPreviewText,
+} from "../utils/attachments";
 
 export function useSocketEvents() {
   const {
@@ -112,16 +117,7 @@ export function useSocketEvents() {
         id: roomId,
         public_id: msg.room_public_id,
         last_message_at: msg.inserted_at,
-        last_message: {
-          id: msg.id,
-          content: msg.content,
-          inserted_at: msg.inserted_at,
-          sender_id: msg.sender_id,
-          sender_public_id: msg.sender_public_id,
-          status: msg.status,
-          media_file_id: msg.media_file_id ?? null,
-          media_mime_type: msg.media_mime_type ?? null,
-        },
+        last_message: buildPreviewMessage(msg),
       });
     };
 
@@ -130,16 +126,7 @@ export function useSocketEvents() {
         id: summary.room_id,
         public_id: summary.room_public_id,
         last_message_at: summary.inserted_at,
-        last_message: {
-          id: summary.message_id,
-          content: summary.preview,
-          inserted_at: summary.inserted_at,
-          sender_id: summary.sender_id,
-          sender_public_id: summary.sender_public_id,
-          status: "sent",
-          media_file_id: null,
-          media_mime_type: summary.media_type ?? null,
-        },
+        last_message: buildPreviewMessageFromSummary(summary),
       });
     };
 
@@ -199,21 +186,14 @@ export function useSocketEvents() {
                 partner_username: msg.sender_username || "Unknown",
                 partner_display_name: msg.sender_display_name || null,
                 unread_count: 1, // Store will increment this
-                last_message: {
-                  id: msg.id,
-                  content: msg.content,
-                  inserted_at: msg.inserted_at,
-                  sender_id: msg.sender_id,
-                  sender_public_id: msg.sender_public_id,
-                  status: msg.status,
-                },
+                last_message: buildPreviewMessage(msg),
               });
 
               if (!focused || !isActive) {
                 const senderName =
                   msg.sender_display_name || msg.sender_username || "User";
                 showNotification(senderName, {
-                  body: msg.content || (msg.media_file_id ? "📎 Media" : "New message"),
+                  body: getPreviewText(msg, "New message"),
                   icon: msg.sender?.avatar_url ?? undefined,
                   onClick: () => {
                     getState().setActiveChat({
@@ -234,14 +214,7 @@ export function useSocketEvents() {
             partner_username: msg.recipient_username || "Unknown",
             partner_display_name: msg.recipient_display_name || null,
             unread_count: 0,
-            last_message: {
-              id: msg.id,
-              content: msg.content,
-              inserted_at: msg.inserted_at,
-              sender_id: msg.sender_id,
-              sender_public_id: msg.sender_public_id,
-              status: msg.status,
-            },
+            last_message: buildPreviewMessage(msg),
           });
         }
       }
@@ -289,7 +262,7 @@ export function useSocketEvents() {
               roomId,
               msg.room_public_id ?? roomId,
               msg.sender_display_name || msg.sender_username || "Someone",
-              msg.content || (msg.media_file_id ? "Attachment" : "New message"),
+              getPreviewText(msg, "New message"),
             );
           }
         });

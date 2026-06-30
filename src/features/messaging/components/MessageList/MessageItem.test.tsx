@@ -1,0 +1,123 @@
+import { render, screen } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { useAppStoreMock } = vi.hoisted(() => ({
+  useAppStoreMock: vi.fn(),
+}));
+
+vi.mock("@/store", () => ({
+  useAppStore: (selector: (state: unknown) => unknown) =>
+    useAppStoreMock(selector),
+}));
+
+vi.mock("@/shared/components/AuthenticatedImage", () => ({
+  AuthenticatedImage: ({
+    src,
+    alt,
+    className,
+  }: {
+    src: string;
+    alt: string;
+    className?: string;
+  }) => <img data-testid="authenticated-image" src={src} alt={alt} className={className} />,
+}));
+
+vi.mock("../../utils/attachmentDownloads", () => ({
+  downloadAttachmentWithAuth: vi.fn(),
+  openAttachmentWithAuth: vi.fn(),
+}));
+
+import { MessageItem } from "./MessageItem";
+
+function makeMessage(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    content: null,
+    sender_id: 2,
+    sender_public_id: "sender-public-id",
+    recipient_id: 1,
+    recipient_public_id: "recipient-public-id",
+    room_id: null,
+    status: "sent" as const,
+    inserted_at: "2026-06-30T12:00:00Z",
+    sender_username: "alice",
+    sender_display_name: "Alice",
+    media_file_id: null,
+    media_mime_type: null,
+    reactions: [],
+    ...overrides,
+  };
+}
+
+function renderMessageItem(messageOverrides: Record<string, unknown>) {
+  return render(
+    <MessageItem
+      msg={makeMessage(messageOverrides)}
+      isOwn={false}
+      isConsecutive={false}
+      isSelected={false}
+      selectionMode={false}
+      isRoom={false}
+      messageReactions={[]}
+      currentUserId={1}
+      onContextMenu={vi.fn()}
+      onToggleSelection={vi.fn()}
+      onToggleReaction={vi.fn()}
+      onLightbox={vi.fn()}
+      renderReplyPreview={() => null}
+      formatTime={() => "12:00"}
+    />,
+  );
+}
+
+describe("MessageItem attachments", () => {
+  beforeEach(() => {
+    useAppStoreMock.mockReset();
+    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({ authToken: "secret-token" }),
+    );
+  });
+
+  it("renders photo attachments through AuthenticatedImage", () => {
+    renderMessageItem({
+      media_file_id: "media-photo-1",
+      media_mime_type: "image/jpeg",
+      attachment: {
+        id: "media-photo-1",
+        url: "/api/v1/media/media-photo-1",
+        mime_type: "image/jpeg",
+        original_name: "photo.jpg",
+        file_size: 2048,
+        kind: "photo",
+      },
+    });
+
+    expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain(
+      "/api/v1/media/media-photo-1",
+    );
+    expect(screen.queryByText("Download")).not.toBeInTheDocument();
+  });
+
+  it("renders PDF attachments as a file card with actions", () => {
+    renderMessageItem({
+      media_file_id: "media-file-1",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "media-file-1",
+        url: "/api/v1/media/media-file-1",
+        mime_type: "application/pdf",
+        original_name: "report.pdf",
+        file_size: 5678,
+        kind: "file",
+      },
+    });
+
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    expect(screen.getByText("PDF · 5.5 KB")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+  });
+});

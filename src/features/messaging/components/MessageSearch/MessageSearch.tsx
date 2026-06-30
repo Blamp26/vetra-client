@@ -6,6 +6,7 @@ import type { Message } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { Search, X, Loader2, MessageSquare } from "lucide-react";
 import { withFallbackRef } from "@/shared/utils/refs";
+import { getPreviewText } from "../../utils/attachments";
 
 interface Props {
   targetId: number;
@@ -152,7 +153,7 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
                       </div>
                     </div>
                     <p className="pl-8 text-xs text-muted-foreground line-clamp-2">
-                      {m.content || (m.media_file_id ? "Attachment" : "")}
+                      {getPreviewText(m, "")}
                     </p>
                   </button>
                 ))}

@@ -15,6 +15,7 @@ import {
   serverChatForServer,
 } from "@/shared/utils/chatRoutes";
 import { resolvePresenceStatus } from "@/shared/utils/presence";
+import { getPreviewText } from "../../utils/attachments";
 
 interface SidebarProps {
   isServerMode?: boolean;
@@ -59,15 +60,6 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
 
   const [showProfile, setShowProfile] = useState(false);
 
-  const getPreviewText = (
-    content?: string | null,
-    mediaFileId?: string | null,
-  ) => {
-    if (content && content.trim().length > 0) return content;
-    if (mediaFileId) return "Attachment";
-    return "No messages yet";
-  };
-
   useEffect(() => {
     if (!currentUser) return;
     serversApi
@@ -82,10 +74,7 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
       id: p.partner_id,
       name: p.partner_display_name ?? p.partner_username,
       time: p.last_message.inserted_at,
-      preview: getPreviewText(
-        p.last_message.content,
-        p.last_message.media_file_id,
-      ),
+      preview: getPreviewText(p.last_message, "No messages yet"),
       unread: p.unread_count,
       isOnline: onlineUserIds.has(Number(p.partner_id)),
       status: resolvePresenceStatus({
@@ -105,7 +94,7 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
       name: r.name,
       time: r.last_message_at ?? r.inserted_at,
       preview: r.last_message
-        ? getPreviewText(r.last_message.content, r.last_message.media_file_id)
+        ? getPreviewText(r.last_message, "No messages yet")
         : "No messages yet",
       unread: r.unread_count,
     }));

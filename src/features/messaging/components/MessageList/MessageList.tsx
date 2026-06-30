@@ -8,6 +8,11 @@ import { ImageLightbox } from "@/shared/components/ImageLightbox";
 import { cn } from "@/shared/utils/cn";
 import { roomChatForPreview } from "@/shared/utils/chatRoutes";
 import { withFallbackRef } from "@/shared/utils/refs";
+import {
+  getMessageAttachment,
+  getPreviewText,
+  isMessageForwardable,
+} from "../../utils/attachments";
 
 import { MessageItem } from "./MessageItem";
 import { MessageContextMenu } from "./MessageContextMenu";
@@ -31,6 +36,7 @@ interface ContextMenu {
   y:        number;
   isOwn:    boolean;
   hasText:  boolean;
+  hasAttachment: boolean;
   author:   string;
 }
 
@@ -162,6 +168,7 @@ export function MessageList({
         y: e.clientY,
         isOwn: msg.sender_id === currentUserId,
         hasText: (msg.content ?? "").trim().length > 0,
+        hasAttachment: getMessageAttachment(msg) != null,
         author,
       });
     },
@@ -225,7 +232,7 @@ export function MessageList({
     if (!contextMenu || !onReply) return;
     const msg = messagesById.get(contextMenu.msgId);
     if (!msg) return;
-    const content = (msg.content ?? "").trim().length > 0 ? msg.content! : msg.media_file_id ? "[attachment]" : "";
+    const content = getPreviewText(msg, "");
     onReply({ id: msg.id, content, author: contextMenu.author });
     setContextMenu(null);
   }, [contextMenu, messagesById, onReply]);
@@ -239,9 +246,11 @@ export function MessageList({
 
   const handleForward = useCallback(() => {
     if (!contextMenu) return;
+    const msg = messagesById.get(contextMenu.msgId);
+    if (!msg || !isMessageForwardable(msg)) return;
     setForwardingMessages([contextMenu.msgId]);
     setContextMenu(null);
-  }, [contextMenu, setForwardingMessages]);
+  }, [contextMenu, messagesById, setForwardingMessages]);
 
   const handlePerformForward = useCallback(async (target: { type: 'direct' | 'room', id: number; ref?: string | number | null }) => {
     if (!forwardingMessageIds || forwardingMessageIds.length === 0 || !socketManager) return;
@@ -249,6 +258,9 @@ export function MessageList({
       for (const msgId of forwardingMessageIds) {
         const msg = messagesById.get(msgId);
         if (!msg) continue;
+        if (!isMessageForwardable(msg)) {
+          return;
+        }
         const payload = { content: msg.content, mediaFileId: msg.media_file_id };
         if (target.type === 'direct') {
           await sendMessageViaChannel(socketManager.userChannel, target.ref ?? target.id, payload);
@@ -276,6 +288,18 @@ export function MessageList({
     }
   }, [forwardingMessageIds, socketManager, messagesById, setActiveChat, clearSelection, setForwardingMessages, roomPreviews]);
 
+  const selectedMessages = useMemo(
+    () =>
+      selectedMessageIds
+        .map((id) => messagesById.get(id))
+        .filter((message): message is Message => Boolean(message)),
+    [messagesById, selectedMessageIds],
+  );
+
+  const selectedForwardBlocked = selectedMessages.some(
+    (message) => !isMessageForwardable(message),
+  );
+
   const formatTime = (iso: string) =>
     new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 
@@ -291,13 +315,9 @@ export function MessageList({
 
     let previewText = "";
     if (target) {
-      if (target.media_file_id && !target.content) {
-        previewText = "[Attachment]";
-      } else {
-        const base = (target.content ?? "").trim();
-        if (base.length > 0) {
-          previewText = base.length > 80 ? `${base.slice(0, 77)}…` : base;
-        }
+      const base = getPreviewText(target, "");
+      if (base.length > 0) {
+        previewText = base.length > 80 ? `${base.slice(0, 77)}…` : base;
       }
     }
 
@@ -370,13 +390,8 @@ export function MessageList({
                   onToggleSelection={toggleMessageSelection}
                   onToggleReaction={toggleReaction}
                   onLightbox={setLightboxData}
-                  onReplyClick={(id) => {
-                    const el = messageRefs.current[id];
-                    if (el) el.scrollIntoView();
-                  }}
                   renderReplyPreview={renderReplyPreview}
                   formatTime={formatTime}
-                  formatDate={formatDate}
                 />
               );
             })}
@@ -394,9 +409,20 @@ export function MessageList({
       {selectionMode && (
         <div className="p-2 border-t border-border flex items-center justify-between bg-card text-sm">
           <span>{selectedMessageIds.length} selected</span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {selectedForwardBlocked && (
+              <span className="text-[10px] text-muted-foreground">
+                Attachment messages cannot be forwarded yet.
+              </span>
+            )}
             <button onClick={() => selectedMessageIds.length > 0 && setMsgToDelete(selectedMessageIds[0])} className="text-destructive">Delete</button>
-            <button onClick={() => setForwardingMessages(selectedMessageIds)}>Forward</button>
+            <button
+              onClick={() => !selectedForwardBlocked && setForwardingMessages(selectedMessageIds)}
+              disabled={selectedForwardBlocked || selectedMessageIds.length === 0}
+              className={cn(selectedForwardBlocked && "opacity-50 cursor-not-allowed")}
+            >
+              Forward
+            </button>
             <button onClick={clearSelection}>Cancel</button>
           </div>
         </div>
@@ -414,7 +440,11 @@ export function MessageList({
           onSelect={handleSelect}
           onEdit={handleEdit}
           onDelete={handleDelete}
-          canEdit={!messagesById.get(contextMenu.msgId)?.media_file_id}
+          canEdit={(() => {
+            const contextMessage = messagesById.get(contextMenu.msgId);
+            return !!contextMessage && isMessageForwardable(contextMessage);
+          })()}
+          canForward={!contextMenu.hasAttachment}
           onClose={() => setContextMenu(null)}
         />
       )}

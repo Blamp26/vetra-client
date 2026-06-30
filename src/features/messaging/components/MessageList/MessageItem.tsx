@@ -3,8 +3,20 @@ import { Message, MessageReactionGroup } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
 import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
-import { API_BASE_URL } from "@/api/base";
+import { useAppStore } from "@/store";
+import { Download, ExternalLink, FileText, Film } from "lucide-react";
 import { StatusIcon } from "./StatusIcon";
+import {
+  formatAttachmentSize,
+  getAttachmentDisplayName,
+  getAttachmentKindLabel,
+  getAttachmentTypeLabel,
+  getMessageAttachment,
+} from "../../utils/attachments";
+import {
+  downloadAttachmentWithAuth,
+  openAttachmentWithAuth,
+} from "../../utils/attachmentDownloads";
 
 interface MessageItemProps {
   msg: Message;
@@ -19,10 +31,8 @@ interface MessageItemProps {
   onToggleSelection: (id: number) => void;
   onToggleReaction: (msgId: number, emoji: string) => void;
   onLightbox: (data: { src: string; author: string; time: string }) => void;
-  onReplyClick: (id: number) => void;
   renderReplyPreview: (msg: Message, isOwn: boolean) => React.ReactNode;
   formatTime: (iso: string) => string;
-  formatDate: (iso: string) => string;
 }
 
 export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
@@ -41,33 +51,108 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   renderReplyPreview,
   formatTime,
 }, ref) => {
-  const isPhotoOnly = !!msg.media_file_id && (!msg.content || msg.content.trim().length === 0) && !msg.reply_to_id;
+  const authToken = useAppStore((s) => s.authToken);
+  const [isAttachmentActionPending, setIsAttachmentActionPending] = React.useState(false);
+  const [attachmentActionError, setAttachmentActionError] = React.useState<string | null>(null);
+  const attachment = getMessageAttachment(msg);
+  const isPhotoOnly =
+    attachment?.kind === "photo" &&
+    (!msg.content || msg.content.trim().length === 0) &&
+    !msg.reply_to_id;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
 
+  const handleAttachmentAction = async (action: "download" | "open") => {
+    if (!attachment || isAttachmentActionPending) return;
+
+    setIsAttachmentActionPending(true);
+    setAttachmentActionError(null);
+
+    try {
+      if (action === "open") {
+        await openAttachmentWithAuth({ attachment, authToken });
+      } else {
+        await downloadAttachmentWithAuth({ attachment, authToken });
+      }
+    } catch (error) {
+      console.error("Attachment action failed:", error);
+      setAttachmentActionError("Attachment unavailable");
+    } finally {
+      setIsAttachmentActionPending(false);
+    }
+  };
+
   const renderContent = () => {
-    const hasMedia = !!msg.media_file_id;
+    const hasMedia = !!attachment;
     const hasText = !!(msg.content && msg.content.trim().length > 0);
+    const attachmentTypeLabel = getAttachmentTypeLabel(attachment);
+    const attachmentName = getAttachmentDisplayName(attachment);
+    const attachmentKindLabel = attachment
+      ? getAttachmentKindLabel(attachment.kind)
+      : "Attachment";
 
     return (
       <>
         {hasMedia && (
             <div className={cn(!isPhotoOnly && "mb-1")}>
-              {msg.media_mime_type?.startsWith("video/") ? (
-                <video className="max-w-full border border-border" controls src={`${API_BASE_URL}/media/${msg.media_file_id}`} />
-              ) : (
+              {attachment?.kind === "photo" ? (
                 <div 
                   onClick={() => onLightbox({
-                    src: `${API_BASE_URL}/media/${msg.media_file_id}`,
+                    src: attachment.url,
                     author: authorName,
                     time: msg.inserted_at
                   })}
                 >
                   <AuthenticatedImage 
                     className="max-w-full border border-border"
-                    src={`${API_BASE_URL}/media/${msg.media_file_id}`} 
-                    alt="attachment" 
+                    src={attachment.url} 
+                    alt={attachmentName} 
                     crossOrigin="anonymous"
                   />
+                </div>
+              ) : (
+                <div className="border border-border bg-background/60 p-3 text-foreground">
+                  <div className="flex items-start gap-3">
+                    <div className="bg-muted p-2 shrink-0">
+                      {attachment?.kind === "video" ? (
+                        <Film className="h-5 w-5" />
+                      ) : (
+                        <FileText className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm">{attachmentName}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {[attachmentTypeLabel || attachmentKindLabel, formatAttachmentSize(attachment?.file_size)].join(" · ")}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    {attachment?.mime_type === "application/pdf" && (
+                      <button
+                        type="button"
+                        onClick={() => handleAttachmentAction("open")}
+                        disabled={isAttachmentActionPending}
+                        className="inline-flex items-center gap-1 border border-border px-2 py-1 text-xs"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleAttachmentAction("download")}
+                      disabled={isAttachmentActionPending}
+                      className="inline-flex items-center gap-1 border border-border px-2 py-1 text-xs"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </button>
+                  </div>
+                  {attachmentActionError && (
+                    <div className="mt-2 text-[10px] text-destructive">
+                      {attachmentActionError}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

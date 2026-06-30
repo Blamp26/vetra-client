@@ -25,6 +25,7 @@ interface MessageContextMenuProps {
   onEdit: () => void;
   onDelete: () => void;
   canEdit: boolean;
+  canForward: boolean;
   onClose: () => void;
 }
 
@@ -42,6 +43,7 @@ export function MessageContextMenu({
   onEdit,
   onDelete,
   canEdit,
+  canForward,
   onClose
 }: MessageContextMenuProps) {
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -113,11 +115,17 @@ export function MessageContextMenu({
             )}
 
             <button
-              onClick={() => { onForward(); onClose(); }}
-              className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
+              onClick={() => {
+                if (!canForward) return;
+                onForward();
+                onClose();
+              }}
+              disabled={!canForward}
+              title={!canForward ? "Messages with attachments cannot be forwarded yet." : undefined}
+              className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Forward className="h-4 w-4 mr-3 text-muted-foreground" />
-              Forward
+              {canForward ? "Forward" : "Forward unavailable for attachments"}
             </button>
 
             <button
