@@ -91,6 +91,12 @@ function envNumber(name, fallback) {
   return parsed;
 }
 
+function envString(name, fallback = "") {
+  const raw = env[name];
+  if (raw === undefined || raw === null) return fallback;
+  return String(raw).trim();
+}
+
 function rateToIntervalMs(rate) {
   if (!Number.isFinite(rate) || rate <= 0) {
     fail("Message rate must be a positive number.");
@@ -109,6 +115,22 @@ function envFlag(name, fallback) {
   if (raw === "0" || raw === "false") return false;
 
   fail(`Environment variable ${name} must be 1, 0, true, or false.`);
+}
+
+function envEnum(name, fallback, allowedValues) {
+  const raw = envString(name, "");
+  if (!raw) return fallback;
+  if (allowedValues.includes(raw)) return raw;
+
+  fail(
+    `Environment variable ${name} must be one of: ${allowedValues.join(", ")}.`,
+  );
+}
+
+function isUuidish(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }
 
 function buildConfig() {
@@ -182,6 +204,14 @@ function buildConfig() {
       "VETRA_LOAD_MONITOR_SSH_TIMEOUT_MS",
       5000,
     ),
+    loadMediaFileId: envString("VETRA_LOAD_MEDIA_FILE_ID", ""),
+    loadMessageTextMode: envEnum(
+      "VETRA_LOAD_MESSAGE_TEXT_MODE",
+      "normal",
+      ["normal", "empty", "mixed"],
+    ),
+    loadMediaKind: envString("VETRA_LOAD_MEDIA_KIND", ""),
+    loadMediaLabel: envString("VETRA_LOAD_MEDIA_LABEL", ""),
     serverMonitorDebug: env.VETRA_LOAD_SERVER_MONITOR_DEBUG === "1",
     serverMonitorOnly: env.VETRA_LOAD_SERVER_MONITOR_ONLY === "1",
     mode,
@@ -198,6 +228,15 @@ function buildConfig() {
   config.serverSsh = String(config.serverSsh ?? "").trim();
   config.serverService = String(config.serverService ?? "").trim();
   config.serverPort = String(config.serverPort ?? "").trim();
+  config.loadMediaFileId = String(config.loadMediaFileId ?? "").trim();
+  config.loadMediaKind = String(config.loadMediaKind ?? "").trim();
+  config.loadMediaLabel = String(config.loadMediaLabel ?? "").trim();
+
+  if (config.loadMediaFileId && !isUuidish(config.loadMediaFileId)) {
+    fail(
+      "VETRA_LOAD_MEDIA_FILE_ID must look like a non-empty UUID string.",
+    );
+  }
 
   if (config.serverMonitorEnabled) {
     if (!config.serverService) {
@@ -246,6 +285,58 @@ function describeMessageRateSource() {
   }
 
   return "default";
+}
+
+function isAttachmentLoadEnabled() {
+  return Boolean(config?.loadMediaFileId);
+}
+
+function createTaggedMessageContent(kind, sessionLabel, messageNumber) {
+  const content = `${loadPrefix} ${kind} message vu=${sessionLabel} n=${messageNumber}`;
+  assertLoadContent(content);
+  return content;
+}
+
+function buildRoomLoadMessagePayload(session, messageNumber) {
+  const attachmentEnabled = isAttachmentLoadEnabled();
+  const includeTaggedText = !attachmentEnabled || config.loadMessageTextMode !== "empty";
+
+  return {
+    content: includeTaggedText
+      ? createTaggedMessageContent("channel", session.label, messageNumber)
+      : "",
+    media_file_id: attachmentEnabled ? config.loadMediaFileId : null,
+    reply_to_id: null,
+  };
+}
+
+function buildDmLoadMessagePayload(session, messageNumber, partnerRef) {
+  const attachmentEnabled = isAttachmentLoadEnabled();
+  const includeTaggedText = !attachmentEnabled || config.loadMessageTextMode !== "empty";
+
+  return {
+    recipient_id: partnerRef,
+    content: includeTaggedText
+      ? createTaggedMessageContent("dm", session.label, messageNumber)
+      : "",
+    media_file_id: attachmentEnabled ? config.loadMediaFileId : null,
+    reply_to_id: null,
+  };
+}
+
+function recordAttachmentAttempt(metrics) {
+  if (!isAttachmentLoadEnabled()) return;
+  metrics.attachmentMessagesAttempted += 1;
+}
+
+function recordAttachmentAck(metrics) {
+  if (!isAttachmentLoadEnabled()) return;
+  metrics.attachmentMessagesAcked += 1;
+}
+
+function recordAttachmentFailure(metrics) {
+  if (!isAttachmentLoadEnabled()) return;
+  metrics.attachmentMessagesFailed += 1;
 }
 
 let config = null;
@@ -517,6 +608,14 @@ function createMetrics(mode, vus, durationSeconds) {
     messagesAttempted: 0,
     messagesAcked: 0,
     messagesFailed: 0,
+    attachmentConfigured: isAttachmentLoadEnabled(),
+    attachmentMediaFileId: config.loadMediaFileId || null,
+    attachmentTextMode: config.loadMessageTextMode,
+    attachmentMediaKind: config.loadMediaKind || null,
+    attachmentMediaLabel: config.loadMediaLabel || null,
+    attachmentMessagesAttempted: 0,
+    attachmentMessagesAcked: 0,
+    attachmentMessagesFailed: 0,
     maxMessageInFlightObserved: 0,
     finalMessageInFlightCount: 0,
     skippedSendTicksMaxInFlight: 0,
@@ -747,6 +846,9 @@ function recordMessageFailure(metrics, session, error, elapsedMs, activeSenderCo
     roomChannelState: getRoomJoinState(session),
     phase: resolveSessionPhase(session),
     eligibleForMessageSending: !!session.canSendMessages,
+    attachmentConfigured: !!metrics.attachmentConfigured,
+    attachmentMediaFileId: metrics.attachmentMediaFileId,
+    attachmentTextMode: metrics.attachmentTextMode,
   });
 }
 
@@ -815,6 +917,14 @@ function summarizeMetrics(metrics) {
     messagesAttempted: metrics.messagesAttempted,
     messagesAcked: metrics.messagesAcked,
     messagesFailed: metrics.messagesFailed,
+    attachmentConfigured: metrics.attachmentConfigured,
+    attachmentMediaFileId: metrics.attachmentMediaFileId,
+    attachmentTextMode: metrics.attachmentTextMode,
+    attachmentMediaKind: metrics.attachmentMediaKind,
+    attachmentMediaLabel: metrics.attachmentMediaLabel,
+    attachmentMessagesAttempted: metrics.attachmentMessagesAttempted,
+    attachmentMessagesAcked: metrics.attachmentMessagesAcked,
+    attachmentMessagesFailed: metrics.attachmentMessagesFailed,
     maxMessageInFlightObserved: metrics.maxMessageInFlightObserved,
     finalMessageInFlightCount: metrics.finalMessageInFlightCount,
     skippedSendTicksMaxInFlight: metrics.skippedSendTicksMaxInFlight,
@@ -887,6 +997,16 @@ function printSummary(metrics) {
   console.log(`messages attempted: ${summary.messagesAttempted}`);
   console.log(`messages acked: ${summary.messagesAcked}`);
   console.log(`messages failed: ${summary.messagesFailed}`);
+  console.log(
+    `attachment media file id configured: ${summary.attachmentConfigured ? "yes" : "no"}`,
+  );
+  console.log(`attachment media file id: ${summary.attachmentMediaFileId ?? "-"}`);
+  console.log(`attachment text mode: ${summary.attachmentTextMode}`);
+  console.log(`attachment media kind: ${summary.attachmentMediaKind ?? "-"}`);
+  console.log(`attachment media label: ${summary.attachmentMediaLabel ?? "-"}`);
+  console.log(`attachment messages attempted: ${summary.attachmentMessagesAttempted}`);
+  console.log(`attachment messages acked: ${summary.attachmentMessagesAcked}`);
+  console.log(`attachment messages failed: ${summary.attachmentMessagesFailed}`);
   console.log(`max in-flight observed: ${summary.maxMessageInFlightObserved}`);
   console.log(`final in-flight count: ${summary.finalMessageInFlightCount}`);
   console.log(
@@ -2442,20 +2562,17 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
 
       try {
         const roomChannel = await ensureRoomChannel(session, target, metrics);
-        const content = `${loadPrefix} channel message vu=${session.label} n=${messageNumber}`;
-        assertLoadContent(content);
+        const payload = buildRoomLoadMessagePayload(session, messageNumber);
+        recordAttachmentAttempt(metrics);
         await pushOk(
           roomChannel,
           "send_message",
-          {
-            content,
-            media_file_id: null,
-            reply_to_id: null,
-          },
+          payload,
           "channel load message",
           metrics,
           config.messageTimeoutMs,
         );
+        recordAttachmentAck(metrics);
       } catch (error) {
         const activeSenderCount = roomJoinedSessions.filter(
           (candidate) =>
@@ -2472,6 +2589,7 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
           activeSenderCount,
           activeReceiverCount,
         );
+        recordAttachmentFailure(metrics);
         recordError(metrics, error);
       } finally {
         markSessionSendFinished(session);
@@ -2527,24 +2645,32 @@ async function runDmMessageMode(sessions, metrics, target) {
   const ticker = createTicker(async () => {
     const session = sessions[sendIndex % sessions.length];
     sendIndex += 1;
-
-    const content = `${loadPrefix} dm message vu=${session.label} n=${sendIndex}`;
-    assertLoadContent(content);
+    const payload = buildDmLoadMessagePayload(session, sendIndex, partnerRef);
+    recordAttachmentAttempt(metrics);
 
     try {
       await pushOk(
         session.userChannel,
         "send_message",
-        {
-          recipient_id: partnerRef,
-          content,
-          media_file_id: null,
-          reply_to_id: null,
-        },
+        payload,
         "dm load message",
         metrics,
       );
+      recordAttachmentAck(metrics);
     } catch (error) {
+      recordAttachmentFailure(metrics);
+      recordMessageFailure(
+        metrics,
+        session,
+        error,
+        0,
+        sessions.filter(
+          (candidate) =>
+            candidate.canSendMessages && getSocketState(candidate) === "open",
+        ).length,
+        sessions.filter((candidate) => getSocketState(candidate) === "open")
+          .length,
+      );
       recordError(metrics, error);
     }
   }, intervalMs);
@@ -2693,6 +2819,15 @@ async function main() {
   if (config.writeEnabled && config.mode !== "connect") {
     warn(
       "Write mode is enabled. Tagged [load-test] data will be sent to the configured LAN backend.",
+    );
+  }
+
+  if (isAttachmentLoadEnabled()) {
+    warn(
+      `Attachment metadata load is enabled with media_file_id=${config.loadMediaFileId}. The media file must already exist and be owned by or attachable by the sending users.`,
+    );
+    info(
+      `Attachment text mode=${config.loadMessageTextMode} media kind=${config.loadMediaKind || "-"} media label=${config.loadMediaLabel || "-"}`,
     );
   }
 
