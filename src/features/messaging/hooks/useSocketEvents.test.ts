@@ -275,4 +275,195 @@ describe("useSocketEvents", () => {
     expect(state.incrementChannelUnread).toHaveBeenCalledWith(9);
     expect(state.appendRoomMessage).not.toHaveBeenCalled();
   });
+
+  it("updates room sidebar preview to Photo for live photo-only room messages", async () => {
+    const { state, handlers } = makeState();
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+    getStateMock.mockImplementation(() => state);
+
+    renderHook(() => useSocketEvents());
+
+    handlers.roomMessageGlobal?.({
+      id: 203,
+      content: null,
+      sender_id: 2,
+      sender_public_id: "sender-public-id",
+      room_id: 9,
+      room_public_id: "room-public-id",
+      status: "sent",
+      inserted_at: "2026-06-30T12:06:00Z",
+      sender_display_name: "Alice",
+      sender_username: "alice",
+      media_file_id: "media-photo-1",
+      media_mime_type: "image/jpeg",
+      attachment: {
+        id: "media-photo-1",
+        url: "/api/v1/media/media-photo-1",
+        mime_type: "image/jpeg",
+        original_name: "photo.jpg",
+        file_size: 2048,
+        kind: "photo",
+      },
+    });
+
+    await Promise.resolve();
+
+    expect(state.upsertRoomPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 9,
+        last_message: expect.objectContaining({
+          id: 203,
+          preview: "Photo",
+          content: null,
+          attachment_kind: "photo",
+        }),
+      }),
+    );
+  });
+
+  it("updates room sidebar preview to File: report.pdf for live file-only room messages", async () => {
+    const { state, handlers } = makeState();
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+    getStateMock.mockImplementation(() => state);
+
+    renderHook(() => useSocketEvents());
+
+    handlers.roomMessageGlobal?.({
+      id: 204,
+      content: null,
+      sender_id: 2,
+      sender_public_id: "sender-public-id",
+      room_id: 9,
+      room_public_id: "room-public-id",
+      status: "sent",
+      inserted_at: "2026-06-30T12:07:00Z",
+      sender_display_name: "Alice",
+      sender_username: "alice",
+      media_file_id: "media-file-4",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "media-file-4",
+        url: "/api/v1/media/media-file-4",
+        mime_type: "application/pdf",
+        original_name: "report.pdf",
+        file_size: 5678,
+        kind: "file",
+      },
+    });
+
+    await Promise.resolve();
+
+    expect(state.upsertRoomPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 9,
+        last_message: expect.objectContaining({
+          id: 204,
+          preview: "File: report.pdf",
+          attachment_kind: "file",
+          attachment_name: "report.pdf",
+        }),
+      }),
+    );
+  });
+
+  it("updates room sidebar preview to text for live text plus attachment room messages", async () => {
+    const { state, handlers } = makeState();
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+    getStateMock.mockImplementation(() => state);
+
+    renderHook(() => useSocketEvents());
+
+    handlers.roomMessageGlobal?.({
+      id: 205,
+      content: "see report",
+      sender_id: 2,
+      sender_public_id: "sender-public-id",
+      room_id: 9,
+      room_public_id: "room-public-id",
+      status: "sent",
+      inserted_at: "2026-06-30T12:08:00Z",
+      sender_display_name: "Alice",
+      sender_username: "alice",
+      media_file_id: "media-file-5",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "media-file-5",
+        url: "/api/v1/media/media-file-5",
+        mime_type: "application/pdf",
+        original_name: "report.pdf",
+        file_size: 5678,
+        kind: "file",
+      },
+    });
+
+    await Promise.resolve();
+
+    expect(state.upsertRoomPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 9,
+        last_message: expect.objectContaining({
+          id: 205,
+          preview: "see report",
+          content: "see report",
+        }),
+      }),
+    );
+  });
+
+  it("updates direct sidebar preview for live attachment-only direct messages", async () => {
+    const { state, handlers } = makeState();
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+    getStateMock.mockImplementation(() => state);
+
+    renderHook(() => useSocketEvents());
+
+    handlers.message?.({
+      id: 304,
+      content: null,
+      sender_id: 2,
+      sender_public_id: "sender-public-id",
+      recipient_id: 1,
+      recipient_public_id: "recipient-public-id",
+      status: "sent",
+      inserted_at: "2026-06-30T12:09:00Z",
+      sender_display_name: "Alice",
+      sender_username: "alice",
+      media_file_id: "media-file-6",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "media-file-6",
+        url: "/api/v1/media/media-file-6",
+        mime_type: "application/pdf",
+        original_name: "report.pdf",
+        file_size: 5678,
+        kind: "file",
+      },
+    });
+
+    await waitFor(() => {
+      expect(state.upsertPreview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          partner_id: 2,
+          last_message: expect.objectContaining({
+            id: 304,
+            preview: "File: report.pdf",
+            attachment_kind: "file",
+            attachment_name: "report.pdf",
+          }),
+        }),
+      );
+    });
+  });
 });

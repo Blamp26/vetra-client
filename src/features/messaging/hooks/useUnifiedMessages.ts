@@ -5,6 +5,7 @@ import { roomsApi } from "@/api/rooms";
 import { markReadViaChannel, sendMessageViaChannel } from "@/services/socket";
 import { useMessagePagination } from "@/shared/hooks/useMessagePagination";
 import { withFallbackRef } from "@/shared/utils/refs";
+import { buildPreviewMessage } from "../utils/attachments";
 
 export type ChatContext =
   | { type: "direct"; partnerId: number; partnerRef?: string | number }
@@ -40,6 +41,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
     (s: RootState) => s.setConversationHasMore,
   );
   const resetUnread = useAppStore((s: RootState) => s.resetUnread);
+  const upsertPreview = useAppStore((s: RootState) => s.upsertPreview);
 
   const initRoomConversation = useAppStore(
     (s: RootState) => s.initRoomConversation,
@@ -60,6 +62,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
   const toggleRoomReaction = useAppStore(
     (s: RootState) => s.toggleRoomReaction,
   );
+  const upsertRoomPreview = useAppStore((s: RootState) => s.upsertRoomPreview);
   const resetRoomUnread = useAppStore((s: RootState) => s.resetRoomUnread);
   const resetChannelUnread = useAppStore((s: RootState) => s.resetChannelUnread);
 
@@ -283,6 +286,12 @@ export function useUnifiedMessages(context: ChatContext | null) {
           replyToId: replyToId ?? null,
         });
         appendRoomMessage(roomId, message);
+        upsertRoomPreview({
+          id: roomId,
+          public_id: message.room_public_id ?? roomPreviewPublicId ?? roomId,
+          last_message_at: message.inserted_at,
+          last_message: buildPreviewMessage(message),
+        });
       } else {
         const message = await sendMessageViaChannel(
           socketManager.userChannel,
@@ -294,6 +303,25 @@ export function useUnifiedMessages(context: ChatContext | null) {
           },
         );
         appendMessage(directPartnerId!, message);
+        upsertPreview({
+          partner_id: directPartnerId!,
+          partner_public_id:
+            message.recipient_public_id ??
+            directPreviewPublicId ??
+            (typeof directPartnerExplicitRef === "string"
+              ? directPartnerExplicitRef
+              : null),
+          partner_username:
+            message.recipient_username ??
+            conversationPreviews[directPartnerId!]?.partner_username ??
+            "Unknown",
+          partner_display_name:
+            message.recipient_display_name ??
+            conversationPreviews[directPartnerId!]?.partner_display_name ??
+            null,
+          unread_count: 0,
+          last_message: buildPreviewMessage(message),
+        });
       }
     },
     [
@@ -304,8 +332,14 @@ export function useUnifiedMessages(context: ChatContext | null) {
       roomId,
       directPartnerId,
       directTargetRef,
+      directPartnerExplicitRef,
+      directPreviewPublicId,
+      roomPreviewPublicId,
+      conversationPreviews,
       appendRoomMessage,
       appendMessage,
+      upsertPreview,
+      upsertRoomPreview,
     ],
   );
 
