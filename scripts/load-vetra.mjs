@@ -91,6 +91,14 @@ function envNumber(name, fallback) {
   return parsed;
 }
 
+function rateToIntervalMs(rate) {
+  if (!Number.isFinite(rate) || rate <= 0) {
+    fail("Message rate must be a positive number.");
+  }
+
+  return 1000 / rate;
+}
+
 function envFlag(name, fallback) {
   const raw = env[name];
   if (raw === undefined || raw === null || raw === "") {
@@ -223,6 +231,21 @@ function buildConfig() {
   }
 
   return config;
+}
+
+function describeMessageRateSource() {
+  const rawEnvValue = process.env.VETRA_LOAD_MESSAGES_PER_SECOND;
+  const mergedEnvValue = env.VETRA_LOAD_MESSAGES_PER_SECOND;
+
+  if (rawEnvValue !== undefined && rawEnvValue !== null && rawEnvValue !== "") {
+    return "process.env";
+  }
+
+  if (mergedEnvValue !== undefined && mergedEnvValue !== null && mergedEnvValue !== "") {
+    return ".env.load";
+  }
+
+  return "default";
 }
 
 let config = null;
@@ -2049,6 +2072,7 @@ function createTicker(callback, intervalMs) {
 function createBoundedInFlightScheduler(options) {
   const {
     intervalMs,
+    requestedMessageRate = null,
     maxInFlight,
     onTick,
     onSkip,
@@ -2219,7 +2243,10 @@ function createBoundedInFlightScheduler(options) {
         finalInFlightCount: pending.size,
         skippedTicksMaxInFlight: skippedTicks,
         skippedSendsMaxInFlight: skippedSends,
-        requestedMessageRate: Number((1000 / intervalMs).toFixed(2)),
+        requestedMessageRate:
+          requestedMessageRate === null
+            ? Number((1000 / intervalMs).toFixed(2))
+            : Number(requestedMessageRate.toFixed(2)),
         expectedSendsByElapsedDuration:
           startedAt === null ? 0 : Math.floor(Math.max(0, stoppedAt - startedAt) / intervalMs),
         schedulerWakeCount: wakeCount,
@@ -2285,7 +2312,7 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
 
   warn("Write mode enabled. This will send tagged [load-test] channel messages.");
   const rate = options.messagesPerSecond ?? config.messagesPerSecond;
-  const intervalMs = Math.max(50, Math.floor(1000 / rate));
+  const intervalMs = rateToIntervalMs(rate);
   const drainTimeoutMs = Math.max(config.messageTimeoutMs, 5000);
   const durationMs = config.durationSeconds * 1000;
   const stopAtMs = performance.now() + durationMs;
@@ -2293,6 +2320,7 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
 
   const scheduler = createBoundedInFlightScheduler({
     intervalMs,
+    requestedMessageRate: rate,
     maxInFlight: config.messageMaxInFlight,
     stopAtMs: config.messageMaxInFlight > 1 ? stopAtMs : null,
     onTick: async () => {
@@ -2383,7 +2411,7 @@ async function runDmMessageMode(sessions, metrics, target) {
 
   warn("Write mode enabled. This will send tagged [load-test] DM messages.");
   const partnerRef = target.partner_public_id ?? target.partner_id;
-  const intervalMs = Math.max(50, Math.floor(1000 / config.messagesPerSecond));
+  const intervalMs = rateToIntervalMs(config.messagesPerSecond);
   let sendIndex = 0;
 
   const ticker = createTicker(async () => {
@@ -2447,7 +2475,7 @@ async function runCallSignalingMode(primarySessions, metrics, secondaryAuth) {
     const callerCallRef = caller.auth.user.public_id ?? caller.auth.user.id;
     const calleeCallRef = callee.auth.user.public_id ?? callee.auth.user.id;
     let cycle = 0;
-    const intervalMs = Math.max(200, Math.floor(1000 / config.messagesPerSecond));
+    const intervalMs = rateToIntervalMs(config.messagesPerSecond);
 
     const ticker = createTicker(async () => {
       cycle += 1;
@@ -2542,6 +2570,10 @@ async function main() {
   loadPrefix = `[load-test] ${new Date().toISOString()}`;
   isCleaningUp = false;
   activeSessions.clear();
+
+  info(
+    `message rate config: raw process.env.VETRA_LOAD_MESSAGES_PER_SECOND=${process.env.VETRA_LOAD_MESSAGES_PER_SECOND ?? "<unset>"} effective=${config.messagesPerSecond} source=${describeMessageRateSource()}`,
+  );
 
   if (config.serverMonitorOnly) {
     await runServerMonitorOnly();
