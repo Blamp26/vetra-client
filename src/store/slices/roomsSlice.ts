@@ -59,6 +59,8 @@ export interface RoomsSlice {
   clearTypingRoomMember: (userId: number) => void;
   setTypingRoomMemberInfo: (userId: number, info: { username: string; display_name: string | null }) => void;
   clearTypingRoomMemberInfo: (userId: number) => void;
+  incrementRoomUnread: (roomId: number, delta?: number) => void;
+  resetRoomUnread: (roomId: number) => void;
   removeRoom: (roomId: number) => void;
   removeServerChannel: (serverId: number, channelId: number) => void;
   toggleRoomReaction: (payload: any) => void;
@@ -182,6 +184,38 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
     set((state: any) => {
       const { [userId]: _, ...rest } = state.typingRoomMemberInfo;
       return { typingRoomMemberInfo: rest };
+    }),
+
+  incrementRoomUnread: (roomId, delta = 1) =>
+    set((state: any) => {
+      const existing = state.roomPreviews[roomId];
+      if (!existing) return state;
+
+      return {
+        roomPreviews: {
+          ...state.roomPreviews,
+          [roomId]: {
+            ...existing,
+            unread_count: (existing.unread_count ?? 0) + delta,
+          },
+        },
+      };
+    }),
+
+  resetRoomUnread: (roomId) =>
+    set((state: any) => {
+      const existing = state.roomPreviews[roomId];
+      if (!existing || (existing.unread_count ?? 0) === 0) return state;
+
+      return {
+        roomPreviews: {
+          ...state.roomPreviews,
+          [roomId]: {
+            ...existing,
+            unread_count: 0,
+          },
+        },
+      };
     }),
 
   removeRoom: (roomId) =>

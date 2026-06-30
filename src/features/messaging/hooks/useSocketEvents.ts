@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAppStore, type RootState, getState } from "@/store";
-import type { Message } from "@/shared/types";
+import type { Message, RoomMessageSummary } from "@/shared/types";
 import { showNotification } from "@/services/notifications";
 import { markReadViaChannel } from "@/services/socket";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -18,7 +18,6 @@ export function useSocketEvents() {
     setLastSeenAt,
     setTyping,
     clearTyping,
-    appendRoomMessage,
     editRoomMessage,
     deleteRoomMessage,
     upsertRoomPreview,
@@ -30,6 +29,8 @@ export function useSocketEvents() {
     incrementChannelUnread,
     setMessageReactions,
     resetUnread,
+    incrementRoomUnread,
+    resetRoomUnread,
     updateMessagesStatus,
   } = useAppStore((s: RootState) => ({
     socketManager: s.socketManager,
@@ -43,7 +44,6 @@ export function useSocketEvents() {
     setLastSeenAt: s.setLastSeenAt,
     setTyping: s.setTyping,
     clearTyping: s.clearTyping,
-    appendRoomMessage: s.appendRoomMessage,
     editRoomMessage: s.editRoomMessage,
     deleteRoomMessage: s.deleteRoomMessage,
     upsertRoomPreview: s.upsertRoomPreview,
@@ -55,6 +55,8 @@ export function useSocketEvents() {
     incrementChannelUnread: s.incrementChannelUnread,
     setMessageReactions: s.setMessageReactions,
     resetUnread: s.resetUnread,
+    incrementRoomUnread: s.incrementRoomUnread,
+    resetRoomUnread: s.resetRoomUnread,
     updateMessagesStatus: s.updateMessagesStatus,
   }), true);
 
@@ -70,6 +72,100 @@ export function useSocketEvents() {
       } catch {
         return document.hasFocus();
       }
+    };
+
+    const isActiveRoom = (roomId: number) => {
+      const active = getState().activeChat;
+      return (
+        (active?.type === "room" && active.roomId === roomId) ||
+        (active?.type === "channel" && active.channelId === roomId)
+      );
+    };
+
+    const openRoomFromRealtime = (roomId: number, roomRef?: string | number | null) => {
+      const state = getState();
+      const preview = state.roomPreviews[roomId];
+
+      if (preview?.server_id != null) {
+        state.setActiveChat({
+          type: "channel",
+          channelId: roomId,
+          serverId: preview.server_id,
+          channelRef: roomRef ?? preview.public_id ?? roomId,
+          serverRef: preview.server_public_id ?? preview.server_id,
+        });
+        return;
+      }
+
+      state.setActiveChat({
+        type: "room",
+        roomId,
+        roomRef: roomRef ?? preview?.public_id ?? roomId,
+      });
+    };
+
+    const updateRoomPreviewFromMessage = (msg: Message) => {
+      const roomId = msg.room_id;
+      if (!roomId) return;
+
+      upsertRoomPreview({
+        id: roomId,
+        public_id: msg.room_public_id,
+        last_message_at: msg.inserted_at,
+        last_message: {
+          id: msg.id,
+          content: msg.content,
+          inserted_at: msg.inserted_at,
+          sender_id: msg.sender_id,
+          sender_public_id: msg.sender_public_id,
+          status: msg.status,
+          media_file_id: msg.media_file_id ?? null,
+          media_mime_type: msg.media_mime_type ?? null,
+        },
+      });
+    };
+
+    const updateRoomPreviewFromSummary = (summary: RoomMessageSummary) => {
+      upsertRoomPreview({
+        id: summary.room_id,
+        public_id: summary.room_public_id,
+        last_message_at: summary.inserted_at,
+        last_message: {
+          id: summary.message_id,
+          content: summary.preview,
+          inserted_at: summary.inserted_at,
+          sender_id: summary.sender_id,
+          sender_public_id: summary.sender_public_id,
+          status: "sent",
+          media_file_id: null,
+          media_mime_type: summary.media_type ?? null,
+        },
+      });
+    };
+
+    const trackRoomUnread = (roomId: number, delta = 1) => {
+      const preview = getState().roomPreviews[roomId];
+
+      if (preview?.server_id != null) {
+        incrementChannelUnread(roomId);
+      } else {
+        incrementRoomUnread(roomId, delta);
+      }
+    };
+
+    const notifyRoomActivity = (
+      roomId: number,
+      roomPublicId: string | number | null | undefined,
+      senderName: string,
+      body: string,
+    ) => {
+      const state = getState();
+      const roomName = state.roomPreviews[roomId]?.name || "Group";
+
+      showNotification(roomName, {
+        body: `${senderName}: ${body}`,
+        onClick: () => openRoomFromRealtime(roomId, roomPublicId),
+      });
     };
 
     unsubs.push(socketManager.onMessage((msg: Message) => {
@@ -178,50 +274,46 @@ export function useSocketEvents() {
       const roomId = msg.room_id;
       if (!roomId) return;
 
-      appendRoomMessage(roomId, msg);
-      upsertRoomPreview({
-        id: roomId,
-        public_id: msg.room_public_id,
-        last_message: {
-          id: msg.id,
-          content: msg.content,
-          inserted_at: msg.inserted_at,
-          sender_id: msg.sender_id,
-          sender_public_id: msg.sender_public_id,
-          status: msg.status,
-        },
-      });
+      updateRoomPreviewFromMessage(msg);
 
-      // Track unread count if message is not from current user
-      if (msg.sender_id !== currentUser?.id) {
-        const state = getState();
-        const active = state.activeChat;
-        const isActive = active?.type === "channel" && active.channelId === roomId;
-        
-        if (!isActive) {
-          incrementChannelUnread(roomId);
+      if (msg.sender_id !== currentUser.id) {
+        const active = isActiveRoom(roomId);
+
+        if (!active) {
+          trackRoomUnread(roomId);
         }
 
-        // Show notification for room messages
         isWindowFocused().then(async (focused) => {
-          if (!isActive || !focused) {
-            const state = getState();
-            const roomName =
-              state.roomPreviews[roomId]?.name || "Group";
-            const senderName =
-              msg.sender_display_name || msg.sender_username || "Someone";
-            showNotification(roomName, {
-              body: `${senderName}: ${
-                msg.content || (msg.media_file_id ? "📎 Media" : "New message")
-              }`,
-              onClick: () => {
-                getState().setActiveChat({
-                  type: "room",
-                  roomId,
-                  roomRef: msg.room_public_id ?? roomId,
-                });
-              },
-            });
+          if (!active || !focused) {
+            notifyRoomActivity(
+              roomId,
+              msg.room_public_id ?? roomId,
+              msg.sender_display_name || msg.sender_username || "Someone",
+              msg.content || (msg.media_file_id ? "Attachment" : "New message"),
+            );
+          }
+        });
+      }
+    }));
+
+    unsubs.push(socketManager.onRoomMessageSummary((summary) => {
+      updateRoomPreviewFromSummary(summary);
+
+      if (summary.sender_id !== currentUser.id) {
+        const active = isActiveRoom(summary.room_id);
+
+        if (!active) {
+          trackRoomUnread(summary.room_id, summary.unread_delta ?? 1);
+        }
+
+        isWindowFocused().then(async (focused) => {
+          if (!active || !focused) {
+            notifyRoomActivity(
+              summary.room_id,
+              summary.room_public_id ?? summary.room_id,
+              summary.sender_display_name || summary.sender_username || "Someone",
+              summary.preview || "New message",
+            );
           }
         });
       }
@@ -235,6 +327,7 @@ export function useSocketEvents() {
       removeRoom(room_id);
       const active = getState().activeChat;
       if (active?.type === "room" && active.roomId === room_id) {
+        resetRoomUnread(room_id);
         setActiveChat(null);
       }
     }));
@@ -318,7 +411,6 @@ export function useSocketEvents() {
     setLastSeenAt,
     setTyping,
     clearTyping,
-    appendRoomMessage,
     editRoomMessage,
     deleteRoomMessage,
     upsertRoomPreview,
@@ -327,9 +419,11 @@ export function useSocketEvents() {
     removeServer,
     addServerChannel,
     incrementChannelUnread,
+    incrementRoomUnread,
     setActiveChat,
     setMessageReactions,
     updateMessagesStatus,
     resetUnread,
+    resetRoomUnread,
   ]);
 }

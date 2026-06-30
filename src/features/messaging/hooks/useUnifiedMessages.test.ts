@@ -46,8 +46,11 @@ function makeState() {
     currentUser: { id: 1 },
     socketManager: {
       userChannel: { push: vi.fn() },
-      joinRoomChannel: vi.fn(),
+      joinRoomChannel: vi.fn(() => Promise.resolve()),
       leaveRoomChannel: vi.fn(),
+      setActiveRoom: vi.fn(() => Promise.resolve()),
+      clearActiveRoom: vi.fn(() => Promise.resolve()),
+      onRoomMessage: vi.fn(() => () => {}),
       onRoomMessageEdited: vi.fn(() => () => {}),
       onRoomMessageDeleted: vi.fn(() => () => {}),
       onRoomReactionUpdated: vi.fn(() => () => {}),
@@ -88,6 +91,8 @@ function makeState() {
     editRoomMessage: vi.fn(),
     deleteRoomMessage: vi.fn(),
     toggleRoomReaction: vi.fn(),
+    resetRoomUnread: vi.fn(),
+    resetChannelUnread: vi.fn(),
   };
 }
 
@@ -133,7 +138,7 @@ describe("useUnifiedMessages", () => {
 
   it("does not re-join a room channel when the room preview map changes only", () => {
     const state = makeState();
-    const joinRoomChannel = vi.fn();
+    const joinRoomChannel = vi.fn(() => Promise.resolve());
 
     state.socketManager = {
       ...state.socketManager,
@@ -186,5 +191,51 @@ describe("useUnifiedMessages", () => {
     });
 
     expect(joinRoomChannel).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses room channel events as the active room append path and marks the room active", async () => {
+    const state = makeState();
+    const onRoomMessage = vi.fn(() => () => {});
+    const setActiveRoom = vi.fn(() => Promise.resolve());
+
+    state.socketManager = {
+      ...state.socketManager,
+      onRoomMessage,
+      setActiveRoom,
+    };
+    state.roomPreviews = {
+      9: {
+        id: 9,
+        public_id: "room-public-id",
+        name: "general",
+        created_by: 1,
+        server_id: null,
+        inserted_at: "2026-06-28T00:00:00Z",
+        unread_count: 2,
+        last_message_at: null,
+        last_message: null,
+      },
+    };
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+
+    renderHook(() =>
+      useUnifiedMessages({
+        type: "room",
+        roomId: 9,
+        roomRef: "room-public-id",
+      }),
+    );
+
+    expect(onRoomMessage).toHaveBeenCalledTimes(1);
+    expect(onRoomMessage).toHaveBeenCalledWith(9, expect.any(Function));
+    expect(state.resetRoomUnread).toHaveBeenCalledWith(9);
+
+    await vi.waitFor(() => {
+      expect(setActiveRoom).toHaveBeenCalledWith("room-public-id");
+    });
   });
 });

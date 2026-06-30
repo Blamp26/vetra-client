@@ -8,6 +8,7 @@ import type {
   MessageEditedPayload,
   MessageDeletedPayload,
   ReactionUpdatedPayload,
+  RoomMessageSummary,
   ResourceRef,
 } from "@/shared/types";
 import { callSignalingService } from "@/features/calling/services/callSignalingService";
@@ -47,6 +48,7 @@ export type PresenceDiffHandler = (diff: PresenceDiff) => void;
 export type TypingHandler = (senderId: number) => void;
 export type LastSeenHandler = (userId: number, lastSeenAt: string) => void;
 export type RoomMessageHandler = (message: Message) => void;
+export type RoomMessageSummaryHandler = (summary: RoomMessageSummary) => void;
 export type RoomTypingPayload = {
   sender_id: number;
   sender_username?: string;
@@ -119,8 +121,11 @@ export interface SocketManager {
   onRoomCreated: (handler: RoomCreatedHandler) => () => void;
   onChannelCreated: (handler: ChannelCreatedHandler) => () => void;
   onRoomMessageGlobal: (handler: (message: Message) => void) => () => void;
+  onRoomMessageSummary: (handler: RoomMessageSummaryHandler) => () => void;
 
   updateStatus: (status: "online" | "away" | "dnd" | "offline") => void;
+  setActiveRoom: (roomRef: ResourceRef) => Promise<void>;
+  clearActiveRoom: () => Promise<void>;
 
   sendTypingStart: (recipientRef: ResourceRef) => void;
   sendTypingStop: (recipientRef: ResourceRef) => void;
@@ -317,6 +322,7 @@ export async function connectSocket(
   const roomCreatedBus = makeEventBus<any>();
   const channelCreatedBus = makeEventBus<{ server_id: number; channel: any }>();
   const roomMessageGlobalBus = makeEventBus<Message>();
+  const roomMessageSummaryBus = makeEventBus<RoomMessageSummary>();
 
   userChannel.on("new_message", (p: Message) => messageBus.emit(p));
 
@@ -367,6 +373,9 @@ export async function connectSocket(
   userChannel.on("room_created", (p) => roomCreatedBus.emit(p));
   userChannel.on("new_room_message", (payload: Message) => {
     roomMessageGlobalBus.emit(payload);
+  });
+  userChannel.on("room_message_summary", (payload: RoomMessageSummary) => {
+    roomMessageSummaryBus.emit(payload);
   });
 
   // Normalize channel_created payload: backend sometimes wraps the channel as { data: {...} }
@@ -452,8 +461,37 @@ export async function connectSocket(
     onRoomCreated: (h) => roomCreatedBus.subscribe(h),
     onChannelCreated: (h) => channelCreatedBus.subscribe(h),
     onRoomMessageGlobal: (h) => roomMessageGlobalBus.subscribe(h),
+    onRoomMessageSummary: (h) => roomMessageSummaryBus.subscribe(h),
 
     updateStatus: (status) => userChannel.push("update_status", { status }),
+
+    setActiveRoom(roomRef) {
+      return new Promise((resolve, reject) => {
+        userChannel
+          .push("active_room:set", { room_id: roomRef })
+          .receive("ok", () => resolve())
+          .receive("error", (r) =>
+            reject(new Error(r?.reason ?? "Active room set failed")),
+          )
+          .receive("timeout", () =>
+            reject(new Error("Active room set timed out")),
+          );
+      });
+    },
+
+    clearActiveRoom() {
+      return new Promise((resolve, reject) => {
+        userChannel
+          .push("active_room:clear", {})
+          .receive("ok", () => resolve())
+          .receive("error", (r) =>
+            reject(new Error(r?.reason ?? "Active room clear failed")),
+          )
+          .receive("timeout", () =>
+            reject(new Error("Active room clear timed out")),
+          );
+      });
+    },
 
     sendTypingStart: (recipientRef) =>
       userChannel.push("typing_start", { recipient_id: recipientRef }),

@@ -60,6 +60,8 @@ export function useUnifiedMessages(context: ChatContext | null) {
   const toggleRoomReaction = useAppStore(
     (s: RootState) => s.toggleRoomReaction,
   );
+  const resetRoomUnread = useAppStore((s: RootState) => s.resetRoomUnread);
+  const resetChannelUnread = useAppStore((s: RootState) => s.resetChannelUnread);
 
   const isRoom = context?.type === "room";
   const id = context ? (isRoom ? context.roomId : context.partnerId) : null;
@@ -76,6 +78,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
       : undefined;
   const roomPreviewPublicId =
     roomId !== null ? roomPreviews[roomId]?.public_id : undefined;
+  const roomIsServer = roomId !== null ? roomPreviews[roomId]?.server_id != null : false;
 
   const directTargetRef = useMemo(
     () =>
@@ -203,10 +206,28 @@ export function useUnifiedMessages(context: ChatContext | null) {
       resetUnread(directPartnerId);
     } else {
       if (roomId === null) return;
-      socketManager.joinRoomChannel(roomId, roomTargetRef ?? roomId);
+      let cancelled = false;
+
+      const unsubMessage = socketManager.onRoomMessage(roomId, (message) =>
+        appendRoomMessage(roomId, message),
+      );
+      void socketManager
+        .joinRoomChannel(roomId, roomTargetRef ?? roomId)
+        .then(() => {
+          if (cancelled) return;
+          void socketManager.setActiveRoom(roomTargetRef ?? roomId);
+        })
+        .catch(() => {
+          // Room join errors are already surfaced by message send/load failures.
+        });
+
+      if (roomIsServer) {
+        resetChannelUnread(roomId);
+      } else {
+        resetRoomUnread(roomId);
+      }
 
       // Local room events that aren't global (edited, deleted, reactions)
-      // Note: Room message append is handled globally in useSocketEvents
       const unsubEdited = socketManager.onRoomMessageEdited(roomId, (p) =>
         editRoomMessage(p),
       );
@@ -218,6 +239,9 @@ export function useUnifiedMessages(context: ChatContext | null) {
       );
 
       return () => {
+        cancelled = true;
+        void socketManager.clearActiveRoom();
+        unsubMessage();
         unsubEdited();
         unsubDeleted();
         unsubReaction();
@@ -232,7 +256,11 @@ export function useUnifiedMessages(context: ChatContext | null) {
     roomId,
     directTargetRef,
     roomTargetRef,
+    roomIsServer,
     resetUnread,
+    resetRoomUnread,
+    resetChannelUnread,
+    appendRoomMessage,
     editRoomMessage,
     deleteRoomMessage,
     toggleRoomReaction,

@@ -83,6 +83,22 @@ export interface ReactionUpdatedPayload {
   room_public_id?: string | null;
 }
 
+export interface RoomMessageSummary {
+  room_id: number;
+  room_public_id?: string | null;
+  message_id: number;
+  sender_id: number;
+  sender_public_id?: string | null;
+  sender_display_name?: string | null;
+  sender_username?: string | null;
+  inserted_at: string;
+  preview: string;
+  message_type: "text" | "media" | "mixed";
+  media_type?: string | null;
+  unread_delta?: number;
+  mention?: boolean;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Conversation / Room previews (sidebar items)
 // ─────────────────────────────────────────────────────────────────────────────
