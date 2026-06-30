@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, writeFileSync, readFileSync, statSync } from "node:fs";
+import { resolve, basename, extname } from "node:path";
 import { execFile } from "node:child_process";
 import { Socket } from "phoenix";
 import { loadLoadEnv } from "./shared.mjs";
@@ -133,12 +133,37 @@ function isUuidish(value) {
   );
 }
 
+function guessMimeTypeFromFilename(filename) {
+  const extension = extname(filename).toLowerCase();
+  switch (extension) {
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".gif":
+      return "image/gif";
+    case ".pdf":
+      return "application/pdf";
+    case ".mp4":
+      return "video/mp4";
+    case ".webm":
+      return "video/webm";
+    case ".ogv":
+    case ".ogg":
+      return "video/ogg";
+    default:
+      return null;
+  }
+}
+
 function buildConfig() {
   const mode = args.mode || env.VETRA_LOAD_MODE || "connect";
   const allowedModes = new Set([
     "connect",
     "channel-messages",
     "dm-messages",
+    "media-upload",
     "call-signaling",
     "soak",
   ]);
@@ -152,6 +177,7 @@ function buildConfig() {
     args.write === "true" ||
     env.VETRA_LOAD_WRITE === "1";
   const joinRoomDuringStartupDefault = mode === "channel-messages";
+  const defaultVus = mode === "media-upload" ? 1 : 10;
 
   const config = {
     apiUrl: env.VETRA_LOAD_API_URL?.replace(/\/+$/, "") || "",
@@ -160,9 +186,10 @@ function buildConfig() {
     password: env.VETRA_LOAD_PASSWORD || "",
     secondUsername: env.VETRA_LOAD_SECOND_USERNAME || "",
     secondPassword: env.VETRA_LOAD_SECOND_PASSWORD || "",
-    vus: envInt("VETRA_LOAD_VUS", 10),
+    vus: envInt("VETRA_LOAD_VUS", defaultVus),
     durationSeconds: envInt("VETRA_LOAD_DURATION_SECONDS", 60),
     messagesPerSecond: envNumber("VETRA_LOAD_MESSAGES_PER_SECOND", 5),
+    uploadsPerSecond: envNumber("VETRA_LOAD_UPLOADS_PER_SECOND", 1),
     // Example for higher-throughput write tests:
     // VETRA_LOAD_MESSAGES_PER_SECOND=20
     // VETRA_LOAD_MESSAGE_MAX_IN_FLIGHT=50
@@ -171,6 +198,7 @@ function buildConfig() {
       1,
     ),
     messageTimeoutMs: envInt("VETRA_LOAD_MESSAGE_TIMEOUT_MS", 15000),
+    uploadMaxInFlight: envInt("VETRA_LOAD_UPLOAD_MAX_IN_FLIGHT", 10),
     rampBatchSize: envInt("VETRA_LOAD_RAMP_BATCH_SIZE", 25),
     rampBatchDelayMs: envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
     startupTimeoutMs: envInt("VETRA_LOAD_STARTUP_TIMEOUT_MS", 15000),
@@ -212,6 +240,11 @@ function buildConfig() {
     ),
     loadMediaKind: envString("VETRA_LOAD_MEDIA_KIND", ""),
     loadMediaLabel: envString("VETRA_LOAD_MEDIA_LABEL", ""),
+    uploadFilePath: envString("VETRA_LOAD_UPLOAD_FILE_PATH", ""),
+    uploadFixturePath: null,
+    uploadFixtureName: null,
+    uploadFixtureSizeBytes: 0,
+    uploadFixtureMimeType: null,
     serverMonitorDebug: env.VETRA_LOAD_SERVER_MONITOR_DEBUG === "1",
     serverMonitorOnly: env.VETRA_LOAD_SERVER_MONITOR_ONLY === "1",
     mode,
@@ -231,10 +264,41 @@ function buildConfig() {
   config.loadMediaFileId = String(config.loadMediaFileId ?? "").trim();
   config.loadMediaKind = String(config.loadMediaKind ?? "").trim();
   config.loadMediaLabel = String(config.loadMediaLabel ?? "").trim();
+  config.uploadFilePath = String(config.uploadFilePath ?? "").trim();
 
   if (config.loadMediaFileId && !isUuidish(config.loadMediaFileId)) {
     fail(
       "VETRA_LOAD_MEDIA_FILE_ID must look like a non-empty UUID string.",
+    );
+  }
+
+  if (mode === "media-upload") {
+    if (!config.uploadFilePath) {
+      fail(
+        "VETRA_LOAD_UPLOAD_FILE_PATH is required for media-upload mode.",
+      );
+    }
+
+    const fixturePath = resolve(process.cwd(), config.uploadFilePath);
+    let fixtureStat = null;
+
+    try {
+      fixtureStat = statSync(fixturePath);
+    } catch (error) {
+      fail(
+        `Upload fixture path does not exist or is unreadable: ${fixturePath} (${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+
+    if (!fixtureStat.isFile()) {
+      fail(`VETRA_LOAD_UPLOAD_FILE_PATH must point to a file: ${fixturePath}`);
+    }
+
+    config.uploadFixturePath = fixturePath;
+    config.uploadFixtureName = basename(fixturePath);
+    config.uploadFixtureSizeBytes = fixtureStat.size;
+    config.uploadFixtureMimeType = guessMimeTypeFromFilename(
+      config.uploadFixtureName,
     );
   }
 
@@ -259,7 +323,7 @@ function buildConfig() {
     fail("Missing required environment variable VETRA_LOAD_API_URL.");
   }
 
-  if (!config.socketUrl) {
+  if (mode !== "media-upload" && !config.socketUrl) {
     fail("Missing required environment variable VETRA_LOAD_SOCKET_URL.");
   }
 
@@ -308,6 +372,16 @@ function buildRoomLoadMessagePayload(session, messageNumber) {
     media_file_id: attachmentEnabled ? config.loadMediaFileId : null,
     reply_to_id: null,
   };
+}
+
+function buildUploadWorkers(auth, metrics) {
+  const workers = Array.from({ length: config.vus }, (_, index) => ({
+    label: `upload-vu-${index + 1}`,
+    auth,
+    metricsRef: metrics,
+  }));
+  metrics.startedVus = workers.length;
+  return workers;
 }
 
 function buildDmLoadMessagePayload(session, messageNumber, partnerRef) {
@@ -469,6 +543,49 @@ async function fetchJson(url, options = {}) {
   }
 
   return body;
+}
+
+async function uploadMediaFixture(apiBaseUrl, auth, fixture) {
+  const formData = new FormData();
+  const blob = new Blob([fixture.buffer], {
+    type: fixture.mimeType ?? "application/octet-stream",
+  });
+  formData.append("file", blob, fixture.name);
+
+  const response = await fetch(`${apiBaseUrl}/media`, {
+    method: "POST",
+    headers: authHeaders(auth.token),
+    body: formData,
+  });
+
+  const text = await response.text();
+  let body = null;
+
+  if (text.length > 0) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
+  }
+
+  const payload =
+    body && typeof body === "object" && body !== null && "data" in body
+      ? body.data
+      : body;
+
+  return {
+    status: response.status,
+    ok: response.ok,
+    body,
+    payload,
+    mediaFileId:
+      payload?.media_file_id ??
+      payload?.id ??
+      body?.media_file_id ??
+      body?.id ??
+      null,
+  };
 }
 
 async function probeBackend(apiBaseUrl) {
@@ -647,6 +764,26 @@ function createMetrics(mode, vus, durationSeconds) {
     schedulerCatchUpSends: 0,
     schedulerLagMs: [],
     schedulerEffectiveMessagesPerSecond: null,
+    uploadAttempts: 0,
+    uploadSuccesses: 0,
+    uploadFailures: 0,
+    uploadStatusCounts: {},
+    uploadFailureSamples: [],
+    uploadSuccessMediaFileIdsSample: [],
+    uploadLatenciesMs: [],
+    uploadBytesTotal: 0,
+    uploadMaxInFlightObserved: 0,
+    uploadFinalInFlightCount: 0,
+    uploadSkippedTicksMaxInFlight: 0,
+    uploadSkippedSendsMaxInFlight: 0,
+    uploadSchedulerRequestedRate: null,
+    uploadSchedulerExpectedByElapsedDuration: 0,
+    uploadSchedulerWakeCount: 0,
+    uploadSchedulerCatchUpSends: 0,
+    uploadSchedulerLagMs: [],
+    uploadSchedulerEffectiveUploadsPerSecond: null,
+    authFailures: 0,
+    authFailuresByType: {},
     serverMonitor: {
       enabled: false,
       samples: [],
@@ -663,6 +800,12 @@ function recordError(metrics, error) {
 function recordStartupError(metrics, error) {
   const key = error instanceof Error ? error.message : String(error);
   metrics.startupErrorsByType[key] = (metrics.startupErrorsByType[key] ?? 0) + 1;
+}
+
+function recordAuthFailure(metrics, error) {
+  const key = error instanceof Error ? error.message : String(error);
+  metrics.authFailures += 1;
+  metrics.authFailuresByType[key] = (metrics.authFailuresByType[key] ?? 0) + 1;
 }
 
 function recordRoomJoinFailure(metrics, error) {
@@ -686,6 +829,20 @@ function recordSocketConnectFailure(metrics, error) {
   if (key.includes("expired_socket_ticket")) {
     metrics.socketConnectDeniedExpiredTicket += 1;
   }
+}
+
+function recordUploadStatus(metrics, status) {
+  const key = String(status);
+  metrics.uploadStatusCounts[key] = (metrics.uploadStatusCounts[key] ?? 0) + 1;
+}
+
+function recordUploadFailure(metrics, sample) {
+  pushLimitedSample(metrics.uploadFailureSamples, sample);
+}
+
+function recordUploadSuccessMediaId(metrics, mediaFileId) {
+  if (!mediaFileId) return;
+  pushLimitedSample(metrics.uploadSuccessMediaFileIdsSample, mediaFileId);
 }
 
 function pushLimitedSample(target, value) {
@@ -944,6 +1101,38 @@ function summarizeMetrics(metrics) {
     socketCloseDetailsSample: metrics.socketCloseDetailsSample,
     runtimeSocketErrors: metrics.runtimeSocketErrors,
     messageFailureDetailsSample: metrics.messageFailureDetailsSample,
+    uploadAttempts: metrics.uploadAttempts,
+    uploadSuccesses: metrics.uploadSuccesses,
+    uploadFailures: metrics.uploadFailures,
+    uploadSuccessRate:
+      metrics.uploadAttempts === 0
+        ? null
+        : Number(
+            ((metrics.uploadSuccesses / metrics.uploadAttempts) * 100).toFixed(2),
+          ),
+    uploadStatusCounts: metrics.uploadStatusCounts,
+    uploadFailureSamples: metrics.uploadFailureSamples,
+    uploadSuccessMediaFileIdsSample: metrics.uploadSuccessMediaFileIdsSample,
+    uploadLatenciesMs: buildLatencyStats(metrics.uploadLatenciesMs),
+    effectiveUploadsPerSecond: approxRate(
+      metrics.uploadSuccesses,
+      metrics.durationSeconds * 1000,
+    ),
+    uploadBytesTotal: metrics.uploadBytesTotal,
+    uploadMaxInFlightObserved: metrics.uploadMaxInFlightObserved,
+    uploadFinalInFlightCount: metrics.uploadFinalInFlightCount,
+    uploadSkippedTicksMaxInFlight: metrics.uploadSkippedTicksMaxInFlight,
+    uploadSkippedSendsMaxInFlight: metrics.uploadSkippedSendsMaxInFlight,
+    uploadSchedulerRequestedRate: metrics.uploadSchedulerRequestedRate,
+    uploadSchedulerExpectedByElapsedDuration:
+      metrics.uploadSchedulerExpectedByElapsedDuration,
+    uploadSchedulerWakeCount: metrics.uploadSchedulerWakeCount,
+    uploadSchedulerCatchUpSends: metrics.uploadSchedulerCatchUpSends,
+    uploadSchedulerLagMs: buildLatencyStats(metrics.uploadSchedulerLagMs),
+    uploadSchedulerEffectiveUploadsPerSecond:
+      metrics.uploadSchedulerEffectiveUploadsPerSecond,
+    authFailures: metrics.authFailures,
+    authFailuresByType: metrics.authFailuresByType,
     approximateMessagesPerSecond: approxMessagesPerSecond(metrics),
     schedulerRequestedMessageRate: metrics.schedulerRequestedMessageRate,
     schedulerExpectedSendsByElapsedDuration:
@@ -1007,6 +1196,46 @@ function printSummary(metrics) {
   console.log(`attachment messages attempted: ${summary.attachmentMessagesAttempted}`);
   console.log(`attachment messages acked: ${summary.attachmentMessagesAcked}`);
   console.log(`attachment messages failed: ${summary.attachmentMessagesFailed}`);
+  if (summary.targetMode === "media-upload") {
+    console.log(`upload attempts: ${summary.uploadAttempts}`);
+    console.log(`upload successes: ${summary.uploadSuccesses}`);
+    console.log(`upload failures: ${summary.uploadFailures}`);
+    console.log(`upload success rate %: ${summary.uploadSuccessRate ?? "-"}`);
+    console.log(`upload HTTP status counts: ${JSON.stringify(summary.uploadStatusCounts)}`);
+    console.log(`upload bytes total: ${summary.uploadBytesTotal}`);
+    console.log(`upload max in-flight observed: ${summary.uploadMaxInFlightObserved}`);
+    console.log(`upload final in-flight count: ${summary.uploadFinalInFlightCount}`);
+    console.log(
+      `upload skipped ticks (max in-flight): ${summary.uploadSkippedTicksMaxInFlight}`,
+    );
+    console.log(
+      `upload skipped sends (max in-flight): ${summary.uploadSkippedSendsMaxInFlight}`,
+    );
+    console.log(
+      `upload requested/sec: ${summary.uploadSchedulerRequestedRate ?? "-"}`,
+    );
+    console.log(
+      `upload expected by elapsed duration: ${summary.uploadSchedulerExpectedByElapsedDuration}`,
+    );
+    console.log(`upload scheduler wakes: ${summary.uploadSchedulerWakeCount}`);
+    console.log(`upload catch-up sends: ${summary.uploadSchedulerCatchUpSends}`);
+    console.log(
+      `upload scheduler lag ms: p50=${summary.uploadSchedulerLagMs.p50 ?? "-"} p95=${summary.uploadSchedulerLagMs.p95 ?? "-"} p99=${summary.uploadSchedulerLagMs.p99 ?? "-"} max=${summary.uploadSchedulerLagMs.max ?? "-"}`,
+    );
+    console.log(
+      `upload effective uploads/sec: ${summary.uploadSchedulerEffectiveUploadsPerSecond ?? summary.effectiveUploadsPerSecond ?? "-"}`,
+    );
+    console.log(
+      `upload latency ms: p50=${summary.uploadLatenciesMs.p50 ?? "-"} p95=${summary.uploadLatenciesMs.p95 ?? "-"} p99=${summary.uploadLatenciesMs.p99 ?? "-"} max=${summary.uploadLatenciesMs.max ?? "-"}`,
+    );
+    console.log(`auth failures: ${summary.authFailures}`);
+    console.log(
+      `auth failures by type: ${JSON.stringify(summary.authFailuresByType)}`,
+    );
+    console.log(
+      `upload failure samples: ${JSON.stringify(summary.uploadFailureSamples)}`,
+    );
+  }
   console.log(`max in-flight observed: ${summary.maxMessageInFlightObserved}`);
   console.log(`final in-flight count: ${summary.finalMessageInFlightCount}`);
   console.log(
@@ -2680,6 +2909,124 @@ async function runDmMessageMode(sessions, metrics, target) {
   ticker.stop();
 }
 
+async function runMediaUploadMode(workers, metrics) {
+  if (!config.writeEnabled) {
+    fail("media-upload mode requires --write or VETRA_LOAD_WRITE=1.");
+  }
+
+  if (workers.length === 0) {
+    fail("No upload workers were created.");
+  }
+
+  const fixture = {
+    path: config.uploadFixturePath,
+    name: config.uploadFixtureName,
+    sizeBytes: config.uploadFixtureSizeBytes,
+    mimeType: config.uploadFixtureMimeType,
+    buffer: readFileSync(config.uploadFixturePath),
+  };
+
+  info(
+    `Upload fixture: ${fixture.path} (${fixture.sizeBytes} bytes, mime=${fixture.mimeType ?? "unknown"})`,
+  );
+  warn(
+    "Write mode enabled. media-upload will create media_files rows and write files on disk. Uploaded files are not deleted automatically.",
+  );
+  info(
+    `Upload rate=${config.uploadsPerSecond}/sec VUs=${workers.length} max in-flight=${config.uploadMaxInFlight}`,
+  );
+
+  const intervalMs = rateToIntervalMs(config.uploadsPerSecond);
+  const drainTimeoutMs = Math.max(config.messageTimeoutMs, 5000);
+  const durationMs = config.durationSeconds * 1000;
+  const stopAtMs = performance.now() + durationMs;
+  let uploadIndex = 0;
+
+  const scheduler = createBoundedInFlightScheduler({
+    intervalMs,
+    requestedMessageRate: config.uploadsPerSecond,
+    maxInFlight: config.uploadMaxInFlight,
+    stopAtMs: config.uploadMaxInFlight > 1 ? stopAtMs : null,
+    onTick: async () => {
+      const uploadNumber = uploadIndex + 1;
+      const worker = workers[uploadIndex % workers.length];
+      uploadIndex = uploadNumber;
+      const startedAt = performance.now();
+
+      metrics.uploadAttempts += 1;
+      metrics.uploadBytesTotal += fixture.sizeBytes;
+
+      try {
+        const result = await uploadMediaFixture(config.apiUrl, worker.auth, fixture);
+        recordUploadStatus(metrics, result.status);
+
+        if (!result.ok) {
+          metrics.uploadFailures += 1;
+          recordUploadFailure(metrics, {
+            vuId: worker.label,
+            uploadNumber,
+            status: result.status,
+            mediaFileId: result.mediaFileId,
+            error:
+              result?.body?.error ??
+              result?.body?.message ??
+              JSON.stringify(result.body),
+          });
+          throw new Error(
+            `media upload failed: status=${result.status} body=${typeof result.body === "string" ? result.body : JSON.stringify(result.body)}`,
+          );
+        }
+
+        metrics.uploadSuccesses += 1;
+        metrics.uploadLatenciesMs.push(performance.now() - startedAt);
+        recordUploadSuccessMediaId(metrics, result.mediaFileId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          !metrics.uploadFailureSamples.some(
+            (sample) =>
+              sample.vuId === worker.label &&
+              sample.uploadNumber === uploadNumber,
+          )
+        ) {
+          recordUploadFailure(metrics, {
+            vuId: worker.label,
+            uploadNumber,
+            status: null,
+            mediaFileId: null,
+            error: message,
+          });
+        }
+        recordError(metrics, error);
+      }
+    },
+    onUnhandledError: (error) => {
+      recordError(metrics, error);
+    },
+  });
+
+  scheduler.start();
+  await sleep(durationMs);
+  const schedulerSummary = await scheduler.stopAndDrain(drainTimeoutMs);
+  metrics.uploadMaxInFlightObserved = Math.max(
+    metrics.uploadMaxInFlightObserved,
+    schedulerSummary.maxInFlightObserved,
+  );
+  metrics.uploadFinalInFlightCount = schedulerSummary.finalInFlightCount;
+  metrics.uploadSkippedTicksMaxInFlight +=
+    schedulerSummary.skippedTicksMaxInFlight;
+  metrics.uploadSkippedSendsMaxInFlight +=
+    schedulerSummary.skippedSendsMaxInFlight;
+  metrics.uploadSchedulerRequestedRate = schedulerSummary.requestedMessageRate;
+  metrics.uploadSchedulerExpectedByElapsedDuration =
+    schedulerSummary.expectedSendsByElapsedDuration;
+  metrics.uploadSchedulerWakeCount = schedulerSummary.schedulerWakeCount;
+  metrics.uploadSchedulerCatchUpSends = schedulerSummary.catchUpSends;
+  metrics.uploadSchedulerLagMs.push(...schedulerSummary.schedulerLagMs);
+  metrics.uploadSchedulerEffectiveUploadsPerSecond =
+    schedulerSummary.schedulerEffectiveMessagesPerSecond;
+}
+
 async function runCallSignalingMode(primarySessions, metrics, secondaryAuth) {
   for (const session of primarySessions) {
     await ensureCallChannel(session, metrics);
@@ -2806,6 +3153,7 @@ async function main() {
   loadPrefix = `[load-test] ${new Date().toISOString()}`;
   isCleaningUp = false;
   activeSessions.clear();
+  const metrics = createMetrics(config.mode, config.vus, config.durationSeconds);
 
   info(
     `message rate config: raw process.env.VETRA_LOAD_MESSAGES_PER_SECOND=${process.env.VETRA_LOAD_MESSAGES_PER_SECOND ?? "<unset>"} effective=${config.messagesPerSecond} source=${describeMessageRateSource()}`,
@@ -2831,59 +3179,103 @@ async function main() {
     );
   }
 
-  await probeBackend(config.apiUrl);
-  const primaryAuth = await login(
-    config.apiUrl,
-    config.username,
-    config.password,
-    "primary",
-  );
-  const secondaryAuth =
-    config.secondUsername && config.secondPassword
-      ? await login(
-          config.apiUrl,
-          config.secondUsername,
-          config.secondPassword,
-          "secondary",
-        )
-      : null;
+  if (config.mode === "media-upload") {
+    info(
+      `Upload fixture configured: ${config.uploadFixturePath} (${config.uploadFixtureSizeBytes} bytes, mime=${config.uploadFixtureMimeType ?? "unknown"})`,
+    );
+    info(
+      `Upload config: rate=${config.uploadsPerSecond}/sec vus=${config.vus} maxInFlight=${config.uploadMaxInFlight}`,
+    );
+    warn(
+      "media-upload mode will create media_files rows and write uploaded files to backend storage. Uploaded files are not deleted automatically.",
+    );
+  }
 
-  const metrics = createMetrics(config.mode, config.vus, config.durationSeconds);
+  await probeBackend(config.apiUrl);
+  let primaryAuth = null;
+  let secondaryAuth = null;
+
+  try {
+    primaryAuth = await login(
+      config.apiUrl,
+      config.username,
+      config.password,
+      "primary",
+    );
+  } catch (error) {
+    metrics.startupFailures += 1;
+    recordStartupError(metrics, error);
+    recordAuthFailure(metrics, error);
+    throw error;
+  }
+
+  if (config.secondUsername && config.secondPassword) {
+    try {
+      secondaryAuth = await login(
+        config.apiUrl,
+        config.secondUsername,
+        config.secondPassword,
+        "secondary",
+      );
+    } catch (error) {
+      metrics.startupFailures += 1;
+      recordStartupError(metrics, error);
+      recordAuthFailure(metrics, error);
+      throw error;
+    }
+  }
+
   const sessions = [];
   let roomReadySessions = [];
+  let uploadWorkers = [];
   const serverMonitor = createServerMonitor(metrics);
   let fatalError = null;
 
   try {
     serverMonitor?.start();
-    const targets = await resolveTargets(primaryAuth, secondaryAuth);
-    const sessionResults = await createSessions(primaryAuth, metrics, {
-      roomTarget: targets.channelTarget,
-      joinRoomDuringStartup:
-        config.mode === "channel-messages" && config.joinRoomDuringStartup,
-    });
-    sessions.push(...sessionResults.sessions);
-    roomReadySessions = sessionResults.roomReadySessions;
-
     switch (config.mode) {
       case "connect":
-        await runConnectMode(sessions);
-        break;
       case "channel-messages":
-        await runChannelMessageMode(sessions, metrics, targets.channelTarget, {
-          roomJoinedSessions: config.joinRoomDuringStartup
-            ? roomReadySessions
-            : undefined,
-        });
-        break;
       case "dm-messages":
-        await runDmMessageMode(sessions, metrics, targets.directTarget);
-        break;
       case "call-signaling":
-        await runCallSignalingMode(sessions, metrics, secondaryAuth);
+      case "soak": {
+        const targets = await resolveTargets(primaryAuth, secondaryAuth);
+        const sessionResults = await createSessions(primaryAuth, metrics, {
+          roomTarget: targets.channelTarget,
+          joinRoomDuringStartup:
+            config.mode === "channel-messages" && config.joinRoomDuringStartup,
+        });
+        sessions.push(...sessionResults.sessions);
+        roomReadySessions = sessionResults.roomReadySessions;
+
+        switch (config.mode) {
+          case "connect":
+            await runConnectMode(sessions);
+            break;
+          case "channel-messages":
+            await runChannelMessageMode(sessions, metrics, targets.channelTarget, {
+              roomJoinedSessions: config.joinRoomDuringStartup
+                ? roomReadySessions
+                : undefined,
+            });
+            break;
+          case "dm-messages":
+            await runDmMessageMode(sessions, metrics, targets.directTarget);
+            break;
+          case "call-signaling":
+            await runCallSignalingMode(sessions, metrics, secondaryAuth);
+            break;
+          case "soak":
+            await runSoakMode(sessions, metrics, targets.channelTarget);
+            break;
+          default:
+            fail(`Unsupported mode ${config.mode}`);
+        }
         break;
-      case "soak":
-        await runSoakMode(sessions, metrics, targets.channelTarget);
+      }
+      case "media-upload":
+        uploadWorkers = buildUploadWorkers(primaryAuth, metrics);
+        await runMediaUploadMode(uploadWorkers, metrics);
         break;
       default:
         fail(`Unsupported mode ${config.mode}`);
