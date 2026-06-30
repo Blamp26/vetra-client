@@ -67,6 +67,18 @@ function envInt(name, fallback) {
   return parsed;
 }
 
+function envNonNegativeInt(name, fallback) {
+  const raw = env[name];
+  if (!raw) return fallback;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    fail(`Environment variable ${name} must be a non-negative integer.`);
+  }
+
+  return parsed;
+}
+
 function envNumber(name, fallback) {
   const raw = env[name];
   if (!raw) return fallback;
@@ -121,6 +133,13 @@ function buildConfig() {
     vus: envInt("VETRA_LOAD_VUS", 10),
     durationSeconds: envInt("VETRA_LOAD_DURATION_SECONDS", 60),
     messagesPerSecond: envNumber("VETRA_LOAD_MESSAGES_PER_SECOND", 5),
+    // Example for higher-throughput write tests:
+    // VETRA_LOAD_MESSAGES_PER_SECOND=20
+    // VETRA_LOAD_MESSAGE_MAX_IN_FLIGHT=50
+    messageMaxInFlight: envNonNegativeInt(
+      "VETRA_LOAD_MESSAGE_MAX_IN_FLIGHT",
+      1,
+    ),
     messageTimeoutMs: envInt("VETRA_LOAD_MESSAGE_TIMEOUT_MS", 15000),
     rampBatchSize: envInt("VETRA_LOAD_RAMP_BATCH_SIZE", 25),
     rampBatchDelayMs: envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
@@ -469,6 +488,9 @@ function createMetrics(mode, vus, durationSeconds) {
     messagesAttempted: 0,
     messagesAcked: 0,
     messagesFailed: 0,
+    maxMessageInFlightObserved: 0,
+    finalMessageInFlightCount: 0,
+    skippedSendTicksMaxInFlight: 0,
     receivedBroadcasts: 0,
     receivedBroadcastsByEvent: {},
     receivedBroadcastsByTopicType: {},
@@ -604,10 +626,31 @@ function resolveSessionPhase(session) {
   if (session.cleanupStarted || isCleaningUp) return "cleanup";
   if (!session.connected) return "startup";
   if (!session.joined) return "user_join";
-  if (session.currentSendInFlight) return "sending";
+  if ((session.currentSendInFlightCount ?? 0) > 0 || session.currentSendInFlight) {
+    return "sending";
+  }
   if (session.lastRoomJoinAttempted && !session.canSendMessages) return "room_join";
   if (session.canSendMessages) return "ready";
   return "unknown";
+}
+
+function markSessionSendStarted(session) {
+  session.currentSendInFlightCount = (session.currentSendInFlightCount ?? 0) + 1;
+  session.currentSendInFlight = session.currentSendInFlightCount > 0;
+  session.currentPhase = "sending";
+}
+
+function markSessionSendFinished(session) {
+  session.currentSendInFlightCount = Math.max(
+    0,
+    (session.currentSendInFlightCount ?? 1) - 1,
+  );
+  session.currentSendInFlight = session.currentSendInFlightCount > 0;
+  if (!session.currentSendInFlight) {
+    session.currentPhase = session.canSendMessages
+      ? "ready"
+      : resolveSessionPhase(session);
+  }
 }
 
 function recordSocketClose(metrics, session, event = null) {
@@ -725,6 +768,9 @@ function summarizeMetrics(metrics) {
     messagesAttempted: metrics.messagesAttempted,
     messagesAcked: metrics.messagesAcked,
     messagesFailed: metrics.messagesFailed,
+    maxMessageInFlightObserved: metrics.maxMessageInFlightObserved,
+    finalMessageInFlightCount: metrics.finalMessageInFlightCount,
+    skippedSendTicksMaxInFlight: metrics.skippedSendTicksMaxInFlight,
     receivedBroadcasts: metrics.receivedBroadcasts,
     receivedBroadcastsByEvent: metrics.receivedBroadcastsByEvent,
     receivedBroadcastsByTopicType: metrics.receivedBroadcastsByTopicType,
@@ -779,6 +825,11 @@ function printSummary(metrics) {
   console.log(`messages attempted: ${summary.messagesAttempted}`);
   console.log(`messages acked: ${summary.messagesAcked}`);
   console.log(`messages failed: ${summary.messagesFailed}`);
+  console.log(`max in-flight observed: ${summary.maxMessageInFlightObserved}`);
+  console.log(`final in-flight count: ${summary.finalMessageInFlightCount}`);
+  console.log(
+    `skipped send ticks (max in-flight): ${summary.skippedSendTicksMaxInFlight}`,
+  );
   console.log(`received broadcasts total: ${summary.receivedBroadcasts}`);
   console.log(
     `received broadcasts by event: ${JSON.stringify(summary.receivedBroadcastsByEvent)}`,
@@ -1372,6 +1423,7 @@ async function openUserSession(label, auth, metrics, timeoutMs) {
     socketOpenedAt: null,
     canSendMessages: false,
     currentSendInFlight: false,
+    currentSendInFlightCount: 0,
     lastRoomJoinAttempted: false,
     hadControlledRoomJoinFailure: false,
     expectedClose: false,
@@ -1960,6 +2012,78 @@ function createTicker(callback, intervalMs) {
   };
 }
 
+function createBoundedInFlightScheduler(options) {
+  const {
+    intervalMs,
+    maxInFlight,
+    onTick,
+    onSkip,
+    onUnhandledError,
+  } = options;
+  const pending = new Set();
+  let maxObserved = 0;
+  let skippedTicks = 0;
+  const sequentialMode = maxInFlight <= 1;
+
+  const startOperation = () => {
+    let tracked = null;
+    tracked = Promise.resolve()
+      .then(() => onTick())
+      .catch((error) => {
+        onUnhandledError?.(error);
+      })
+      .finally(() => {
+        pending.delete(tracked);
+      });
+    pending.add(tracked);
+    if (pending.size > maxObserved) {
+      maxObserved = pending.size;
+    }
+
+    return tracked;
+  };
+
+  const ticker = sequentialMode
+    ? createTicker(async () => {
+        if (pending.size >= 1) {
+          return;
+        }
+
+        await startOperation();
+      }, intervalMs)
+    : createTicker(() => {
+        if (pending.size >= maxInFlight) {
+          skippedTicks += 1;
+          onSkip?.(pending.size);
+          return;
+        }
+
+        startOperation();
+      }, intervalMs);
+
+  return {
+    start() {
+      ticker.start();
+    },
+    async stopAndDrain(timeoutMs) {
+      ticker.stop();
+
+      if (pending.size > 0) {
+        await Promise.race([
+          Promise.allSettled([...pending]),
+          new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+        ]);
+      }
+
+      return {
+        maxInFlightObserved: maxObserved,
+        finalInFlightCount: pending.size,
+        skippedTicksMaxInFlight: skippedTicks,
+      };
+    },
+  };
+}
+
 async function sleep(ms) {
   if (shutdownRequested) return;
 
@@ -2012,57 +2136,71 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
   warn("Write mode enabled. This will send tagged [load-test] channel messages.");
   const rate = options.messagesPerSecond ?? config.messagesPerSecond;
   const intervalMs = Math.max(50, Math.floor(1000 / rate));
+  const drainTimeoutMs = Math.max(config.messageTimeoutMs, 5000);
   let sendIndex = 0;
 
-  const ticker = createTicker(async () => {
-    const session = roomJoinedSessions[sendIndex % roomJoinedSessions.length];
-    sendIndex += 1;
-    session.currentSendInFlight = true;
-    session.currentPhase = "sending";
-    const sendStartedAt = performance.now();
+  const scheduler = createBoundedInFlightScheduler({
+    intervalMs,
+    maxInFlight: config.messageMaxInFlight,
+    onTick: async () => {
+      const messageNumber = sendIndex + 1;
+      const session = roomJoinedSessions[sendIndex % roomJoinedSessions.length];
+      sendIndex = messageNumber;
+      markSessionSendStarted(session);
+      const sendStartedAt = performance.now();
 
-    try {
-      const roomChannel = await ensureRoomChannel(session, target, metrics);
-      const content = `${loadPrefix} channel message vu=${session.label} n=${sendIndex}`;
-      assertLoadContent(content);
-      await pushOk(
-        roomChannel,
-        "send_message",
-        {
-          content,
-          media_file_id: null,
-          reply_to_id: null,
-        },
-        "channel load message",
-        metrics,
-        config.messageTimeoutMs,
-      );
-    } catch (error) {
-      const activeSenderCount = roomJoinedSessions.filter(
-        (candidate) =>
-          candidate.canSendMessages && getSocketState(candidate) === "open",
-      ).length;
-      const activeReceiverCount = roomJoinedSessions.filter(
-        (candidate) => getSocketState(candidate) === "open",
-      ).length;
-      recordMessageFailure(
-        metrics,
-        session,
-        error,
-        performance.now() - sendStartedAt,
-        activeSenderCount,
-        activeReceiverCount,
-      );
+      try {
+        const roomChannel = await ensureRoomChannel(session, target, metrics);
+        const content = `${loadPrefix} channel message vu=${session.label} n=${messageNumber}`;
+        assertLoadContent(content);
+        await pushOk(
+          roomChannel,
+          "send_message",
+          {
+            content,
+            media_file_id: null,
+            reply_to_id: null,
+          },
+          "channel load message",
+          metrics,
+          config.messageTimeoutMs,
+        );
+      } catch (error) {
+        const activeSenderCount = roomJoinedSessions.filter(
+          (candidate) =>
+            candidate.canSendMessages && getSocketState(candidate) === "open",
+        ).length;
+        const activeReceiverCount = roomJoinedSessions.filter(
+          (candidate) => getSocketState(candidate) === "open",
+        ).length;
+        recordMessageFailure(
+          metrics,
+          session,
+          error,
+          performance.now() - sendStartedAt,
+          activeSenderCount,
+          activeReceiverCount,
+        );
+        recordError(metrics, error);
+      } finally {
+        markSessionSendFinished(session);
+      }
+    },
+    onUnhandledError: (error) => {
       recordError(metrics, error);
-    } finally {
-      session.currentSendInFlight = false;
-      session.currentPhase = session.canSendMessages ? "ready" : resolveSessionPhase(session);
-    }
-  }, intervalMs);
+    },
+  });
 
-  ticker.start();
+  scheduler.start();
   await sleep(config.durationSeconds * 1000);
-  ticker.stop();
+  const schedulerSummary = await scheduler.stopAndDrain(drainTimeoutMs);
+  metrics.maxMessageInFlightObserved = Math.max(
+    metrics.maxMessageInFlightObserved,
+    schedulerSummary.maxInFlightObserved,
+  );
+  metrics.finalMessageInFlightCount = schedulerSummary.finalInFlightCount;
+  metrics.skippedSendTicksMaxInFlight +=
+    schedulerSummary.skippedTicksMaxInFlight;
 }
 
 async function runDmMessageMode(sessions, metrics, target) {
