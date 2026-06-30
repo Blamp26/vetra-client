@@ -491,6 +491,7 @@ function createMetrics(mode, vus, durationSeconds) {
     maxMessageInFlightObserved: 0,
     finalMessageInFlightCount: 0,
     skippedSendTicksMaxInFlight: 0,
+    skippedSendsMaxInFlight: 0,
     receivedBroadcasts: 0,
     receivedBroadcastsByEvent: {},
     receivedBroadcastsByTopicType: {},
@@ -512,6 +513,12 @@ function createMetrics(mode, vus, durationSeconds) {
     errorsByType: {},
     startupErrorsByType: {},
     roomJoinFailuresByType: {},
+    schedulerRequestedMessageRate: null,
+    schedulerExpectedSendsByElapsedDuration: 0,
+    schedulerWakeCount: 0,
+    schedulerCatchUpSends: 0,
+    schedulerLagMs: [],
+    schedulerEffectiveMessagesPerSecond: null,
     serverMonitor: {
       enabled: false,
       samples: [],
@@ -742,6 +749,11 @@ function approxMessagesPerSecond(metrics) {
   return Number((metrics.messagesAcked / metrics.durationSeconds).toFixed(2));
 }
 
+function approxRate(count, durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return null;
+  return Number(((count * 1000) / durationMs).toFixed(2));
+}
+
 function summarizeMetrics(metrics) {
   return {
     duration: metrics.durationSeconds,
@@ -771,6 +783,7 @@ function summarizeMetrics(metrics) {
     maxMessageInFlightObserved: metrics.maxMessageInFlightObserved,
     finalMessageInFlightCount: metrics.finalMessageInFlightCount,
     skippedSendTicksMaxInFlight: metrics.skippedSendTicksMaxInFlight,
+    skippedSendsMaxInFlight: metrics.skippedSendsMaxInFlight,
     receivedBroadcasts: metrics.receivedBroadcasts,
     receivedBroadcastsByEvent: metrics.receivedBroadcastsByEvent,
     receivedBroadcastsByTopicType: metrics.receivedBroadcastsByTopicType,
@@ -787,6 +800,14 @@ function summarizeMetrics(metrics) {
     runtimeSocketErrors: metrics.runtimeSocketErrors,
     messageFailureDetailsSample: metrics.messageFailureDetailsSample,
     approximateMessagesPerSecond: approxMessagesPerSecond(metrics),
+    schedulerRequestedMessageRate: metrics.schedulerRequestedMessageRate,
+    schedulerExpectedSendsByElapsedDuration:
+      metrics.schedulerExpectedSendsByElapsedDuration,
+    schedulerWakeCount: metrics.schedulerWakeCount,
+    schedulerCatchUpSends: metrics.schedulerCatchUpSends,
+    schedulerLagMs: buildLatencyStats(metrics.schedulerLagMs),
+    schedulerEffectiveMessagesPerSecond:
+      metrics.schedulerEffectiveMessagesPerSecond,
     latenciesMs: buildLatencyStats(metrics.ackLatenciesMs),
     connectLatenciesMs: buildLatencyStats(metrics.connectLatenciesMs),
     joinLatenciesMs: buildLatencyStats(metrics.joinLatenciesMs),
@@ -829,6 +850,19 @@ function printSummary(metrics) {
   console.log(`final in-flight count: ${summary.finalMessageInFlightCount}`);
   console.log(
     `skipped send ticks (max in-flight): ${summary.skippedSendTicksMaxInFlight}`,
+  );
+  console.log(`skipped sends (max in-flight): ${summary.skippedSendsMaxInFlight}`);
+  console.log(`requested msg/sec: ${summary.schedulerRequestedMessageRate ?? "-"}`);
+  console.log(
+    `expected sends by elapsed duration: ${summary.schedulerExpectedSendsByElapsedDuration}`,
+  );
+  console.log(`scheduler wakes: ${summary.schedulerWakeCount}`);
+  console.log(`catch-up sends: ${summary.schedulerCatchUpSends}`);
+  console.log(
+    `scheduler lag ms: p50=${summary.schedulerLagMs.p50 ?? "-"} p95=${summary.schedulerLagMs.p95 ?? "-"} p99=${summary.schedulerLagMs.p99 ?? "-"} max=${summary.schedulerLagMs.max ?? "-"}`,
+  );
+  console.log(
+    `scheduler effective msg/sec: ${summary.schedulerEffectiveMessagesPerSecond ?? "-"}`,
   );
   console.log(`received broadcasts total: ${summary.receivedBroadcasts}`);
   console.log(
@@ -2019,11 +2053,23 @@ function createBoundedInFlightScheduler(options) {
     onTick,
     onSkip,
     onUnhandledError,
+    stopAtMs = null,
   } = options;
   const pending = new Set();
   let maxObserved = 0;
   let skippedTicks = 0;
+  let skippedSends = 0;
+  let wakeCount = 0;
+  let catchUpSends = 0;
+  let startedAt = null;
   const sequentialMode = maxInFlight <= 1;
+  let accountedSends = 0;
+  const schedulerLagMs = [];
+
+  const effectiveNow = () => {
+    const now = performance.now();
+    return stopAtMs === null ? now : Math.min(now, stopAtMs);
+  };
 
   const startOperation = () => {
     let tracked = null;
@@ -2043,6 +2089,102 @@ function createBoundedInFlightScheduler(options) {
     return tracked;
   };
 
+  const scheduleNextMonotonicWake = () => {
+    if (startedAt === null) return null;
+
+    const nextSendNumber = accountedSends + 1;
+    const nextDueAt = startedAt + nextSendNumber * intervalMs;
+    const now = performance.now();
+    const targetWakeAt =
+      stopAtMs === null ? nextDueAt : Math.min(nextDueAt, stopAtMs);
+
+    return Math.max(0, targetWakeAt - now);
+  };
+
+  // Catch-up scheduling is needed here because timer drift across many VUs can
+  // under-produce writes even when the backend is fast and there is no real
+  // backpressure from WebSocket fanout or acks.
+  const createCatchUpTicker = () => {
+    let active = false;
+    let timer = null;
+
+    const schedule = (delayMs) => {
+      timer = setTimeout(runTick, delayMs);
+    };
+
+    const runTick = async () => {
+      if (!active) return;
+
+      wakeCount += 1;
+
+      try {
+        const now = performance.now();
+        if (stopAtMs !== null && now >= stopAtMs) {
+          active = false;
+          return;
+        }
+
+        const boundedNow = effectiveNow();
+        const elapsedMs = Math.max(0, boundedNow - startedAt);
+        const expectedSends = Math.floor(elapsedMs / intervalMs);
+        const lagMs = Math.max(0, now - (startedAt + (accountedSends + 1) * intervalMs));
+        schedulerLagMs.push(lagMs);
+
+        const dueSends = Math.max(0, expectedSends - accountedSends);
+        if (dueSends > 0) {
+          const availableSlots = Math.max(0, maxInFlight - pending.size);
+          const sendsToStart = Math.min(dueSends, availableSlots);
+          const droppedSends = dueSends - sendsToStart;
+
+          if (droppedSends > 0) {
+            skippedTicks += 1;
+            skippedSends += droppedSends;
+            onSkip?.(pending.size, droppedSends);
+          }
+
+          if (sendsToStart > 1) {
+            catchUpSends += sendsToStart - 1;
+          }
+
+          for (let index = 0; index < sendsToStart; index += 1) {
+            startOperation();
+          }
+
+          accountedSends += dueSends;
+        }
+      } catch (error) {
+        onUnhandledError?.(error);
+      } finally {
+        if (!active) {
+          return;
+        }
+
+        if (stopAtMs !== null && performance.now() >= stopAtMs) {
+          active = false;
+          return;
+        }
+
+        schedule(scheduleNextMonotonicWake());
+      }
+    };
+
+    return {
+      start() {
+        if (active) return;
+        active = true;
+        startedAt = performance.now();
+        schedule(intervalMs);
+      },
+      stop() {
+        active = false;
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+      },
+    };
+  };
+
   const ticker = sequentialMode
     ? createTicker(async () => {
         if (pending.size >= 1) {
@@ -2051,22 +2193,19 @@ function createBoundedInFlightScheduler(options) {
 
         await startOperation();
       }, intervalMs)
-    : createTicker(() => {
-        if (pending.size >= maxInFlight) {
-          skippedTicks += 1;
-          onSkip?.(pending.size);
-          return;
-        }
-
-        startOperation();
-      }, intervalMs);
+    : createCatchUpTicker();
 
   return {
     start() {
+      if (sequentialMode) {
+        startedAt = performance.now();
+      }
+
       ticker.start();
     },
     async stopAndDrain(timeoutMs) {
       ticker.stop();
+      const stoppedAt = effectiveNow();
 
       if (pending.size > 0) {
         await Promise.race([
@@ -2079,6 +2218,17 @@ function createBoundedInFlightScheduler(options) {
         maxInFlightObserved: maxObserved,
         finalInFlightCount: pending.size,
         skippedTicksMaxInFlight: skippedTicks,
+        skippedSendsMaxInFlight: skippedSends,
+        requestedMessageRate: Number((1000 / intervalMs).toFixed(2)),
+        expectedSendsByElapsedDuration:
+          startedAt === null ? 0 : Math.floor(Math.max(0, stoppedAt - startedAt) / intervalMs),
+        schedulerWakeCount: wakeCount,
+        catchUpSends,
+        schedulerLagMs,
+        schedulerEffectiveMessagesPerSecond:
+          startedAt === null
+            ? null
+            : approxRate(accountedSends, Math.max(0, stoppedAt - startedAt)),
       };
     },
   };
@@ -2137,11 +2287,14 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
   const rate = options.messagesPerSecond ?? config.messagesPerSecond;
   const intervalMs = Math.max(50, Math.floor(1000 / rate));
   const drainTimeoutMs = Math.max(config.messageTimeoutMs, 5000);
+  const durationMs = config.durationSeconds * 1000;
+  const stopAtMs = performance.now() + durationMs;
   let sendIndex = 0;
 
   const scheduler = createBoundedInFlightScheduler({
     intervalMs,
     maxInFlight: config.messageMaxInFlight,
+    stopAtMs: config.messageMaxInFlight > 1 ? stopAtMs : null,
     onTick: async () => {
       const messageNumber = sendIndex + 1;
       const session = roomJoinedSessions[sendIndex % roomJoinedSessions.length];
@@ -2192,7 +2345,7 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
   });
 
   scheduler.start();
-  await sleep(config.durationSeconds * 1000);
+  await sleep(durationMs);
   const schedulerSummary = await scheduler.stopAndDrain(drainTimeoutMs);
   metrics.maxMessageInFlightObserved = Math.max(
     metrics.maxMessageInFlightObserved,
@@ -2201,6 +2354,15 @@ async function runChannelMessageMode(sessions, metrics, target, options = {}) {
   metrics.finalMessageInFlightCount = schedulerSummary.finalInFlightCount;
   metrics.skippedSendTicksMaxInFlight +=
     schedulerSummary.skippedTicksMaxInFlight;
+  metrics.skippedSendsMaxInFlight += schedulerSummary.skippedSendsMaxInFlight;
+  metrics.schedulerRequestedMessageRate = schedulerSummary.requestedMessageRate;
+  metrics.schedulerExpectedSendsByElapsedDuration =
+    schedulerSummary.expectedSendsByElapsedDuration;
+  metrics.schedulerWakeCount = schedulerSummary.schedulerWakeCount;
+  metrics.schedulerCatchUpSends = schedulerSummary.catchUpSends;
+  metrics.schedulerLagMs.push(...schedulerSummary.schedulerLagMs);
+  metrics.schedulerEffectiveMessagesPerSecond =
+    schedulerSummary.schedulerEffectiveMessagesPerSecond;
 }
 
 async function runDmMessageMode(sessions, metrics, target) {
