@@ -42,9 +42,25 @@ describe("ActiveCallDock", () => {
     expect(screen.getAllByText("Alice")).toHaveLength(2);
     expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("Connected");
     expect(screen.getByTestId("active-call-dock-controls")).toBeInTheDocument();
+    expect(screen.getByTestId("active-call-dock-stage")).toBeInTheDocument();
+    expect(screen.getAllByTestId("active-call-participant-tile")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share screen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hang Up" })).toBeInTheDocument();
+  });
+
+  it("keeps controls inside the dock overlay rather than in a sibling strip", () => {
+    renderDock();
+
+    const dock = screen.getByTestId("active-call-dock");
+    const controls = screen.getByTestId("active-call-dock-controls");
+    const stage = screen.getByTestId("active-call-dock-stage");
+
+    expect(dock).toContainElement(controls);
+    expect(dock).toContainElement(stage);
+    expect(controls.parentElement).toBe(dock);
+    expect(controls).toHaveClass("absolute");
+    expect(controls).not.toHaveClass("bg-card/50");
   });
 
   it("disables the screen-share control while an update is in flight", () => {
