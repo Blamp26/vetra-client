@@ -17,6 +17,25 @@ vi.mock('../services/webrtcService', () => {
         this.startCall = vi.fn().mockResolvedValue(undefined);
         this.acceptCall = vi.fn().mockResolvedValue(undefined);
         this.handleAnswer = vi.fn().mockResolvedValue(undefined);
+        this.handleOffer = vi.fn().mockResolvedValue(undefined);
+        this.startScreenShare = vi.fn(async (onEnded?: () => void) => {
+            this._screenStream?.getTracks?.().forEach((track: MediaStreamTrack) => track.stop());
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                audio: false,
+            });
+            const track = stream.getVideoTracks?.()[0];
+            if (track && onEnded) {
+                track.addEventListener?.('ended', onEnded);
+                track.onended = onEnded;
+            }
+            this._screenStream = stream;
+            return stream;
+        });
+        this.stopScreenShare = vi.fn(async () => {
+            this._screenStream?.getTracks?.().forEach((track: MediaStreamTrack) => track.stop());
+            this._screenStream = null;
+        });
         this.collectDiagnostics = vi.fn().mockResolvedValue({
             connectionState: 'unknown',
             iceConnectionState: 'unknown',
@@ -26,7 +45,10 @@ vi.mock('../services/webrtcService', () => {
         });
         this.addIceCandidate = vi.fn();
         this.hangUp = vi.fn();
-        this.dispose = vi.fn();
+        this.dispose = vi.fn(() => {
+            this._screenStream?.getTracks?.().forEach((track: MediaStreamTrack) => track.stop());
+            this._screenStream = null;
+        });
         this.setLocalMuted = vi.fn((muted: boolean) => {
             this._isLocalMuted = muted;
         });
@@ -37,6 +59,7 @@ vi.mock('../services/webrtcService', () => {
         this.isLocalMuted = vi.fn(() => this._isLocalMuted);
         this.getLocalAudioTracks = vi.fn(() => []);
         this.onRemoteStream = null;
+        this.onRemoteScreenStream = null;
         this.onCallIdReceived = null;
         this.onDiagnosticsChange = null;
         this.getDiagnosticsSnapshot = vi.fn().mockReturnValue({
@@ -174,6 +197,7 @@ describe('useCall', () => {
         expect(result.current.callId).toBeNull();
         expect(result.current.isMuted).toBe(false);
         expect(result.current.remoteStream).toBeNull();
+        expect(result.current.remoteScreenStream).toBeNull();
     });
 
     // УБРАЛИ async и waitFor
@@ -1199,6 +1223,93 @@ describe('useCall', () => {
             expect(warnSpy).toHaveBeenCalledWith('[useCall] Screen share was not started', error);
 
             warnSpy.mockRestore();
+        });
+
+        it('startScreenShare in an active call uses WebRTC and keeps status active', async () => {
+            const track = {
+                stop: vi.fn(),
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const stream = {
+                getVideoTracks: vi.fn(() => [track]),
+                getTracks: vi.fn(() => [track]),
+            };
+            mockGetDisplayMedia.mockResolvedValue(stream);
+
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+            });
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+
+            expect(service.startScreenShare).toHaveBeenCalledWith(expect.any(Function));
+            expect(result.current.status).toBe('active');
+            expect(result.current.isScreenSharing).toBe(true);
+            expect(result.current.localScreenStream).toBe(stream);
+        });
+
+        it('remote screen stream state is set and cleared from WebRTC callbacks', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+            const remoteScreenStream = { id: 'remote-screen' };
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+                service.onRemoteScreenStream?.(remoteScreenStream);
+            });
+
+            expect(result.current.status).toBe('active');
+            expect(result.current.remoteScreenStream).toEqual(remoteScreenStream);
+
+            act(() => {
+                service.onRemoteScreenStream?.(null);
+            });
+
+            expect(result.current.remoteScreenStream).toBeNull();
+        });
+
+        it('active-call offer is handled as renegotiation without leaving active status', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+            const offerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'offer')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+            });
+            act(() => {
+                offerHandler({
+                    sdp: 'renegotiation-offer-sdp',
+                    from_user_id: 2,
+                    from_username: 'caller',
+                    call_id: 'call-123',
+                });
+            });
+
+            expect(result.current.status).toBe('active');
+            expect(service.handleOffer).toHaveBeenCalledWith('renegotiation-offer-sdp');
+            expect(service.dispose).not.toHaveBeenCalled();
         });
     });
 

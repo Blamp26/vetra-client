@@ -43,6 +43,7 @@ export interface UseCallReturn {
     isMuted: boolean;
     isScreenSharing: boolean;
     remoteStream: MediaStream | null;
+    remoteScreenStream: MediaStream | null;
     localScreenStream: MediaStream | null;
     seconds: number;
     diagnostics: CallDiagnostics;

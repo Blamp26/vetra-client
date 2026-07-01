@@ -64,6 +64,7 @@ function App() {
   const {
     status,
     remoteStream,
+    remoteScreenStream,
     localScreenStream,
     remoteUsername,
     remoteUserId,
@@ -327,6 +328,7 @@ function App() {
           seconds={seconds}
           isMuted={isMuted}
           isScreenSharing={isScreenSharing}
+          remoteScreenStream={remoteScreenStream}
           localScreenStream={localScreenStream}
           diagnostics={diagnostics}
           onMuteToggle={toggleMute}

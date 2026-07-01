@@ -24,6 +24,7 @@ import {
 class MockMediaStream {
     getTracks = vi.fn(() => []);
     getAudioTracks = vi.fn(() => []);
+    getVideoTracks = vi.fn(() => []);
 }
 global.MediaStream = MockMediaStream as any;
 
@@ -97,7 +98,8 @@ class MockRTCPeerConnection {
         return Promise.resolve();
     });
     addIceCandidate = vi.fn().mockResolvedValue(undefined);
-    addTrack = vi.fn();
+    addTrack = vi.fn((track: MediaStreamTrack) => ({ track }));
+    removeTrack = vi.fn();
     close = vi.fn();
 
     constructor(config: RTCConfiguration) {
@@ -107,11 +109,26 @@ class MockRTCPeerConnection {
 
 let mockLocalTracks: Array<{ enabled: boolean; stop: ReturnType<typeof vi.fn> }>;
 let mockAudioTracks: Array<{ enabled: boolean; stop: ReturnType<typeof vi.fn> }>;
+let mockScreenTrack: {
+    kind: string;
+    enabled: boolean;
+    stop: ReturnType<typeof vi.fn>;
+    addEventListener: ReturnType<typeof vi.fn>;
+    removeEventListener: ReturnType<typeof vi.fn>;
+    onended: (() => void) | null;
+};
+let mockScreenStream: {
+    getTracks: ReturnType<typeof vi.fn>;
+    getAudioTracks: ReturnType<typeof vi.fn>;
+    getVideoTracks: ReturnType<typeof vi.fn>;
+};
 
 const mockGetUserMedia = vi.fn(async () => ({
     getTracks: () => mockLocalTracks,
     getAudioTracks: () => mockAudioTracks,
 }));
+
+const mockGetDisplayMedia = vi.fn(async () => mockScreenStream);
 
 const mockChannelPush = vi.fn().mockReturnValue({
     receive: vi.fn((event, cb) => {
@@ -133,11 +150,24 @@ beforeEach(() => {
     mockAppState.autoGainControl = true;
     mockAudioTracks = [{ enabled: true, stop: vi.fn() }];
     mockLocalTracks = mockAudioTracks;
+    mockScreenTrack = {
+        kind: 'video',
+        enabled: true,
+        stop: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        onended: null,
+    };
+    mockScreenStream = {
+        getTracks: vi.fn(() => [mockScreenTrack]),
+        getAudioTracks: vi.fn(() => []),
+        getVideoTracks: vi.fn(() => [mockScreenTrack]),
+    };
 
     (global as any).RTCPeerConnection = MockRTCPeerConnection as any;
 
     Object.defineProperty(global.navigator, 'mediaDevices', {
-        value: { getUserMedia: mockGetUserMedia },
+        value: { getUserMedia: mockGetUserMedia, getDisplayMedia: mockGetDisplayMedia },
         writable: true,
     });
 });
@@ -339,6 +369,77 @@ describe('WebRTCService', () => {
         });
     });
 
+    describe('screen sharing', () => {
+        it('startScreenShare gets display media, attaches the screen track, and sends a renegotiation offer', async () => {
+            await service.startCall();
+            mockChannelPush.mockClear();
+
+            const stream = await service.startScreenShare();
+
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            expect(stream).toBe(mockScreenStream);
+            expect(mockGetDisplayMedia).toHaveBeenCalledWith({
+                video: true,
+                audio: false,
+            });
+            expect(pc.addTrack).toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
+            expect(pc.createOffer).toHaveBeenCalledTimes(2);
+            expect(mockChannelPush).toHaveBeenCalledWith('offer', {
+                sdp: expect.any(String),
+                to_user_id: remoteUserId,
+                call_id: expect.stringContaining(':'),
+            });
+        });
+
+        it('stopScreenShare removes the sender and renegotiates without disposing the peer', async () => {
+            await service.startCall();
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+
+            await service.startScreenShare();
+            const sender = (service as any).screenSender;
+            mockChannelPush.mockClear();
+
+            await service.stopScreenShare();
+
+            expect(pc.removeTrack).toHaveBeenCalledWith(sender);
+            expect(mockScreenTrack.stop).toHaveBeenCalled();
+            expect(pc.close).not.toHaveBeenCalled();
+            expect((service as any).peerConnection).toBe(pc);
+            expect(mockChannelPush).toHaveBeenCalledWith('offer', expect.objectContaining({
+                sdp: expect.any(String),
+                to_user_id: remoteUserId,
+            }));
+        });
+
+        it('screen track ended cleans up through the provided callback without disposing the peer', async () => {
+            const onEnded = vi.fn();
+            await service.startCall();
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+
+            await service.startScreenShare(onEnded);
+            const endedHandler = mockScreenTrack.addEventListener.mock.calls.find(([event]) => event === 'ended')?.[1];
+            expect(endedHandler).toEqual(expect.any(Function));
+
+            endedHandler?.();
+
+            await vi.waitFor(() => {
+                expect(onEnded).toHaveBeenCalled();
+            });
+            expect(mockScreenTrack.stop).not.toHaveBeenCalled();
+            expect(pc.close).not.toHaveBeenCalled();
+            expect((service as any).screenStream).toBeNull();
+        });
+
+        it('dispose stops an active screen track', async () => {
+            await service.startCall();
+            await service.startScreenShare();
+
+            service.dispose();
+
+            expect(mockScreenTrack.stop).toHaveBeenCalled();
+        });
+    });
+
     describe('dispose', () => {
         it('closes the peer connection, stops tracks, and clears ICE state', async () => {
             await service.startCall();
@@ -378,6 +479,56 @@ describe('WebRTCService', () => {
             }
 
             expect(onRemoteStream).toHaveBeenCalledWith(fakeStream);
+        });
+
+        it('invokes onRemoteScreenStream for remote video tracks and clears it on mute', async () => {
+            const onRemoteScreenStream = vi.fn();
+            service.onRemoteScreenStream = onRemoteScreenStream;
+
+            await service.startCall();
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            const fakeStream = new MediaStream();
+            const fakeTrack = {
+                kind: 'video',
+                onended: null as (() => void) | null,
+                onmute: null as (() => void) | null,
+            };
+
+            pc.ontrack?.({ streams: [fakeStream], track: fakeTrack } as any);
+
+            expect(onRemoteScreenStream).toHaveBeenCalledWith(fakeStream);
+
+            fakeTrack.onmute?.();
+
+            expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
+        });
+
+        it('clears remote screen stream when a renegotiation offer no longer sends video', async () => {
+            const onRemoteScreenStream = vi.fn();
+            service.onRemoteScreenStream = onRemoteScreenStream;
+
+            await service.startCall();
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            const fakeStream = new MediaStream();
+
+            pc.ontrack?.({
+                streams: [fakeStream],
+                track: { kind: 'video', onended: null, onmute: null },
+            } as any);
+
+            await service.handleOffer([
+                'v=0',
+                'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+                'a=sendrecv',
+                'm=video 9 UDP/TLS/RTP/SAVPF 96',
+                'a=recvonly',
+            ].join('\r\n'));
+
+            expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
+            expect(mockChannelPush).toHaveBeenCalledWith('answer', expect.objectContaining({
+                sdp: expect.any(String),
+                to_user_id: remoteUserId,
+            }));
         });
     });
 

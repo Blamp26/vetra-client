@@ -8,6 +8,7 @@ interface ActiveCallWindowProps {
   seconds: number;
   isMuted: boolean;
   isScreenSharing: boolean;
+  remoteScreenStream: MediaStream | null;
   localScreenStream: MediaStream | null;
   diagnostics: CallDiagnostics;
   onMuteToggle: () => void;
@@ -21,6 +22,7 @@ export const ActiveCallWindow = ({
   seconds,
   isMuted,
   isScreenSharing,
+  remoteScreenStream,
   localScreenStream,
   diagnostics,
   onMuteToggle,
@@ -28,9 +30,21 @@ export const ActiveCallWindow = ({
   onStopScreenShare,
   onHangUp,
 }: ActiveCallWindowProps) => {
+  const remoteScreenRef = useRef<HTMLVideoElement>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === 'true';
+
+  useEffect(() => {
+    const remoteScreen = remoteScreenRef.current;
+    if (!remoteScreen) return;
+
+    remoteScreen.srcObject = remoteScreenStream;
+
+    return () => {
+      remoteScreen.srcObject = null;
+    };
+  }, [remoteScreenStream]);
 
   useEffect(() => {
     const preview = previewRef.current;
@@ -83,6 +97,21 @@ export const ActiveCallWindow = ({
                 {diagnostics.selectedLocalCandidateType}
               </span>
             </div>
+          </div>
+        )}
+
+        {remoteScreenStream && (
+          <div className="w-full max-w-[520px] border border-border bg-background p-2">
+            <div className="mb-2 text-[10px] uppercase text-muted-foreground">
+              Remote Screen
+            </div>
+            <video
+              ref={remoteScreenRef}
+              autoPlay
+              playsInline
+              className="w-full border border-border bg-muted/20"
+              data-testid="remote-screen-view"
+            />
           </div>
         )}
 

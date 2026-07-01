@@ -17,12 +17,14 @@ class MockMediaStream {}
 function renderWindow({
   diagnostics = defaultDiagnostics,
   isScreenSharing = false,
+  remoteScreenStream = null,
   localScreenStream = null,
   onStartScreenShare = async () => undefined,
   onStopScreenShare = () => undefined,
 } : {
   diagnostics?: CallDiagnostics;
   isScreenSharing?: boolean;
+  remoteScreenStream?: MediaStream | null;
   localScreenStream?: MediaStream | null;
   onStartScreenShare?: () => Promise<void>;
   onStopScreenShare?: () => void;
@@ -33,6 +35,7 @@ function renderWindow({
       seconds={12}
       isMuted={false}
       isScreenSharing={isScreenSharing}
+      remoteScreenStream={remoteScreenStream}
       localScreenStream={localScreenStream}
       diagnostics={diagnostics}
       onMuteToggle={vi.fn()}
@@ -133,5 +136,14 @@ describe('ActiveCallWindow', () => {
 
     expect(screen.getByTestId('local-screen-preview')).toBeInTheDocument();
     expect(screen.getByText('Local Preview Only')).toBeInTheDocument();
+  });
+
+  it('shows the remote shared screen when a remote screen stream exists', () => {
+    renderWindow({
+      remoteScreenStream: new MediaStream(),
+    });
+
+    expect(screen.getByTestId('remote-screen-view')).toBeInTheDocument();
+    expect(screen.getByText('Remote Screen')).toBeInTheDocument();
   });
 });

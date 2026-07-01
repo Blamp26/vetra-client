@@ -41,6 +41,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [isMuted, setIsMuted] = useState(false);
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+    const [remoteScreenStream, setRemoteScreenStream] = useState<MediaStream | null>(null);
     const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
     const [seconds, setSeconds] = useState(0);
     const [diagnostics, setDiagnostics] = useState<CallDiagnostics>(EMPTY_CALL_DIAGNOSTICS);
@@ -86,7 +87,11 @@ export function useCall(currentUserId: number): UseCallReturn {
     }, []);
 
     const stopScreenShare = useCallback(() => {
-        cleanupScreenShare({ stopTracks: true });
+        const service = webrtcRef.current;
+        void service?.stopScreenShare().catch((err) => {
+            console.warn('[useCall] Failed to stop transmitted screen share', err);
+        });
+        cleanupScreenShare({ stopTracks: !service });
     }, [cleanupScreenShare]);
 
     const clearCallTimeout = useCallback(() => {
@@ -107,7 +112,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             signalingUnsubsRef.current.forEach((unsub) => unsub());
             signalingUnsubsRef.current = [];
         }
-        cleanupScreenShare({ stopTracks: true });
+        cleanupScreenShare({ stopTracks: !webrtcRef.current });
         webrtcRef.current?.dispose();
         webrtcRef.current = null;
         callChannelRef.current = null;
@@ -118,6 +123,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             setRemoteUsername(null);
             setCallId(null);
             setRemoteStream(null);
+            setRemoteScreenStream(null);
             setIsMuted(false);
             setIsScreenSharing(false);
             setLocalScreenStream(null);
@@ -139,7 +145,16 @@ export function useCall(currentUserId: number): UseCallReturn {
         setRemoteUserId((prev) => prev ?? payload.from_user_id);
         setRemoteUsername((prev) => prev ?? payload.from_username);
         setCallId((prev) => prev ?? payload.call_id ?? null);
-        setStatus((prev) => prev === 'idle' ? 'ringing' : prev);
+        const service = webrtcRef.current;
+        setStatus((prev) => {
+            if (prev === 'active' && service) {
+                service.handleOffer(payload.sdp).catch((err) => {
+                    console.error('[useCall] renegotiation offer failed', err);
+                });
+                return prev;
+            }
+            return prev === 'idle' ? 'ringing' : prev;
+        });
         callSignalingService.clearPendingOffer(payload);
     }, []);
 
@@ -240,7 +255,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 webrtcRef.current?.addIceCandidate(payload.candidate);
             }),
             callSignalingService.onHangUp(() => {
-                cleanupScreenShare({ stopTracks: true });
+                cleanupScreenShare({ stopTracks: !webrtcRef.current });
                 webrtcRef.current?.dispose();
                 resetAfterDelay();
             }),
@@ -283,6 +298,7 @@ export function useCall(currentUserId: number): UseCallReturn {
 
         const service = new WebRTCService(channel, currentUserId, targetUserId);
         service.onRemoteStream = (stream) => setRemoteStream(stream);
+        service.onRemoteScreenStream = (stream) => setRemoteScreenStream(stream);
         service.onCallIdReceived = (nextCallId) => setCallId(nextCallId);
         service.onDiagnosticsChange = (nextDiagnostics) => setDiagnostics(mapDiagnostics(nextDiagnostics));
         webrtcRef.current = service;
@@ -293,7 +309,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 callTimeoutRef.current = setTimeout(() => {
                     if (webrtcRef.current) {
                         console.warn('[useCall] Call timeout');
-                        cleanupScreenShare({ stopTracks: true });
+                        cleanupScreenShare({ stopTracks: false });
                         webrtcRef.current.dispose();
                         resetAfterDelay();
                     }
@@ -319,6 +335,9 @@ export function useCall(currentUserId: number): UseCallReturn {
         const service = new WebRTCService(channel, currentUserId, remote);
         service.onRemoteStream = (stream) => {
             setRemoteStream(stream);
+        };
+        service.onRemoteScreenStream = (stream) => {
+            setRemoteScreenStream(stream);
         };
         service.onDiagnosticsChange = (nextDiagnostics) => setDiagnostics(mapDiagnostics(nextDiagnostics));
 
@@ -348,7 +367,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         if (channel && callId && remoteUserId) {
             channel.push('hang_up', { call_id: callId, to_user_id: remoteUserId });
         }
-        cleanupScreenShare({ stopTracks: true });
+        cleanupScreenShare({ stopTracks: !webrtcRef.current });
         webrtcRef.current?.dispose();
         offerSdpRef.current = null;
         resetAfterDelay();
@@ -370,17 +389,22 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
 
         try {
-            cleanupScreenShare({ stopTracks: true });
-            const stream = await mediaDevices.getDisplayMedia({
-                video: true,
-                audio: false,
-            });
+            const service = webrtcRef.current;
+            cleanupScreenShare({ stopTracks: !service });
+            const stream = service
+                ? await service.startScreenShare(() => {
+                    cleanupScreenShare({ stopTracks: false });
+                })
+                : await mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: false,
+                });
             const videoTrack = stream.getVideoTracks()[0] ?? null;
             const handleEnded = () => {
                 cleanupScreenShare({ stopTracks: false });
             };
 
-            if (videoTrack) {
+            if (videoTrack && !service) {
                 if ('addEventListener' in videoTrack) {
                     videoTrack.addEventListener?.('ended', handleEnded);
                 }
@@ -388,7 +412,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             }
 
             screenTrackRef.current = videoTrack;
-            screenTrackEndedHandlerRef.current = handleEnded;
+            screenTrackEndedHandlerRef.current = service ? null : handleEnded;
             localScreenStreamRef.current = stream;
             setLocalScreenStream(stream);
             setIsScreenSharing(true);
@@ -405,6 +429,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         isMuted,
         isScreenSharing,
         remoteStream,
+        remoteScreenStream,
         localScreenStream,
         seconds,
         diagnostics,

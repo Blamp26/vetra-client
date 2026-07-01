@@ -15,6 +15,7 @@ vi.mock("./features/calling/hooks/useCall", () => ({
   useCall: () => ({
     status: "idle",
     remoteStream: null,
+    remoteScreenStream: null,
     localScreenStream: null,
     remoteUsername: null,
     remoteUserId: null,
