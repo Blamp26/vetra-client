@@ -15,9 +15,11 @@ vi.mock("./features/calling/hooks/useCall", () => ({
   useCall: () => ({
     status: "idle",
     remoteStream: null,
+    localScreenStream: null,
     remoteUsername: null,
     remoteUserId: null,
     isMuted: false,
+    isScreenSharing: false,
     seconds: 0,
     diagnostics: null,
     toggleMute: vi.fn(),
@@ -25,6 +27,8 @@ vi.mock("./features/calling/hooks/useCall", () => ({
     acceptCall: vi.fn(),
     rejectCall: vi.fn(),
     startCall: vi.fn(),
+    startScreenShare: vi.fn(),
+    stopScreenShare: vi.fn(),
   }),
 }));
 

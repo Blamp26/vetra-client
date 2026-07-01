@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { ActiveCallWindow } from './ActiveCallWindow';
 import type { CallDiagnostics } from '../../hooks/useCall.types';
@@ -12,14 +12,32 @@ const defaultDiagnostics: CallDiagnostics = {
   selectedLocalCandidateType: 'relay',
 };
 
-function renderWindow(diagnostics: CallDiagnostics = defaultDiagnostics) {
+class MockMediaStream {}
+
+function renderWindow({
+  diagnostics = defaultDiagnostics,
+  isScreenSharing = false,
+  localScreenStream = null,
+  onStartScreenShare = async () => undefined,
+  onStopScreenShare = () => undefined,
+} : {
+  diagnostics?: CallDiagnostics;
+  isScreenSharing?: boolean;
+  localScreenStream?: MediaStream | null;
+  onStartScreenShare?: () => Promise<void>;
+  onStopScreenShare?: () => void;
+} = {}) {
   return render(
     <ActiveCallWindow
       remoteUsername="Alice"
       seconds={12}
       isMuted={false}
+      isScreenSharing={isScreenSharing}
+      localScreenStream={localScreenStream}
       diagnostics={diagnostics}
       onMuteToggle={vi.fn()}
+      onStartScreenShare={onStartScreenShare}
+      onStopScreenShare={onStopScreenShare}
       onHangUp={vi.fn()}
     />,
   );
@@ -28,6 +46,7 @@ function renderWindow(diagnostics: CallDiagnostics = defaultDiagnostics) {
 describe('ActiveCallWindow', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
+    global.MediaStream = MockMediaStream as typeof MediaStream;
   });
 
   it('hides diagnostics by default', () => {
@@ -59,8 +78,10 @@ describe('ActiveCallWindow', () => {
     vi.stubEnv('VITE_WEBRTC_SHOW_DIAGNOSTICS', 'true');
 
     renderWindow({
-      ...defaultDiagnostics,
-      selectedLocalCandidateType: 'srflx',
+      diagnostics: {
+        ...defaultDiagnostics,
+        selectedLocalCandidateType: 'srflx',
+      },
     });
 
     const diagnosticsText = screen.getByTestId('webrtc-diagnostics').textContent ?? '';
@@ -74,5 +95,43 @@ describe('ActiveCallWindow', () => {
     const { container } = renderWindow();
 
     expect(container.querySelector('audio')).toBeNull();
+  });
+
+  it('shows the share screen button during an active call', () => {
+    renderWindow();
+
+    expect(screen.getByRole('button', { name: 'Share screen' })).toBeInTheDocument();
+  });
+
+  it('clicking share screen calls startScreenShare', () => {
+    const onStartScreenShare = vi.fn().mockResolvedValue(undefined);
+    renderWindow({ onStartScreenShare });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Share screen' }));
+
+    expect(onStartScreenShare).toHaveBeenCalledTimes(1);
+  });
+
+  it('clicking stop sharing calls stopScreenShare', () => {
+    const onStopScreenShare = vi.fn();
+    renderWindow({
+      isScreenSharing: true,
+      localScreenStream: new MediaStream(),
+      onStopScreenShare,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop sharing' }));
+
+    expect(onStopScreenShare).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the local screen preview when a screen stream exists', () => {
+    renderWindow({
+      isScreenSharing: true,
+      localScreenStream: new MediaStream(),
+    });
+
+    expect(screen.getByTestId('local-screen-preview')).toBeInTheDocument();
+    expect(screen.getByText('Local Preview Only')).toBeInTheDocument();
   });
 });

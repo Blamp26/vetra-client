@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { formatCallTime } from '@/utils/formatDate';
 import type { CallDiagnostics } from '../../hooks/useCall.types';
@@ -6,8 +7,12 @@ interface ActiveCallWindowProps {
   remoteUsername: string;
   seconds: number;
   isMuted: boolean;
+  isScreenSharing: boolean;
+  localScreenStream: MediaStream | null;
   diagnostics: CallDiagnostics;
   onMuteToggle: () => void;
+  onStartScreenShare: () => Promise<void>;
+  onStopScreenShare: () => void;
   onHangUp: () => void;
 }
 
@@ -15,12 +20,28 @@ export const ActiveCallWindow = ({
   remoteUsername,
   seconds,
   isMuted,
+  isScreenSharing,
+  localScreenStream,
   diagnostics,
   onMuteToggle,
+  onStartScreenShare,
+  onStopScreenShare,
   onHangUp,
 }: ActiveCallWindowProps) => {
+  const previewRef = useRef<HTMLVideoElement>(null);
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === 'true';
+
+  useEffect(() => {
+    const preview = previewRef.current;
+    if (!preview) return;
+
+    preview.srcObject = localScreenStream;
+
+    return () => {
+      preview.srcObject = null;
+    };
+  }, [localScreenStream]);
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-background/50 z-modal">
@@ -65,6 +86,22 @@ export const ActiveCallWindow = ({
           </div>
         )}
 
+        {localScreenStream && (
+          <div className="w-full max-w-[360px] border border-border bg-background p-2">
+            <div className="mb-2 text-[10px] uppercase text-muted-foreground">
+              Local Preview Only
+            </div>
+            <video
+              ref={previewRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full border border-border bg-muted/20"
+              data-testid="local-screen-preview"
+            />
+          </div>
+        )}
+
         <div className="flex gap-4 mt-2">
           <button
             className={cn(
@@ -90,6 +127,17 @@ export const ActiveCallWindow = ({
                 <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
             )}
+          </button>
+
+          <button
+            className={cn(
+              "border border-border px-3 py-2 text-sm",
+              isScreenSharing ? "bg-accent text-foreground" : "bg-background text-foreground"
+            )}
+            onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
+            aria-label={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+          >
+            {isScreenSharing ? 'Stop sharing' : 'Share screen'}
           </button>
 
           <button

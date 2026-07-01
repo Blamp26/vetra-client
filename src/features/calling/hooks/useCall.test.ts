@@ -59,6 +59,7 @@ let mockUserChannel: any;
 let mockCallChannel: any;
 let MockWebRTCService: any;
 let mockStoreState: any;
+let mockGetDisplayMedia: any;
 
 beforeAll(async () => {
     const module = await import('../services/webrtcService');
@@ -145,6 +146,14 @@ beforeEach(() => {
         currentUser: { id: 1 },
         socketManager: mockSocketManager,
     };
+
+    mockGetDisplayMedia = vi.fn();
+    Object.defineProperty(global.navigator, 'mediaDevices', {
+        value: {
+            getDisplayMedia: mockGetDisplayMedia,
+        },
+        writable: true,
+    });
 
     (vi.mocked(useAppStore) as any).mockImplementation((selector: any) =>
         selector(mockStoreState)
@@ -682,6 +691,177 @@ describe('useCall', () => {
             });
             expect(service.toggleLocalMuted).toHaveBeenCalledTimes(2);
             expect(result.current.isMuted).toBe(false);
+        });
+    });
+
+    describe('screen sharing', () => {
+        it('startScreenShare calls getDisplayMedia and sets state', async () => {
+            const endedListeners: Array<() => void> = [];
+            const track = {
+                stop: vi.fn(),
+                addEventListener: vi.fn((event: string, handler: () => void) => {
+                    if (event === 'ended') endedListeners.push(handler);
+                }),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const stream = {
+                getVideoTracks: vi.fn(() => [track]),
+                getTracks: vi.fn(() => [track]),
+            };
+            mockGetDisplayMedia.mockResolvedValue(stream);
+
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+
+            expect(mockGetDisplayMedia).toHaveBeenCalledWith({
+                video: true,
+                audio: false,
+            });
+            expect(result.current.isScreenSharing).toBe(true);
+            expect(result.current.localScreenStream).toBe(stream);
+            expect(track.addEventListener).toHaveBeenCalledWith('ended', expect.any(Function));
+        });
+
+        it('stopScreenShare stops tracks and clears state', async () => {
+            const track = {
+                stop: vi.fn(),
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const stream = {
+                getVideoTracks: vi.fn(() => [track]),
+                getTracks: vi.fn(() => [track]),
+            };
+            mockGetDisplayMedia.mockResolvedValue(stream);
+
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+
+            act(() => {
+                result.current.stopScreenShare();
+            });
+
+            expect(track.stop).toHaveBeenCalled();
+            expect(result.current.isScreenSharing).toBe(false);
+            expect(result.current.localScreenStream).toBeNull();
+        });
+
+        it('track ended event clears state', async () => {
+            let endedHandler: (() => void) | null = null;
+            const track = {
+                stop: vi.fn(),
+                addEventListener: vi.fn((event: string, handler: () => void) => {
+                    if (event === 'ended') endedHandler = handler;
+                }),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const stream = {
+                getVideoTracks: vi.fn(() => [track]),
+                getTracks: vi.fn(() => [track]),
+            };
+            mockGetDisplayMedia.mockResolvedValue(stream);
+
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+
+            expect(result.current.isScreenSharing).toBe(true);
+
+            act(() => {
+                endedHandler?.();
+            });
+
+            expect(result.current.isScreenSharing).toBe(false);
+            expect(result.current.localScreenStream).toBeNull();
+        });
+
+        it('teardown and hangUp stop screen capture tracks', async () => {
+            const track = {
+                stop: vi.fn(),
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const stream = {
+                getVideoTracks: vi.fn(() => [track]),
+                getTracks: vi.fn(() => [track]),
+            };
+            mockGetDisplayMedia.mockResolvedValue(stream);
+
+            const { result, unmount } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+
+            act(() => {
+                if (service.onCallIdReceived) {
+                    service.onCallIdReceived('call-123');
+                }
+                result.current.hangUp();
+            });
+
+            expect(track.stop).toHaveBeenCalled();
+            expect(result.current.localScreenStream).toBeNull();
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+            unmount();
+            expect(track.stop).toHaveBeenCalledTimes(2);
+        });
+
+        it('unsupported getDisplayMedia fails gracefully', async () => {
+            Object.defineProperty(global.navigator, 'mediaDevices', {
+                value: {},
+                writable: true,
+            });
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+
+            expect(result.current.isScreenSharing).toBe(false);
+            expect(result.current.localScreenStream).toBeNull();
+            expect(warnSpy).toHaveBeenCalledWith('[useCall] Screen sharing is not supported in this environment');
+
+            warnSpy.mockRestore();
+        });
+
+        it('user-cancelled getDisplayMedia fails gracefully', async () => {
+            const error = new Error('cancelled');
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+            mockGetDisplayMedia.mockRejectedValue(error);
+
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+
+            expect(result.current.isScreenSharing).toBe(false);
+            expect(result.current.localScreenStream).toBeNull();
+            expect(warnSpy).toHaveBeenCalledWith('[useCall] Screen share was not started', error);
+
+            warnSpy.mockRestore();
         });
     });
 

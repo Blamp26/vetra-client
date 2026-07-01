@@ -64,9 +64,11 @@ function App() {
   const {
     status,
     remoteStream,
+    localScreenStream,
     remoteUsername,
     remoteUserId,
     isMuted,
+    isScreenSharing,
     seconds,
     diagnostics,
     toggleMute,
@@ -74,6 +76,8 @@ function App() {
     acceptCall,
     rejectCall,
     startCall,
+    startScreenShare,
+    stopScreenShare,
   } = useCall(currentUser?.id ?? 0);
   const activeChat = useAppStore((s) => s.activeChat);
   const conversationPreviews = useAppStore((s) => s.conversationPreviews);
@@ -322,8 +326,12 @@ function App() {
           remoteUsername={remoteUsername ?? `User #${remoteUserId}`}
           seconds={seconds}
           isMuted={isMuted}
+          isScreenSharing={isScreenSharing}
+          localScreenStream={localScreenStream}
           diagnostics={diagnostics}
           onMuteToggle={toggleMute}
+          onStartScreenShare={startScreenShare}
+          onStopScreenShare={stopScreenShare}
           onHangUp={hangUp}
         />
       )}

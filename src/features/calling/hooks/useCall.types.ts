@@ -41,10 +41,14 @@ export interface UseCallReturn {
     remoteUsername: string | null;
     callId: string | null;
     isMuted: boolean;
+    isScreenSharing: boolean;
     remoteStream: MediaStream | null;
+    localScreenStream: MediaStream | null;
     seconds: number;
     diagnostics: CallDiagnostics;
     startCall: (targetUserId: ResourceRef) => void;
+    startScreenShare: () => Promise<void>;
+    stopScreenShare: () => void;
     acceptCall: () => void;
     rejectCall: () => void;
     hangUp: () => void;
