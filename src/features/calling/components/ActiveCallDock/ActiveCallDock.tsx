@@ -108,23 +108,22 @@ export function ActiveCallDock({
   return (
     <section
       className={cn(
-        "relative isolate shrink-0 overflow-hidden border-b border-border bg-[#0f1117] text-foreground shadow-[inset_0_-1px_0_rgba(255,255,255,0.03)]",
-        "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:bg-[radial-gradient(circle_at_18%_18%,rgba(72,115,255,0.16),transparent_32%),radial-gradient(circle_at_82%_12%,rgba(54,211,153,0.10),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.05),transparent_42%)]",
+        "relative shrink-0 overflow-hidden border-b border-border bg-[#202225] text-foreground",
         hasScreenStage ? "h-[clamp(340px,55vh,620px)]" : "h-[300px]",
       )}
       data-testid="active-call-dock"
       aria-label="Active call dock"
     >
       <div className="absolute left-4 right-4 top-3 z-10 flex items-start justify-between gap-3">
-        <div className="min-w-0 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 shadow-lg shadow-black/20 backdrop-blur">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Voice call
           </p>
-          <h2 className="truncate text-sm font-normal text-white/90">
+          <h2 className="truncate text-sm font-normal text-foreground">
             {remoteUsername}
           </h2>
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-xs uppercase text-white/55 shadow-lg shadow-black/20 backdrop-blur">
+        <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
           <span data-testid="active-call-dock-status">{callStateLabel}</span>
           <span>{formatCallTime(seconds)}</span>
         </div>
@@ -133,10 +132,10 @@ export function ActiveCallDock({
       {callIssue && (
         <div
           className={cn(
-            "absolute left-4 right-4 top-16 z-20 border px-3 py-2 text-sm shadow-lg shadow-black/20 backdrop-blur",
+            "absolute left-4 right-4 top-14 z-20 rounded-md border px-3 py-2 text-sm",
             callIssue.tone === "error"
-              ? "border-destructive/50 bg-destructive/20 text-foreground"
-              : "border-white/10 bg-black/35 text-foreground",
+              ? "border-destructive/50 bg-destructive/10 text-foreground"
+              : "border-border bg-[#2b2d31] text-foreground",
           )}
           data-testid="call-issue-banner"
         >
@@ -153,24 +152,24 @@ export function ActiveCallDock({
       >
         {hasScreenStage ? (
           <div className="grid h-full w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
-            <div className="flex min-h-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 p-3 shadow-2xl shadow-black/25">
+            <div className="flex min-h-0 items-center justify-center rounded-md border border-border bg-[#2b2d31] p-2">
               {remoteScreenStream ? (
                 <video
                   ref={remoteScreenRef}
                   autoPlay
                   playsInline
-                  className="max-h-full w-full rounded-xl bg-black/30 object-contain"
+                  className="max-h-full w-full rounded bg-black object-contain"
                   data-testid="remote-screen-view"
                 />
               ) : isRemoteScreenLoading ? (
                 <div
-                  className="flex h-full min-h-48 w-full items-center justify-center rounded-xl bg-black/20 text-sm text-white/55"
+                  className="flex h-full min-h-48 w-full items-center justify-center rounded bg-[#1e1f22] text-sm text-muted-foreground"
                   data-testid="remote-screen-loading"
                 >
                   Waiting for shared screen
                 </div>
               ) : (
-                <div className="text-sm text-white/55">
+                <div className="text-sm text-muted-foreground">
                   Screen sharing from this device
                 </div>
               )}
@@ -179,8 +178,8 @@ export function ActiveCallDock({
             <div className="flex min-h-0 flex-col gap-3">
               <ParticipantTile name={remoteUsername} label={callStateLabel} compact />
               {localScreenStream && (
-                <div className="min-h-0 rounded-2xl border border-white/10 bg-black/30 p-2 shadow-xl shadow-black/20">
-                  <div className="mb-2 text-[10px] uppercase text-white/45">
+                <div className="min-h-0 rounded-md border border-border bg-[#2b2d31] p-2">
+                  <div className="mb-2 text-[10px] uppercase text-muted-foreground">
                     Local Preview
                   </div>
                   <video
@@ -188,7 +187,7 @@ export function ActiveCallDock({
                     autoPlay
                     muted
                     playsInline
-                    className="max-h-36 w-full rounded-xl border border-white/10 bg-black/30 object-contain"
+                    className="max-h-36 w-full rounded border border-border bg-black object-contain"
                     data-testid="local-screen-preview"
                   />
                 </div>
@@ -205,10 +204,10 @@ export function ActiveCallDock({
 
       {shouldShowDiagnostics && (
         <div
-          className="absolute bottom-3 left-4 z-20 hidden max-w-[calc(100%-2rem)] border border-white/10 bg-black/45 px-3 py-2 text-[11px] text-white/50 backdrop-blur lg:block"
+          className="absolute bottom-3 left-4 z-20 hidden max-w-[calc(100%-2rem)] rounded-md border border-border bg-[#1e1f22] px-3 py-2 text-[11px] text-muted-foreground lg:block"
           data-testid="webrtc-diagnostics"
         >
-          <span className="mr-3 text-white/80">WebRTC Debug</span>
+          <span className="mr-3 text-foreground">WebRTC Debug</span>
           <span>connection {diagnostics.connectionState}</span>
           <span className="ml-3">ice {diagnostics.iceConnectionState}</span>
           <span className="ml-3">candidate {diagnostics.selectedLocalCandidateType}</span>
@@ -216,15 +215,15 @@ export function ActiveCallDock({
       )}
 
       <div
-        className="absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center justify-center gap-3 rounded-full border border-white/10 bg-black/45 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur"
+        className="absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center justify-center gap-2 rounded-md border border-border bg-[#2b2d31] px-3 py-2"
         data-testid="active-call-dock-controls"
       >
         <button
           className={cn(
-            "flex h-11 w-11 items-center justify-center rounded-full border border-white/10 shadow-lg transition-colors",
+            "flex h-10 w-10 items-center justify-center rounded-md border border-border transition-colors",
             isMuted
               ? "bg-destructive text-destructive-foreground"
-              : "bg-white/10 text-white hover:bg-white/18",
+              : "bg-[#1e1f22] text-foreground hover:bg-[#313338]",
           )}
           onClick={onMuteToggle}
           aria-label={isMuted ? "Unmute" : "Mute"}
@@ -234,10 +233,10 @@ export function ActiveCallDock({
 
         <button
           className={cn(
-            "inline-flex h-11 items-center gap-2 rounded-full border border-white/10 px-4 text-sm shadow-lg transition-colors disabled:pointer-events-none disabled:opacity-60",
+            "inline-flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm transition-colors disabled:pointer-events-none disabled:opacity-60",
             isScreenSharing
-              ? "bg-white/20 text-white"
-              : "bg-white/10 text-white hover:bg-white/18",
+              ? "bg-[#313338] text-foreground"
+              : "bg-[#1e1f22] text-foreground hover:bg-[#313338]",
           )}
           onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
           aria-label={
@@ -260,7 +259,7 @@ export function ActiveCallDock({
         </button>
 
         <button
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-destructive/40 bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20 transition-colors hover:bg-destructive/90"
+          className="flex h-10 w-10 items-center justify-center rounded-md border border-destructive/40 bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90"
           onClick={onHangUp}
           aria-label="Hang Up"
         >
@@ -283,23 +282,23 @@ function ParticipantTile({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/[0.07] p-4 shadow-2xl shadow-black/20 backdrop-blur",
-        compact ? "min-h-32" : "min-h-40",
+        "flex flex-col items-center justify-center rounded-md border border-border bg-[#2b2d31] p-4",
+        compact ? "min-h-28" : "min-h-36",
       )}
       data-testid="active-call-participant-tile"
     >
       <div
         className={cn(
-          "flex items-center justify-center rounded-3xl border border-white/10 bg-gradient-to-br from-primary/90 to-primary/55 text-primary-foreground shadow-xl shadow-primary/10",
-          compact ? "h-16 w-16 text-xl" : "h-20 w-20 text-2xl",
+          "flex items-center justify-center rounded-full border border-border bg-[#1e1f22] text-foreground",
+          compact ? "h-14 w-14 text-xl" : "h-16 w-16 text-2xl",
         )}
       >
         {name.charAt(0).toUpperCase()}
       </div>
-      <p className="mt-3 max-w-full truncate text-base font-normal text-white">
+      <p className="mt-3 max-w-full truncate text-base font-normal text-foreground">
         {name}
       </p>
-      <p className="mt-1 text-xs uppercase text-white/50">{label}</p>
+      <p className="mt-1 text-xs uppercase text-muted-foreground">{label}</p>
     </div>
   );
 }

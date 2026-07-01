@@ -61,6 +61,8 @@ describe("ActiveCallDock", () => {
     expect(controls.parentElement).toBe(dock);
     expect(controls).toHaveClass("absolute");
     expect(controls).not.toHaveClass("bg-card/50");
+    expect(dock.className).not.toMatch(/gradient|backdrop|shadow/);
+    expect(controls.className).not.toMatch(/backdrop|shadow/);
   });
 
   it("disables the screen-share control while an update is in flight", () => {
