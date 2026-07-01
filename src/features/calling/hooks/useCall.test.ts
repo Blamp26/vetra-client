@@ -347,6 +347,22 @@ describe('useCall', () => {
             expect(disconnectSpy).not.toHaveBeenCalled();
         });
 
+        it('surfaces a provider channel-not-ready start attempt instead of silently no-oping', async () => {
+            mockStoreState.socketManager = null;
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            act(() => {
+                result.current.startCall(2, 'Alice');
+            });
+
+            expect(MockWebRTCService).not.toHaveBeenCalled();
+            expect(result.current.status).toBe('failed');
+            expect(result.current.callIssue).toEqual({
+                tone: 'error',
+                message: 'Call service is not ready. Try again in a moment.',
+            });
+        });
+
         it('recovers cleanly when the server rejects an offer with already_in_call', async () => {
             const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
             const rejectedStartCall = vi

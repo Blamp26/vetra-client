@@ -582,7 +582,28 @@ export function useCall(currentUserId: number): UseCallReturn {
 
     const startCall = useCallback((targetUserId: ResourceRef, targetUsername?: string) => {
         const channel = callChannelRef.current;
-        if (!channel || statusRef.current !== 'idle') return;
+        if (!channel) {
+            debugCall('[useCall] startCall skipped', {
+                reason: 'call_channel_not_ready',
+                targetUserId,
+                status: statusRef.current,
+            });
+            resetAfterDelay({
+                status: 'failed',
+                issue: buildCallIssue('Call service is not ready. Try again in a moment.'),
+            });
+            return;
+        }
+
+        if (statusRef.current !== 'idle') {
+            debugCall('[useCall] startCall skipped', {
+                reason: 'status_not_idle',
+                targetUserId,
+                status: statusRef.current,
+                activeCallId: callIdRef.current,
+            });
+            return;
+        }
 
         if (typeof targetUserId === 'number' && targetUserId === currentUserId) {
             console.warn('[useCall] Cannot call yourself');

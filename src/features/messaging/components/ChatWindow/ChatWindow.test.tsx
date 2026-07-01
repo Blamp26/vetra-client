@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -54,10 +54,6 @@ vi.mock("../MessageInput/MessageInput", () => ({
 
 vi.mock("../MessageSearch/MessageSearch", () => ({
   MessageSearch: () => <div data-testid="message-search" />,
-}));
-
-vi.mock("@/features/calling/components/CallButton", () => ({
-  CallButton: () => <button type="button">Call</button>,
 }));
 
 import { ChatWindow } from "./ChatWindow";
@@ -183,6 +179,87 @@ describe("ChatWindow presence rendering", () => {
 
     expect(container.querySelector(".bg-online")).toBeTruthy();
     expect(container.querySelector(".bg-offline")).toBeFalsy();
+  });
+
+  it("renders an enabled direct-call button that invokes provider startCall once", async () => {
+    const state = makeState();
+    const startCall = vi.fn();
+    state.conversationPreviews = {
+      2: {
+        partner_id: 2,
+        partner_public_id: "alice-public-id",
+        username: "alice",
+        display_name: "Alice",
+        avatar_url: null,
+        last_message: null,
+        last_message_at: null,
+        unread_count: 0,
+      },
+    } as any;
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      public_id: "alice-api-public-id",
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2, partnerRef: "alice-route-ref" }}
+        call={makeCall({ startCall })}
+      />,
+    );
+
+    const callButton = await screen.findByRole("button", { name: "Call Alice" });
+    expect(callButton).not.toBeDisabled();
+
+    fireEvent.click(callButton);
+
+    expect(startCall).toHaveBeenCalledTimes(1);
+    expect(startCall).toHaveBeenCalledWith("alice-api-public-id", "Alice");
+  });
+
+  it("shows a friendly issue instead of silently no-oping when call target is missing", async () => {
+    const state = makeState();
+    const startCall = vi.fn();
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      public_id: "",
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2, partnerRef: "" }}
+        call={makeCall({ startCall })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Call unavailable" }));
+
+    expect(startCall).not.toHaveBeenCalled();
+    expect(screen.getByTestId("call-start-issue")).toHaveTextContent(
+      "Cannot start call because this user is missing call target information.",
+    );
   });
 
   it("renders ActiveCallDock above messages without hiding history or composer", async () => {

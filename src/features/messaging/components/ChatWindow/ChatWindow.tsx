@@ -76,6 +76,7 @@ export function ChatWindow({ activeChat, call }: Props) {
   const [partner, setPartner] = useState<User | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
+  const [callStartIssue, setCallStartIssue] = useState<string | null>(null);
   const activeChatType = activeChat.type;
   const activePartnerId =
     activeChat.type === "direct" ? activeChat.partnerId : null;
@@ -134,6 +135,7 @@ export function ChatWindow({ activeChat, call }: Props) {
   useEffect(() => {
     setReplyTo(null);
     setIsSearchOpen(false);
+    setCallStartIssue(null);
     if (activeChatType === "direct" && activePartnerId !== null) {
       let cancelled = false;
       authApi
@@ -148,6 +150,18 @@ export function ChatWindow({ activeChat, call }: Props) {
       setPartner(null);
     }
   }, [activeChatType, activePartnerId, directPartnerRef]);
+
+  const handleCallUnavailable = useCallback((reason: string) => {
+    setCallStartIssue(reason);
+  }, []);
+
+  const handleStartCall = useCallback(
+    (targetUserId: string | number, targetUsername?: string) => {
+      setCallStartIssue(null);
+      call.startCall(targetUserId, targetUsername);
+    },
+    [call],
+  );
 
   const handleTypingStart = useCallback(() => {
     if (!socketManager || !chatContext) return;
@@ -254,7 +268,8 @@ export function ChatWindow({ activeChat, call }: Props) {
               }
               targetUsername={partner.display_name || partner.username}
               status={call.status}
-              onCall={call.startCall}
+              onCall={handleStartCall}
+              onUnavailable={handleCallUnavailable}
             />
             <button onClick={() => setIsSearchOpen(true)}>Search</button>
           </div>
@@ -286,6 +301,15 @@ export function ChatWindow({ activeChat, call }: Props) {
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-background">
       {renderHeader()}
+
+      {callStartIssue && (
+        <div
+          className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-foreground"
+          data-testid="call-start-issue"
+        >
+          {callStartIssue}
+        </div>
+      )}
 
       {shouldShowActiveCallDock && (
         <ActiveCallDock

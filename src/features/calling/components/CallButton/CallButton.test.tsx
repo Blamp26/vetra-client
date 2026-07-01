@@ -110,4 +110,27 @@ describe('CallButton', () => {
     fireEvent.click(screen.getByRole('button'));
     expect(onCall).toHaveBeenCalledWith(99, 'Bob');
   });
+
+  it('reports a missing target instead of silently doing nothing', () => {
+    const onUnavailable = vi.fn();
+    render(
+      <CallButton
+        targetUserId={null}
+        targetUsername="Unknown"
+        status="idle"
+        onCall={onCall}
+        onUnavailable={onUnavailable}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Call unavailable' });
+    expect(button).not.toBeDisabled();
+
+    fireEvent.click(button);
+
+    expect(onCall).not.toHaveBeenCalled();
+    expect(onUnavailable).toHaveBeenCalledWith(
+      'Cannot start call because this user is missing call target information.',
+    );
+  });
 });
