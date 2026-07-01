@@ -13,16 +13,28 @@ function AudioVideoSettings() {
     availableOutputDevices, 
     selectedInputDeviceId, 
     selectedOutputDeviceId,
+    noiseSuppression,
+    echoCancellation,
+    autoGainControl,
     setInputDevice,
     setOutputDevice,
+    setNoiseSuppression,
+    setEchoCancellation,
+    setAutoGainControl,
     refreshDevices 
   } = useAppStore((s: RootState) => ({
     availableInputDevices: s.availableInputDevices,
     availableOutputDevices: s.availableOutputDevices,
     selectedInputDeviceId: s.selectedInputDeviceId,
     selectedOutputDeviceId: s.selectedOutputDeviceId,
+    noiseSuppression: s.noiseSuppression,
+    echoCancellation: s.echoCancellation,
+    autoGainControl: s.autoGainControl,
     setInputDevice: s.setInputDevice,
     setOutputDevice: s.setOutputDevice,
+    setNoiseSuppression: s.setNoiseSuppression,
+    setEchoCancellation: s.setEchoCancellation,
+    setAutoGainControl: s.setAutoGainControl,
     refreshDevices: s.refreshDevices
   }));
 
@@ -42,7 +54,12 @@ function AudioVideoSettings() {
     const startVisualizer = async () => {
       try {
         const constraints = {
-          audio: { deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined }
+          audio: {
+            deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined,
+            noiseSuppression,
+            echoCancellation,
+            autoGainControl,
+          }
         };
         stream = await navigator.mediaDevices.getUserMedia(constraints);
         audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -69,7 +86,7 @@ function AudioVideoSettings() {
       if (audioContext) audioContext.close();
       if (stream) stream.getTracks().forEach(t => t.stop());
     };
-  }, [selectedInputDeviceId]);
+  }, [selectedInputDeviceId, noiseSuppression, echoCancellation, autoGainControl]);
 
   return (
     <div className="max-w-xl">
@@ -106,6 +123,41 @@ function AudioVideoSettings() {
               <option key={device.deviceId} value={device.deviceId}>{device.label || `Speaker (${device.deviceId.slice(0, 5)})`}</option>
             ))}
           </select>
+        </div>
+        <div className="space-y-2 border border-border p-3">
+          <div>
+            <div className="text-sm">Microphone processing</div>
+            <p className="text-xs text-muted-foreground">
+              These are browser-requested audio improvements. Actual support and behavior can vary by browser and device.
+            </p>
+          </div>
+          <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-noise-suppression">
+            <span>Noise suppression</span>
+            <input
+              id="settings-noise-suppression"
+              type="checkbox"
+              checked={noiseSuppression}
+              onChange={(e) => setNoiseSuppression(e.target.checked)}
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-echo-cancellation">
+            <span>Echo cancellation</span>
+            <input
+              id="settings-echo-cancellation"
+              type="checkbox"
+              checked={echoCancellation}
+              onChange={(e) => setEchoCancellation(e.target.checked)}
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-auto-gain-control">
+            <span>Auto gain control</span>
+            <input
+              id="settings-auto-gain-control"
+              type="checkbox"
+              checked={autoGainControl}
+              onChange={(e) => setAutoGainControl(e.target.checked)}
+            />
+          </label>
         </div>
         <button onClick={() => refreshDevices()} className="text-sm border border-border px-2 py-1">Refresh devices</button>
       </div>

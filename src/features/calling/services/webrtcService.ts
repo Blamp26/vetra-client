@@ -262,7 +262,12 @@ export class WebRTCService {
         const inputId = state.selectedInputDeviceId || 'default';
 
         this.localStream = await navigator.mediaDevices.getUserMedia({
-            audio: { deviceId: inputId !== 'default' ? { exact: inputId } : undefined },
+            audio: {
+                deviceId: inputId !== 'default' ? { exact: inputId } : undefined,
+                noiseSuppression: state.noiseSuppression,
+                echoCancellation: state.echoCancellation,
+                autoGainControl: state.autoGainControl,
+            },
             video: false,
         });
         this.setLocalMuted(this.localMuted);

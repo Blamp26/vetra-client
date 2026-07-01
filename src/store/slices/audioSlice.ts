@@ -9,6 +9,9 @@ export interface AudioSlice {
   // Device Selection
   selectedInputDeviceId: string;
   selectedOutputDeviceId: string;
+  noiseSuppression: boolean;
+  echoCancellation: boolean;
+  autoGainControl: boolean;
   availableInputDevices: MediaDeviceInfo[];
   availableOutputDevices: MediaDeviceInfo[];
 
@@ -16,6 +19,9 @@ export interface AudioSlice {
   toggleSound: () => void;
   setInputDevice: (deviceId: string) => void;
   setOutputDevice: (deviceId: string) => void;
+  setNoiseSuppression: (enabled: boolean) => void;
+  setEchoCancellation: (enabled: boolean) => void;
+  setAutoGainControl: (enabled: boolean) => void;
   refreshDevices: () => Promise<void>;
 }
 
@@ -29,6 +35,9 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
   
   selectedInputDeviceId: 'default',
   selectedOutputDeviceId: 'default',
+  noiseSuppression: true,
+  echoCancellation: true,
+  autoGainControl: true,
   availableInputDevices: [],
   availableOutputDevices: [],
 
@@ -98,6 +107,9 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
 
   setInputDevice: (deviceId: string) => set({ selectedInputDeviceId: deviceId }),
   setOutputDevice: (deviceId: string) => set({ selectedOutputDeviceId: deviceId }),
+  setNoiseSuppression: (enabled: boolean) => set({ noiseSuppression: enabled }),
+  setEchoCancellation: (enabled: boolean) => set({ echoCancellation: enabled }),
+  setAutoGainControl: (enabled: boolean) => set({ autoGainControl: enabled }),
 
   refreshDevices: async () => {
     try {

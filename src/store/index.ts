@@ -41,6 +41,11 @@ const useAppStoreBase = create<RootState>()(
       name: 'vetra-storage',
       partialize: (state) => ({
         theme: state.theme,
+        selectedInputDeviceId: state.selectedInputDeviceId,
+        selectedOutputDeviceId: state.selectedOutputDeviceId,
+        noiseSuppression: state.noiseSuppression,
+        echoCancellation: state.echoCancellation,
+        autoGainControl: state.autoGainControl,
       }),
     }
   )

@@ -1,5 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Channel } from 'phoenix';
+
+const { mockAppState } = vi.hoisted(() => ({
+    mockAppState: {
+        selectedInputDeviceId: 'default',
+        noiseSuppression: true,
+        echoCancellation: true,
+        autoGainControl: true,
+    },
+}));
+
+vi.mock('@/store', () => ({
+    getState: () => mockAppState,
+}));
+
 import {
     WebRTCService,
     buildIceServers,
@@ -113,6 +127,10 @@ const mockChannel = {
 beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    mockAppState.selectedInputDeviceId = 'default';
+    mockAppState.noiseSuppression = true;
+    mockAppState.echoCancellation = true;
+    mockAppState.autoGainControl = true;
     mockAudioTracks = [{ enabled: true, stop: vi.fn() }];
     mockLocalTracks = mockAudioTracks;
 
@@ -146,7 +164,12 @@ describe('WebRTCService', () => {
             await service.startCall();
 
             expect(mockGetUserMedia).toHaveBeenCalledWith({
-                audio: { deviceId: undefined },
+                audio: {
+                    deviceId: undefined,
+                    noiseSuppression: true,
+                    echoCancellation: true,
+                    autoGainControl: true,
+                },
                 video: false,
             });
             const pc = (service as any).peerConnection as MockRTCPeerConnection;
@@ -179,6 +202,25 @@ describe('WebRTCService', () => {
 
             await expect(service.startCall()).rejects.toThrow('No mic');
             expect((service as any).peerConnection).toBeNull();
+        });
+
+        it('passes selected device and requested audio processing constraints into getUserMedia', async () => {
+            mockAppState.selectedInputDeviceId = 'mic-123';
+            mockAppState.noiseSuppression = false;
+            mockAppState.echoCancellation = true;
+            mockAppState.autoGainControl = false;
+
+            await service.startCall();
+
+            expect(mockGetUserMedia).toHaveBeenCalledWith({
+                audio: {
+                    deviceId: { exact: 'mic-123' },
+                    noiseSuppression: false,
+                    echoCancellation: true,
+                    autoGainControl: false,
+                },
+                video: false,
+            });
         });
     });
 
