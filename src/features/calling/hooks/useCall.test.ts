@@ -66,6 +66,7 @@ vi.mock('../services/webrtcService', () => {
         this.getLocalAudioTracks = vi.fn(() => []);
         this.onRemoteStream = null;
         this.onRemoteScreenStream = null;
+        this.onRemoteScreenLoading = null;
         this.onCallIdReceived = null;
         this.onDiagnosticsChange = null;
         this.getDiagnosticsSnapshot = vi.fn().mockReturnValue({
@@ -1428,6 +1429,46 @@ describe('useCall', () => {
                 screen_share_active: true,
             });
             expect(MockWebRTCService).toHaveBeenCalledTimes(1);
+        });
+
+        it('renegotiate answer is applied for an outgoing call started with a public user ref', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall('user-public-id-2');
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+            const renegotiationHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'renegotiate')?.[1];
+
+            act(() => {
+                answerHandler({
+                    from_user_id: 2,
+                    from_username: 'caller',
+                    sdp: 'initial-answer-sdp',
+                    call_id: 'call-123',
+                });
+            });
+            service.handleRenegotiation.mockClear();
+
+            act(() => {
+                renegotiationHandler({
+                    from_user_id: 2,
+                    call_id: 'call-123',
+                    sdp: 'renegotiation-answer-sdp',
+                    type: 'answer',
+                    screen_share_active: null,
+                });
+            });
+
+            expect(result.current.remoteUserId).toBe(2);
+            expect(service.handleRenegotiation).toHaveBeenCalledWith({
+                from_user_id: 2,
+                call_id: 'call-123',
+                sdp: 'renegotiation-answer-sdp',
+                type: 'answer',
+                screen_share_active: null,
+            });
         });
 
         it('remote hang_up closes the call even during renegotiation', async () => {

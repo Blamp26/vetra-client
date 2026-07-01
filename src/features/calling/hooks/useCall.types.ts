@@ -53,6 +53,7 @@ export interface UseCallReturn {
     callId: string | null;
     isMuted: boolean;
     isScreenSharing: boolean;
+    isRemoteScreenLoading: boolean;
     remoteStream: MediaStream | null;
     remoteScreenStream: MediaStream | null;
     localScreenStream: MediaStream | null;

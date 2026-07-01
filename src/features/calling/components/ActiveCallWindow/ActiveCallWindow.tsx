@@ -3,11 +3,14 @@ import { cn } from '@/shared/utils/cn';
 import { formatCallTime } from '@/utils/formatDate';
 import type { CallDiagnostics } from '../../hooks/useCall.types';
 
+const CALL_DEBUG_KEY = 'vetra.debug.calls';
+
 interface ActiveCallWindowProps {
   remoteUsername: string;
   seconds: number;
   isMuted: boolean;
   isScreenSharing: boolean;
+  isRemoteScreenLoading: boolean;
   remoteScreenStream: MediaStream | null;
   localScreenStream: MediaStream | null;
   diagnostics: CallDiagnostics;
@@ -24,11 +27,37 @@ function detachVideo(video: HTMLVideoElement): void {
   video.load();
 }
 
+function isCallDebugEnabled(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(CALL_DEBUG_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function debugCall(message: string, details?: Record<string, unknown>): void {
+  if (!isCallDebugEnabled()) return;
+  console.log(message, details ?? {});
+}
+
+async function safelyPlayVideo(video: HTMLVideoElement, reason: string): Promise<void> {
+  try {
+    await video.play();
+    debugCall('[ActiveCallWindow] video play success', { reason });
+  } catch (error) {
+    debugCall('[ActiveCallWindow] video play failed', {
+      reason,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export const ActiveCallWindow = ({
   remoteUsername,
   seconds,
   isMuted,
   isScreenSharing,
+  isRemoteScreenLoading,
   remoteScreenStream,
   localScreenStream,
   diagnostics,
@@ -52,6 +81,7 @@ export const ActiveCallWindow = ({
     }
 
     remoteScreen.srcObject = remoteScreenStream;
+    void safelyPlayVideo(remoteScreen, 'remote_screen_stream');
 
     return () => {
       detachVideo(remoteScreen);
@@ -68,6 +98,7 @@ export const ActiveCallWindow = ({
     }
 
     preview.srcObject = localScreenStream;
+    void safelyPlayVideo(preview, 'local_screen_preview');
 
     return () => {
       detachVideo(preview);
@@ -117,18 +148,27 @@ export const ActiveCallWindow = ({
           </div>
         )}
 
-        {remoteScreenStream && (
+        {(isRemoteScreenLoading || remoteScreenStream) && (
           <div className="w-full max-w-[520px] border border-border bg-background p-2">
             <div className="mb-2 text-[10px] uppercase text-muted-foreground">
-              Remote Screen
+              {remoteScreenStream ? 'Remote Screen' : 'Connecting Screen'}
             </div>
-            <video
-              ref={remoteScreenRef}
-              autoPlay
-              playsInline
-              className="w-full border border-border bg-muted/20"
-              data-testid="remote-screen-view"
-            />
+            {remoteScreenStream ? (
+              <video
+                ref={remoteScreenRef}
+                autoPlay
+                playsInline
+                className="w-full border border-border bg-muted/20"
+                data-testid="remote-screen-view"
+              />
+            ) : (
+              <div
+                className="flex min-h-48 items-center justify-center border border-border bg-muted/20 text-sm text-muted-foreground"
+                data-testid="remote-screen-loading"
+              >
+                Waiting for shared screen
+              </div>
+            )}
           </div>
         )}
 

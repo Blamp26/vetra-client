@@ -174,6 +174,7 @@ export class WebRTCService {
     private isScreenShareActiveLocal = false;
     private desiredScreenShareActive = false;
     private pendingScreenShareChange = false;
+    private pendingScreenShareChangeReason: 'start' | 'stop' | null = null;
     private pendingScreenShareStartResolvers: Array<{
         resolve: (stream: MediaStream) => void;
         reject: (error: Error) => void;
@@ -195,6 +196,7 @@ export class WebRTCService {
 
     public onRemoteStream: (stream: MediaStream) => void = () => { };
     public onRemoteScreenStream: (stream: MediaStream | null) => void = () => { };
+    public onRemoteScreenLoading: (loading: boolean) => void = () => { };
     public onCallIdReceived: ((callId: string) => void) | null = null;
     public onDiagnosticsChange: ((diagnostics: WebRTCDiagnostics) => void) | null = null;
 
@@ -268,6 +270,11 @@ export class WebRTCService {
         );
         this.remoteDescriptionSet = true;
         this.isRenegotiationInFlight = false;
+        debugCall('[WebRTCService] renegotiation answer applied', {
+            call_id: this.getCallId(),
+            signalingState: this.peerConnection.signalingState,
+            inFlight: this.isRenegotiationInFlight,
+        });
         await this.refreshDiagnostics();
         await this.flushIceCandidateQueue();
         this.consumePendingScreenShareChangeIfStable();
@@ -299,6 +306,7 @@ export class WebRTCService {
         this.remoteDescriptionSet = true;
         if (options?.screenShareActive === false || !remoteSdpHasSendingVideo(sdp)) {
             this.remoteScreenShareActive = false;
+            this.setRemoteScreenLoading(false, 'screenShareActive_false');
             this.clearRemoteScreenStream('screenShareActive_false');
         } else if (this.remoteScreenShareActive) {
             this.syncRemoteScreenFromReceivers('post_renegotiation');
@@ -368,13 +376,16 @@ export class WebRTCService {
 
         if (this.isScreenShareActiveLocal && this.screenStream) {
             this.pendingScreenShareChange = false;
+            this.pendingScreenShareChangeReason = null;
             return this.screenStream;
         }
 
         if (!this.canApplyScreenShareChangeNow()) {
             this.pendingScreenShareChange = true;
+            this.pendingScreenShareChangeReason = 'start';
             debugCall('[WebRTCService] pending screen desired state queued', {
                 call_id: this.getCallId(),
+                reason: this.pendingScreenShareChangeReason,
                 desired: this.desiredScreenShareActive,
                 signalingState: this.peerConnection.signalingState,
                 inFlight: this.isRenegotiationInFlight,
@@ -405,18 +416,24 @@ export class WebRTCService {
         if (!shouldRenegotiate || !this.peerConnection) {
             await this.detachScreenTrack({ stopTracks: options?.stopTracks ?? true });
             this.pendingScreenShareChange = false;
+            this.pendingScreenShareChangeReason = null;
             return;
         }
 
         if (!this.isScreenShareActiveLocal && !this.screenStream) {
             this.pendingScreenShareChange = false;
+            this.pendingScreenShareChangeReason = null;
             return;
         }
 
+        await this.detachScreenTrack({ stopTracks: options?.stopTracks ?? true });
+
         if (!this.canApplyScreenShareChangeNow()) {
             this.pendingScreenShareChange = true;
+            this.pendingScreenShareChangeReason = 'stop';
             debugCall('[WebRTCService] pending screen desired state queued', {
                 call_id: this.getCallId(),
+                reason: this.pendingScreenShareChangeReason,
                 desired: this.desiredScreenShareActive,
                 signalingState: this.peerConnection.signalingState,
                 inFlight: this.isRenegotiationInFlight,
@@ -424,7 +441,9 @@ export class WebRTCService {
             return;
         }
 
-        await this.applyDesiredScreenShareState({ stopTracks: options?.stopTracks ?? true });
+        this.pendingScreenShareChange = false;
+        this.pendingScreenShareChangeReason = null;
+        await this.renegotiate('stop_screen_share');
     }
 
     private async applyDesiredScreenShareState(options?: { stopTracks?: boolean }): Promise<MediaStream> {
@@ -440,6 +459,7 @@ export class WebRTCService {
         if (this.desiredScreenShareActive) {
             const stream = await this.attachScreenTrack();
             this.pendingScreenShareChange = false;
+            this.pendingScreenShareChangeReason = null;
             this.resolvePendingScreenShareStarts(stream);
             await this.renegotiate('start_screen_share');
             return stream;
@@ -447,6 +467,7 @@ export class WebRTCService {
 
         await this.detachScreenTrack({ stopTracks: options?.stopTracks ?? true });
         this.pendingScreenShareChange = false;
+        this.pendingScreenShareChangeReason = null;
         await this.renegotiate('stop_screen_share');
         return this.screenStream ?? new MediaStream();
     }
@@ -526,6 +547,11 @@ export class WebRTCService {
         if (stopTracks && stream) {
             stream.getTracks().forEach((mediaTrack) => mediaTrack.stop());
         }
+        debugCall('[WebRTCService] local screen track stopped', {
+            call_id: this.getCallId(),
+            stopTracks,
+            track_id: track?.id,
+        });
 
         if (sender && this.peerConnection && typeof sender.replaceTrack === 'function') {
             await sender.replaceTrack(null);
@@ -551,10 +577,12 @@ export class WebRTCService {
             this.remoteStream = null;
         }
         this.remoteScreenShareActive = false;
+        this.setRemoteScreenLoading(false, 'dispose');
         this.clearRemoteScreenStream('dispose');
         this.desiredScreenShareActive = false;
         this.isScreenShareActiveLocal = false;
         this.pendingScreenShareChange = false;
+        this.pendingScreenShareChangeReason = null;
         this.rejectPendingScreenShareStarts(new Error('Screen share stopped because the peer was disposed'));
         this.iceCandidateQueue = [];
         this.queuedIceCandidateKeys.clear();
@@ -570,6 +598,7 @@ export class WebRTCService {
         this.emitDiagnostics();
         this.onRemoteStream = () => { };
         this.onRemoteScreenStream = () => { };
+        this.onRemoteScreenLoading = () => { };
         this.onCallIdReceived = null;
         this.onDiagnosticsChange = null;
     }
@@ -714,8 +743,29 @@ export class WebRTCService {
 
     private consumePendingScreenShareChangeIfStable(): void {
         if (!this.pendingScreenShareChange || !this.canApplyScreenShareChangeNow()) return;
+        if (this.pendingScreenShareChangeReason === 'stop') {
+            this.pendingScreenShareChange = false;
+            this.pendingScreenShareChangeReason = null;
+            debugCall('[WebRTCService] pending screen desired state consumed', {
+                call_id: this.getCallId(),
+                current: this.isScreenShareActiveLocal,
+                desired: this.desiredScreenShareActive,
+                reason: 'stop',
+            });
+            void this.renegotiate('stop_screen_share').catch((err) => {
+                console.warn('[WebRTCService] Failed to apply pending screen share stop', err);
+            });
+            return;
+        }
+
         if (this.desiredScreenShareActive === this.isScreenShareActiveLocal) {
             this.pendingScreenShareChange = false;
+            this.pendingScreenShareChangeReason = null;
+            debugCall('[WebRTCService] pending screen desired state cleared', {
+                call_id: this.getCallId(),
+                current: this.isScreenShareActiveLocal,
+                desired: this.desiredScreenShareActive,
+            });
             return;
         }
 
@@ -723,6 +773,7 @@ export class WebRTCService {
             call_id: this.getCallId(),
             current: this.isScreenShareActiveLocal,
             desired: this.desiredScreenShareActive,
+            reason: this.pendingScreenShareChangeReason,
         });
         void this.applyDesiredScreenShareState().catch((err) => {
             this.rejectPendingScreenShareStarts(err instanceof Error ? err : new Error('Screen share change failed'));
@@ -790,24 +841,54 @@ export class WebRTCService {
             })),
         });
 
-        const videoTrack = videoReceivers.find((receiver) => (
-            receiver.track?.readyState === 'live' && !receiver.track.muted
-        ))?.track;
+        const candidateTrack = videoReceivers.find((receiver) => receiver.track?.readyState === 'live')?.track;
+        if (!candidateTrack) return;
+
+        if (candidateTrack.muted) {
+            this.setRemoteScreenLoading(true, `${reason}_muted`);
+            this.attachRemoteScreenTrackLifecycle(candidateTrack);
+            return;
+        }
+
+        const videoTrack = candidateTrack;
         if (!videoTrack) return;
 
         this.setRemoteScreenTrack(videoTrack, reason);
     }
 
-    private setRemoteScreenTrack(track: MediaStreamTrack, reason: string): void {
-        const screenStream = new MediaStream([track]);
-        this.remoteScreenStream = screenStream;
-        track.onended = () => this.clearRemoteScreenStream('onended');
-        track.onmute = () => this.clearRemoteScreenStream('onmute');
+    private attachRemoteScreenTrackLifecycle(track: MediaStreamTrack): void {
+        track.onended = () => {
+            debugCall('[WebRTCService] remote screen track ended', {
+                call_id: this.getCallId(),
+                track_id: track.id,
+            });
+            this.setRemoteScreenLoading(false, 'onended');
+            this.clearRemoteScreenStream('onended');
+        };
+        track.onmute = () => {
+            debugCall('[WebRTCService] remote screen track muted', {
+                call_id: this.getCallId(),
+                track_id: track.id,
+            });
+            this.setRemoteScreenLoading(true, 'onmute');
+            this.clearRemoteScreenStream('onmute');
+        };
         track.onunmute = () => {
+            debugCall('[WebRTCService] remote screen track unmuted', {
+                call_id: this.getCallId(),
+                track_id: track.id,
+            });
             if (this.remoteScreenShareActive) {
                 this.setRemoteScreenTrack(track, 'onunmute');
             }
         };
+    }
+
+    private setRemoteScreenTrack(track: MediaStreamTrack, reason: string): void {
+        this.attachRemoteScreenTrackLifecycle(track);
+        const screenStream = new MediaStream([track]);
+        this.remoteScreenStream = screenStream;
+        this.setRemoteScreenLoading(false, reason);
         debugCall('[WebRTCService] set remote screen stream', {
             call_id: this.getCallId(),
             reason,
@@ -827,6 +908,15 @@ export class WebRTCService {
             hadRemoteScreenStream,
         });
         this.onRemoteScreenStream(null);
+    }
+
+    private setRemoteScreenLoading(loading: boolean, reason: string): void {
+        debugCall('[WebRTCService] remote screen loading', {
+            call_id: this.getCallId(),
+            loading,
+            reason,
+        });
+        this.onRemoteScreenLoading(loading);
     }
 
     private async initPeerConnection(): Promise<void> {
@@ -865,7 +955,12 @@ export class WebRTCService {
 
             if (event.track?.kind === 'video') {
                 this.remoteScreenShareActive = true;
-                this.setRemoteScreenTrack(event.track, 'ontrack');
+                if (event.track.muted) {
+                    this.setRemoteScreenLoading(true, 'ontrack_muted');
+                    this.attachRemoteScreenTrackLifecycle(event.track);
+                } else {
+                    this.setRemoteScreenTrack(event.track, 'ontrack');
+                }
                 return;
             }
 

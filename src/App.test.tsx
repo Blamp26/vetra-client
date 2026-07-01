@@ -21,6 +21,7 @@ vi.mock("./features/calling/hooks/useCall", () => ({
     remoteUserId: null,
     isMuted: false,
     isScreenSharing: false,
+    isRemoteScreenLoading: false,
     seconds: 0,
     diagnostics: null,
     toggleMute: vi.fn(),

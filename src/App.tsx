@@ -70,6 +70,7 @@ function App() {
     remoteUserId,
     isMuted,
     isScreenSharing,
+    isRemoteScreenLoading,
     seconds,
     diagnostics,
     toggleMute,
@@ -328,6 +329,7 @@ function App() {
           seconds={seconds}
           isMuted={isMuted}
           isScreenSharing={isScreenSharing}
+          isRemoteScreenLoading={isRemoteScreenLoading}
           remoteScreenStream={remoteScreenStream}
           localScreenStream={localScreenStream}
           diagnostics={diagnostics}

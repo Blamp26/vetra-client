@@ -17,6 +17,7 @@ class MockMediaStream {}
 function renderWindow({
   diagnostics = defaultDiagnostics,
   isScreenSharing = false,
+  isRemoteScreenLoading = false,
   remoteScreenStream = null,
   localScreenStream = null,
   onStartScreenShare = async () => undefined,
@@ -24,6 +25,7 @@ function renderWindow({
 } : {
   diagnostics?: CallDiagnostics;
   isScreenSharing?: boolean;
+  isRemoteScreenLoading?: boolean;
   remoteScreenStream?: MediaStream | null;
   localScreenStream?: MediaStream | null;
   onStartScreenShare?: () => Promise<void>;
@@ -35,6 +37,7 @@ function renderWindow({
       seconds={12}
       isMuted={false}
       isScreenSharing={isScreenSharing}
+      isRemoteScreenLoading={isRemoteScreenLoading}
       remoteScreenStream={remoteScreenStream}
       localScreenStream={localScreenStream}
       diagnostics={diagnostics}
@@ -50,6 +53,7 @@ describe('ActiveCallWindow', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     global.MediaStream = MockMediaStream as typeof MediaStream;
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
   });
 
   it('hides diagnostics by default', () => {
@@ -162,6 +166,7 @@ describe('ActiveCallWindow', () => {
         seconds={12}
         isMuted={false}
         isScreenSharing={false}
+        isRemoteScreenLoading={false}
         remoteScreenStream={null}
         localScreenStream={null}
         diagnostics={defaultDiagnostics}
@@ -180,6 +185,7 @@ describe('ActiveCallWindow', () => {
         seconds={12}
         isMuted={false}
         isScreenSharing={false}
+        isRemoteScreenLoading={false}
         remoteScreenStream={secondStream}
         localScreenStream={null}
         diagnostics={defaultDiagnostics}
@@ -208,6 +214,7 @@ describe('ActiveCallWindow', () => {
         seconds={12}
         isMuted={false}
         isScreenSharing={false}
+        isRemoteScreenLoading={false}
         remoteScreenStream={null}
         localScreenStream={null}
         diagnostics={defaultDiagnostics}
@@ -224,5 +231,15 @@ describe('ActiveCallWindow', () => {
 
     pauseSpy.mockRestore();
     loadSpy.mockRestore();
+  });
+
+  it('shows a loading placeholder while the remote screen track is not yet unmuted', () => {
+    renderWindow({
+      isRemoteScreenLoading: true,
+      remoteScreenStream: null,
+    });
+
+    expect(screen.getByTestId('remote-screen-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('remote-screen-view')).not.toBeInTheDocument();
   });
 });
