@@ -101,11 +101,19 @@ function isUnavailableRemoteError(error: unknown): boolean {
     );
 }
 
+function isAlreadyInCallError(error: unknown): boolean {
+    return getErrorMessage(error).toLowerCase().includes('already_in_call');
+}
+
 function buildCallIssue(message: string, tone: CallIssue['tone'] = 'error'): CallIssue {
     return { tone, message };
 }
 
 function mapStartCallIssue(error: unknown): CallIssue {
+    if (isAlreadyInCallError(error)) {
+        return buildCallIssue('Call could not start because one side is already in a call.');
+    }
+
     if (isPermissionDeniedError(error)) {
         return buildCallIssue('Microphone permission denied.');
     }
@@ -615,10 +623,37 @@ export function useCall(currentUserId: number): UseCallReturn {
                 }, 30_000);
             })
             .catch((err) => {
+                const issue = mapStartCallIssue(err);
+                if (isAlreadyInCallError(err)) {
+                    debugCall('[useCall] startCall rejected because a participant is already in a call', {
+                        targetUserId,
+                    });
+                    service.dispose();
+                    if (webrtcRef.current === service) {
+                        webrtcRef.current = null;
+                    }
+                    clearCallTimeout();
+                    cleanupScreenShare({ stopTracks: false });
+                    statusRef.current = 'idle';
+                    setStatus('idle');
+                    setCallId(null);
+                    setRemoteStream(null);
+                    setRemoteScreenStream(null);
+                    setIsScreenShareUpdating(false);
+                    setIsRemoteScreenLoading(false);
+                    setIsMuted(false);
+                    setIsScreenSharing(false);
+                    setLocalScreenStream(null);
+                    setSeconds(0);
+                    setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
+                    setCallIssue(issue);
+                    return;
+                }
+
                 console.error('[useCall] startCall failed', err);
-                resetAfterDelay({ status: 'failed', issue: mapStartCallIssue(err) });
+                resetAfterDelay({ status: 'failed', issue });
             });
-    }, [cleanupScreenShare, currentUserId, resetAfterDelay]);
+    }, [cleanupScreenShare, clearCallTimeout, currentUserId, resetAfterDelay]);
 
     const acceptCall = useCallback(() => {
         const channel = callChannelRef.current;

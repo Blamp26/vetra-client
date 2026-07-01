@@ -347,6 +347,67 @@ describe('useCall', () => {
             expect(disconnectSpy).not.toHaveBeenCalled();
         });
 
+        it('recovers cleanly when the server rejects an offer with already_in_call', async () => {
+            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+            const rejectedStartCall = vi
+                .fn()
+                .mockRejectedValue(new Error('Call signaling offer failed: already_in_call'));
+            const dispose = vi.fn();
+            MockWebRTCService.mockImplementationOnce(function (this: any) {
+                this.startCall = rejectedStartCall;
+                this.dispose = dispose;
+                this.setCallId = vi.fn();
+                this.getSignalingCallId = vi.fn(() => 'fallback-call-id');
+                this.getDiagnosticsSnapshot = vi.fn().mockReturnValue({
+                    connectionState: 'unknown',
+                    iceConnectionState: 'unknown',
+                    iceGatheringState: 'unknown',
+                    signalingState: 'unknown',
+                    selectedCandidatePair: null,
+                });
+                this.onRemoteStream = null;
+                this.onRemoteScreenStream = null;
+                this.onRemoteScreenLoading = null;
+                this.onScreenShareUpdatingChange = null;
+                this.onCallIdReceived = null;
+                this.onDiagnosticsChange = null;
+                return this;
+            });
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            act(() => {
+                result.current.startCall(2, 'Alice');
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+
+            await act(async () => {
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+
+            expect(service.startCall).toHaveBeenCalledTimes(1);
+            expect(service.dispose).toHaveBeenCalledTimes(1);
+            expect(result.current.status).toBe('idle');
+            expect(result.current.callId).toBeNull();
+            expect(result.current.remoteStream).toBeNull();
+            expect(result.current.callIssue).toEqual({
+                tone: 'error',
+                message: 'Call could not start because one side is already in a call.',
+            });
+            expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+                '[useCall] startCall failed',
+                expect.anything(),
+            );
+
+            act(() => {
+                result.current.startCall(2, 'Alice');
+            });
+
+            expect(MockWebRTCService).toHaveBeenCalledTimes(2);
+            consoleErrorSpy.mockRestore();
+        });
+
         it('does not teardown when the current user call ref changes during an outgoing call', async () => {
             const disconnectSpy = vi.spyOn(callSignalingService, 'disconnect');
             const { result, rerender } = renderHook(() => useCall(currentUserId));

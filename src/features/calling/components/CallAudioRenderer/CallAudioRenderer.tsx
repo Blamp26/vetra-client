@@ -17,8 +17,11 @@ function isMissingOutputDeviceError(error: unknown): boolean {
 
   return (
     name === 'NotFoundError' ||
+    name === 'NotSupportedError' ||
     message.includes('can not be found here') ||
     message.includes('cannot be found here') ||
+    message.includes('object can not be found') ||
+    message.includes('object cannot be found') ||
     message.includes('not found')
   );
 }
@@ -77,28 +80,38 @@ export function CallAudioRenderer({
     }).catch(async (error) => {
       if (cancelled) return;
 
-      if (sinkId !== 'default' && isMissingOutputDeviceError(error)) {
+      if (isMissingOutputDeviceError(error)) {
         debugCall('[CallAudioRenderer] Output device missing, falling back to default', {
           sinkId,
           errorName: error instanceof Error ? error.name : undefined,
         });
 
-        if (lastFallbackDeviceIdRef.current !== sinkId) {
+        if (sinkId !== 'default' && lastFallbackDeviceIdRef.current !== sinkId) {
           lastFallbackDeviceIdRef.current = sinkId;
           onOutputDeviceFallback?.(sinkId);
         }
 
-        try {
-          await audio.setSinkId('default');
-          if (!cancelled) {
-            lastSinkWarningKeyRef.current = null;
+        if (sinkId !== 'default') {
+          try {
+            await audio.setSinkId('default');
+            if (!cancelled) {
+              lastSinkWarningKeyRef.current = null;
+            }
+          } catch (fallbackError) {
+            if (!isMissingOutputDeviceError(fallbackError) && !isOutputDeviceSecurityError(fallbackError)) {
+              const warningKey = `default:${fallbackError instanceof Error ? fallbackError.name : 'unknown'}`;
+              if (lastSinkWarningKeyRef.current !== warningKey) {
+                lastSinkWarningKeyRef.current = warningKey;
+                console.warn('[CallAudioRenderer] Failed to apply default output device', fallbackError);
+              }
+            } else {
+              debugCall('[CallAudioRenderer] Default output device routing unavailable', {
+                errorName: fallbackError instanceof Error ? fallbackError.name : undefined,
+              });
+            }
           }
-        } catch (fallbackError) {
-          const warningKey = `default:${fallbackError instanceof Error ? fallbackError.name : 'unknown'}`;
-          if (lastSinkWarningKeyRef.current !== warningKey) {
-            lastSinkWarningKeyRef.current = warningKey;
-            console.warn('[CallAudioRenderer] Failed to apply default output device', fallbackError);
-          }
+        } else {
+          lastSinkWarningKeyRef.current = null;
         }
         return;
       }

@@ -184,4 +184,49 @@ describe('CallAudioRenderer', () => {
     expect(onOutputDeviceFallback).not.toHaveBeenCalled();
     expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
+
+  it('handles missing default output device without warning spam', async () => {
+    setSinkIdMock.mockRejectedValue(
+      new DOMException('The object can not be found here', 'NotFoundError'),
+    );
+
+    const { rerender } = render(
+      <CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" />
+    );
+
+    await waitFor(() => {
+      expect(setSinkIdMock).toHaveBeenCalledWith('default');
+    });
+
+    rerender(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" />);
+
+    await waitFor(() => {
+      expect(setSinkIdMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when selected and fallback output devices are both missing', async () => {
+    const onOutputDeviceFallback = vi.fn();
+    setSinkIdMock
+      .mockRejectedValueOnce(new DOMException('The object can not be found here', 'NotFoundError'))
+      .mockRejectedValueOnce(new DOMException('The object can not be found here', 'NotFoundError'));
+
+    render(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="speaker-123"
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />
+    );
+
+    await waitFor(() => {
+      expect(onOutputDeviceFallback).toHaveBeenCalledWith('speaker-123');
+      expect(setSinkIdMock).toHaveBeenNthCalledWith(1, 'speaker-123');
+      expect(setSinkIdMock).toHaveBeenNthCalledWith(2, 'default');
+    });
+
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
+  });
 });
