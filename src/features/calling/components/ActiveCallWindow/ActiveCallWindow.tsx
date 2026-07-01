@@ -1,10 +1,8 @@
-import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { formatCallTime } from '@/utils/formatDate';
 import type { CallDiagnostics } from '../../hooks/useCall.types';
 
 interface ActiveCallWindowProps {
-  remoteStream: MediaStream | null;
   remoteUsername: string;
   seconds: number;
   isMuted: boolean;
@@ -14,7 +12,6 @@ interface ActiveCallWindowProps {
 }
 
 export const ActiveCallWindow = ({
-  remoteStream,
   remoteUsername,
   seconds,
   isMuted,
@@ -22,15 +19,8 @@ export const ActiveCallWindow = ({
   onMuteToggle,
   onHangUp,
 }: ActiveCallWindowProps) => {
-  const audioRef = useRef<HTMLAudioElement>(null);
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === 'true';
-
-  useEffect(() => {
-    if (audioRef.current && remoteStream) {
-      audioRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream]);
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-background/50 z-modal">
@@ -74,8 +64,6 @@ export const ActiveCallWindow = ({
             </div>
           </div>
         )}
-
-        <audio ref={audioRef} autoPlay hidden />
 
         <div className="flex gap-4 mt-2">
           <button

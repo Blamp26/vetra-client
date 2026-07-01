@@ -17,6 +17,7 @@ import { useCall } from "./features/calling/hooks/useCall";
 
 import { IncomingCallModal } from "./features/calling/components/IncomingCallModal";
 import { ActiveCallWindow } from "./features/calling/components/ActiveCallWindow";
+import { CallAudioRenderer } from "./features/calling/components/CallAudioRenderer/CallAudioRenderer";
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 
 function EmptyState({
@@ -82,7 +83,6 @@ function App() {
   const searchResults = useAppStore((s) => s.searchResults);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
-  const audioRef = useRef<HTMLAudioElement>(null);
 
   const [showSettings, setShowSettings] = useState(false);
   const [routeHash, setRouteHash] = useState(() =>
@@ -209,12 +209,6 @@ function App() {
     routeHash,
   ]);
 
-  useEffect(() => {
-    if (audioRef.current && remoteStream) {
-      audioRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream]);
-
   useAuthHydration();
   useSocketEvents();
 
@@ -257,7 +251,7 @@ function App() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-      <audio ref={audioRef} autoPlay hidden />
+      <CallAudioRenderer remoteStream={remoteStream} />
 
       <div className="flex h-full w-[400px] flex-shrink-0 flex-col border-r border-border bg-sidebar">
         <div className="flex flex-1 overflow-hidden">
@@ -321,7 +315,6 @@ function App() {
 
       {status === "active" && (
         <ActiveCallWindow
-          remoteStream={remoteStream}
           remoteUsername={remoteUsername ?? `User #${remoteUserId}`}
           seconds={seconds}
           isMuted={isMuted}

@@ -15,7 +15,6 @@ const defaultDiagnostics: CallDiagnostics = {
 function renderWindow(diagnostics: CallDiagnostics = defaultDiagnostics) {
   return render(
     <ActiveCallWindow
-      remoteStream={null}
       remoteUsername="Alice"
       seconds={12}
       isMuted={false}
@@ -69,5 +68,11 @@ describe('ActiveCallWindow', () => {
     expect(diagnosticsText).not.toContain('turn-pass');
     expect(diagnosticsText).not.toContain('token');
     expect(diagnosticsText).not.toContain('candidate:');
+  });
+
+  it('does not own remote audio playback', () => {
+    const { container } = renderWindow();
+
+    expect(container.querySelector('audio')).toBeNull();
   });
 });
