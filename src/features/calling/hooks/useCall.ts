@@ -56,9 +56,18 @@ export function useCall(currentUserId: number): UseCallReturn {
     const screenTrackRef = useRef<MediaStreamTrack | null>(null);
     const screenTrackEndedHandlerRef = useRef<(() => void) | null>(null);
 
-    const stopScreenShare = useCallback(() => {
+    const cleanupScreenShare = useCallback((options?: { stopTracks?: boolean }) => {
+        const shouldStopTracks = options?.stopTracks ?? true;
+        const existingStream = localScreenStreamRef.current;
         const existingTrack = screenTrackRef.current;
         const existingHandler = screenTrackEndedHandlerRef.current;
+
+        localScreenStreamRef.current = null;
+        screenTrackRef.current = null;
+        screenTrackEndedHandlerRef.current = null;
+        setLocalScreenStream(null);
+        setIsScreenSharing(false);
+
         if (existingTrack && existingHandler) {
             if ('removeEventListener' in existingTrack) {
                 existingTrack.removeEventListener?.('ended', existingHandler);
@@ -66,19 +75,16 @@ export function useCall(currentUserId: number): UseCallReturn {
             existingTrack.onended = null;
         }
 
-        const stream = localScreenStreamRef.current;
-        if (stream) {
-            stream.getTracks().forEach((track) => {
+        if (shouldStopTracks && existingStream) {
+            existingStream.getTracks().forEach((track) => {
                 track.stop();
             });
         }
-
-        localScreenStreamRef.current = null;
-        screenTrackRef.current = null;
-        screenTrackEndedHandlerRef.current = null;
-        setLocalScreenStream(null);
-        setIsScreenSharing(false);
     }, []);
+
+    const stopScreenShare = useCallback(() => {
+        cleanupScreenShare({ stopTracks: true });
+    }, [cleanupScreenShare]);
 
     const teardownCall = useCallback((options?: { resetState?: boolean; unsubscribe?: boolean }) => {
         const resetState = options?.resetState ?? true;
@@ -92,7 +98,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             signalingUnsubsRef.current.forEach((unsub) => unsub());
             signalingUnsubsRef.current = [];
         }
-        stopScreenShare();
+        cleanupScreenShare({ stopTracks: true });
         webrtcRef.current?.dispose();
         webrtcRef.current = null;
         callChannelRef.current = null;
@@ -109,7 +115,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             setSeconds(0);
             setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
         }
-    }, [stopScreenShare]);
+    }, [cleanupScreenShare]);
 
     const resetAfterDelay = useCallback(() => {
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
@@ -189,7 +195,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 webrtcRef.current?.addIceCandidate(payload.candidate);
             }),
             callSignalingService.onHangUp(() => {
-                stopScreenShare();
+                cleanupScreenShare({ stopTracks: true });
                 webrtcRef.current?.dispose();
                 resetAfterDelay();
             }),
@@ -212,7 +218,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         return () => {
             teardownCall({ resetState: false });
         };
-    }, [socketManager, currentUserCallRef, currentUserId, handleOffer, resetAfterDelay, stopScreenShare, teardownCall]);
+    }, [cleanupScreenShare, socketManager, currentUserCallRef, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
 
     const startCall = useCallback((targetUserId: ResourceRef) => {
         console.log('[useCall] startCall -> targetUserId:', targetUserId, '| current status:', status);
@@ -239,7 +245,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 callTimeoutRef.current = setTimeout(() => {
                     if (webrtcRef.current) {
                         console.warn('[useCall] Call timeout');
-                        stopScreenShare();
+                        cleanupScreenShare({ stopTracks: true });
                         webrtcRef.current.dispose();
                         resetAfterDelay();
                     }
@@ -249,7 +255,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 console.error('[useCall] startCall failed', err);
                 resetAfterDelay();
             });
-    }, [status, currentUserId, resetAfterDelay, stopScreenShare]);
+    }, [cleanupScreenShare, status, currentUserId, resetAfterDelay]);
 
     const acceptCall = useCallback(() => {
         const channel = callChannelRef.current;
@@ -293,11 +299,11 @@ export function useCall(currentUserId: number): UseCallReturn {
         if (channel && callId && remoteUserId) {
             channel.push('hang_up', { call_id: callId, to_user_id: remoteUserId });
         }
-        stopScreenShare();
+        cleanupScreenShare({ stopTracks: true });
         webrtcRef.current?.dispose();
         offerSdpRef.current = null;
         resetAfterDelay();
-    }, [callId, remoteUserId, resetAfterDelay, stopScreenShare]);
+    }, [callId, cleanupScreenShare, remoteUserId, resetAfterDelay]);
 
     const toggleMute = useCallback(() => {
         const service = webrtcRef.current;
@@ -315,14 +321,14 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
 
         try {
-            stopScreenShare();
+            cleanupScreenShare({ stopTracks: true });
             const stream = await mediaDevices.getDisplayMedia({
                 video: true,
                 audio: false,
             });
             const videoTrack = stream.getVideoTracks()[0] ?? null;
             const handleEnded = () => {
-                stopScreenShare();
+                cleanupScreenShare({ stopTracks: false });
             };
 
             if (videoTrack) {
@@ -340,7 +346,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         } catch (err) {
             console.warn('[useCall] Screen share was not started', err);
         }
-    }, [stopScreenShare]);
+    }, [cleanupScreenShare]);
 
     return {
         status,

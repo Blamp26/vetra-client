@@ -754,6 +754,46 @@ describe('useCall', () => {
             expect(result.current.localScreenStream).toBeNull();
         });
 
+        it('active call stays active when stopScreenShare is used', async () => {
+            const track = {
+                stop: vi.fn(),
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const stream = {
+                getVideoTracks: vi.fn(() => [track]),
+                getTracks: vi.fn(() => [track]),
+            };
+            mockGetDisplayMedia.mockResolvedValue(stream);
+
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+            });
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+
+            act(() => {
+                result.current.stopScreenShare();
+            });
+
+            expect(result.current.status).toBe('active');
+            expect(result.current.isScreenSharing).toBe(false);
+            expect(result.current.localScreenStream).toBeNull();
+            expect(callChannel.push).not.toHaveBeenCalled();
+            expect(service.dispose).not.toHaveBeenCalled();
+        });
+
         it('track ended event clears state', async () => {
             let endedHandler: (() => void) | null = null;
             const track = {
@@ -784,6 +824,50 @@ describe('useCall', () => {
 
             expect(result.current.isScreenSharing).toBe(false);
             expect(result.current.localScreenStream).toBeNull();
+        });
+
+        it('track ended event keeps the call active and does not signal hangup', async () => {
+            let endedHandler: (() => void) | null = null;
+            const track = {
+                stop: vi.fn(),
+                addEventListener: vi.fn((event: string, handler: () => void) => {
+                    if (event === 'ended') endedHandler = handler;
+                }),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const stream = {
+                getVideoTracks: vi.fn(() => [track]),
+                getTracks: vi.fn(() => [track]),
+            };
+            mockGetDisplayMedia.mockResolvedValue(stream);
+
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+            });
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+
+            act(() => {
+                endedHandler?.();
+            });
+
+            expect(result.current.status).toBe('active');
+            expect(result.current.isScreenSharing).toBe(false);
+            expect(result.current.localScreenStream).toBeNull();
+            expect(callChannel.push).not.toHaveBeenCalled();
+            expect(service.dispose).not.toHaveBeenCalled();
+            expect(track.stop).not.toHaveBeenCalled();
         });
 
         it('teardown and hangUp stop screen capture tracks', async () => {
@@ -824,6 +908,68 @@ describe('useCall', () => {
             });
             unmount();
             expect(track.stop).toHaveBeenCalledTimes(2);
+        });
+
+        it('repeated start and stop screen sharing does not leave stuck state', async () => {
+            const firstTrack = {
+                stop: vi.fn(),
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const secondTrack = {
+                stop: vi.fn(),
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const firstStream = {
+                getVideoTracks: vi.fn(() => [firstTrack]),
+                getTracks: vi.fn(() => [firstTrack]),
+            };
+            const secondStream = {
+                getVideoTracks: vi.fn(() => [secondTrack]),
+                getTracks: vi.fn(() => [secondTrack]),
+            };
+            mockGetDisplayMedia
+                .mockResolvedValueOnce(firstStream)
+                .mockResolvedValueOnce(secondStream);
+
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+            });
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+            act(() => {
+                result.current.stopScreenShare();
+            });
+            expect(result.current.status).toBe('active');
+            expect(result.current.isScreenSharing).toBe(false);
+
+            await act(async () => {
+                await result.current.startScreenShare();
+            });
+            expect(result.current.status).toBe('active');
+            expect(result.current.isScreenSharing).toBe(true);
+            expect(result.current.localScreenStream).toBe(secondStream);
+
+            act(() => {
+                result.current.stopScreenShare();
+            });
+            expect(result.current.status).toBe('active');
+            expect(result.current.isScreenSharing).toBe(false);
+            expect(result.current.localScreenStream).toBeNull();
+            expect(firstTrack.stop).toHaveBeenCalled();
+            expect(secondTrack.stop).toHaveBeenCalled();
         });
 
         it('unsupported getDisplayMedia fails gracefully', async () => {
