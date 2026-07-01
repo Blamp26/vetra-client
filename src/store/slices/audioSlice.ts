@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import { storage } from "@/shared/utils/storage";
 
 export interface AudioSlice {
   micEnabled: boolean;
@@ -74,9 +75,9 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
       });
 
       try {
-        const shown = localStorage.getItem(CASCADE_TOAST_KEY);
+        const shown = storage.getString(CASCADE_TOAST_KEY);
         if (!shown) {
-          localStorage.setItem(CASCADE_TOAST_KEY, "1");
+          storage.setString(CASCADE_TOAST_KEY, "1");
           window.dispatchEvent(
             new CustomEvent("vetra:toast", {
               detail: {

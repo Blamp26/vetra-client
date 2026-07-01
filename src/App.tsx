@@ -93,7 +93,6 @@ function App() {
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
 
-  const [showSettings, setShowSettings] = useState(false);
   const [routeHash, setRouteHash] = useState(() =>
     typeof window !== "undefined" ? window.location.hash || "#" : "#",
   );
@@ -107,6 +106,18 @@ function App() {
   const handleOutputDeviceFallback = useCallback(() => {
     setOutputDevice('default');
   }, [setOutputDevice]);
+
+  const navigateToHash = useCallback((nextHash: string) => {
+    const normalizedHash = nextHash || "#";
+    if (typeof window === "undefined") return;
+    if ((window.location.hash || "#") === normalizedHash) {
+      setRouteHash((prev) => (prev === normalizedHash ? prev : normalizedHash));
+      return;
+    }
+
+    window.history.replaceState(null, "", normalizedHash);
+    setRouteHash(normalizedHash);
+  }, []);
 
   useEffect(() => {
     const syncHashState = () => {
@@ -141,12 +152,33 @@ function App() {
     ],
   );
   const routeTargetKey = activeChatKey(routeTarget);
+  const isSettingsRoute = routeTarget?.type === "settings";
+  const activeChatHash = useMemo(
+    () =>
+      buildHashForActiveChat(activeChat, {
+        activeChat,
+        currentUser,
+        conversationPreviews,
+        roomPreviews,
+        servers,
+        serverChannels,
+        searchResults,
+      }),
+    [
+      activeChat,
+      currentUser,
+      conversationPreviews,
+      roomPreviews,
+      servers,
+      serverChannels,
+      searchResults,
+    ],
+  );
 
   useEffect(() => {
     if (!routeHash || routeHash === "#") return;
 
-    if (routeTarget?.type === "settings") {
-      setShowSettings(true);
+    if (isSettingsRoute) {
       return;
     }
 
@@ -157,68 +189,22 @@ function App() {
     routeHash,
     routeTarget,
     routeTargetKey,
+    isSettingsRoute,
     setActiveChat,
   ]);
 
   useEffect(() => {
     if (!activeChat) return;
+    if (isSettingsRoute) return;
 
-    const newHash = buildHashForActiveChat(activeChat, {
-      activeChat,
-      currentUser,
-      conversationPreviews,
-      roomPreviews,
-      servers,
-      serverChannels,
-      searchResults,
-    });
-
-    if (newHash && routeHash !== newHash) {
-      window.history.replaceState(null, "", newHash);
-      setRouteHash(newHash);
+    if (activeChatHash && routeHash !== activeChatHash) {
+      navigateToHash(activeChatHash);
     }
   }, [
     activeChat,
-    currentUser,
-    conversationPreviews,
-    roomPreviews,
-    servers,
-    serverChannels,
-    searchResults,
-    routeHash,
-  ]);
-
-  useEffect(() => {
-    if (showSettings && routeHash !== "#/settings") {
-      window.history.replaceState(null, "", "#/settings");
-      setRouteHash("#/settings");
-    } else if (!showSettings && routeHash === "#/settings") {
-      if (activeChat) {
-        const newHash = buildHashForActiveChat(activeChat, {
-          activeChat,
-          currentUser,
-          conversationPreviews,
-          roomPreviews,
-          servers,
-          serverChannels,
-          searchResults,
-        });
-        window.history.replaceState(null, "", newHash || "#");
-        setRouteHash(newHash || "#");
-      } else {
-        window.history.replaceState(null, "", "#");
-        setRouteHash("#");
-      }
-    }
-  }, [
-    showSettings,
-    activeChat,
-    currentUser,
-    conversationPreviews,
-    roomPreviews,
-    servers,
-    serverChannels,
-    searchResults,
+    activeChatHash,
+    isSettingsRoute,
+    navigateToHash,
     routeHash,
   ]);
 
@@ -290,7 +276,7 @@ function App() {
           onHangUp={hangUp}
           onAcceptCall={acceptCall}
           onRejectCall={rejectCall}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenSettings={() => navigateToHash("#/settings")}
         />
       </div>
 
@@ -320,7 +306,9 @@ function App() {
         )}
       </div>
 
-      {showSettings && <SettingsPage onClose={() => setShowSettings(false)} />}
+      {isSettingsRoute && (
+        <SettingsPage onClose={() => navigateToHash(activeChatHash || "#")} />
+      )}
 
       {status === "ringing" && (
         <IncomingCallModal

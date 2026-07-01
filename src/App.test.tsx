@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { useAppStoreMock, setActiveChatMock } = vi.hoisted(() => ({
@@ -52,7 +52,9 @@ vi.mock("@/features/messaging/components/Sidebar", () => ({
 }));
 
 vi.mock("@/features/messaging/components/Sidebar/SidebarFooter", () => ({
-  SidebarFooter: () => <div>footer</div>,
+  SidebarFooter: ({ onOpenSettings }: { onOpenSettings: () => void }) => (
+    <button onClick={onOpenSettings}>open settings</button>
+  ),
 }));
 
 vi.mock("@/features/messaging/components/ChatWindow/ChatWindow", () => ({
@@ -164,5 +166,46 @@ describe("App hash sync", () => {
     expect(setActiveChatMock).not.toHaveBeenCalledWith(
       { type: "server", serverId: 1, serverRef: "1" },
     );
+  });
+
+  it("keeps the explicit settings hash stable instead of restoring the active chat route", async () => {
+    const state = makeState();
+    state.activeChat = {
+      type: "direct",
+      partnerId: 2,
+      partnerRef: "a0d2a839-4b37-441e-958e-6d4369e94de9",
+    };
+    window.location.hash = "#/settings";
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("settings")).toBeTruthy());
+    expect(window.location.hash).toBe("#/settings");
+    expect(setActiveChatMock).not.toHaveBeenCalled();
+  });
+
+  it("switches from a chat route to settings without bouncing back to chat", async () => {
+    const state = makeState();
+    state.activeChat = {
+      type: "direct",
+      partnerId: 2,
+      partnerRef: "a0d2a839-4b37-441e-958e-6d4369e94de9",
+    };
+    window.location.hash = "#/a0d2a839-4b37-441e-958e-6d4369e94de9";
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open settings" }));
+
+    await waitFor(() => expect(window.location.hash).toBe("#/settings"));
+    expect(screen.getByText("settings")).toBeTruthy();
   });
 });

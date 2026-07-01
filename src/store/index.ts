@@ -4,7 +4,7 @@
 //          Zustand persist оставлен для возможного использования в будущем.
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { shallow } from 'zustand/shallow';
 import { createAuthSlice, AuthSlice } from './slices/authSlice';
 import { createMessagesSlice, MessagesSlice } from './slices/messagesSlice';
@@ -14,6 +14,7 @@ import { createPresenceSlice, PresenceSlice } from './slices/presenceSlice';
 import { createUISlice, UISlice } from './slices/uiSlice';
 import { createChannelsSlice, ChannelsSlice } from './slices/channelsSlice';
 import { createAudioSlice, AudioSlice } from './slices/audioSlice';
+import { storage, STORAGE_KEYS } from '@/shared/utils/storage';
 
 export type RootState =
   AuthSlice &
@@ -24,6 +25,12 @@ export type RootState =
   UISlice &
   ChannelsSlice &
   AudioSlice;
+
+const safePersistStorage: StateStorage = {
+  getItem: (name) => storage.getString(name),
+  setItem: (name, value) => storage.setString(name, value),
+  removeItem: (name) => storage.remove(name),
+};
 
 const useAppStoreBase = create<RootState>()(
   persist(
@@ -38,7 +45,8 @@ const useAppStoreBase = create<RootState>()(
       ...createAudioSlice(...a),
     }),
     {
-      name: 'vetra-storage',
+      name: STORAGE_KEYS.APP_STATE,
+      storage: createJSONStorage(() => safePersistStorage),
       partialize: (state) => ({
         theme: state.theme,
         selectedInputDeviceId: state.selectedInputDeviceId,

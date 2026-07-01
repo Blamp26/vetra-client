@@ -145,6 +145,8 @@ describe("SettingsPage audio settings", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
 
+    expect(requestNotificationPermissionMock).not.toHaveBeenCalled();
+
     const enableButton = await screen.findByRole("button", { name: "Enable notifications" });
     fireEvent.click(enableButton);
 
