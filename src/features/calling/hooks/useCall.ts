@@ -5,6 +5,7 @@ import type { ResourceRef } from '@/shared/types';
 import { WebRTCService, type WebRTCDiagnostics } from '../services/webrtcService';
 import { callSignalingService, type OfferPayload } from '../services/callSignalingService';
 import type { CallDiagnostics, CallStatus, UseCallReturn } from './useCall.types';
+import { debugCall } from '../utils/callDebug';
 
 const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
     connectionState: 'unknown',
@@ -15,23 +16,8 @@ const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
 };
 
 const DIAGNOSTICS_POLL_INTERVAL_MS = 1500;
-const CALL_DEBUG_KEY = 'vetra.debug.calls';
-
 function shouldPollDiagnostics(): boolean {
     return import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === 'true';
-}
-
-function isCallDebugEnabled(): boolean {
-    try {
-        return globalThis.localStorage?.getItem(CALL_DEBUG_KEY) === '1';
-    } catch {
-        return false;
-    }
-}
-
-function debugCall(message: string, details?: Record<string, unknown>): void {
-    if (!isCallDebugEnabled()) return;
-    console.log(message, details ?? {});
 }
 
 function mapDiagnostics(diagnostics: WebRTCDiagnostics): CallDiagnostics {

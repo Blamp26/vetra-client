@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { formatCallTime } from '@/utils/formatDate';
 import type { CallDiagnostics } from '../../hooks/useCall.types';
-
-const CALL_DEBUG_KEY = 'vetra.debug.calls';
+import { debugCall } from '../../utils/callDebug';
 
 interface ActiveCallWindowProps {
   remoteUsername: string;
@@ -26,19 +25,6 @@ function detachVideo(video: HTMLVideoElement): void {
   video.srcObject = null;
   video.removeAttribute('src');
   video.load();
-}
-
-function isCallDebugEnabled(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(CALL_DEBUG_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function debugCall(message: string, details?: Record<string, unknown>): void {
-  if (!isCallDebugEnabled()) return;
-  console.log(message, details ?? {});
 }
 
 async function safelyPlayVideo(video: HTMLVideoElement, reason: string): Promise<void> {

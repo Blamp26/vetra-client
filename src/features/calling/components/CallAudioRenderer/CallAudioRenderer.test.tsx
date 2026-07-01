@@ -161,4 +161,26 @@ describe('CallAudioRenderer', () => {
       expect(onOutputDeviceFallback).toHaveBeenCalledTimes(2);
     });
   });
+
+  it('handles setSinkId SecurityError without warning spam or fallback reset', async () => {
+    const onOutputDeviceFallback = vi.fn();
+    setSinkIdMock.mockRejectedValueOnce(
+      new DOMException('The operation is insecure.', 'SecurityError'),
+    );
+
+    render(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="speaker-123"
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />
+    );
+
+    await waitFor(() => {
+      expect(setSinkIdMock).toHaveBeenCalledWith('speaker-123');
+    });
+
+    expect(onOutputDeviceFallback).not.toHaveBeenCalled();
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
+  });
 });

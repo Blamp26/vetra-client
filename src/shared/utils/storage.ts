@@ -12,8 +12,8 @@ export const STORAGE_KEYS = {
 
 export const storage = {
   get<T>(key: string): T | null {
-    if (typeof localStorage === "undefined") return null;
     try {
+      if (typeof localStorage === "undefined") return null;
       const item = localStorage.getItem(key);
       if (!item) return null;
       return JSON.parse(item) as T;
@@ -23,8 +23,8 @@ export const storage = {
   },
 
   set<T>(key: string, value: T): void {
-    if (typeof localStorage === "undefined") return;
     try {
+      if (typeof localStorage === "undefined") return;
       const stringified = JSON.stringify(value);
       localStorage.setItem(key, stringified);
     } catch (error) {
@@ -33,22 +33,38 @@ export const storage = {
   },
 
   remove(key: string): void {
-    if (typeof localStorage === "undefined") return;
-    localStorage.removeItem(key);
+    try {
+      if (typeof localStorage === "undefined") return;
+      localStorage.removeItem(key);
+    } catch {
+      // ignore storage access errors
+    }
   },
 
   getString(key: string): string | null {
-    if (typeof localStorage === "undefined") return null;
-    return localStorage.getItem(key);
+    try {
+      if (typeof localStorage === "undefined") return null;
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
   },
 
   setString(key: string, value: string): void {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(key, value);
+    try {
+      if (typeof localStorage === "undefined") return;
+      localStorage.setItem(key, value);
+    } catch (error) {
+      console.error(`Error saving to localStorage [${key}]:`, error);
+    }
   },
 
   clear(): void {
-    if (typeof localStorage === "undefined") return;
-    localStorage.clear();
+    try {
+      if (typeof localStorage === "undefined") return;
+      localStorage.clear();
+    } catch {
+      // ignore storage access errors
+    }
   },
 };

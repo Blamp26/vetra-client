@@ -1,25 +1,10 @@
 import { useEffect, useRef } from 'react';
-
-const CALL_DEBUG_KEY = 'vetra.debug.calls';
+import { debugCall } from '../../utils/callDebug';
 
 interface CallAudioRendererProps {
   remoteStream: MediaStream | null;
   selectedOutputDeviceId: string;
   onOutputDeviceFallback?: () => void;
-}
-
-function isCallDebugEnabled(): boolean {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return false;
-  }
-
-  return window.localStorage.getItem(CALL_DEBUG_KEY) === '1';
-}
-
-function debugCall(message: string, details?: Record<string, unknown>): void {
-  if (isCallDebugEnabled()) {
-    console.log(message, details ?? {});
-  }
 }
 
 function isMissingOutputDeviceError(error: unknown): boolean {
@@ -35,6 +20,23 @@ function isMissingOutputDeviceError(error: unknown): boolean {
     message.includes('can not be found here') ||
     message.includes('cannot be found here') ||
     message.includes('not found')
+  );
+}
+
+function isOutputDeviceSecurityError(error: unknown): boolean {
+  if (!(error instanceof DOMException) && !(error instanceof Error)) {
+    return false;
+  }
+
+  const name = 'name' in error ? String(error.name) : '';
+  const message = 'message' in error ? String(error.message).toLowerCase() : '';
+
+  return (
+    name === 'SecurityError' ||
+    name === 'NotAllowedError' ||
+    message.includes('insecure') ||
+    message.includes('permission denied') ||
+    message.includes('not allowed')
   );
 }
 
@@ -98,6 +100,14 @@ export function CallAudioRenderer({
             console.warn('[CallAudioRenderer] Failed to apply default output device', fallbackError);
           }
         }
+        return;
+      }
+
+      if (isOutputDeviceSecurityError(error)) {
+        debugCall('[CallAudioRenderer] Output device routing unavailable', {
+          sinkId,
+          errorName: error instanceof Error ? error.name : undefined,
+        });
         return;
       }
 

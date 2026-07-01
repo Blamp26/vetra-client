@@ -2,6 +2,7 @@ import { Channel } from 'phoenix';
 import { getState } from '@/store';
 import type { ResourceRef } from '@/shared/types';
 import type { CallIceCandidatePayload, RenegotiationSignalPayload } from '../hooks/useCall.types';
+import { debugCall, isCallDebugEnabled } from '../utils/callDebug';
 
 const DEFAULT_STUN_URL = 'stun:stun.l.google.com:19302';
 
@@ -35,7 +36,6 @@ type StatsValue = {
     candidateType?: string;
 };
 
-const CALL_DEBUG_KEY = 'vetra.debug.calls';
 const RENEGOTIATION_ANSWER_TIMEOUT_MS = 8_000;
 
 const EMPTY_DIAGNOSTICS: WebRTCDiagnostics = {
@@ -58,19 +58,6 @@ function cloneDiagnostics(diagnostics: WebRTCDiagnostics): WebRTCDiagnostics {
             ? { ...diagnostics.selectedCandidatePair }
             : null,
     };
-}
-
-function isCallDebugEnabled(): boolean {
-    try {
-        return globalThis.localStorage?.getItem(CALL_DEBUG_KEY) === '1';
-    } catch {
-        return false;
-    }
-}
-
-function debugCall(message: string, details?: Record<string, unknown>): void {
-    if (!isCallDebugEnabled()) return;
-    console.log(message, details ?? {});
 }
 
 function getStatsValues(stats: { values?: () => IterableIterator<StatsValue> } | null | undefined): StatsValue[] {

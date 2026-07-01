@@ -19,11 +19,20 @@ export async function getNotificationPermissionStatus(): Promise<NotificationPer
     }
   }
 
-  if (!('Notification' in window)) {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
     return 'unsupported';
   }
 
-  return Notification.permission;
+  if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    return 'unsupported';
+  }
+
+  try {
+    return Notification.permission;
+  } catch (e) {
+    console.error('[Notifications] Browser permission check failed:', e);
+    return 'unsupported';
+  }
 }
 
 export async function ensureNotificationPermission(options?: {
@@ -46,6 +55,9 @@ export async function ensureNotificationPermission(options?: {
   }
 
   try {
+    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+      return false;
+    }
     const permission = await Notification.requestPermission();
     return permission === 'granted';
   } catch (e) {

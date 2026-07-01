@@ -6,22 +6,7 @@ import type {
     IncomingCallPayload,
     RenegotiationSignalPayload,
 } from '../hooks/useCall.types';
-
-const CALL_DEBUG_KEY = 'vetra.debug.calls';
-
-function isCallDebugEnabled(): boolean {
-    if (typeof window === 'undefined' || !window.localStorage) {
-        return false;
-    }
-
-    return window.localStorage.getItem(CALL_DEBUG_KEY) === '1';
-}
-
-function debugCall(message: string, details?: Record<string, unknown>): void {
-    if (isCallDebugEnabled()) {
-        console.log(message, details ?? {});
-    }
-}
+import { debugCall } from '../utils/callDebug';
 
 export interface OfferPayload {
     sdp: string;

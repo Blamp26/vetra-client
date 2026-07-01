@@ -59,6 +59,24 @@ describe('notifications service', () => {
     expect(requestPermission).toHaveBeenCalledTimes(1);
   });
 
+  it('handles browser notification SecurityError without throwing', async () => {
+    const requestPermission = vi
+      .fn()
+      .mockRejectedValue(new DOMException('The operation is insecure.', 'SecurityError'));
+
+    Object.defineProperty(window, 'Notification', {
+      value: {
+        permission: 'default',
+        requestPermission,
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    await expect(requestNotificationPermission()).resolves.toBe(false);
+    expect(requestPermission).toHaveBeenCalledTimes(1);
+  });
+
   it('returns the current browser notification permission status', async () => {
     Object.defineProperty(window, 'Notification', {
       value: {
