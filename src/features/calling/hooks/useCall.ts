@@ -68,6 +68,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const offerSdpRef = useRef<string | null>(null);
     const statusRef = useRef<CallStatus>('idle');
     const callIdRef = useRef<string | null>(null);
+    const hangUpSentRef = useRef(false);
     const previousUserIdRef = useRef<number | null>(null);
     const previousSocketManagerRef = useRef<typeof socketManager>(null);
     const latestUserCallRefRef = useRef<ResourceRef | null>(null);
@@ -141,6 +142,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         webrtcRef.current = null;
         callChannelRef.current = null;
         offerSdpRef.current = null;
+        hangUpSentRef.current = false;
         if (resetState) {
             setStatus('idle');
             setRemoteUserId(null);
@@ -311,10 +313,13 @@ export function useCall(currentUserId: number): UseCallReturn {
                 });
                 webrtcRef.current?.addIceCandidate(payload.candidate);
             }),
-            callSignalingService.onHangUp(() => {
+            callSignalingService.onHangUp((payload) => {
                 debugCall('[useCall] hang_up received', {
+                    call_id: payload.call_id,
+                    from_user_id: payload.from_user_id,
                     active_call_id: callIdRef.current,
                     status: statusRef.current,
+                    accepted: true,
                 });
                 cleanupScreenShare({ stopTracks: !webrtcRef.current });
                 setRemoteScreenStream(null);
@@ -431,12 +436,21 @@ export function useCall(currentUserId: number): UseCallReturn {
     const hangUp = useCallback(() => {
         const channel = callChannelRef.current;
         const activeCallId = callId ?? webrtcRef.current?.getSignalingCallId() ?? null;
-        if (channel && activeCallId && remoteUserId) {
+        if (!hangUpSentRef.current && channel && activeCallId && remoteUserId) {
+            hangUpSentRef.current = true;
             debugCall('[useCall] hang_up sent', {
                 call_id: activeCallId,
                 to_user_id: remoteUserId,
+                status,
             });
             channel.push('hang_up', { call_id: activeCallId, to_user_id: remoteUserId });
+        } else {
+            debugCall('[useCall] hang_up not sent', {
+                reason: hangUpSentRef.current ? 'already_sent' : 'missing_context',
+                call_id: activeCallId,
+                to_user_id: remoteUserId,
+                status,
+            });
         }
         cleanupScreenShare({ stopTracks: !webrtcRef.current });
         webrtcRef.current?.dispose();

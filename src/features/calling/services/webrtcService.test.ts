@@ -115,6 +115,8 @@ class MockRTCPeerConnection {
         replaceTrack: vi.fn().mockResolvedValue(undefined),
     }));
     removeTrack = vi.fn();
+    receivers: Array<{ track: MediaStreamTrack }> = [];
+    getReceivers = vi.fn(() => this.receivers);
     close = vi.fn();
 
     constructor(config: RTCConfiguration) {
@@ -679,8 +681,12 @@ describe('WebRTCService', () => {
             const fakeStream = new MediaStream();
             const fakeTrack = {
                 kind: 'video',
+                id: 'remote-video-1',
+                muted: false,
+                readyState: 'live',
                 onended: null as (() => void) | null,
                 onmute: null as (() => void) | null,
+                onunmute: null as (() => void) | null,
             };
 
             pc.ontrack?.({ streams: [fakeStream], track: fakeTrack } as any);
@@ -688,6 +694,114 @@ describe('WebRTCService', () => {
             expect(onRemoteScreenStream).toHaveBeenCalledWith(expect.any(MediaStream));
 
             fakeTrack.onmute?.();
+
+            expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
+        });
+
+        it('restores remote screen on unmute while remote screen share is active', async () => {
+            const onRemoteScreenStream = vi.fn();
+            service.onRemoteScreenStream = onRemoteScreenStream;
+
+            await service.startCall();
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            const fakeStream = new MediaStream();
+            const fakeTrack = {
+                kind: 'video',
+                id: 'remote-video-1',
+                muted: false,
+                readyState: 'live',
+                onended: null as (() => void) | null,
+                onmute: null as (() => void) | null,
+                onunmute: null as (() => void) | null,
+            };
+
+            pc.ontrack?.({ streams: [fakeStream], track: fakeTrack } as any);
+            fakeTrack.onmute?.();
+            onRemoteScreenStream.mockClear();
+
+            fakeTrack.onunmute?.();
+
+            expect(onRemoteScreenStream).toHaveBeenCalledWith(expect.any(MediaStream));
+        });
+
+        it('clears remote screen when the remote video track ends', async () => {
+            const onRemoteScreenStream = vi.fn();
+            service.onRemoteScreenStream = onRemoteScreenStream;
+
+            await service.startCall();
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            const fakeTrack = {
+                kind: 'video',
+                id: 'remote-video-1',
+                muted: false,
+                readyState: 'live',
+                onended: null as (() => void) | null,
+                onmute: null as (() => void) | null,
+                onunmute: null as (() => void) | null,
+            };
+
+            pc.ontrack?.({ streams: [new MediaStream()], track: fakeTrack } as any);
+            fakeTrack.onended?.();
+
+            expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
+        });
+
+        it('re-emits a fresh remote screen stream from an existing receiver after active renegotiation', async () => {
+            const onRemoteScreenStream = vi.fn();
+            service.onRemoteScreenStream = onRemoteScreenStream;
+
+            await service.acceptCall('initial-offer-sdp');
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            const existingVideoTrack = {
+                kind: 'video',
+                id: 'remote-video-existing',
+                muted: false,
+                readyState: 'live',
+                onended: null as (() => void) | null,
+                onmute: null as (() => void) | null,
+                onunmute: null as (() => void) | null,
+            };
+            pc.receivers = [{ track: existingVideoTrack as any }];
+            onRemoteScreenStream.mockClear();
+
+            await service.handleOffer([
+                'v=0',
+                'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+                'a=sendrecv',
+                'm=video 9 UDP/TLS/RTP/SAVPF 96',
+                'a=sendonly',
+            ].join('\r\n'), { screenShareActive: true });
+
+            expect(onRemoteScreenStream).toHaveBeenCalledTimes(1);
+            expect(onRemoteScreenStream).toHaveBeenCalledWith(expect.any(MediaStream));
+        });
+
+        it('screenShareActive false clears remote screen immediately even with an existing receiver', async () => {
+            const onRemoteScreenStream = vi.fn();
+            service.onRemoteScreenStream = onRemoteScreenStream;
+
+            await service.acceptCall('initial-offer-sdp');
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            pc.ontrack?.({
+                streams: [new MediaStream()],
+                track: {
+                    kind: 'video',
+                    id: 'remote-video-existing',
+                    muted: false,
+                    readyState: 'live',
+                    onended: null,
+                    onmute: null,
+                    onunmute: null,
+                },
+            } as any);
+
+            await service.handleOffer([
+                'v=0',
+                'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+                'a=sendrecv',
+                'm=video 9 UDP/TLS/RTP/SAVPF 96',
+                'a=recvonly',
+            ].join('\r\n'), { screenShareActive: false });
 
             expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
         });

@@ -888,6 +888,9 @@ describe('useCall', () => {
             }).not.toThrow();
 
             expect(result.current.status).toBe('ended');
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            expect(callChannel.push).toHaveBeenCalledTimes(1);
+            expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
             expect(service.dispose).toHaveBeenCalledTimes(2);
         });
 
@@ -1423,11 +1426,13 @@ describe('useCall', () => {
                     from_username: 'caller',
                     call_id: 'call-123',
                 });
+                service.onRemoteScreenStream?.({ id: 'remote-screen' });
                 hangUpHandler({ from_user_id: 2, call_id: 'call-123' });
             });
 
             expect(service.handleOffer).toHaveBeenCalledWith('renegotiation-offer-sdp');
             expect(service.dispose).toHaveBeenCalled();
+            expect(result.current.remoteScreenStream).toBeNull();
             expect(result.current.status).toBe('ended');
 
             await act(async () => {

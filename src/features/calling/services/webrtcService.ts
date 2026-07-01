@@ -176,6 +176,7 @@ export class WebRTCService {
     private localStream: MediaStream | null = null;
     private remoteStream: MediaStream | null = null;
     private remoteScreenStream: MediaStream | null = null;
+    private remoteScreenShareActive = false;
     private screenStream: MediaStream | null = null;
     private screenSender: RTCRtpSender | null = null;
     private screenTrackEndedHandler: (() => void) | null = null;
@@ -280,12 +281,18 @@ export class WebRTCService {
             signalingState: this.peerConnection.signalingState,
             screenShareActive: options?.screenShareActive,
         });
+        if (options?.screenShareActive !== undefined) {
+            this.remoteScreenShareActive = options.screenShareActive;
+        }
         await this.peerConnection.setRemoteDescription(
             new RTCSessionDescription({ type: 'offer', sdp })
         );
         this.remoteDescriptionSet = true;
         if (options?.screenShareActive === false || !remoteSdpHasSendingVideo(sdp)) {
-            this.clearRemoteScreenStream();
+            this.remoteScreenShareActive = false;
+            this.clearRemoteScreenStream('screenShareActive_false');
+        } else if (this.remoteScreenShareActive) {
+            this.syncRemoteScreenFromReceivers('post_renegotiation');
         }
         await this.refreshDiagnostics();
         await this.flushIceCandidateQueue();
@@ -438,7 +445,8 @@ export class WebRTCService {
         if (this.remoteStream) {
             this.remoteStream = null;
         }
-        this.clearRemoteScreenStream();
+        this.remoteScreenShareActive = false;
+        this.clearRemoteScreenStream('dispose');
         this.iceCandidateQueue = [];
         this.queuedIceCandidateKeys.clear();
         this.appliedIceCandidateKeys.clear();
@@ -614,9 +622,59 @@ export class WebRTCService {
         void this.renegotiate(reason);
     }
 
-    private clearRemoteScreenStream(): void {
+    private syncRemoteScreenFromReceivers(reason: string): void {
+        const peerConnection = this.peerConnection;
+        if (!peerConnection || !this.remoteScreenShareActive) return;
+
+        const videoReceivers = peerConnection
+            .getReceivers()
+            .filter((receiver) => receiver.track?.kind === 'video');
+        debugCall('[WebRTCService] remote video receivers', {
+            call_id: this.getCallId(),
+            reason,
+            count: videoReceivers.length,
+            tracks: videoReceivers.map((receiver) => ({
+                id: receiver.track?.id,
+                muted: receiver.track?.muted,
+                readyState: receiver.track?.readyState,
+            })),
+        });
+
+        const videoTrack = videoReceivers.find((receiver) => (
+            receiver.track?.readyState === 'live' && !receiver.track.muted
+        ))?.track;
+        if (!videoTrack) return;
+
+        this.setRemoteScreenTrack(videoTrack, reason);
+    }
+
+    private setRemoteScreenTrack(track: MediaStreamTrack, reason: string): void {
+        const screenStream = new MediaStream([track]);
+        this.remoteScreenStream = screenStream;
+        track.onended = () => this.clearRemoteScreenStream('onended');
+        track.onmute = () => this.clearRemoteScreenStream('onmute');
+        track.onunmute = () => {
+            if (this.remoteScreenShareActive) {
+                this.setRemoteScreenTrack(track, 'onunmute');
+            }
+        };
+        debugCall('[WebRTCService] set remote screen stream', {
+            call_id: this.getCallId(),
+            reason,
+            track_id: track.id,
+            muted: track.muted,
+            readyState: track.readyState,
+        });
+        this.onRemoteScreenStream(screenStream);
+    }
+
+    private clearRemoteScreenStream(reason = 'clear'): void {
         if (!this.remoteScreenStream) return;
         this.remoteScreenStream = null;
+        debugCall('[WebRTCService] clear remote screen stream', {
+            call_id: this.getCallId(),
+            reason,
+        });
         this.onRemoteScreenStream(null);
     }
 
@@ -655,15 +713,8 @@ export class WebRTCService {
             if (!stream) return;
 
             if (event.track?.kind === 'video') {
-                const emitRemoteScreen = () => {
-                    const screenStream = new MediaStream([event.track]);
-                    this.remoteScreenStream = screenStream;
-                    this.onRemoteScreenStream(screenStream);
-                };
-                emitRemoteScreen();
-                event.track.onended = () => this.clearRemoteScreenStream();
-                event.track.onmute = () => this.clearRemoteScreenStream();
-                event.track.onunmute = () => emitRemoteScreen();
+                this.remoteScreenShareActive = true;
+                this.setRemoteScreenTrack(event.track, 'ontrack');
                 return;
             }
 
