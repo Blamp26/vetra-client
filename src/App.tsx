@@ -81,6 +81,7 @@ function App() {
   const servers = useAppStore((s) => s.servers);
   const serverChannels = useAppStore((s) => s.serverChannels);
   const searchResults = useAppStore((s) => s.searchResults);
+  const selectedOutputDeviceId = useAppStore((s) => s.selectedOutputDeviceId);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
 
@@ -251,7 +252,10 @@ function App() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-      <CallAudioRenderer remoteStream={remoteStream} />
+      <CallAudioRenderer
+        remoteStream={remoteStream}
+        selectedOutputDeviceId={selectedOutputDeviceId}
+      />
 
       <div className="flex h-full w-[400px] flex-shrink-0 flex-col border-r border-border bg-sidebar">
         <div className="flex flex-1 overflow-hidden">

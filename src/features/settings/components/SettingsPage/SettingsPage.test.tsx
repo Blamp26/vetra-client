@@ -102,6 +102,9 @@ describe("SettingsPage audio settings", () => {
     expect(
       screen.getByText(/actual support and behavior can vary by browser and device/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/speaker routing depends on browser support/i),
+    ).toBeInTheDocument();
   });
 
   it("calls store setters when microphone processing toggles change", () => {

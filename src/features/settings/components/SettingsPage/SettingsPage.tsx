@@ -123,6 +123,9 @@ function AudioVideoSettings() {
               <option key={device.deviceId} value={device.deviceId}>{device.label || `Speaker (${device.deviceId.slice(0, 5)})`}</option>
             ))}
           </select>
+          <p className="text-xs text-muted-foreground">
+            Speaker routing depends on browser support and may fall back to the system default output device.
+          </p>
         </div>
         <div className="space-y-2 border border-border p-3">
           <div>
