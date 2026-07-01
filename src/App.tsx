@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useAppStore } from "@/store";
 import { AuthPage } from "@/features/registration/AuthPage";
 import { Sidebar } from "@/features/messaging/components/Sidebar";
@@ -89,6 +89,7 @@ function App() {
   const serverChannels = useAppStore((s) => s.serverChannels);
   const searchResults = useAppStore((s) => s.searchResults);
   const selectedOutputDeviceId = useAppStore((s) => s.selectedOutputDeviceId);
+  const setOutputDevice = useAppStore((s) => s.setOutputDevice);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
 
@@ -102,6 +103,10 @@ function App() {
   useEffect(() => {
     currentActiveChatKeyRef.current = currentActiveChatKey;
   }, [currentActiveChatKey]);
+
+  const handleOutputDeviceFallback = useCallback(() => {
+    setOutputDevice('default');
+  }, [setOutputDevice]);
 
   useEffect(() => {
     const syncHashState = () => {
@@ -262,6 +267,7 @@ function App() {
       <CallAudioRenderer
         remoteStream={remoteStream}
         selectedOutputDeviceId={selectedOutputDeviceId}
+        onOutputDeviceFallback={handleOutputDeviceFallback}
       />
 
       <div className="flex h-full w-[400px] flex-shrink-0 flex-col border-r border-border bg-sidebar">

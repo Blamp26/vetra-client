@@ -6,12 +6,8 @@ import App from './App';
 import './styles.css';
 // import './channel-panel.css';
 import { ErrorBoundary } from '@/shared/components/ErrorBoundary';
-import { ensureNotificationPermission } from '@/services/notifications';
 
 import { storage, STORAGE_KEYS } from '@/shared/utils/storage';
-
-// Request notification permission on startup
-ensureNotificationPermission().catch(console.error);
 
 // Apply saved theme on startup
 const savedTheme = storage.getString(STORAGE_KEYS.THEME) || 'light';

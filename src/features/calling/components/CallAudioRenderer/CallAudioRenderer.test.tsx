@@ -92,4 +92,73 @@ describe('CallAudioRenderer', () => {
       );
     });
   });
+
+  it('falls back to default when the selected output device no longer exists', async () => {
+    const onOutputDeviceFallback = vi.fn();
+    setSinkIdMock
+      .mockRejectedValueOnce(new DOMException('The object can not be found here', 'NotFoundError'))
+      .mockResolvedValueOnce(undefined);
+
+    render(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="speaker-123"
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />
+    );
+
+    await waitFor(() => {
+      expect(onOutputDeviceFallback).toHaveBeenCalledTimes(1);
+      expect(setSinkIdMock).toHaveBeenNthCalledWith(1, 'speaker-123');
+      expect(setSinkIdMock).toHaveBeenNthCalledWith(2, 'default');
+    });
+
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
+  });
+
+  it('can fall back again if the same missing output device is reselected later', async () => {
+    const onOutputDeviceFallback = vi.fn();
+    setSinkIdMock
+      .mockRejectedValueOnce(new DOMException('The object can not be found here', 'NotFoundError'))
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new DOMException('The object can not be found here', 'NotFoundError'))
+      .mockResolvedValueOnce(undefined);
+
+    const { rerender } = render(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="speaker-123"
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />
+    );
+
+    await waitFor(() => {
+      expect(onOutputDeviceFallback).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="default"
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />
+    );
+
+    await waitFor(() => {
+      expect(setSinkIdMock).toHaveBeenCalledWith('default');
+    });
+
+    rerender(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="speaker-123"
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />
+    );
+
+    await waitFor(() => {
+      expect(onOutputDeviceFallback).toHaveBeenCalledTimes(2);
+    });
+  });
 });

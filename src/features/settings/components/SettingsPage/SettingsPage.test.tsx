@@ -6,6 +6,14 @@ const { useAppStoreMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
 }));
 
+const {
+  getNotificationPermissionStatusMock,
+  requestNotificationPermissionMock,
+} = vi.hoisted(() => ({
+  getNotificationPermissionStatusMock: vi.fn(),
+  requestNotificationPermissionMock: vi.fn(),
+}));
+
 vi.mock("@/store", () => ({
   useAppStore: (selector: (state: unknown) => unknown) => useAppStoreMock(selector),
 }));
@@ -16,6 +24,11 @@ vi.mock("@/features/profile/components/ProfileModal/ProfileModal", () => ({
 
 vi.mock("@/shared/components/ConfirmModal/ConfirmModal", () => ({
   ConfirmModal: () => null,
+}));
+
+vi.mock("@/services/notifications", () => ({
+  getNotificationPermissionStatus: getNotificationPermissionStatusMock,
+  requestNotificationPermission: requestNotificationPermissionMock,
 }));
 
 import { SettingsPage } from "./SettingsPage";
@@ -45,6 +58,8 @@ describe("SettingsPage audio settings", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    getNotificationPermissionStatusMock.mockResolvedValue("granted");
+    requestNotificationPermissionMock.mockResolvedValue(true);
 
     Object.defineProperty(global.navigator, "mediaDevices", {
       value: {
@@ -119,5 +134,20 @@ describe("SettingsPage audio settings", () => {
     expect(storeState.setNoiseSuppression).toHaveBeenCalledWith(false);
     expect(storeState.setEchoCancellation).toHaveBeenCalledWith(false);
     expect(storeState.setAutoGainControl).toHaveBeenCalledWith(false);
+  });
+
+  it("requests notification permission only from the notifications settings action", async () => {
+    getNotificationPermissionStatusMock
+      .mockResolvedValueOnce("default")
+      .mockResolvedValueOnce("granted");
+
+    render(<SettingsPage onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+
+    const enableButton = await screen.findByRole("button", { name: "Enable notifications" });
+    fireEvent.click(enableButton);
+
+    expect(requestNotificationPermissionMock).toHaveBeenCalledTimes(1);
   });
 });

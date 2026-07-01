@@ -1,35 +1,61 @@
-import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
+import {
+  isPermissionGranted,
+  requestPermission as requestTauriPermission,
+  sendNotification,
+} from '@tauri-apps/plugin-notification';
+
+export type NotificationPermissionStatus = NotificationPermission | 'unsupported';
 
 const isTauri = (): boolean => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-export async function ensureNotificationPermission(): Promise<boolean> {
+export async function getNotificationPermissionStatus(): Promise<NotificationPermissionStatus> {
   if (isTauri()) {
     try {
       const granted = await isPermissionGranted();
-      console.log('[Notifications] isPermissionGranted:', granted);
-
-      if (!granted) {
-        const permission = await requestPermission();
-        console.log('[Notifications] requestPermission result:', permission);
-        return permission === 'granted';
-      }
-      return true;
+      return granted ? 'granted' : 'default';
     } catch (e) {
       console.error('[Notifications] Tauri permission check failed:', e);
-      return false;
+      return 'default';
     }
   }
 
   if (!('Notification' in window)) {
-    console.warn('[Notifications] Browser does not support notifications');
+    return 'unsupported';
+  }
+
+  return Notification.permission;
+}
+
+export async function ensureNotificationPermission(options?: {
+  requestIfNeeded?: boolean;
+}): Promise<boolean> {
+  const status = await getNotificationPermissionStatus();
+  if (status === 'granted') return true;
+  if (status === 'unsupported' || status === 'denied' || !options?.requestIfNeeded) {
     return false;
   }
-  if (Notification.permission === 'granted') return true;
-  if (Notification.permission !== 'denied') {
+
+  if (isTauri()) {
+    try {
+      const permission = await requestTauriPermission();
+      return permission === 'granted';
+    } catch (e) {
+      console.error('[Notifications] Tauri permission request failed:', e);
+      return false;
+    }
+  }
+
+  try {
     const permission = await Notification.requestPermission();
     return permission === 'granted';
+  } catch (e) {
+    console.error('[Notifications] Browser permission request failed:', e);
+    return false;
   }
-  return false;
+}
+
+export async function requestNotificationPermission(): Promise<boolean> {
+  return ensureNotificationPermission({ requestIfNeeded: true });
 }
 
 export async function showNotification(
@@ -41,9 +67,8 @@ export async function showNotification(
   }
 ) {
   try {
-    const granted = await ensureNotificationPermission();
+    const granted = await ensureNotificationPermission({ requestIfNeeded: false });
     if (!granted) {
-      console.warn('[Notifications] Permission not granted');
       return;
     }
 

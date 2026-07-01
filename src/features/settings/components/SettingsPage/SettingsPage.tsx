@@ -1,11 +1,15 @@
 // client/src/features/settings/components/SettingsPage/SettingsPage.tsx
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAppStore, type RootState } from '@/store';
 import { ProfileModal } from '@/features/profile/components/ProfileModal/ProfileModal';
 import { ConfirmModal } from '@/shared/components/ConfirmModal/ConfirmModal';
 import { cn } from '@/shared/utils/cn';
 import { themeLabels, type Theme } from "@/themes";
+import {
+  getNotificationPermissionStatus,
+  requestNotificationPermission,
+  type NotificationPermissionStatus,
+} from '@/services/notifications';
 
 function AudioVideoSettings() {
   const { 
@@ -180,12 +184,27 @@ export function SettingsPage({ onClose }: Props) {
   const [tab, setTab] = useState<SettingsTab>('account');
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus | 'loading'>('loading');
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
+
+  const refreshNotificationPermission = useCallback(async () => {
+    const status = await getNotificationPermissionStatus();
+    setNotificationPermission(status);
+  }, []);
+
+  useEffect(() => {
+    void refreshNotificationPermission();
+  }, [refreshNotificationPermission]);
+
+  const handleNotificationPermissionRequest = useCallback(async () => {
+    await requestNotificationPermission();
+    await refreshNotificationPermission();
+  }, [refreshNotificationPermission]);
 
   const tabs: { id: SettingsTab; label: string }[] = [
     { id: 'account', label: 'Account' },
@@ -252,6 +271,31 @@ export function SettingsPage({ onClose }: Props) {
                     className={cn("flex-1 p-2 border text-sm", theme === t ? "bg-primary text-primary-foreground border-primary" : "border-border")}
                   >{themeLabels[t]}</button>
                 ))}
+              </div>
+            </div>
+          )}
+          {tab === 'notifications' && (
+            <div className="max-w-xl space-y-4">
+              <h3 className="text-lg font-normal">Notifications</h3>
+              <div className="space-y-3 border border-border p-4">
+                <div>
+                  <div className="text-sm">Desktop notifications</div>
+                  <p className="text-xs text-muted-foreground">
+                    {notificationPermission === 'granted' && 'Desktop notifications are enabled.'}
+                    {notificationPermission === 'default' && 'Desktop notifications are off until you enable them here.'}
+                    {notificationPermission === 'denied' && 'Desktop notifications are blocked. Update your browser or system notification settings to re-enable them.'}
+                    {notificationPermission === 'unsupported' && 'This environment does not support desktop notifications.'}
+                    {notificationPermission === 'loading' && 'Checking notification support...'}
+                  </p>
+                </div>
+                {notificationPermission === 'default' && (
+                  <button
+                    onClick={() => { void handleNotificationPermissionRequest(); }}
+                    className="border border-border px-3 py-1 text-sm"
+                  >
+                    Enable notifications
+                  </button>
+                )}
               </div>
             </div>
           )}

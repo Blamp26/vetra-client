@@ -7,6 +7,22 @@ import type {
     RenegotiationSignalPayload,
 } from '../hooks/useCall.types';
 
+const CALL_DEBUG_KEY = 'vetra.debug.calls';
+
+function isCallDebugEnabled(): boolean {
+    if (typeof window === 'undefined' || !window.localStorage) {
+        return false;
+    }
+
+    return window.localStorage.getItem(CALL_DEBUG_KEY) === '1';
+}
+
+function debugCall(message: string, details?: Record<string, unknown>): void {
+    if (isCallDebugEnabled()) {
+        console.log(message, details ?? {});
+    }
+}
+
 export interface OfferPayload {
     sdp: string;
     from_user_id: ResourceRef;
@@ -86,7 +102,7 @@ class CallSignalingService {
         });
 
         channel.join()
-            .receive('ok', () => console.log('[callSignaling] call channel joined'))
+            .receive('ok', () => debugCall('[callSignaling] call channel joined', { currentUserCallRef }))
             .receive('error', (reason) => console.error('[callSignaling] call channel join error', reason));
 
         this.incomingCallRef = userChannel.on('incoming_call', (payload: IncomingCallPayload) => {
