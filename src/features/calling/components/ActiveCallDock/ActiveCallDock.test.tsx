@@ -2,10 +2,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { CallSurface } from "./CallSurface";
+import { ActiveCallDock } from "./ActiveCallDock";
 
-function renderSurface(overrides: Partial<ComponentProps<typeof CallSurface>> = {}) {
-  const props: ComponentProps<typeof CallSurface> = {
+function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = {}) {
+  const props: ComponentProps<typeof ActiveCallDock> = {
     remoteUsername: "Alice",
     seconds: 65,
     isMuted: false,
@@ -29,38 +29,38 @@ function renderSurface(overrides: Partial<ComponentProps<typeof CallSurface>> = 
     ...overrides,
   };
 
-  render(<CallSurface {...props} />);
+  render(<ActiveCallDock {...props} />);
   return props;
 }
 
-describe("CallSurface", () => {
-  it("renders a large active call shell with status and controls", () => {
-    renderSurface();
+describe("ActiveCallDock", () => {
+  it("renders a docked active call panel with status and controls", () => {
+    renderDock();
 
-    expect(screen.getByTestId("call-surface")).toBeInTheDocument();
+    expect(screen.getByTestId("active-call-dock")).toBeInTheDocument();
     expect(screen.getByText("Voice call")).toBeInTheDocument();
     expect(screen.getAllByText("Alice")).toHaveLength(2);
-    expect(screen.getByTestId("call-surface-status")).toHaveTextContent("Connected");
-    expect(screen.getByTestId("call-surface-controls")).toBeInTheDocument();
+    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("Connected");
+    expect(screen.getByTestId("active-call-dock-controls")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share screen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hang Up" })).toBeInTheDocument();
   });
 
   it("disables the screen-share control while an update is in flight", () => {
-    renderSurface({ isScreenShareUpdating: true });
+    renderDock({ isScreenShareUpdating: true });
 
     expect(
       screen.getByRole("button", { name: "Updating screen share" }),
     ).toBeDisabled();
-    expect(screen.getByTestId("call-surface-status")).toHaveTextContent(
+    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent(
       "Updating screen share...",
     );
   });
 
-  it("calls the existing hangup action from the bottom controls", () => {
+  it("calls the existing hangup action from the dock controls", () => {
     const onHangUp = vi.fn();
-    renderSurface({ onHangUp });
+    renderDock({ onHangUp });
 
     fireEvent.click(screen.getByRole("button", { name: "Hang Up" }));
 

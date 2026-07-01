@@ -5,7 +5,7 @@ import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
 
-interface CallSurfaceProps {
+interface ActiveCallDockProps {
   remoteUsername: string;
   seconds: number;
   isMuted: boolean;
@@ -32,16 +32,16 @@ function detachVideo(video: HTMLVideoElement): void {
 async function safelyPlayVideo(video: HTMLVideoElement, reason: string): Promise<void> {
   try {
     await video.play();
-    debugCall("[CallSurface] video play success", { reason });
+    debugCall("[ActiveCallDock] video play success", { reason });
   } catch (error) {
-    debugCall("[CallSurface] video play failed", {
+    debugCall("[ActiveCallDock] video play failed", {
       reason,
       error: error instanceof Error ? error.message : String(error),
     });
   }
 }
 
-export function CallSurface({
+export function ActiveCallDock({
   remoteUsername,
   seconds,
   isMuted,
@@ -56,7 +56,7 @@ export function CallSurface({
   onStartScreenShare,
   onStopScreenShare,
   onHangUp,
-}: CallSurfaceProps) {
+}: ActiveCallDockProps) {
   const remoteScreenRef = useRef<HTMLVideoElement>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const shouldShowDiagnostics =
@@ -69,6 +69,7 @@ export function CallSurface({
           diagnostics.iceConnectionState === "connected"
         ? "Connected"
         : "Connecting...";
+  const hasScreenStage = isRemoteScreenLoading || remoteScreenStream || localScreenStream;
 
   useEffect(() => {
     const remoteScreen = remoteScreenRef.current;
@@ -104,13 +105,14 @@ export function CallSurface({
     };
   }, [localScreenStream]);
 
-  const hasScreenStage = isRemoteScreenLoading || remoteScreenStream || localScreenStream;
-
   return (
     <section
-      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#101318] text-foreground"
-      data-testid="call-surface"
-      aria-label="Active call"
+      className={cn(
+        "flex shrink-0 flex-col overflow-hidden border-b border-border bg-[#101318] text-foreground",
+        hasScreenStage ? "h-[clamp(340px,55vh,620px)]" : "h-[320px]",
+      )}
+      data-testid="active-call-dock"
+      aria-label="Active call dock"
     >
       <div className="flex items-center justify-between border-b border-border/70 bg-card/40 px-4 py-3">
         <div className="min-w-0">
@@ -122,7 +124,7 @@ export function CallSurface({
           </h2>
         </div>
         <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
-          <span data-testid="call-surface-status">{callStateLabel}</span>
+          <span data-testid="active-call-dock-status">{callStateLabel}</span>
           <span>{formatCallTime(seconds)}</span>
         </div>
       </div>
@@ -130,7 +132,7 @@ export function CallSurface({
       {callIssue && (
         <div
           className={cn(
-            "mx-4 mt-4 border px-3 py-2 text-sm",
+            "mx-4 mt-3 border px-3 py-2 text-sm",
             callIssue.tone === "error"
               ? "border-destructive/50 bg-destructive/10 text-foreground"
               : "border-border bg-background/60 text-foreground",
@@ -141,10 +143,10 @@ export function CallSurface({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-4 pb-3">
         {hasScreenStage ? (
-          <div className="grid h-full w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
-            <div className="flex min-h-[260px] items-center justify-center border border-border bg-background/70 p-3">
+          <div className="grid h-full w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
+            <div className="flex min-h-0 items-center justify-center border border-border bg-background/70 p-3">
               {remoteScreenStream ? (
                 <video
                   ref={remoteScreenRef}
@@ -155,7 +157,7 @@ export function CallSurface({
                 />
               ) : isRemoteScreenLoading ? (
                 <div
-                  className="flex h-full min-h-[260px] w-full items-center justify-center text-sm text-muted-foreground"
+                  className="flex h-full min-h-48 w-full items-center justify-center text-sm text-muted-foreground"
                   data-testid="remote-screen-loading"
                 >
                   Waiting for shared screen
@@ -167,10 +169,10 @@ export function CallSurface({
               )}
             </div>
 
-            <div className="flex min-h-0 flex-col gap-4">
-              <ParticipantCard name={remoteUsername} label={callStateLabel} />
+            <div className="flex min-h-0 flex-col gap-3">
+              <ParticipantTile name={remoteUsername} label={callStateLabel} compact />
               {localScreenStream && (
-                <div className="border border-border bg-background/70 p-2">
+                <div className="min-h-0 border border-border bg-background/70 p-2">
                   <div className="mb-2 text-[10px] uppercase text-muted-foreground">
                     Local Preview
                   </div>
@@ -179,7 +181,7 @@ export function CallSurface({
                     autoPlay
                     muted
                     playsInline
-                    className="w-full border border-border bg-muted/20"
+                    className="max-h-36 w-full border border-border bg-muted/20 object-contain"
                     data-testid="local-screen-preview"
                   />
                 </div>
@@ -188,15 +190,15 @@ export function CallSurface({
           </div>
         ) : (
           <div className="grid w-full max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
-            <ParticipantCard name="You" label={isMuted ? "Muted" : "Connected"} />
-            <ParticipantCard name={remoteUsername} label={callStateLabel} />
+            <ParticipantTile name="You" label={isMuted ? "Muted" : "Connected"} />
+            <ParticipantTile name={remoteUsername} label={callStateLabel} />
           </div>
         )}
       </div>
 
       {shouldShowDiagnostics && (
         <div
-          className="mx-4 mb-3 border border-border bg-background/80 px-3 py-2 text-[11px] text-muted-foreground"
+          className="mx-4 mb-2 border border-border bg-background/80 px-3 py-2 text-[11px] text-muted-foreground"
           data-testid="webrtc-diagnostics"
         >
           <span className="mr-3 text-foreground">WebRTC Debug</span>
@@ -207,12 +209,12 @@ export function CallSurface({
       )}
 
       <div
-        className="flex items-center justify-center gap-3 border-t border-border/70 bg-card/50 px-4 py-4"
-        data-testid="call-surface-controls"
+        className="flex items-center justify-center gap-3 bg-card/50 px-4 pb-4 pt-2"
+        data-testid="active-call-dock-controls"
       >
         <button
           className={cn(
-            "flex h-12 w-12 items-center justify-center rounded-full border border-border",
+            "flex h-11 w-11 items-center justify-center rounded-full border border-border",
             isMuted
               ? "bg-destructive text-destructive-foreground"
               : "bg-background text-foreground hover:bg-accent",
@@ -225,7 +227,7 @@ export function CallSurface({
 
         <button
           className={cn(
-            "inline-flex h-12 items-center gap-2 rounded-full border border-border px-4 text-sm disabled:pointer-events-none disabled:opacity-60",
+            "inline-flex h-11 items-center gap-2 rounded-full border border-border px-4 text-sm disabled:pointer-events-none disabled:opacity-60",
             isScreenSharing
               ? "bg-accent text-foreground"
               : "bg-background text-foreground hover:bg-accent",
@@ -251,7 +253,7 @@ export function CallSurface({
         </button>
 
         <button
-          className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-destructive text-destructive-foreground"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-destructive text-destructive-foreground"
           onClick={onHangUp}
           aria-label="Hang Up"
         >
@@ -262,13 +264,31 @@ export function CallSurface({
   );
 }
 
-function ParticipantCard({ name, label }: { name: string; label: string }) {
+function ParticipantTile({
+  name,
+  label,
+  compact = false,
+}: {
+  name: string;
+  label: string;
+  compact?: boolean;
+}) {
   return (
-    <div className="flex min-h-[220px] flex-col items-center justify-center border border-border bg-card/70 p-6">
-      <div className="flex h-24 w-24 items-center justify-center rounded-3xl border border-border bg-primary text-3xl text-primary-foreground">
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center border border-border bg-card/70 p-4",
+        compact ? "min-h-32" : "min-h-40",
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center justify-center rounded-3xl border border-border bg-primary text-primary-foreground",
+          compact ? "h-16 w-16 text-xl" : "h-20 w-20 text-2xl",
+        )}
+      >
         {name.charAt(0).toUpperCase()}
       </div>
-      <p className="mt-4 max-w-full truncate text-lg font-normal text-foreground">
+      <p className="mt-3 max-w-full truncate text-base font-normal text-foreground">
         {name}
       </p>
       <p className="mt-1 text-xs uppercase text-muted-foreground">{label}</p>

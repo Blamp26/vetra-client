@@ -12,7 +12,7 @@ import { formatLastSeen } from "@/utils/formatDate";
 import type { ActiveChat, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from "@/features/calling/components/CallButton";
-import { CallSurface } from "@/features/calling/components/CallSurface";
+import { ActiveCallDock } from "@/features/calling/components/ActiveCallDock";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { cn } from "@/shared/utils/cn";
 import { withFallbackRef } from "@/shared/utils/refs";
@@ -191,7 +191,7 @@ export function ChatWindow({ activeChat, call }: Props) {
 
   if (!currentUser) return null;
 
-  const shouldShowCallSurface = isActiveCallForChat(activeChat, call);
+  const shouldShowActiveCallDock = isActiveCallForChat(activeChat, call);
 
   const renderHeader = () => {
     if (activeChat.type === "direct") {
@@ -287,8 +287,8 @@ export function ChatWindow({ activeChat, call }: Props) {
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-background">
       {renderHeader()}
 
-      {shouldShowCallSurface ? (
-        <CallSurface
+      {shouldShowActiveCallDock && (
+        <ActiveCallDock
           remoteUsername={call.remoteUsername ?? `User #${call.remoteUserId}`}
           seconds={call.seconds}
           isMuted={call.isMuted}
@@ -304,32 +304,30 @@ export function ChatWindow({ activeChat, call }: Props) {
           onStopScreenShare={call.stopScreenShare}
           onHangUp={call.hangUp}
         />
-      ) : (
-        <>
-          <div className="relative flex-1 overflow-hidden p-2">
-            <MessageList
-              key={chatId}
-              messages={messages}
-              currentUserId={currentUser.id}
-              isLoading={isLoading}
-              hasMore={hasMore}
-              onLoadMore={loadMore}
-              chatContext={chatContext!}
-              onReply={setReplyTo}
-            />
-          </div>
-
-          {typingNickname && <TypingIndicator nickname={typingNickname} />}
-
-          <MessageInput
-            onSend={sendMessage}
-            onTypingStart={handleTypingStart}
-            onTypingStop={handleTypingStop}
-            replyTo={replyTo}
-            onCancelReply={() => setReplyTo(null)}
-          />
-        </>
       )}
+
+      <div className="relative min-h-0 flex-1 overflow-hidden p-2" data-testid="message-list-region">
+        <MessageList
+          key={chatId}
+          messages={messages}
+          currentUserId={currentUser.id}
+          isLoading={isLoading}
+          hasMore={hasMore}
+          onLoadMore={loadMore}
+          chatContext={chatContext!}
+          onReply={setReplyTo}
+        />
+      </div>
+
+      {typingNickname && <TypingIndicator nickname={typingNickname} />}
+
+      <MessageInput
+        onSend={sendMessage}
+        onTypingStart={handleTypingStart}
+        onTypingStop={handleTypingStop}
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
+      />
 
       {isSearchOpen && (
         <MessageSearch

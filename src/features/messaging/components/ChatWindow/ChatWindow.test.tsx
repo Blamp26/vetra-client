@@ -20,7 +20,15 @@ vi.mock("@/api/auth", () => ({
 
 vi.mock("@/features/messaging/hooks/useUnifiedMessages", () => ({
   useUnifiedMessages: () => ({
-    messages: [],
+    messages: [
+      {
+        id: 100,
+        content: "message visible during active call",
+        user_id: 2,
+        username: "alice",
+        inserted_at: "2026-07-01T00:00:00Z",
+      },
+    ],
     isLoading: false,
     hasMore: false,
     loadMore: vi.fn(),
@@ -29,11 +37,19 @@ vi.mock("@/features/messaging/hooks/useUnifiedMessages", () => ({
 }));
 
 vi.mock("../MessageList/MessageList", () => ({
-  MessageList: () => <div data-testid="message-list" />,
+  MessageList: ({ messages }: { messages: Array<{ content?: string | null }> }) => (
+    <div data-testid="message-list">
+      {messages.map((message, index) => (
+        <div key={index}>{message.content}</div>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock("../MessageInput/MessageInput", () => ({
-  MessageInput: () => <div data-testid="message-input" />,
+  MessageInput: () => (
+    <textarea data-testid="message-input" aria-label="Message composer" />
+  ),
 }));
 
 vi.mock("../MessageSearch/MessageSearch", () => ({
@@ -169,7 +185,7 @@ describe("ChatWindow presence rendering", () => {
     expect(container.querySelector(".bg-offline")).toBeFalsy();
   });
 
-  it("replaces messages and composer with CallSurface for the active direct call", async () => {
+  it("renders ActiveCallDock above messages without hiding history or composer", async () => {
     const state = makeState();
     useAppStoreMock.mockImplementation(
       (selector: (value: ReturnType<typeof makeState>) => unknown) =>
@@ -204,9 +220,20 @@ describe("ChatWindow presence rendering", () => {
       />,
     );
 
-    expect(screen.getByTestId("call-surface")).toBeInTheDocument();
-    expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("message-input")).not.toBeInTheDocument();
+    const dock = screen.getByTestId("active-call-dock");
+    const messageRegion = screen.getByTestId("message-list-region");
+    const composer = screen.getByRole("textbox", { name: "Message composer" });
+
+    expect(dock).toBeInTheDocument();
+    expect(messageRegion).toBeInTheDocument();
+    expect(screen.getByTestId("message-list")).toBeInTheDocument();
+    expect(screen.getByText("message visible during active call")).toBeInTheDocument();
+    expect(composer).toBeInTheDocument();
+    composer.focus();
+    expect(composer).toHaveFocus();
+    expect(
+      dock.compareDocumentPosition(messageRegion) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("keeps messages visible when the active call belongs to another direct chat", async () => {
@@ -236,8 +263,8 @@ describe("ChatWindow presence rendering", () => {
       />,
     );
 
-    expect(screen.queryByTestId("call-surface")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("active-call-dock")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-list")).toBeInTheDocument();
-    expect(screen.getByTestId("message-input")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message composer" })).toBeInTheDocument();
   });
 });
