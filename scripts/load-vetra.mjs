@@ -359,8 +359,16 @@ function describeMessageRateSource() {
   return "default";
 }
 
-function isAttachmentLoadEnabled() {
-  return Boolean(config?.loadMediaFileId);
+function supportsAttachmentMessageLoad(mode = config?.mode) {
+  return (
+    mode === "channel-messages" ||
+    mode === "dm-messages" ||
+    mode === "soak"
+  );
+}
+
+function isAttachmentMessageLoadEnabled() {
+  return supportsAttachmentMessageLoad() && Boolean(config?.loadMediaFileId);
 }
 
 function createTaggedMessageContent(kind, sessionLabel, messageNumber) {
@@ -370,7 +378,7 @@ function createTaggedMessageContent(kind, sessionLabel, messageNumber) {
 }
 
 function buildRoomLoadMessagePayload(session, messageNumber) {
-  const attachmentEnabled = isAttachmentLoadEnabled();
+  const attachmentEnabled = isAttachmentMessageLoadEnabled();
   const includeTaggedText = !attachmentEnabled || config.loadMessageTextMode !== "empty";
 
   return {
@@ -393,7 +401,7 @@ function buildUploadWorkers(auth, metrics) {
 }
 
 function buildDmLoadMessagePayload(session, messageNumber, partnerRef) {
-  const attachmentEnabled = isAttachmentLoadEnabled();
+  const attachmentEnabled = isAttachmentMessageLoadEnabled();
   const includeTaggedText = !attachmentEnabled || config.loadMessageTextMode !== "empty";
 
   return {
@@ -407,17 +415,17 @@ function buildDmLoadMessagePayload(session, messageNumber, partnerRef) {
 }
 
 function recordAttachmentAttempt(metrics) {
-  if (!isAttachmentLoadEnabled()) return;
+  if (!isAttachmentMessageLoadEnabled()) return;
   metrics.attachmentMessagesAttempted += 1;
 }
 
 function recordAttachmentAck(metrics) {
-  if (!isAttachmentLoadEnabled()) return;
+  if (!isAttachmentMessageLoadEnabled()) return;
   metrics.attachmentMessagesAcked += 1;
 }
 
 function recordAttachmentFailure(metrics) {
-  if (!isAttachmentLoadEnabled()) return;
+  if (!isAttachmentMessageLoadEnabled()) return;
   metrics.attachmentMessagesFailed += 1;
 }
 
@@ -766,11 +774,19 @@ function createMetrics(mode, vus, durationSeconds) {
     messagesAttempted: 0,
     messagesAcked: 0,
     messagesFailed: 0,
-    attachmentConfigured: isAttachmentLoadEnabled(),
-    attachmentMediaFileId: config.loadMediaFileId || null,
-    attachmentTextMode: config.loadMessageTextMode,
-    attachmentMediaKind: config.loadMediaKind || null,
-    attachmentMediaLabel: config.loadMediaLabel || null,
+    attachmentConfigured: isAttachmentMessageLoadEnabled(),
+    attachmentMediaFileId: isAttachmentMessageLoadEnabled()
+      ? config.loadMediaFileId || null
+      : null,
+    attachmentTextMode: isAttachmentMessageLoadEnabled()
+      ? config.loadMessageTextMode
+      : null,
+    attachmentMediaKind: isAttachmentMessageLoadEnabled()
+      ? config.loadMediaKind || null
+      : null,
+    attachmentMediaLabel: isAttachmentMessageLoadEnabled()
+      ? config.loadMediaLabel || null
+      : null,
     attachmentMessagesAttempted: 0,
     attachmentMessagesAcked: 0,
     attachmentMessagesFailed: 0,
@@ -1294,13 +1310,15 @@ function printSummary(metrics) {
   console.log(
     `attachment media file id configured: ${summary.attachmentConfigured ? "yes" : "no"}`,
   );
-  console.log(`attachment media file id: ${summary.attachmentMediaFileId ?? "-"}`);
-  console.log(`attachment text mode: ${summary.attachmentTextMode}`);
-  console.log(`attachment media kind: ${summary.attachmentMediaKind ?? "-"}`);
-  console.log(`attachment media label: ${summary.attachmentMediaLabel ?? "-"}`);
-  console.log(`attachment messages attempted: ${summary.attachmentMessagesAttempted}`);
-  console.log(`attachment messages acked: ${summary.attachmentMessagesAcked}`);
-  console.log(`attachment messages failed: ${summary.attachmentMessagesFailed}`);
+  if (summary.attachmentConfigured) {
+    console.log(`attachment media file id: ${summary.attachmentMediaFileId ?? "-"}`);
+    console.log(`attachment text mode: ${summary.attachmentTextMode}`);
+    console.log(`attachment media kind: ${summary.attachmentMediaKind ?? "-"}`);
+    console.log(`attachment media label: ${summary.attachmentMediaLabel ?? "-"}`);
+    console.log(`attachment messages attempted: ${summary.attachmentMessagesAttempted}`);
+    console.log(`attachment messages acked: ${summary.attachmentMessagesAcked}`);
+    console.log(`attachment messages failed: ${summary.attachmentMessagesFailed}`);
+  }
   if (summary.targetMode === "media-upload") {
     console.log(`upload attempts: ${summary.uploadAttempts}`);
     console.log(`upload successes: ${summary.uploadSuccesses}`);
@@ -3439,7 +3457,7 @@ async function main() {
     );
   }
 
-  if (isAttachmentLoadEnabled()) {
+  if (isAttachmentMessageLoadEnabled()) {
     warn(
       `Attachment metadata load is enabled with media_file_id=${config.loadMediaFileId}. The media file must already exist and be owned by or attachable by the sending users.`,
     );
