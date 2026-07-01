@@ -110,7 +110,10 @@ class MockRTCPeerConnection {
         return Promise.resolve();
     });
     addIceCandidate = vi.fn().mockResolvedValue(undefined);
-    addTrack = vi.fn((track: MediaStreamTrack) => ({ track }));
+    addTrack = vi.fn((track: MediaStreamTrack) => ({
+        track,
+        replaceTrack: vi.fn().mockResolvedValue(undefined),
+    }));
     removeTrack = vi.fn();
     close = vi.fn();
 
@@ -467,11 +470,12 @@ describe('WebRTCService', () => {
             expect(pc.addTrack).toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
             expect(pc.createOffer).toHaveBeenCalledTimes(2);
             expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', {
-                candidate: {
+                candidate: expect.objectContaining({
                     __vetra_call_signal: 'renegotiation_offer',
+                    screen_share_active: true,
                     sdp: expect.any(String),
                     sdp_type: 'offer',
-                },
+                }),
                 to_user_id: remoteUserId,
                 call_id: '123:456',
             });
@@ -490,17 +494,18 @@ describe('WebRTCService', () => {
             expect(mockChannelPush).not.toHaveBeenCalledWith('offer', expect.objectContaining({
                 call_id: expect.any(String),
             }));
-            expect((service as any).hasQueuedRenegotiation).toBe(true);
+            expect((service as any).pendingRenegotiationReason).toBe('start_screen_share');
 
             await service.handleAnswer('answer-sdp');
 
             await vi.waitFor(() => {
                 expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', expect.objectContaining({
-                    candidate: {
+                    candidate: expect.objectContaining({
                         __vetra_call_signal: 'renegotiation_offer',
+                        screen_share_active: true,
                         sdp: expect.any(String),
                         sdp_type: 'offer',
-                    },
+                    }),
                     to_user_id: remoteUserId,
                     call_id: '123:456',
                 }));
@@ -521,7 +526,7 @@ describe('WebRTCService', () => {
             expect(mockChannelPush).not.toHaveBeenCalledWith('offer', expect.objectContaining({
                 call_id: expect.any(String),
             }));
-            expect((service as any).hasQueuedRenegotiation).toBe(true);
+            expect((service as any).pendingRenegotiationReason).toBe('start_screen_share');
         });
 
         it('stopScreenShare removes the sender and renegotiates without disposing the peer', async () => {
@@ -536,18 +541,61 @@ describe('WebRTCService', () => {
 
             await service.stopScreenShare();
 
-            expect(pc.removeTrack).toHaveBeenCalledWith(sender);
+            expect(sender.replaceTrack).toHaveBeenCalledWith(null);
+            expect(pc.removeTrack).not.toHaveBeenCalled();
             expect(mockScreenTrack.stop).toHaveBeenCalled();
             expect(pc.close).not.toHaveBeenCalled();
             expect((service as any).peerConnection).toBe(pc);
             expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', expect.objectContaining({
-                candidate: {
+                candidate: expect.objectContaining({
                     __vetra_call_signal: 'renegotiation_offer',
+                    screen_share_active: false,
                     sdp: expect.any(String),
                     sdp_type: 'offer',
-                },
+                }),
                 to_user_id: remoteUserId,
             }));
+        });
+
+        it('applying a renegotiation answer does not trigger another offer by itself', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            await service.startScreenShare();
+            mockChannelPush.mockClear();
+
+            await service.handleAnswer('screen-answer-sdp');
+
+            expect(mockChannelPush).not.toHaveBeenCalledWith('ice_candidate', expect.objectContaining({
+                candidate: expect.objectContaining({
+                    __vetra_call_signal: 'renegotiation_offer',
+                }),
+            }));
+            expect((service as any).pendingRenegotiationReason).toBeNull();
+        });
+
+        it('start stop start triggers exactly three intended renegotiation offers', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            mockChannelPush.mockClear();
+
+            await service.startScreenShare();
+            await service.handleAnswer('screen-start-answer-sdp');
+            await service.stopScreenShare();
+            await service.handleAnswer('screen-stop-answer-sdp');
+            await service.startScreenShare();
+
+            const renegotiationOffers = mockChannelPush.mock.calls.filter(([event, payload]) => (
+                event === 'ice_candidate' &&
+                payload?.candidate?.__vetra_call_signal === 'renegotiation_offer'
+            ));
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            const sender = (service as any).screenSender;
+
+            expect(renegotiationOffers).toHaveLength(3);
+            expect(pc.addTrack).toHaveBeenCalledTimes(2);
+            expect(pc.addTrack).toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
+            expect(sender.replaceTrack).toHaveBeenCalledWith(null);
+            expect(sender.replaceTrack).toHaveBeenCalledWith(mockScreenTrack);
         });
 
         it('screen track ended cleans up through the provided callback without disposing the peer', async () => {
@@ -637,7 +685,7 @@ describe('WebRTCService', () => {
 
             pc.ontrack?.({ streams: [fakeStream], track: fakeTrack } as any);
 
-            expect(onRemoteScreenStream).toHaveBeenCalledWith(fakeStream);
+            expect(onRemoteScreenStream).toHaveBeenCalledWith(expect.any(MediaStream));
 
             fakeTrack.onmute?.();
 

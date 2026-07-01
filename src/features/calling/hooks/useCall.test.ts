@@ -1308,6 +1308,12 @@ describe('useCall', () => {
             });
 
             expect(result.current.remoteScreenStream).toBeNull();
+
+            act(() => {
+                service.onRemoteScreenStream?.({ id: 'remote-screen-second' });
+            });
+
+            expect(result.current.remoteScreenStream).toEqual({ id: 'remote-screen-second' });
         });
 
         it('active-call offer is handled as renegotiation without leaving active status', () => {

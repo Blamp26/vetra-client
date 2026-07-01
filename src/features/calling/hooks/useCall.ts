@@ -312,7 +312,12 @@ export function useCall(currentUserId: number): UseCallReturn {
                 webrtcRef.current?.addIceCandidate(payload.candidate);
             }),
             callSignalingService.onHangUp(() => {
+                debugCall('[useCall] hang_up received', {
+                    active_call_id: callIdRef.current,
+                    status: statusRef.current,
+                });
                 cleanupScreenShare({ stopTracks: !webrtcRef.current });
+                setRemoteScreenStream(null);
                 webrtcRef.current?.dispose();
                 resetAfterDelay();
             }),
@@ -427,6 +432,10 @@ export function useCall(currentUserId: number): UseCallReturn {
         const channel = callChannelRef.current;
         const activeCallId = callId ?? webrtcRef.current?.getSignalingCallId() ?? null;
         if (channel && activeCallId && remoteUserId) {
+            debugCall('[useCall] hang_up sent', {
+                call_id: activeCallId,
+                to_user_id: remoteUserId,
+            });
             channel.push('hang_up', { call_id: activeCallId, to_user_id: remoteUserId });
         }
         cleanupScreenShare({ stopTracks: !webrtcRef.current });

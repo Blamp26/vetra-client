@@ -21,6 +21,7 @@ export interface RenegotiationSignalPayload {
     __vetra_call_signal: 'renegotiation_offer' | 'renegotiation_answer';
     sdp: string;
     sdp_type: 'offer' | 'answer';
+    screen_share_active?: boolean;
 }
 
 export type CallIceCandidatePayload = RTCIceCandidateInit | RenegotiationSignalPayload;

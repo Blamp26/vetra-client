@@ -146,4 +146,50 @@ describe('ActiveCallWindow', () => {
     expect(screen.getByTestId('remote-screen-view')).toBeInTheDocument();
     expect(screen.getByText('Remote Screen')).toBeInTheDocument();
   });
+
+  it('can hide and show the remote shared screen again', () => {
+    const firstStream = new MediaStream();
+    const secondStream = new MediaStream();
+    const { rerender } = renderWindow({
+      remoteScreenStream: firstStream,
+    });
+
+    expect(screen.getByTestId('remote-screen-view')).toBeInTheDocument();
+
+    rerender(
+      <ActiveCallWindow
+        remoteUsername="Alice"
+        seconds={12}
+        isMuted={false}
+        isScreenSharing={false}
+        remoteScreenStream={null}
+        localScreenStream={null}
+        diagnostics={defaultDiagnostics}
+        onMuteToggle={vi.fn()}
+        onStartScreenShare={async () => undefined}
+        onStopScreenShare={vi.fn()}
+        onHangUp={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('remote-screen-view')).not.toBeInTheDocument();
+
+    rerender(
+      <ActiveCallWindow
+        remoteUsername="Alice"
+        seconds={12}
+        isMuted={false}
+        isScreenSharing={false}
+        remoteScreenStream={secondStream}
+        localScreenStream={null}
+        diagnostics={defaultDiagnostics}
+        onMuteToggle={vi.fn()}
+        onStartScreenShare={async () => undefined}
+        onStopScreenShare={vi.fn()}
+        onHangUp={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('remote-screen-view')).toBeInTheDocument();
+  });
 });
