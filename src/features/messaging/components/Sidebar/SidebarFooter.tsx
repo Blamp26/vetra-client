@@ -11,7 +11,7 @@ import {
   Phone,
   PhoneOff,
 } from "lucide-react";
-import type { CallStatus } from "@/features/calling/hooks/useCall.types";
+import type { CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
 import { ProfileModal } from "@/features/profile/components/ProfileModal/ProfileModal";
 import { ConfirmModal } from "@/shared/components/ConfirmModal/ConfirmModal";
 import { formatCallTime } from "@/utils/formatDate";
@@ -25,6 +25,10 @@ interface SidebarFooterProps {
   remoteUsername?: string | null;
   callSeconds: number;
   isMuted: boolean;
+  isScreenSharing: boolean;
+  isScreenShareUpdating: boolean;
+  callIssue: CallIssue | null;
+  isIncomingActionPending: boolean;
   onMuteToggle: () => void;
   onHangUp: () => void;
   onAcceptCall: () => void;
@@ -37,6 +41,10 @@ export function SidebarFooter({
   remoteUsername,
   callSeconds,
   isMuted,
+  isScreenSharing,
+  isScreenShareUpdating,
+  callIssue,
+  isIncomingActionPending,
   onMuteToggle,
   onHangUp,
   onAcceptCall,
@@ -75,21 +83,76 @@ export function SidebarFooter({
   }, [micEnabled, soundEnabled, currentStatus]);
 
   const isMicMuted = callStatus === "active" ? isMuted : !micEnabled;
+  const callPanel = useMemo(() => {
+    switch (callStatus) {
+      case "calling":
+        return {
+          title: "Calling...",
+          subtitle: remoteUsername ? `Ringing ${remoteUsername}` : "Trying to reach the other user",
+          tone: "default" as const,
+        };
+      case "ringing":
+        return {
+          title: isIncomingActionPending ? "Connecting..." : "Incoming call",
+          subtitle: remoteUsername ? `${remoteUsername} is calling` : "Someone is calling you",
+          tone: "default" as const,
+        };
+      case "active":
+        return {
+          title: isScreenShareUpdating
+            ? "Updating screen share..."
+            : isScreenSharing
+              ? "Screen sharing"
+              : "Connected",
+          subtitle: callIssue?.message ?? `${remoteUsername || "User"} · ${formatCallTime(callSeconds)}`,
+          tone: callIssue?.tone ?? "default",
+        };
+      case "ended":
+        return {
+          title: "Call ended",
+          subtitle: remoteUsername ? `${remoteUsername}` : "The call has been closed",
+          tone: "default" as const,
+        };
+      case "failed":
+        return {
+          title: "Call failed",
+          subtitle: callIssue?.message ?? "Please try again.",
+          tone: "error" as const,
+        };
+      default:
+        return null;
+    }
+  }, [
+    callIssue,
+    callSeconds,
+    callStatus,
+    isIncomingActionPending,
+    isScreenShareUpdating,
+    isScreenSharing,
+    remoteUsername,
+  ]);
 
   return (
     <div className="border-t border-border bg-card p-2">
       <div className="flex flex-col gap-2">
-        {(callStatus === "active" ||
-          callStatus === "calling" ||
-          callStatus === "ringing") && (
-          <div className="flex items-center justify-between border border-border p-2 bg-background">
+        {callPanel && (
+          <div
+            className={cn(
+              "flex items-center justify-between border p-2 bg-background",
+              callPanel.tone === "error" ? "border-destructive/50" : "border-border",
+            )}
+          >
             <div className="flex flex-col min-w-0">
-              <span className="text-xs text-muted-foreground">
-                {callStatus === "active"
-                  ? `${remoteUsername || "User"} · ${formatCallTime(callSeconds)}`
-                  : callStatus === "calling"
-                    ? `Calling ${remoteUsername || "User"}...`
-                    : `Incoming · ${remoteUsername || "User"}`}
+              <span
+                className={cn(
+                  "text-xs uppercase",
+                  callPanel.tone === "error" ? "text-destructive" : "text-muted-foreground",
+                )}
+              >
+                {callPanel.title}
+              </span>
+              <span className="text-xs text-foreground truncate">
+                {callPanel.subtitle}
               </span>
             </div>
             <div className="flex items-center gap-1">
@@ -97,15 +160,17 @@ export function SidebarFooter({
                 <>
                   <button
                     onClick={onAcceptCall}
-                    title="Accept"
-                    className="flex h-7 w-7 items-center justify-center bg-online text-white"
+                    title="Accept call"
+                    className="flex h-7 w-7 items-center justify-center bg-online text-white disabled:pointer-events-none disabled:opacity-60"
+                    disabled={isIncomingActionPending}
                   >
                     <Phone className="h-4 w-4" />
                   </button>
                   <button
                     onClick={onRejectCall}
-                    title="Reject"
-                    className="flex h-7 w-7 items-center justify-center bg-destructive text-destructive-foreground"
+                    title="Decline call"
+                    className="flex h-7 w-7 items-center justify-center bg-destructive text-destructive-foreground disabled:pointer-events-none disabled:opacity-60"
+                    disabled={isIncomingActionPending}
                   >
                     <PhoneOff className="h-4 w-4" />
                   </button>

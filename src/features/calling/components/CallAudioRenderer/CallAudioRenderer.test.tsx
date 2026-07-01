@@ -109,6 +109,7 @@ describe('CallAudioRenderer', () => {
 
     await waitFor(() => {
       expect(onOutputDeviceFallback).toHaveBeenCalledTimes(1);
+      expect(onOutputDeviceFallback).toHaveBeenCalledWith('speaker-123');
       expect(setSinkIdMock).toHaveBeenNthCalledWith(1, 'speaker-123');
       expect(setSinkIdMock).toHaveBeenNthCalledWith(2, 'default');
     });

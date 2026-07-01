@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { ActiveCallWindow } from './ActiveCallWindow';
-import type { CallDiagnostics } from '../../hooks/useCall.types';
+import type { CallDiagnostics, CallIssue } from '../../hooks/useCall.types';
 
 const defaultDiagnostics: CallDiagnostics = {
   connectionState: 'connected',
@@ -19,6 +19,7 @@ function renderWindow({
   isScreenSharing = false,
   isScreenShareUpdating = false,
   isRemoteScreenLoading = false,
+  callIssue = null,
   remoteScreenStream = null,
   localScreenStream = null,
   onStartScreenShare = async () => undefined,
@@ -28,6 +29,7 @@ function renderWindow({
   isScreenSharing?: boolean;
   isScreenShareUpdating?: boolean;
   isRemoteScreenLoading?: boolean;
+  callIssue?: CallIssue | null;
   remoteScreenStream?: MediaStream | null;
   localScreenStream?: MediaStream | null;
   onStartScreenShare?: () => Promise<void>;
@@ -41,6 +43,7 @@ function renderWindow({
       isScreenSharing={isScreenSharing}
       isScreenShareUpdating={isScreenShareUpdating}
       isRemoteScreenLoading={isRemoteScreenLoading}
+      callIssue={callIssue}
       remoteScreenStream={remoteScreenStream}
       localScreenStream={localScreenStream}
       diagnostics={diagnostics}
@@ -113,6 +116,27 @@ describe('ActiveCallWindow', () => {
     expect(screen.getByRole('button', { name: 'Share screen' })).toBeInTheDocument();
   });
 
+  it('shows a connecting label before the peer is fully connected', () => {
+    renderWindow({
+      diagnostics: {
+        ...defaultDiagnostics,
+        connectionState: 'connecting',
+        iceConnectionState: 'checking',
+      },
+    });
+
+    expect(screen.getByText('Connecting...')).toBeInTheDocument();
+  });
+
+  it('shows a screen sharing label while local sharing is active', () => {
+    renderWindow({
+      isScreenSharing: true,
+      localScreenStream: new MediaStream(),
+    });
+
+    expect(screen.getByText('Screen sharing')).toBeInTheDocument();
+  });
+
   it('clicking share screen calls startScreenShare', () => {
     const onStartScreenShare = vi.fn().mockResolvedValue(undefined);
     renderWindow({ onStartScreenShare });
@@ -171,6 +195,7 @@ describe('ActiveCallWindow', () => {
         isScreenSharing={false}
         isScreenShareUpdating={false}
         isRemoteScreenLoading={false}
+        callIssue={null}
         remoteScreenStream={null}
         localScreenStream={null}
         diagnostics={defaultDiagnostics}
@@ -191,6 +216,7 @@ describe('ActiveCallWindow', () => {
         isScreenSharing={false}
         isScreenShareUpdating={false}
         isRemoteScreenLoading={false}
+        callIssue={null}
         remoteScreenStream={secondStream}
         localScreenStream={null}
         diagnostics={defaultDiagnostics}
@@ -221,6 +247,7 @@ describe('ActiveCallWindow', () => {
         isScreenSharing={false}
         isScreenShareUpdating={false}
         isRemoteScreenLoading={false}
+        callIssue={null}
         remoteScreenStream={null}
         localScreenStream={null}
         diagnostics={defaultDiagnostics}
@@ -259,8 +286,20 @@ describe('ActiveCallWindow', () => {
     const button = screen.getByRole('button', { name: 'Updating screen share' });
     expect(button).toBeDisabled();
     expect(button).toHaveTextContent('Updating...');
+    expect(screen.getByText('Updating screen share...')).toBeInTheDocument();
 
     fireEvent.click(button);
     expect(onStartScreenShare).not.toHaveBeenCalled();
+  });
+
+  it('shows a call issue banner when a user-friendly error is present', () => {
+    renderWindow({
+      callIssue: {
+        tone: 'error',
+        message: 'Screen share permission denied.',
+      },
+    });
+
+    expect(screen.getByTestId('call-issue-banner')).toHaveTextContent('Screen share permission denied.');
   });
 });

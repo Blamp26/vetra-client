@@ -47,7 +47,7 @@ describe('CallButton', () => {
   it('имеет aria-label с именем пользователя', () => {
     renderButton();
     expect(
-      screen.getByRole('button', { name: /Позвонить Alice/i }),
+      screen.getByRole('button', { name: /Call Alice/i }),
     ).toBeTruthy();
   });
 
@@ -61,7 +61,7 @@ describe('CallButton', () => {
   it('title содержит имя пользователя когда idle', () => {
     renderButton('idle', onCall);
     const btn = screen.getByRole('button');
-    expect(btn.getAttribute('title')).toContain('Alice');
+    expect(btn.getAttribute('title')).toContain('Call Alice');
   });
 
   // ── Disabled состояния ───────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ describe('CallButton', () => {
     renderButton('idle', onCall);
     fireEvent.click(screen.getByRole('button'));
     expect(onCall).toHaveBeenCalledTimes(1);
-    expect(onCall).toHaveBeenCalledWith(42);
+    expect(onCall).toHaveBeenCalledWith(42, 'Alice');
   });
 
   it('НЕ вызывает onCall при клике когда disabled', () => {
@@ -108,6 +108,6 @@ describe('CallButton', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button'));
-    expect(onCall).toHaveBeenCalledWith(99);
+    expect(onCall).toHaveBeenCalledWith(99, 'Bob');
   });
 });

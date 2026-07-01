@@ -9,7 +9,7 @@ interface Props {
   targetUserId: ResourceRef;
   targetUsername: string;
   status: CallStatus;
-  onCall: (targetUserId: ResourceRef) => void;
+  onCall: (targetUserId: ResourceRef, targetUsername?: string) => void;
   className?: string;
 }
 
@@ -22,10 +22,10 @@ export function CallButton({ targetUserId, targetUsername, status, onCall, class
         "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] hover:bg-accent size-9 h-9 w-9 text-muted-foreground hover:text-foreground",
         className
       )}
-      onClick={() => onCall(targetUserId)}
+      onClick={() => onCall(targetUserId, targetUsername)}
       disabled={isDisabled}
-      title={isDisabled ? `Звонок недоступен (${status})` : `Позвонить ${targetUsername}`}
-      aria-label={`Позвонить ${targetUsername}`}
+      title={isDisabled ? `Call unavailable while ${status}` : `Call ${targetUsername}`}
+      aria-label={`Call ${targetUsername}`}
     >
       <Phone className="h-4 w-4" />
     </button>

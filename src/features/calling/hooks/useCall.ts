@@ -4,7 +4,7 @@ import { useAppStore } from '@/store';
 import type { ResourceRef } from '@/shared/types';
 import { WebRTCService, type WebRTCDiagnostics } from '../services/webrtcService';
 import { callSignalingService, type OfferPayload } from '../services/callSignalingService';
-import type { CallDiagnostics, CallStatus, UseCallReturn } from './useCall.types';
+import type { CallDiagnostics, CallIssue, CallStatus, UseCallReturn } from './useCall.types';
 import { debugCall } from '../utils/callDebug';
 
 const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
@@ -47,6 +47,122 @@ function isExpectedScreenShareCancellation(error: unknown): boolean {
     );
 }
 
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) return error.message;
+    return String(error ?? 'unknown error');
+}
+
+function getErrorName(error: unknown): string {
+    if (error instanceof DOMException || error instanceof Error) {
+        return error.name;
+    }
+
+    return '';
+}
+
+function isPermissionDeniedError(error: unknown): boolean {
+    const name = getErrorName(error);
+    const message = getErrorMessage(error).toLowerCase();
+
+    return (
+        name === 'NotAllowedError' ||
+        name === 'SecurityError' ||
+        message.includes('permission denied') ||
+        message.includes('permission dismissed') ||
+        message.includes('denied permission')
+    );
+}
+
+function isUnavailableDeviceError(error: unknown): boolean {
+    const name = getErrorName(error);
+    const message = getErrorMessage(error).toLowerCase();
+
+    return (
+        name === 'NotFoundError' ||
+        name === 'OverconstrainedError' ||
+        message.includes('no mic') ||
+        message.includes('device not found') ||
+        message.includes('requested device not found') ||
+        message.includes('could not start audio source') ||
+        message.includes('not available')
+    );
+}
+
+function isTimedOutError(error: unknown): boolean {
+    return getErrorMessage(error).toLowerCase().includes('timed out');
+}
+
+function isUnavailableRemoteError(error: unknown): boolean {
+    const message = getErrorMessage(error).toLowerCase();
+    return (
+        message.includes('not_found') ||
+        message.includes('offline') ||
+        message.includes('unavailable')
+    );
+}
+
+function buildCallIssue(message: string, tone: CallIssue['tone'] = 'error'): CallIssue {
+    return { tone, message };
+}
+
+function mapStartCallIssue(error: unknown): CallIssue {
+    if (isPermissionDeniedError(error)) {
+        return buildCallIssue('Microphone permission denied.');
+    }
+
+    if (isUnavailableDeviceError(error)) {
+        return buildCallIssue('Microphone unavailable.');
+    }
+
+    if (isUnavailableRemoteError(error)) {
+        return buildCallIssue('User unavailable. Try again later.');
+    }
+
+    if (isTimedOutError(error)) {
+        return buildCallIssue('Call timed out. No answer.');
+    }
+
+    return buildCallIssue('Call failed. Please try again.');
+}
+
+function mapAcceptCallIssue(error: unknown): CallIssue {
+    if (isPermissionDeniedError(error)) {
+        return buildCallIssue('Microphone permission denied.');
+    }
+
+    if (isUnavailableDeviceError(error)) {
+        return buildCallIssue('Microphone unavailable.');
+    }
+
+    if (isTimedOutError(error)) {
+        return buildCallIssue('Connecting timed out. Please try again.');
+    }
+
+    return buildCallIssue('Could not connect the call.');
+}
+
+function mapScreenShareIssue(error: unknown): CallIssue {
+    const message = getErrorMessage(error).toLowerCase();
+
+    if (message.includes('not supported')) {
+        return buildCallIssue('Screen sharing is not supported in this browser.');
+    }
+
+    if (isPermissionDeniedError(error)) {
+        return buildCallIssue('Screen share permission denied.');
+    }
+
+    if (isTimedOutError(error)) {
+        return buildCallIssue('Screen share update timed out. Try again.');
+    }
+
+    if (message.includes('screen share did not provide a video track')) {
+        return buildCallIssue('Screen share failed. No video track was provided.');
+    }
+
+    return buildCallIssue('Screen share failed. Please try again.');
+}
+
 export function useCall(currentUserId: number): UseCallReturn {
     const socketManager = useAppStore((s) => s.socketManager);
     const currentUserCallRef = useAppStore((s) => s.currentUser?.public_id ?? s.currentUser?.id ?? null);
@@ -64,6 +180,8 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
     const [seconds, setSeconds] = useState(0);
     const [diagnostics, setDiagnostics] = useState<CallDiagnostics>(EMPTY_CALL_DIAGNOSTICS);
+    const [callIssue, setCallIssue] = useState<CallIssue | null>(null);
+    const [isIncomingActionPending, setIsIncomingActionPending] = useState(false);
 
     const callChannelRef = useRef<Channel | null>(null);
     const webrtcRef = useRef<WebRTCService | null>(null);
@@ -82,6 +200,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const localScreenStreamRef = useRef<MediaStream | null>(null);
     const screenTrackRef = useRef<MediaStreamTrack | null>(null);
     const screenTrackEndedHandlerRef = useRef<(() => void) | null>(null);
+    const incomingActionPendingRef = useRef(false);
 
     const cleanupScreenShare = useCallback((options?: { stopTracks?: boolean }) => {
         const shouldStopTracks = options?.stopTracks ?? true;
@@ -128,8 +247,11 @@ export function useCall(currentUserId: number): UseCallReturn {
             has_local_stream: Boolean(localScreenStreamRef.current),
             signalingState: service?.getDiagnosticsSnapshot().signalingState,
         });
-        void service?.stopScreenShare().catch((err) => {
+        void service?.stopScreenShare().then(() => {
+            setCallIssue(null);
+        }).catch((err) => {
             console.warn('[useCall] Failed to stop transmitted screen share', err);
+            setCallIssue(mapScreenShareIssue(err));
         });
         cleanupScreenShare({ stopTracks: !service });
     }, [cleanupScreenShare]);
@@ -158,7 +280,9 @@ export function useCall(currentUserId: number): UseCallReturn {
         callChannelRef.current = null;
         offerSdpRef.current = null;
         hangUpSentRef.current = false;
+        incomingActionPendingRef.current = false;
         if (resetState) {
+            statusRef.current = 'idle';
             setStatus('idle');
             setRemoteUserId(null);
             setRemoteUsername(null);
@@ -172,12 +296,17 @@ export function useCall(currentUserId: number): UseCallReturn {
             setLocalScreenStream(null);
             setSeconds(0);
             setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
+            setCallIssue(null);
+            setIsIncomingActionPending(false);
         }
     }, [cleanupScreenShare, clearCallTimeout]);
 
-    const resetAfterDelay = useCallback(() => {
+    const resetAfterDelay = useCallback((options?: { status?: 'ended' | 'failed'; issue?: CallIssue | null }) => {
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
-        setStatus('ended');
+        const nextStatus = options?.status ?? 'ended';
+        statusRef.current = nextStatus;
+        setStatus(nextStatus);
+        setCallIssue(options?.issue ?? null);
         endedTimerRef.current = setTimeout(() => {
             teardownCall();
         }, 2000);
@@ -192,6 +321,9 @@ export function useCall(currentUserId: number): UseCallReturn {
             signalingState: webrtcRef.current?.getDiagnosticsSnapshot().signalingState,
         });
         offerSdpRef.current = payload.sdp;
+        setCallIssue(null);
+        setIsIncomingActionPending(false);
+        incomingActionPendingRef.current = false;
         setRemoteUserId((prev) => canonicalCallUserId(prev, payload.from_user_id));
         setRemoteUsername((prev) => prev ?? payload.from_username);
         setCallId((prev) => prev ?? payload.call_id ?? null);
@@ -315,10 +447,13 @@ export function useCall(currentUserId: number): UseCallReturn {
                     webrtcRef.current?.setCallId(nextCallId);
                 }
                 setRemoteUserId((prev) => canonicalCallUserId(prev, payload.from_user_id));
+                setCallIssue(null);
                 webrtcRef.current?.handleAnswer(payload.sdp).catch((err) => {
                     console.error('[useCall] initial answer failed', err);
+                    resetAfterDelay({ status: 'failed', issue: mapAcceptCallIssue(err) });
                 });
                 setRemoteUsername((prev) => payload.from_username ?? prev);
+                statusRef.current = 'active';
                 setStatus('active');
             }),
             callSignalingService.onIceCandidate((payload) => {
@@ -367,8 +502,11 @@ export function useCall(currentUserId: number): UseCallReturn {
                     setCallId((prev) => prev ?? payload.call_id ?? null);
                     webrtcRef.current?.setCallId(payload.call_id);
                 }
-                webrtcRef.current?.handleRenegotiation(payload).catch((err) => {
+                webrtcRef.current?.handleRenegotiation(payload).then(() => {
+                    setCallIssue(null);
+                }).catch((err) => {
                     console.error('[useCall] renegotiation failed', err);
+                    setCallIssue(mapScreenShareIssue(err));
                 });
             }),
             callSignalingService.onHangUp((payload) => {
@@ -408,7 +546,11 @@ export function useCall(currentUserId: number): UseCallReturn {
             }),
             callSignalingService.onIncomingCall((payload) => {
                 debugCall('[useCall] incoming_call received', { ...payload });
+                statusRef.current = 'ringing';
                 setStatus('ringing');
+                setCallIssue(null);
+                setIsIncomingActionPending(false);
+                incomingActionPendingRef.current = false;
                 setRemoteUserId(payload.from_user_id);
                 setRemoteUsername(payload.from_username);
                 setCallId(payload.call_id);
@@ -430,17 +572,20 @@ export function useCall(currentUserId: number): UseCallReturn {
         };
     }, [cleanupScreenShare, clearCallTimeout, socketManager, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
 
-    const startCall = useCallback((targetUserId: ResourceRef) => {
+    const startCall = useCallback((targetUserId: ResourceRef, targetUsername?: string) => {
         const channel = callChannelRef.current;
-        if (!channel || status !== 'idle') return;
+        if (!channel || statusRef.current !== 'idle') return;
 
         if (typeof targetUserId === 'number' && targetUserId === currentUserId) {
             console.warn('[useCall] Cannot call yourself');
             return;
         }
 
+        statusRef.current = 'calling';
         setStatus('calling');
+        setCallIssue(null);
         setRemoteUserId(targetUserId);
+        setRemoteUsername(targetUsername ?? null);
 
         const service = new WebRTCService(channel, currentUserId, targetUserId);
         service.onRemoteStream = (stream) => setRemoteStream(stream);
@@ -462,26 +607,33 @@ export function useCall(currentUserId: number): UseCallReturn {
                         console.warn('[useCall] Call timeout');
                         cleanupScreenShare({ stopTracks: false });
                         webrtcRef.current.dispose();
-                        resetAfterDelay();
+                        resetAfterDelay({
+                            status: 'failed',
+                            issue: buildCallIssue('Call timed out. No answer.'),
+                        });
                     }
                 }, 30_000);
             })
             .catch((err) => {
                 console.error('[useCall] startCall failed', err);
-                resetAfterDelay();
+                resetAfterDelay({ status: 'failed', issue: mapStartCallIssue(err) });
             });
-    }, [cleanupScreenShare, status, currentUserId, resetAfterDelay]);
+    }, [cleanupScreenShare, currentUserId, resetAfterDelay]);
 
     const acceptCall = useCallback(() => {
         const channel = callChannelRef.current;
         const remote = remoteUserId;
-        if (!channel || !remote || status !== 'ringing') return;
+        if (!channel || !remote || statusRef.current !== 'ringing' || incomingActionPendingRef.current) return;
 
         const sdp = offerSdpRef.current;
         if (!sdp) {
             console.warn('[useCall] acceptCall called before offer SDP received');
             return;
         }
+
+        incomingActionPendingRef.current = true;
+        setIsIncomingActionPending(true);
+        setCallIssue(null);
 
         const service = new WebRTCService(channel, currentUserId, remote);
         service.setCallId(callId);
@@ -497,18 +649,26 @@ export function useCall(currentUserId: number): UseCallReturn {
 
         webrtcRef.current = service;
         clearCallTimeout();
+        statusRef.current = 'active';
         setStatus('active');
         offerSdpRef.current = null;
         setDiagnostics(mapDiagnostics(service.getDiagnosticsSnapshot()));
 
-        service.acceptCall(sdp).catch((err) => {
+        service.acceptCall(sdp).then(() => {
+            setIsIncomingActionPending(false);
+            incomingActionPendingRef.current = false;
+            setCallIssue(null);
+        }).catch((err) => {
             console.error('[useCall] acceptCall failed', err);
-            resetAfterDelay();
+            resetAfterDelay({ status: 'failed', issue: mapAcceptCallIssue(err) });
         });
     }, [callId, clearCallTimeout, status, remoteUserId, currentUserId, resetAfterDelay]);
 
     const rejectCall = useCallback(() => {
         const channel = callChannelRef.current;
+        if (incomingActionPendingRef.current) return;
+        incomingActionPendingRef.current = true;
+        setIsIncomingActionPending(true);
         if (channel && callId && remoteUserId) {
             channel.push('hang_up', { call_id: callId, to_user_id: remoteUserId });
         }
@@ -554,6 +714,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         const mediaDevices = navigator.mediaDevices;
         if (!mediaDevices || typeof mediaDevices.getDisplayMedia !== 'function') {
             console.warn('[useCall] Screen sharing is not supported in this environment');
+            setCallIssue(buildCallIssue('Screen sharing is not supported in this browser.'));
             return;
         }
 
@@ -585,9 +746,11 @@ export function useCall(currentUserId: number): UseCallReturn {
             localScreenStreamRef.current = stream;
             setLocalScreenStream(stream);
             setIsScreenSharing(true);
+            setCallIssue(null);
         } catch (err) {
             if (!isExpectedScreenShareCancellation(err)) {
                 console.warn('[useCall] Screen share was not started', err);
+                setCallIssue(mapScreenShareIssue(err));
             }
         }
     }, [cleanupScreenShare]);
@@ -606,6 +769,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         localScreenStream,
         seconds,
         diagnostics,
+        callIssue,
+        isIncomingActionPending,
         startCall,
         startScreenShare,
         stopScreenShare,

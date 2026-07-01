@@ -4,7 +4,7 @@ import { debugCall } from '../../utils/callDebug';
 interface CallAudioRendererProps {
   remoteStream: MediaStream | null;
   selectedOutputDeviceId: string;
-  onOutputDeviceFallback?: () => void;
+  onOutputDeviceFallback?: (missingDeviceId: string) => void;
 }
 
 function isMissingOutputDeviceError(error: unknown): boolean {
@@ -85,7 +85,7 @@ export function CallAudioRenderer({
 
         if (lastFallbackDeviceIdRef.current !== sinkId) {
           lastFallbackDeviceIdRef.current = sinkId;
-          onOutputDeviceFallback?.();
+          onOutputDeviceFallback?.(sinkId);
         }
 
         try {

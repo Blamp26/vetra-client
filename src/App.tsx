@@ -74,6 +74,8 @@ function App() {
     isRemoteScreenLoading,
     seconds,
     diagnostics,
+    callIssue,
+    isIncomingActionPending,
     toggleMute,
     hangUp,
     acceptCall,
@@ -98,13 +100,29 @@ function App() {
   );
   const currentActiveChatKey = activeChatKey(activeChat);
   const currentActiveChatKeyRef = useRef(currentActiveChatKey);
+  const lastOutputDeviceFallbackRef = useRef<string | null>(null);
 
   useEffect(() => {
     currentActiveChatKeyRef.current = currentActiveChatKey;
   }, [currentActiveChatKey]);
 
-  const handleOutputDeviceFallback = useCallback(() => {
+  const handleOutputDeviceFallback = useCallback((missingDeviceId?: string) => {
     setOutputDevice('default');
+    if (typeof window === "undefined") return;
+    if (missingDeviceId && lastOutputDeviceFallbackRef.current === missingDeviceId) {
+      return;
+    }
+
+    lastOutputDeviceFallbackRef.current = missingDeviceId ?? 'unknown';
+    window.dispatchEvent(
+      new CustomEvent("vetra:toast", {
+        detail: {
+          title: "Audio output switched to default",
+          body: "Your previous output device is unavailable, so call audio is using the system default device.",
+          durationMs: 4000,
+        },
+      }),
+    );
   }, [setOutputDevice]);
 
   const navigateToHash = useCallback((nextHash: string) => {
@@ -272,6 +290,10 @@ function App() {
           remoteUsername={remoteUsername}
           callSeconds={seconds}
           isMuted={isMuted}
+          isScreenSharing={isScreenSharing}
+          isScreenShareUpdating={isScreenShareUpdating}
+          callIssue={callIssue}
+          isIncomingActionPending={isIncomingActionPending}
           onMuteToggle={toggleMute}
           onHangUp={hangUp}
           onAcceptCall={acceptCall}
@@ -313,6 +335,7 @@ function App() {
       {status === "ringing" && (
         <IncomingCallModal
           callerName={remoteUsername ?? `User #${remoteUserId}`}
+          isPending={isIncomingActionPending}
           onAccept={acceptCall}
           onReject={rejectCall}
         />
@@ -326,6 +349,7 @@ function App() {
           isScreenSharing={isScreenSharing}
           isScreenShareUpdating={isScreenShareUpdating}
           isRemoteScreenLoading={isRemoteScreenLoading}
+          callIssue={callIssue}
           remoteScreenStream={remoteScreenStream}
           localScreenStream={localScreenStream}
           diagnostics={diagnostics}

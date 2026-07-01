@@ -23,7 +23,7 @@ import {
 interface Props {
   activeChat: ActiveChat;
   callStatus: CallStatus;
-  onStartCall: (targetUserId: string | number) => void;
+  onStartCall: (targetUserId: string | number, targetUsername?: string) => void;
 }
 
 interface ReplyTarget {

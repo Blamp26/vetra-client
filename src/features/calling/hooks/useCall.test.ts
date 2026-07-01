@@ -428,7 +428,8 @@ describe('useCall', () => {
             });
 
             expect(service.dispose).toHaveBeenCalled();
-            expect(result.current.status).toBe('ended');
+            expect(result.current.status).toBe('failed');
+            expect(result.current.callIssue?.message).toBe('Call timed out. No answer.');
 
             await act(async () => {
                 vi.advanceTimersByTime(2000);
@@ -464,7 +465,38 @@ describe('useCall', () => {
             });
 
             expect(service.dispose).toHaveBeenCalled();
-            expect(result.current.status).toBe('ended');
+            expect(result.current.status).toBe('failed');
+        });
+
+        it('surfaces a microphone permission denied message when the call cannot start', async () => {
+            MockWebRTCService.mockImplementationOnce(function (this: any) {
+                this.startCall = vi.fn().mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'));
+                this.dispose = vi.fn();
+                this.setCallId = vi.fn();
+                this.getSignalingCallId = vi.fn(() => 'fallback-call-id');
+                this.toggleLocalMuted = vi.fn(() => false);
+                this.getDiagnosticsSnapshot = vi.fn().mockReturnValue({
+                    connectionState: 'unknown',
+                    iceConnectionState: 'unknown',
+                    iceGatheringState: 'unknown',
+                    signalingState: 'unknown',
+                    selectedCandidatePair: null,
+                });
+                return this;
+            });
+
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            expect(result.current.status).toBe('failed');
+            expect(result.current.callIssue?.message).toBe('Microphone permission denied.');
         });
     });
 
@@ -833,6 +865,24 @@ describe('useCall', () => {
             });
             expect(result.current.status).toBe('idle');
             expect(result.current.remoteUserId).toBeNull();
+        });
+
+        it('ignores duplicate decline clicks once a decision is in progress', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            const incomingHandler = mockUserChannel.on.mock.calls.find((c: any[]) => c[0] === 'incoming_call')?.[1];
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+
+            act(() => {
+                incomingHandler({ from_user_id: 2, call_id: 'call-123' });
+            });
+
+            act(() => {
+                result.current.rejectCall();
+                result.current.rejectCall();
+            });
+
+            expect(callChannel.push).toHaveBeenCalledTimes(1);
+            expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
         });
     });
 
@@ -1255,13 +1305,14 @@ describe('useCall', () => {
 
             expect(result.current.isScreenSharing).toBe(false);
             expect(result.current.localScreenStream).toBeNull();
+            expect(result.current.callIssue?.message).toBe('Screen sharing is not supported in this browser.');
             expect(warnSpy).toHaveBeenCalledWith('[useCall] Screen sharing is not supported in this environment');
 
             warnSpy.mockRestore();
         });
 
-        it('user-cancelled getDisplayMedia fails gracefully', async () => {
-            const error = new Error('cancelled');
+        it('screen-share permission denial is surfaced to the user', async () => {
+            const error = new DOMException('Permission denied', 'NotAllowedError');
             const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
             mockGetDisplayMedia.mockRejectedValue(error);
 
@@ -1273,6 +1324,7 @@ describe('useCall', () => {
 
             expect(result.current.isScreenSharing).toBe(false);
             expect(result.current.localScreenStream).toBeNull();
+            expect(result.current.callIssue?.message).toBe('Screen share permission denied.');
             expect(warnSpy).toHaveBeenCalledWith('[useCall] Screen share was not started', error);
 
             warnSpy.mockRestore();

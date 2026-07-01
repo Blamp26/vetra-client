@@ -1,6 +1,6 @@
 import type { ResourceRef } from "@/shared/types";
 
-export type CallStatus = 'idle' | 'calling' | 'ringing' | 'active' | 'ended';
+export type CallStatus = 'idle' | 'calling' | 'ringing' | 'active' | 'ended' | 'failed';
 
 // ── Входящие события от сервера ──────────────────────────────────────────────
 
@@ -44,6 +44,11 @@ export interface CallDiagnostics {
     selectedLocalCandidateType: 'host' | 'srflx' | 'relay' | 'unknown';
 }
 
+export interface CallIssue {
+    tone: 'default' | 'error';
+    message: string;
+}
+
 // ── Публичный интерфейс хука ─────────────────────────────────────────────────
 
 export interface UseCallReturn {
@@ -60,7 +65,9 @@ export interface UseCallReturn {
     localScreenStream: MediaStream | null;
     seconds: number;
     diagnostics: CallDiagnostics;
-    startCall: (targetUserId: ResourceRef) => void;
+    callIssue: CallIssue | null;
+    isIncomingActionPending: boolean;
+    startCall: (targetUserId: ResourceRef, targetUsername?: string) => void;
     startScreenShare: () => Promise<void>;
     stopScreenShare: () => void;
     acceptCall: () => void;

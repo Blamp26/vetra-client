@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { formatCallTime } from '@/utils/formatDate';
-import type { CallDiagnostics } from '../../hooks/useCall.types';
+import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff } from 'lucide-react';
+import type { CallDiagnostics, CallIssue } from '../../hooks/useCall.types';
 import { debugCall } from '../../utils/callDebug';
 
 interface ActiveCallWindowProps {
@@ -11,6 +12,7 @@ interface ActiveCallWindowProps {
   isScreenSharing: boolean;
   isScreenShareUpdating: boolean;
   isRemoteScreenLoading: boolean;
+  callIssue: CallIssue | null;
   remoteScreenStream: MediaStream | null;
   localScreenStream: MediaStream | null;
   diagnostics: CallDiagnostics;
@@ -46,6 +48,7 @@ export const ActiveCallWindow = ({
   isScreenSharing,
   isScreenShareUpdating,
   isRemoteScreenLoading,
+  callIssue,
   remoteScreenStream,
   localScreenStream,
   diagnostics,
@@ -58,6 +61,13 @@ export const ActiveCallWindow = ({
   const previewRef = useRef<HTMLVideoElement>(null);
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === 'true';
+  const callStateLabel = isScreenShareUpdating
+    ? 'Updating screen share...'
+    : isScreenSharing
+      ? 'Screen sharing'
+      : diagnostics.connectionState === 'connected' || diagnostics.iceConnectionState === 'connected'
+        ? 'Connected'
+        : 'Connecting...';
 
   useEffect(() => {
     const remoteScreen = remoteScreenRef.current;
@@ -106,10 +116,24 @@ export const ActiveCallWindow = ({
         <div className="text-center space-y-1">
           <p className="m-0 text-xl font-normal text-foreground">{remoteUsername}</p>
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground uppercase">
-            <span>Connected</span>
+            <span>{callStateLabel}</span>
             <span>{formatCallTime(seconds)}</span>
           </div>
         </div>
+
+        {callIssue && (
+          <div
+            className={cn(
+              "w-full max-w-[520px] border px-3 py-2 text-sm",
+              callIssue.tone === 'error'
+                ? "border-destructive/50 bg-destructive/5 text-foreground"
+                : "border-border bg-background text-foreground",
+            )}
+            data-testid="call-issue-banner"
+          >
+            {callIssue.message}
+          </div>
+        )}
 
         {shouldShowDiagnostics && (
           <div
@@ -185,22 +209,7 @@ export const ActiveCallWindow = ({
             onClick={onMuteToggle}
             aria-label={isMuted ? 'Unmute' : 'Mute'}
           >
-            {isMuted ? (
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <line x1="1" y1="1" x2="23" y2="23" />
-                <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            )}
+            {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
           </button>
 
           <button
@@ -212,7 +221,10 @@ export const ActiveCallWindow = ({
             aria-label={isScreenShareUpdating ? 'Updating screen share' : isScreenSharing ? 'Stop sharing' : 'Share screen'}
             disabled={isScreenShareUpdating}
           >
-            {isScreenShareUpdating ? 'Updating...' : isScreenSharing ? 'Stop sharing' : 'Share screen'}
+            <span className="inline-flex items-center gap-2">
+              {isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}
+              <span>{isScreenShareUpdating ? 'Updating...' : isScreenSharing ? 'Stop sharing' : 'Share screen'}</span>
+            </span>
           </button>
 
           <button
@@ -220,9 +232,7 @@ export const ActiveCallWindow = ({
             onClick={onHangUp}
             aria-label="Hang Up"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z" />
-            </svg>
+            <PhoneOff className="h-5 w-5" />
           </button>
         </div>
       </div>
