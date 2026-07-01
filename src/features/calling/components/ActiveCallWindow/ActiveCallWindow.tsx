@@ -10,6 +10,7 @@ interface ActiveCallWindowProps {
   seconds: number;
   isMuted: boolean;
   isScreenSharing: boolean;
+  isScreenShareUpdating: boolean;
   isRemoteScreenLoading: boolean;
   remoteScreenStream: MediaStream | null;
   localScreenStream: MediaStream | null;
@@ -57,6 +58,7 @@ export const ActiveCallWindow = ({
   seconds,
   isMuted,
   isScreenSharing,
+  isScreenShareUpdating,
   isRemoteScreenLoading,
   remoteScreenStream,
   localScreenStream,
@@ -217,13 +219,14 @@ export const ActiveCallWindow = ({
 
           <button
             className={cn(
-              "border border-border px-3 py-2 text-sm",
+              "border border-border px-3 py-2 text-sm disabled:pointer-events-none disabled:opacity-60",
               isScreenSharing ? "bg-accent text-foreground" : "bg-background text-foreground"
             )}
             onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
-            aria-label={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+            aria-label={isScreenShareUpdating ? 'Updating screen share' : isScreenSharing ? 'Stop sharing' : 'Share screen'}
+            disabled={isScreenShareUpdating}
           >
-            {isScreenSharing ? 'Stop sharing' : 'Share screen'}
+            {isScreenShareUpdating ? 'Updating...' : isScreenSharing ? 'Stop sharing' : 'Share screen'}
           </button>
 
           <button

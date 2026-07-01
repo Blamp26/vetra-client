@@ -89,6 +89,9 @@ class MockRTCPeerConnection {
             this.signalingState = 'have-local-offer';
         } else if (desc.type === 'answer') {
             this.signalingState = 'stable';
+        } else if (desc.type === 'rollback') {
+            this.localDescription = null;
+            this.signalingState = 'stable';
         }
         this.onsignalingstatechange?.();
         if (this.onicecandidate) {
@@ -157,17 +160,16 @@ const mockGetUserMedia = vi.fn(async () => ({
 const mockGetDisplayMedia = vi.fn(async () => mockScreenStream);
 
 const mockPushReply = {
-    ok: { call_id: '123:456' } as unknown,
-    error: null as unknown,
-    timeout: false,
+    mode: 'ok' as 'ok' | 'error' | 'timeout',
+    payload: { call_id: '123:456' } as unknown,
 };
 
 const mockChannelPush = vi.fn().mockImplementation(() => {
     const response = {
         receive(event: string, cb: (payload?: unknown) => void) {
-            if (event === 'ok' && mockPushReply.ok !== null) cb(mockPushReply.ok);
-            if (event === 'error' && mockPushReply.error !== null) cb(mockPushReply.error);
-            if (event === 'timeout' && mockPushReply.timeout) cb();
+            if (mockPushReply.mode === 'ok' && event === 'ok') cb(mockPushReply.payload);
+            if (mockPushReply.mode === 'error' && event === 'error') cb(mockPushReply.payload);
+            if (mockPushReply.mode === 'timeout' && event === 'timeout') cb();
             return response;
         },
     };
@@ -211,9 +213,8 @@ beforeEach(() => {
         getAudioTracks: vi.fn(() => []),
         getVideoTracks: vi.fn(() => [mockScreenTrack]),
     };
-    mockPushReply.ok = { call_id: '123:456' };
-    mockPushReply.error = null;
-    mockPushReply.timeout = false;
+    mockPushReply.mode = 'ok';
+    mockPushReply.payload = { call_id: '123:456' };
 
     (global as any).RTCPeerConnection = MockRTCPeerConnection as any;
 
@@ -273,8 +274,8 @@ describe('WebRTCService', () => {
         });
 
         it('rejects when the server rejects the initial offer', async () => {
-            mockPushReply.ok = null;
-            mockPushReply.error = { reason: 'not_found' };
+            mockPushReply.mode = 'error';
+            mockPushReply.payload = { reason: 'not_found' };
 
             await expect(service.startCall()).rejects.toThrow('Call signaling offer failed: not_found');
         });
@@ -339,8 +340,8 @@ describe('WebRTCService', () => {
         });
 
         it('rejects when the server rejects the answer', async () => {
-            mockPushReply.ok = null;
-            mockPushReply.error = { reason: 'unauthorized' };
+            mockPushReply.mode = 'error';
+            mockPushReply.payload = { reason: 'unauthorized' };
 
             await expect(service.acceptCall(remoteSdp)).rejects.toThrow('Call signaling answer failed: unauthorized');
         });
@@ -695,6 +696,85 @@ describe('WebRTCService', () => {
             });
             expect(renegotiationOffers[1]?.[1].screen_share_active).toBe(false);
             expect(sender.replaceTrack).toHaveBeenCalledWith(null);
+        });
+
+        it('renegotiate push reject clears inFlight and rolls back have-local-offer', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            await service.startScreenShare();
+            await service.handleAnswer('screen-start-answer-sdp');
+
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            mockPushReply.mode = 'error';
+            mockPushReply.payload = { reason: 'rate_limited' };
+
+            await expect(service.stopScreenShare()).rejects.toThrow('Call signaling renegotiate failed: rate_limited');
+
+            expect((service as any).isRenegotiationInFlight).toBe(false);
+            expect(pc.signalingState).toBe('stable');
+            expect(pc.setLocalDescription).toHaveBeenCalledWith({ type: 'rollback' });
+        });
+
+        it('renegotiate push timeout clears inFlight and rolls back have-local-offer', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            await service.startScreenShare();
+            await service.handleAnswer('screen-start-answer-sdp');
+
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            mockPushReply.mode = 'timeout';
+
+            await expect(service.stopScreenShare()).rejects.toThrow('Call signaling renegotiate timed out');
+
+            expect((service as any).isRenegotiationInFlight).toBe(false);
+            expect(pc.signalingState).toBe('stable');
+            expect(pc.setLocalDescription).toHaveBeenCalledWith({ type: 'rollback' });
+        });
+
+        it('renegotiation answer timeout clears inFlight and rolls back the peer', async () => {
+            vi.useFakeTimers();
+            try {
+                await service.startCall();
+                await service.handleAnswer('answer-sdp');
+
+                await service.startScreenShare();
+
+                const pc = (service as any).peerConnection as MockRTCPeerConnection;
+                expect((service as any).isRenegotiationInFlight).toBe(true);
+                expect(pc.signalingState).toBe('have-local-offer');
+
+                await vi.advanceTimersByTimeAsync(8_000);
+                await Promise.resolve();
+
+                expect((service as any).isRenegotiationInFlight).toBe(false);
+                expect(pc.signalingState).toBe('stable');
+                expect((service as any).screenStream).toBeNull();
+                expect((service as any).isScreenShareActiveLocal).toBe(false);
+                expect(mockScreenTrack.stop).toHaveBeenCalled();
+                expect(pc.setLocalDescription).toHaveBeenCalledWith({ type: 'rollback' });
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('supports five complete start/stop screen-share cycles without leaving renegotiation stuck', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            mockChannelPush.mockClear();
+
+            for (let cycle = 0; cycle < 5; cycle += 1) {
+                await service.startScreenShare();
+                await service.handleAnswer(`screen-start-answer-${cycle}`);
+                await service.stopScreenShare();
+                await service.handleAnswer(`screen-stop-answer-${cycle}`);
+            }
+
+            const renegotiationOffers = renegotiationPushes('offer');
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+
+            expect(renegotiationOffers).toHaveLength(10);
+            expect((service as any).isRenegotiationInFlight).toBe(false);
+            expect(pc.signalingState).toBe('stable');
         });
 
         it('app stop detaches the local screen track immediately even while the start answer is pending', async () => {

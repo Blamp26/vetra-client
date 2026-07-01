@@ -67,6 +67,7 @@ vi.mock('../services/webrtcService', () => {
         this.onRemoteStream = null;
         this.onRemoteScreenStream = null;
         this.onRemoteScreenLoading = null;
+        this.onScreenShareUpdatingChange = null;
         this.onCallIdReceived = null;
         this.onDiagnosticsChange = null;
         this.getDiagnosticsSnapshot = vi.fn().mockReturnValue({

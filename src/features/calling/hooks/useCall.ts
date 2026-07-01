@@ -71,6 +71,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [callId, setCallId] = useState<string | null>(null);
     const [isMuted, setIsMuted] = useState(false);
     const [isScreenSharing, setIsScreenSharing] = useState(false);
+    const [isScreenShareUpdating, setIsScreenShareUpdating] = useState(false);
     const [isRemoteScreenLoading, setIsRemoteScreenLoading] = useState(false);
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const [remoteScreenStream, setRemoteScreenStream] = useState<MediaStream | null>(null);
@@ -178,6 +179,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             setCallId(null);
             setRemoteStream(null);
             setRemoteScreenStream(null);
+            setIsScreenShareUpdating(false);
             setIsRemoteScreenLoading(false);
             setIsMuted(false);
             setIsScreenSharing(false);
@@ -458,6 +460,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         service.onRemoteStream = (stream) => setRemoteStream(stream);
         service.onRemoteScreenStream = (stream) => setRemoteScreenStream(stream);
         service.onRemoteScreenLoading = (loading) => setIsRemoteScreenLoading(loading);
+        service.onScreenShareUpdatingChange = (updating) => setIsScreenShareUpdating(updating);
         service.onCallIdReceived = (nextCallId) => {
             service.setCallId(nextCallId);
             setCallId(nextCallId);
@@ -503,6 +506,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             setRemoteScreenStream(stream);
         };
         service.onRemoteScreenLoading = (loading) => setIsRemoteScreenLoading(loading);
+        service.onScreenShareUpdatingChange = (updating) => setIsScreenShareUpdating(updating);
         service.onDiagnosticsChange = (nextDiagnostics) => setDiagnostics(mapDiagnostics(nextDiagnostics));
 
         webrtcRef.current = service;
@@ -609,6 +613,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         callId,
         isMuted,
         isScreenSharing,
+        isScreenShareUpdating,
         isRemoteScreenLoading,
         remoteStream,
         remoteScreenStream,

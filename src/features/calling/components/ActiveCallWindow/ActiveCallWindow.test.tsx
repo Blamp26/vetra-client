@@ -17,6 +17,7 @@ class MockMediaStream {}
 function renderWindow({
   diagnostics = defaultDiagnostics,
   isScreenSharing = false,
+  isScreenShareUpdating = false,
   isRemoteScreenLoading = false,
   remoteScreenStream = null,
   localScreenStream = null,
@@ -25,6 +26,7 @@ function renderWindow({
 } : {
   diagnostics?: CallDiagnostics;
   isScreenSharing?: boolean;
+  isScreenShareUpdating?: boolean;
   isRemoteScreenLoading?: boolean;
   remoteScreenStream?: MediaStream | null;
   localScreenStream?: MediaStream | null;
@@ -37,6 +39,7 @@ function renderWindow({
       seconds={12}
       isMuted={false}
       isScreenSharing={isScreenSharing}
+      isScreenShareUpdating={isScreenShareUpdating}
       isRemoteScreenLoading={isRemoteScreenLoading}
       remoteScreenStream={remoteScreenStream}
       localScreenStream={localScreenStream}
@@ -127,7 +130,7 @@ describe('ActiveCallWindow', () => {
       onStopScreenShare,
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stop sharing' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Stop sharing' }));
 
     expect(onStopScreenShare).toHaveBeenCalledTimes(1);
   });
@@ -166,6 +169,7 @@ describe('ActiveCallWindow', () => {
         seconds={12}
         isMuted={false}
         isScreenSharing={false}
+        isScreenShareUpdating={false}
         isRemoteScreenLoading={false}
         remoteScreenStream={null}
         localScreenStream={null}
@@ -185,6 +189,7 @@ describe('ActiveCallWindow', () => {
         seconds={12}
         isMuted={false}
         isScreenSharing={false}
+        isScreenShareUpdating={false}
         isRemoteScreenLoading={false}
         remoteScreenStream={secondStream}
         localScreenStream={null}
@@ -214,6 +219,7 @@ describe('ActiveCallWindow', () => {
         seconds={12}
         isMuted={false}
         isScreenSharing={false}
+        isScreenShareUpdating={false}
         isRemoteScreenLoading={false}
         remoteScreenStream={null}
         localScreenStream={null}
@@ -241,5 +247,20 @@ describe('ActiveCallWindow', () => {
 
     expect(screen.getByTestId('remote-screen-loading')).toBeInTheDocument();
     expect(screen.queryByTestId('remote-screen-view')).not.toBeInTheDocument();
+  });
+
+  it('disables the screen-share button while the screen-share transaction is updating', () => {
+    const onStartScreenShare = vi.fn().mockResolvedValue(undefined);
+    renderWindow({
+      isScreenShareUpdating: true,
+      onStartScreenShare,
+    });
+
+    const button = screen.getByRole('button', { name: 'Updating screen share' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent('Updating...');
+
+    fireEvent.click(button);
+    expect(onStartScreenShare).not.toHaveBeenCalled();
   });
 });

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "test": "vitest",
+    "test:call-stress": "vitest --run src/features/calling/services/webrtcService.stress.test.ts",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
