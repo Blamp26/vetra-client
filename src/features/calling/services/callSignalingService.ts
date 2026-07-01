@@ -4,6 +4,7 @@ import type {
     AnswerPayload,
     IceCandidatePayload,
     IncomingCallPayload,
+    RenegotiationSignalPayload,
 } from '../hooks/useCall.types';
 
 export interface OfferPayload {
@@ -47,6 +48,7 @@ class CallSignalingService {
     private readonly incomingCallBus = createBus<IncomingCallPayload>();
     private readonly answerBus = createBus<AnswerPayload>();
     private readonly iceCandidateBus = createBus<IceCandidatePayload>();
+    private readonly renegotiationBus = createBus<RenegotiationSignalPayload & { from_user_id: ResourceRef; call_id?: string }>();
     private readonly hangUpBus = createBus<HangUpPayload>();
 
     initialize(socket: Socket, userChannel: Channel, currentUserId: number, currentUserCallRef: ResourceRef = currentUserId): void {
@@ -75,6 +77,9 @@ class CallSignalingService {
         });
         channel.on('ice_candidate', (payload: IceCandidatePayload) => {
             this.iceCandidateBus.emit(payload);
+        });
+        channel.on('renegotiate', (payload: RenegotiationSignalPayload & { from_user_id: ResourceRef; call_id?: string }) => {
+            this.renegotiationBus.emit(payload);
         });
         channel.on('hang_up', (payload: HangUpPayload) => {
             this.hangUpBus.emit(payload);
@@ -137,6 +142,10 @@ class CallSignalingService {
 
     onIceCandidate(handler: Handler<IceCandidatePayload>): () => void {
         return this.iceCandidateBus.subscribe(handler);
+    }
+
+    onRenegotiation(handler: Handler<RenegotiationSignalPayload & { from_user_id: ResourceRef; call_id?: string }>): () => void {
+        return this.renegotiationBus.subscribe(handler);
     }
 
     onHangUp(handler: Handler<HangUpPayload>): () => void {

@@ -36,7 +36,6 @@ type StatsValue = {
 };
 
 const CALL_DEBUG_KEY = 'vetra.debug.calls';
-const RENEGOTIATION_SIGNAL_KEY = '__vetra_call_signal';
 
 const EMPTY_DIAGNOSTICS: WebRTCDiagnostics = {
     connectionState: 'unknown',
@@ -145,15 +144,6 @@ function remoteSdpHasSendingVideo(sdp: string): boolean {
     return !direction || direction === 'sendrecv' || direction === 'sendonly';
 }
 
-function isRenegotiationSignal(candidate: CallIceCandidatePayload): candidate is RenegotiationSignalPayload {
-    return (
-        typeof candidate === 'object' &&
-        candidate !== null &&
-        RENEGOTIATION_SIGNAL_KEY in candidate &&
-        (candidate as RenegotiationSignalPayload).__vetra_call_signal !== undefined
-    );
-}
-
 function candidateKey(candidate: RTCIceCandidateInit): string {
     return JSON.stringify({
         candidate: candidate.candidate ?? '',
@@ -179,6 +169,7 @@ export class WebRTCService {
     private remoteScreenShareActive = false;
     private screenStream: MediaStream | null = null;
     private screenSender: RTCRtpSender | null = null;
+    private screenTransceiver: RTCRtpTransceiver | null = null;
     private screenTrackEndedHandler: (() => void) | null = null;
     private isScreenShareActiveLocal = false;
     private desiredScreenShareActive = false;
@@ -283,6 +274,15 @@ export class WebRTCService {
         this.runQueuedRenegotiationIfStable();
     }
 
+    async handleRenegotiation(signal: RenegotiationSignalPayload): Promise<void> {
+        if (signal.type === 'offer') {
+            await this.handleOffer(signal.sdp, { screenShareActive: signal.screen_share_active });
+            return;
+        }
+
+        await this.handleAnswer(signal.sdp);
+    }
+
     async handleOffer(sdp: string, options?: { screenShareActive?: boolean }): Promise<void> {
         if (!this.peerConnection) throw new Error('No peer connection');
         debugCall('[WebRTCService] handle active-call renegotiation offer', {
@@ -310,24 +310,13 @@ export class WebRTCService {
         await this.peerConnection.setLocalDescription(answer);
 
         this.sendRenegotiationSignal({
-            __vetra_call_signal: 'renegotiation_answer',
             sdp: this.peerConnection.localDescription!.sdp ?? answer.sdp ?? '',
-            sdp_type: 'answer',
+            type: 'answer',
         });
     }
 
     async addIceCandidate(candidate: CallIceCandidatePayload): Promise<void> {
         if (!this.peerConnection) return;
-
-        if (isRenegotiationSignal(candidate)) {
-            if (candidate.__vetra_call_signal === 'renegotiation_offer') {
-                await this.handleOffer(candidate.sdp, { screenShareActive: candidate.screen_share_active });
-                return;
-            }
-
-            await this.handleAnswer(candidate.sdp);
-            return;
-        }
 
         await this.addRealIceCandidate(candidate);
     }
@@ -496,6 +485,15 @@ export class WebRTCService {
         this.isScreenShareActiveLocal = true;
         if (this.screenSender) {
             await this.screenSender.replaceTrack(screenTrack);
+            if (this.screenTransceiver) {
+                this.screenTransceiver.direction = 'sendonly';
+            }
+        } else if (typeof this.peerConnection.addTransceiver === 'function') {
+            this.screenTransceiver = this.peerConnection.addTransceiver(screenTrack, {
+                direction: 'sendonly',
+                streams: [stream],
+            });
+            this.screenSender = this.screenTransceiver.sender;
         } else {
             this.screenSender = this.peerConnection.addTrack(screenTrack, stream);
         }
@@ -531,6 +529,9 @@ export class WebRTCService {
 
         if (sender && this.peerConnection && typeof sender.replaceTrack === 'function') {
             await sender.replaceTrack(null);
+            if (this.screenTransceiver) {
+                this.screenTransceiver.direction = 'inactive';
+            }
             debugCall('[WebRTCService] detach screen track', {
                 call_id: this.getCallId(),
                 track_id: track?.id,
@@ -562,6 +563,8 @@ export class WebRTCService {
         this.isCreatingRenegotiationOffer = false;
         this.isRenegotiationInFlight = false;
         this.pendingRenegotiationReason = null;
+        this.screenSender = null;
+        this.screenTransceiver = null;
         this.callId = null;
         this.diagnostics = cloneDiagnostics(EMPTY_DIAGNOSTICS);
         this.emitDiagnostics();
@@ -682,7 +685,7 @@ export class WebRTCService {
             this.isRenegotiationInFlight = true;
             this.pendingRenegotiationReason = null;
             debugCall('[WebRTCService] create renegotiation offer', {
-                event: 'ice_candidate',
+                event: 'renegotiate',
                 call_id: this.getCallId(),
                 target_user_id: this.remoteUserId,
                 reason,
@@ -690,9 +693,8 @@ export class WebRTCService {
                 signalingState: peerConnection.signalingState,
             });
             this.sendRenegotiationSignal({
-                __vetra_call_signal: 'renegotiation_offer',
                 sdp: peerConnection.localDescription!.sdp ?? offer.sdp ?? '',
-                sdp_type: 'offer',
+                type: 'offer',
                 screen_share_active: this.isScreenShareActiveLocal,
             });
         } finally {
@@ -742,14 +744,14 @@ export class WebRTCService {
 
     private sendRenegotiationSignal(signal: RenegotiationSignalPayload): void {
         debugCall('[WebRTCService] send call signal', {
-            event: 'ice_candidate',
+            event: 'renegotiate',
             call_id: this.getCallId(),
             target_user_id: this.remoteUserId,
-            signal: signal.__vetra_call_signal,
-            sdp_type: signal.sdp_type,
+            sdp_type: signal.type,
+            screen_share_active: signal.screen_share_active,
         });
-        this.channel.push('ice_candidate', {
-            candidate: signal,
+        this.channel.push('renegotiate', {
+            ...signal,
             to_user_id: this.remoteUserId,
             call_id: this.getCallId(),
         });
@@ -817,11 +819,12 @@ export class WebRTCService {
     }
 
     private clearRemoteScreenStream(reason = 'clear'): void {
-        if (!this.remoteScreenStream) return;
+        const hadRemoteScreenStream = Boolean(this.remoteScreenStream);
         this.remoteScreenStream = null;
         debugCall('[WebRTCService] clear remote screen stream', {
             call_id: this.getCallId(),
             reason,
+            hadRemoteScreenStream,
         });
         this.onRemoteScreenStream(null);
     }
@@ -929,8 +932,8 @@ export class WebRTCService {
     }
 
     private logDiagnostics(diagnostics: WebRTCDiagnostics): void {
-        if (!import.meta.env.DEV) return;
-        console.log('[WebRTC] diagnostics', {
+        if (!import.meta.env.DEV || !isCallDebugEnabled()) return;
+        debugCall('[WebRTC] diagnostics', {
             connectionState: diagnostics.connectionState,
             iceConnectionState: diagnostics.iceConnectionState,
             iceGatheringState: diagnostics.iceGatheringState,

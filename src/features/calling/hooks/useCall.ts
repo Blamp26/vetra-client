@@ -44,6 +44,18 @@ function mapDiagnostics(diagnostics: WebRTCDiagnostics): CallDiagnostics {
     };
 }
 
+function sameResourceRef(a: ResourceRef | null | undefined, b: ResourceRef | null | undefined): boolean {
+    return a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b);
+}
+
+function isExpectedScreenShareCancellation(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    return (
+        error.message === 'Screen share start was superseded by stop' ||
+        error.message === 'Screen share stopped because the peer was disposed'
+    );
+}
+
 export function useCall(currentUserId: number): UseCallReturn {
     const socketManager = useAppStore((s) => s.socketManager);
     const currentUserCallRef = useAppStore((s) => s.currentUser?.public_id ?? s.currentUser?.id ?? null);
@@ -311,14 +323,53 @@ export function useCall(currentUserId: number): UseCallReturn {
                     call_id: payload.call_id,
                     active_call_id: callIdRef.current,
                     signalingState: webrtcRef.current?.getDiagnosticsSnapshot().signalingState,
-                    isCallSignal:
-                        typeof payload.candidate === 'object' &&
-                        payload.candidate !== null &&
-                        '__vetra_call_signal' in payload.candidate,
                 });
                 webrtcRef.current?.addIceCandidate(payload.candidate);
             }),
+            callSignalingService.onRenegotiation((payload) => {
+                debugCall('[useCall] receive renegotiation', {
+                    call_id: payload.call_id,
+                    active_call_id: callIdRef.current,
+                    from_user_id: payload.from_user_id,
+                    type: payload.type,
+                    screen_share_active: payload.screen_share_active,
+                    signalingState: webrtcRef.current?.getDiagnosticsSnapshot().signalingState,
+                });
+                if (!sameResourceRef(payload.from_user_id, remoteUserIdRef.current)) {
+                    return;
+                }
+                if (payload.call_id && callIdRef.current && payload.call_id !== callIdRef.current) {
+                    return;
+                }
+                if (payload.call_id) {
+                    setCallId((prev) => prev ?? payload.call_id ?? null);
+                    webrtcRef.current?.setCallId(payload.call_id);
+                }
+                webrtcRef.current?.handleRenegotiation(payload).catch((err) => {
+                    console.error('[useCall] renegotiation failed', err);
+                });
+            }),
             callSignalingService.onHangUp((payload) => {
+                const activeCallId = callIdRef.current ?? webrtcRef.current?.getSignalingCallId() ?? null;
+                const activeRemoteUserId = remoteUserIdRef.current;
+                if (!sameResourceRef(payload.from_user_id, activeRemoteUserId)) {
+                    debugCall('[useCall] hang_up ignored', {
+                        reason: 'remote_mismatch',
+                        call_id: payload.call_id,
+                        active_call_id: activeCallId,
+                        from_user_id: payload.from_user_id,
+                        active_remote_user_id: activeRemoteUserId,
+                    });
+                    return;
+                }
+                if (payload.call_id && activeCallId && payload.call_id !== activeCallId) {
+                    debugCall('[useCall] hang_up ignored', {
+                        reason: 'call_mismatch',
+                        call_id: payload.call_id,
+                        active_call_id: activeCallId,
+                    });
+                    return;
+                }
                 debugCall('[useCall] hang_up received', {
                     call_id: payload.call_id,
                     from_user_id: payload.from_user_id,
@@ -333,7 +384,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 resetAfterDelay();
             }),
             callSignalingService.onIncomingCall((payload) => {
-                console.log('[useCall] incoming_call received', payload);
+                debugCall('[useCall] incoming_call received', { ...payload });
                 setStatus('ringing');
                 setRemoteUserId(payload.from_user_id);
                 setRemoteUsername(payload.from_username);
@@ -509,7 +560,9 @@ export function useCall(currentUserId: number): UseCallReturn {
             setLocalScreenStream(stream);
             setIsScreenSharing(true);
         } catch (err) {
-            console.warn('[useCall] Screen share was not started', err);
+            if (!isExpectedScreenShareCancellation(err)) {
+                console.warn('[useCall] Screen share was not started', err);
+            }
         }
     }, [cleanupScreenShare]);
 

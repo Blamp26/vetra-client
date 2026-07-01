@@ -18,13 +18,12 @@ export interface AnswerPayload {
 }
 
 export interface RenegotiationSignalPayload {
-    __vetra_call_signal: 'renegotiation_offer' | 'renegotiation_answer';
     sdp: string;
-    sdp_type: 'offer' | 'answer';
+    type: 'offer' | 'answer';
     screen_share_active?: boolean;
 }
 
-export type CallIceCandidatePayload = RTCIceCandidateInit | RenegotiationSignalPayload;
+export type CallIceCandidatePayload = RTCIceCandidateInit;
 
 export interface IceCandidatePayload {
     from_user_id: ResourceRef;
@@ -34,6 +33,7 @@ export interface IceCandidatePayload {
 
 export interface HangUpPayload {
     from_user_id: ResourceRef;
+    call_id?: string;
 }
 
 export interface CallDiagnostics {

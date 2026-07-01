@@ -19,6 +19,7 @@ vi.mock('../services/webrtcService', () => {
         this.acceptCall = vi.fn().mockResolvedValue(undefined);
         this.handleAnswer = vi.fn().mockResolvedValue(undefined);
         this.handleOffer = vi.fn().mockResolvedValue(undefined);
+        this.handleRenegotiation = vi.fn().mockResolvedValue(undefined);
         this.startScreenShare = vi.fn(async (onEnded?: () => void) => {
             this._screenStream?.getTracks?.().forEach((track: MediaStreamTrack) => track.stop());
             const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -215,6 +216,7 @@ describe('useCall', () => {
         const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
         expect(callChannel.on).toHaveBeenCalledWith('answer', expect.any(Function));
         expect(callChannel.on).toHaveBeenCalledWith('ice_candidate', expect.any(Function));
+        expect(callChannel.on).toHaveBeenCalledWith('renegotiate', expect.any(Function));
         expect(callChannel.on).toHaveBeenCalledWith('hang_up', expect.any(Function));
         expect(callChannel.on).toHaveBeenCalledWith('offer', expect.any(Function));
 
@@ -227,13 +229,13 @@ describe('useCall', () => {
         callSignalingService.initialize(mockSocketManager.socket, mockUserChannel, currentUserId);
 
         const firstCallChannel = mockSocketManager.socket.channel.mock.results[0].value;
-        expect(firstCallChannel.on).toHaveBeenCalledTimes(4);
+        expect(firstCallChannel.on).toHaveBeenCalledTimes(5);
         expect(mockUserChannel.on).toHaveBeenCalledTimes(1);
 
         callSignalingService.initialize(mockSocketManager.socket, mockUserChannel, currentUserId);
 
         expect(mockSocketManager.socket.channel).toHaveBeenCalledTimes(1);
-        expect(firstCallChannel.on).toHaveBeenCalledTimes(4);
+        expect(firstCallChannel.on).toHaveBeenCalledTimes(5);
         expect(mockUserChannel.on).toHaveBeenCalledTimes(1);
     });
 
@@ -733,7 +735,7 @@ describe('useCall', () => {
             const hangUpHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'hang_up')?.[1];
             if (hangUpHandler) {
                 act(() => {
-                    hangUpHandler({});
+                    hangUpHandler({ from_user_id: 2 });
                 });
             }
             expect(service.dispose).toHaveBeenCalled();
@@ -1392,7 +1394,7 @@ describe('useCall', () => {
             expect(MockWebRTCService).toHaveBeenCalledTimes(1);
         });
 
-        it('active-call renegotiation signal received over ICE stays in the active call', () => {
+        it('active-call renegotiation signal received over the renegotiate event stays in the active call', () => {
             const { result } = renderHook(() => useCall(currentUserId));
             act(() => {
                 result.current.startCall(2);
@@ -1400,30 +1402,30 @@ describe('useCall', () => {
             const service = MockWebRTCService.mock.results[0]?.value;
             const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
             const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
-            const iceHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'ice_candidate')?.[1];
+            const renegotiationHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'renegotiate')?.[1];
 
             act(() => {
                 answerHandler({ sdp: 'initial-answer-sdp', from_username: 'caller', call_id: 'call-123' });
             });
 
             act(() => {
-                iceHandler({
+                renegotiationHandler({
                     from_user_id: 2,
                     call_id: 'call-123',
-                    candidate: {
-                        __vetra_call_signal: 'renegotiation_offer',
-                        sdp: 'renegotiation-offer-sdp',
-                        sdp_type: 'offer',
-                    },
+                    sdp: 'renegotiation-offer-sdp',
+                    type: 'offer',
+                    screen_share_active: true,
                 });
             });
 
             expect(result.current.status).toBe('active');
             expect(result.current.remoteUserId).toBe(2);
-            expect(service.addIceCandidate).toHaveBeenCalledWith({
-                __vetra_call_signal: 'renegotiation_offer',
+            expect(service.handleRenegotiation).toHaveBeenCalledWith({
+                from_user_id: 2,
+                call_id: 'call-123',
                 sdp: 'renegotiation-offer-sdp',
-                sdp_type: 'offer',
+                type: 'offer',
+                screen_share_active: true,
             });
             expect(MockWebRTCService).toHaveBeenCalledTimes(1);
         });
