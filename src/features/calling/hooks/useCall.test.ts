@@ -13,6 +13,7 @@ vi.mock('@/store', () => ({
 
 vi.mock('../services/webrtcService', () => {
     const MockWebRTCService = vi.fn().mockImplementation(function (this: any, _channel: any, _localUserId: number, _remoteUserId: number) {
+        this._isLocalMuted = false;
         this.startCall = vi.fn().mockResolvedValue(undefined);
         this.acceptCall = vi.fn().mockResolvedValue(undefined);
         this.handleAnswer = vi.fn().mockResolvedValue(undefined);
@@ -25,6 +26,16 @@ vi.mock('../services/webrtcService', () => {
         });
         this.addIceCandidate = vi.fn();
         this.hangUp = vi.fn();
+        this.dispose = vi.fn();
+        this.setLocalMuted = vi.fn((muted: boolean) => {
+            this._isLocalMuted = muted;
+        });
+        this.toggleLocalMuted = vi.fn(() => {
+            this._isLocalMuted = !this._isLocalMuted;
+            return this._isLocalMuted;
+        });
+        this.isLocalMuted = vi.fn(() => this._isLocalMuted);
+        this.getLocalAudioTracks = vi.fn(() => []);
         this.onRemoteStream = null;
         this.onCallIdReceived = null;
         this.onDiagnosticsChange = null;
@@ -35,7 +46,6 @@ vi.mock('../services/webrtcService', () => {
             signalingState: 'unknown',
             selectedCandidatePair: null,
         });
-        this.localStream = null;
         return this;
     });
     return { WebRTCService: MockWebRTCService };
@@ -622,27 +632,23 @@ describe('useCall', () => {
     });
 
     describe('toggleMute', () => {
-        it('переключает isMuted и отключает/включает аудиотрек', async () => {
+        it('переключает isMuted через публичный API сервиса', async () => {
             const { result } = renderHook(() => useCall(currentUserId));
             act(() => {
                 result.current.startCall(2);
             });
             const service = MockWebRTCService.mock.results[0]?.value;
-            const localStream = {
-                getAudioTracks: vi.fn().mockReturnValue([{ enabled: true }]),
-            };
-            service.localStream = localStream;
 
             act(() => {
                 result.current.toggleMute();
             });
-            expect(localStream.getAudioTracks()[0].enabled).toBe(false);
+            expect(service.toggleLocalMuted).toHaveBeenCalledTimes(1);
             expect(result.current.isMuted).toBe(true);
 
             act(() => {
                 result.current.toggleMute();
             });
-            expect(localStream.getAudioTracks()[0].enabled).toBe(true);
+            expect(service.toggleLocalMuted).toHaveBeenCalledTimes(2);
             expect(result.current.isMuted).toBe(false);
         });
     });

@@ -91,10 +91,13 @@ class MockRTCPeerConnection {
     }
 }
 
-const mockGetUserMedia = vi.fn().mockResolvedValue({
-    getTracks: () => [{ stop: vi.fn() }],
-    getAudioTracks: () => [{ enabled: true }],
-});
+let mockLocalTracks: Array<{ enabled: boolean; stop: ReturnType<typeof vi.fn> }>;
+let mockAudioTracks: Array<{ enabled: boolean; stop: ReturnType<typeof vi.fn> }>;
+
+const mockGetUserMedia = vi.fn(async () => ({
+    getTracks: () => mockLocalTracks,
+    getAudioTracks: () => mockAudioTracks,
+}));
 
 const mockChannelPush = vi.fn().mockReturnValue({
     receive: vi.fn((event, cb) => {
@@ -110,6 +113,8 @@ const mockChannel = {
 beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    mockAudioTracks = [{ enabled: true, stop: vi.fn() }];
+    mockLocalTracks = mockAudioTracks;
 
     (global as any).RTCPeerConnection = MockRTCPeerConnection as any;
 
@@ -249,20 +254,71 @@ describe('WebRTCService', () => {
         });
     });
 
-    describe('hangUp', () => {
+    describe('local media controls', () => {
+        it('setLocalMuted updates local audio track enabled state', async () => {
+            await service.startCall();
+
+            service.setLocalMuted(true);
+            expect(service.isLocalMuted()).toBe(true);
+            expect(service.getLocalAudioTracks()[0]?.enabled).toBe(false);
+
+            service.setLocalMuted(false);
+            expect(service.isLocalMuted()).toBe(false);
+            expect(service.getLocalAudioTracks()[0]?.enabled).toBe(true);
+        });
+
+        it('toggleLocalMuted returns the new mute state', async () => {
+            await service.startCall();
+
+            expect(service.toggleLocalMuted()).toBe(true);
+            expect(service.isLocalMuted()).toBe(true);
+            expect(service.getLocalAudioTracks()[0]?.enabled).toBe(false);
+
+            expect(service.toggleLocalMuted()).toBe(false);
+            expect(service.isLocalMuted()).toBe(false);
+            expect(service.getLocalAudioTracks()[0]?.enabled).toBe(true);
+        });
+
+        it('does not throw when no local stream exists', () => {
+            expect(() => service.setLocalMuted(true)).not.toThrow();
+            expect(service.isLocalMuted()).toBe(true);
+            expect(() => service.toggleLocalMuted()).not.toThrow();
+            expect(service.isLocalMuted()).toBe(false);
+            expect(service.getLocalAudioTracks()).toEqual([]);
+        });
+
+        it('applies the current mute state to tracks created after muting', async () => {
+            service.setLocalMuted(true);
+
+            await service.startCall();
+
+            expect(service.isLocalMuted()).toBe(true);
+            expect(service.getLocalAudioTracks()[0]?.enabled).toBe(false);
+        });
+    });
+
+    describe('dispose', () => {
         it('closes the peer connection, stops tracks, and clears ICE state', async () => {
             await service.startCall();
             const pc = (service as any).peerConnection as MockRTCPeerConnection;
-            const stream = (service as any).localStream;
-            const stopMock = vi.fn();
-            stream.getTracks = () => [{ stop: stopMock }];
 
-            service.hangUp();
+            service.dispose();
 
             expect(pc.close).toHaveBeenCalled();
-            expect(stopMock).toHaveBeenCalled();
+            expect(mockLocalTracks[0]?.stop).toHaveBeenCalled();
             expect((service as any).iceCandidateQueue).toEqual([]);
             expect((service as any).remoteDescriptionSet).toBe(false);
+        });
+
+        it('is safe to call multiple times', async () => {
+            await service.startCall();
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+
+            service.dispose();
+            service.dispose();
+
+            expect(pc.close).toHaveBeenCalledTimes(1);
+            expect(mockLocalTracks[0]?.stop).toHaveBeenCalledTimes(1);
         });
     });
 

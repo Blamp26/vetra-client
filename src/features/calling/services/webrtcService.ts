@@ -115,11 +115,13 @@ export function buildIceServers(): RTCIceServer[] {
 export class WebRTCService {
     private peerConnection: RTCPeerConnection | null = null;
     private localStream: MediaStream | null = null;
+    private remoteStream: MediaStream | null = null;
     private channel: Channel;
     private localUserId: number;
     private remoteUserId: ResourceRef;
     private iceCandidateQueue: RTCIceCandidateInit[] = [];
     private remoteDescriptionSet = false;
+    private localMuted = false;
     private diagnostics: WebRTCDiagnostics = cloneDiagnostics(EMPTY_DIAGNOSTICS);
 
     public onRemoteStream: (stream: MediaStream) => void = () => { };
@@ -199,17 +201,48 @@ export class WebRTCService {
         return this.getDiagnosticsSnapshot();
     }
 
-    hangUp(): void {
+    getLocalAudioTracks(): MediaStreamTrack[] {
+        return this.localStream?.getAudioTracks() ?? [];
+    }
+
+    setLocalMuted(muted: boolean): void {
+        this.localMuted = muted;
+        this.getLocalAudioTracks().forEach((track) => {
+            track.enabled = !muted;
+        });
+    }
+
+    toggleLocalMuted(): boolean {
+        const nextMuted = !this.localMuted;
+        this.setLocalMuted(nextMuted);
+        return nextMuted;
+    }
+
+    isLocalMuted(): boolean {
+        return this.localMuted;
+    }
+
+    dispose(): void {
         if (this.peerConnection) {
             this.peerConnection.close();
         }
         this.peerConnection = null;
         this.localStream?.getTracks().forEach(track => track.stop());
         this.localStream = null;
+        if (this.remoteStream) {
+            this.remoteStream = null;
+        }
         this.iceCandidateQueue = [];
         this.remoteDescriptionSet = false;
         this.diagnostics = cloneDiagnostics(EMPTY_DIAGNOSTICS);
         this.emitDiagnostics();
+        this.onRemoteStream = () => { };
+        this.onCallIdReceived = null;
+        this.onDiagnosticsChange = null;
+    }
+
+    hangUp(): void {
+        this.dispose();
     }
 
     private async flushIceCandidateQueue(): Promise<void> {
@@ -232,6 +265,7 @@ export class WebRTCService {
             audio: { deviceId: inputId !== 'default' ? { exact: inputId } : undefined },
             video: false,
         });
+        this.setLocalMuted(this.localMuted);
         this.peerConnection = new RTCPeerConnection({ iceServers: buildIceServers() });
         this.attachDiagnosticsListeners(this.peerConnection);
         this.localStream.getTracks().forEach(track => {
@@ -251,6 +285,7 @@ export class WebRTCService {
         };
         this.peerConnection.ontrack = (event) => {
             if (event.streams[0]) {
+                this.remoteStream = event.streams[0];
                 this.onRemoteStream(event.streams[0]);
             }
         };

@@ -255,14 +255,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         const service = webrtcRef.current;
         if (!service) return;
 
-        const localStream: MediaStream | null = (service as unknown as { localStream: MediaStream | null }).localStream;
-        if (!localStream) return;
-
-        const audioTrack = localStream.getAudioTracks()[0];
-        if (!audioTrack) return;
-
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
+        const nextMuted = service.toggleLocalMuted();
+        setIsMuted(nextMuted);
     }, []);
 
     return {
