@@ -14,6 +14,7 @@ vi.mock('@/store', () => ({
 vi.mock('../services/webrtcService', () => {
     const MockWebRTCService = vi.fn().mockImplementation(function (this: any, _channel: any, _localUserId: number, _remoteUserId: number) {
         this._isLocalMuted = false;
+        this._callId = null;
         this.startCall = vi.fn().mockResolvedValue(undefined);
         this.acceptCall = vi.fn().mockResolvedValue(undefined);
         this.handleAnswer = vi.fn().mockResolvedValue(undefined);
@@ -49,6 +50,10 @@ vi.mock('../services/webrtcService', () => {
             this._screenStream?.getTracks?.().forEach((track: MediaStreamTrack) => track.stop());
             this._screenStream = null;
         });
+        this.setCallId = vi.fn((callId: string | null) => {
+            this._callId = callId;
+        });
+        this.getSignalingCallId = vi.fn(() => this._callId ?? 'fallback-call-id');
         this.setLocalMuted = vi.fn((muted: boolean) => {
             this._isLocalMuted = muted;
         });
@@ -885,6 +890,26 @@ describe('useCall', () => {
             expect(result.current.status).toBe('ended');
             expect(service.dispose).toHaveBeenCalledTimes(2);
         });
+
+        it('sends hang_up with the service call id while renegotiation is pending', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            act(() => {
+                service.setCallId('call-123');
+                result.current.hangUp();
+            });
+
+            expect(service.getSignalingCallId).toHaveBeenCalled();
+            expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
+            expect(service.dispose).toHaveBeenCalled();
+            expect(result.current.status).toBe('ended');
+        });
     });
 
     describe('toggleMute', () => {
@@ -1308,8 +1333,67 @@ describe('useCall', () => {
             });
 
             expect(result.current.status).toBe('active');
+            expect(service.setCallId).toHaveBeenCalledWith('call-123');
             expect(service.handleOffer).toHaveBeenCalledWith('renegotiation-offer-sdp');
             expect(service.dispose).not.toHaveBeenCalled();
+        });
+
+        it('active-call answer is applied to the existing peer during renegotiation', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'initial-answer-sdp', from_username: 'caller', call_id: 'call-123' });
+            });
+            service.handleAnswer.mockClear();
+
+            act(() => {
+                answerHandler({ sdp: 'renegotiation-answer-sdp', from_username: 'caller', call_id: 'call-123' });
+            });
+
+            expect(result.current.status).toBe('active');
+            expect(service.setCallId).toHaveBeenCalledWith('call-123');
+            expect(service.handleAnswer).toHaveBeenCalledWith('renegotiation-answer-sdp');
+            expect(MockWebRTCService).toHaveBeenCalledTimes(1);
+        });
+
+        it('remote hang_up closes the call even during renegotiation', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+            const offerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'offer')?.[1];
+            const hangUpHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'hang_up')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller', call_id: 'call-123' });
+                offerHandler({
+                    sdp: 'renegotiation-offer-sdp',
+                    from_user_id: 2,
+                    from_username: 'caller',
+                    call_id: 'call-123',
+                });
+                hangUpHandler({ from_user_id: 2, call_id: 'call-123' });
+            });
+
+            expect(service.handleOffer).toHaveBeenCalledWith('renegotiation-offer-sdp');
+            expect(service.dispose).toHaveBeenCalled();
+            expect(result.current.status).toBe('ended');
+
+            await act(async () => {
+                vi.advanceTimersByTime(2000);
+                vi.runOnlyPendingTimers();
+                await Promise.resolve();
+            });
+            expect(result.current.status).toBe('idle');
         });
     });
 

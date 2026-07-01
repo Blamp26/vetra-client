@@ -146,6 +146,9 @@ export function useCall(currentUserId: number): UseCallReturn {
         setRemoteUsername((prev) => prev ?? payload.from_username);
         setCallId((prev) => prev ?? payload.call_id ?? null);
         const service = webrtcRef.current;
+        if (payload.call_id) {
+            service?.setCallId(payload.call_id);
+        }
         setStatus((prev) => {
             if (prev === 'active' && service) {
                 service.handleOffer(payload.sdp).catch((err) => {
@@ -247,8 +250,13 @@ export function useCall(currentUserId: number): UseCallReturn {
         const unsubs = [
             callSignalingService.onAnswer((payload) => {
                 clearCallTimeout();
+                if ('call_id' in payload && typeof payload.call_id === 'string') {
+                    const nextCallId = payload.call_id;
+                    setCallId((prev) => prev ?? nextCallId);
+                    webrtcRef.current?.setCallId(nextCallId);
+                }
                 webrtcRef.current?.handleAnswer(payload.sdp);
-                setRemoteUsername(payload.from_username);
+                setRemoteUsername((prev) => payload.from_username ?? prev);
                 setStatus('active');
             }),
             callSignalingService.onIceCandidate((payload) => {
@@ -299,7 +307,10 @@ export function useCall(currentUserId: number): UseCallReturn {
         const service = new WebRTCService(channel, currentUserId, targetUserId);
         service.onRemoteStream = (stream) => setRemoteStream(stream);
         service.onRemoteScreenStream = (stream) => setRemoteScreenStream(stream);
-        service.onCallIdReceived = (nextCallId) => setCallId(nextCallId);
+        service.onCallIdReceived = (nextCallId) => {
+            service.setCallId(nextCallId);
+            setCallId(nextCallId);
+        };
         service.onDiagnosticsChange = (nextDiagnostics) => setDiagnostics(mapDiagnostics(nextDiagnostics));
         webrtcRef.current = service;
         setDiagnostics(mapDiagnostics(service.getDiagnosticsSnapshot()));
@@ -333,6 +344,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
 
         const service = new WebRTCService(channel, currentUserId, remote);
+        service.setCallId(callId);
         service.onRemoteStream = (stream) => {
             setRemoteStream(stream);
         };
@@ -351,7 +363,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             console.error('[useCall] acceptCall failed', err);
             resetAfterDelay();
         });
-    }, [clearCallTimeout, status, remoteUserId, currentUserId, resetAfterDelay]);
+    }, [callId, clearCallTimeout, status, remoteUserId, currentUserId, resetAfterDelay]);
 
     const rejectCall = useCallback(() => {
         const channel = callChannelRef.current;
@@ -364,8 +376,9 @@ export function useCall(currentUserId: number): UseCallReturn {
 
     const hangUp = useCallback(() => {
         const channel = callChannelRef.current;
-        if (channel && callId && remoteUserId) {
-            channel.push('hang_up', { call_id: callId, to_user_id: remoteUserId });
+        const activeCallId = callId ?? webrtcRef.current?.getSignalingCallId() ?? null;
+        if (channel && activeCallId && remoteUserId) {
+            channel.push('hang_up', { call_id: activeCallId, to_user_id: remoteUserId });
         }
         cleanupScreenShare({ stopTracks: !webrtcRef.current });
         webrtcRef.current?.dispose();

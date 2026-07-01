@@ -85,6 +85,12 @@ class MockRTCPeerConnection {
     createAnswer = vi.fn().mockResolvedValue({ type: 'answer', sdp: 'mock-answer' });
     setLocalDescription = vi.fn((desc: RTCSessionDescriptionInit) => {
         this.localDescription = desc;
+        if (desc.type === 'offer') {
+            this.signalingState = 'have-local-offer';
+        } else if (desc.type === 'answer') {
+            this.signalingState = 'stable';
+        }
+        this.onsignalingstatechange?.();
         if (this.onicecandidate) {
             setTimeout(() => {
                 this.onicecandidate!({ candidate: { candidate: 'mock-candidate', sdpMid: '0', sdpMLineIndex: 0 } } as any);
@@ -95,6 +101,12 @@ class MockRTCPeerConnection {
     });
     setRemoteDescription = vi.fn((desc: RTCSessionDescriptionInit) => {
         this.remoteDescription = desc;
+        if (desc.type === 'offer') {
+            this.signalingState = 'have-remote-offer';
+        } else if (desc.type === 'answer') {
+            this.signalingState = 'stable';
+        }
+        this.onsignalingstatechange?.();
         return Promise.resolve();
     });
     addIceCandidate = vi.fn().mockResolvedValue(undefined);
@@ -372,6 +384,7 @@ describe('WebRTCService', () => {
     describe('screen sharing', () => {
         it('startScreenShare gets display media, attaches the screen track, and sends a renegotiation offer', async () => {
             await service.startCall();
+            await service.handleAnswer('answer-sdp');
             mockChannelPush.mockClear();
 
             const stream = await service.startScreenShare();
@@ -391,11 +404,56 @@ describe('WebRTCService', () => {
             });
         });
 
+        it('startScreenShare queues renegotiation instead of creating an offer while signaling is not stable', async () => {
+            await service.startCall();
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            expect(pc.signalingState).toBe('have-local-offer');
+            mockChannelPush.mockClear();
+
+            await service.startScreenShare();
+
+            expect(pc.addTrack).toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
+            expect(pc.createOffer).toHaveBeenCalledTimes(1);
+            expect(mockChannelPush).not.toHaveBeenCalledWith('offer', expect.objectContaining({
+                call_id: expect.any(String),
+            }));
+            expect((service as any).hasQueuedRenegotiation).toBe(true);
+
+            await service.handleAnswer('answer-sdp');
+
+            await vi.waitFor(() => {
+                expect(mockChannelPush).toHaveBeenCalledWith('offer', expect.objectContaining({
+                    sdp: expect.any(String),
+                    to_user_id: remoteUserId,
+                    call_id: '123:456',
+                }));
+            });
+            expect(pc.createOffer).toHaveBeenCalledTimes(2);
+        });
+
+        it('startScreenShare does not create repeated offers while signaling remains have-local-offer', async () => {
+            await service.startCall();
+            mockChannelPush.mockClear();
+
+            await service.startScreenShare();
+            await service.startScreenShare();
+
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            expect(pc.signalingState).toBe('have-local-offer');
+            expect(pc.createOffer).toHaveBeenCalledTimes(1);
+            expect(mockChannelPush).not.toHaveBeenCalledWith('offer', expect.objectContaining({
+                call_id: expect.any(String),
+            }));
+            expect((service as any).hasQueuedRenegotiation).toBe(true);
+        });
+
         it('stopScreenShare removes the sender and renegotiates without disposing the peer', async () => {
             await service.startCall();
+            await service.handleAnswer('answer-sdp');
             const pc = (service as any).peerConnection as MockRTCPeerConnection;
 
             await service.startScreenShare();
+            await service.handleAnswer('screen-answer-sdp');
             const sender = (service as any).screenSender;
             mockChannelPush.mockClear();
 
@@ -414,6 +472,7 @@ describe('WebRTCService', () => {
         it('screen track ended cleans up through the provided callback without disposing the peer', async () => {
             const onEnded = vi.fn();
             await service.startCall();
+            await service.handleAnswer('answer-sdp');
             const pc = (service as any).peerConnection as MockRTCPeerConnection;
 
             await service.startScreenShare(onEnded);
@@ -432,6 +491,7 @@ describe('WebRTCService', () => {
 
         it('dispose stops an active screen track', async () => {
             await service.startCall();
+            await service.handleAnswer('answer-sdp');
             await service.startScreenShare();
 
             service.dispose();
@@ -649,7 +709,7 @@ describe('WebRTCService', () => {
                 connectionState: 'new',
                 iceConnectionState: 'new',
                 iceGatheringState: 'new',
-                signalingState: 'stable',
+                signalingState: 'have-local-offer',
                 selectedCandidatePair: null,
             });
         });

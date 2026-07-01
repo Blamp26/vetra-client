@@ -139,9 +139,12 @@ export class WebRTCService {
     private channel: Channel;
     private localUserId: number;
     private remoteUserId: ResourceRef;
+    private callId: string | null = null;
     private iceCandidateQueue: RTCIceCandidateInit[] = [];
     private remoteDescriptionSet = false;
     private localMuted = false;
+    private isCreatingRenegotiationOffer = false;
+    private hasQueuedRenegotiation = false;
     private diagnostics: WebRTCDiagnostics = cloneDiagnostics(EMPTY_DIAGNOSTICS);
 
     public onRemoteStream: (stream: MediaStream) => void = () => { };
@@ -155,6 +158,14 @@ export class WebRTCService {
         this.remoteUserId = remoteUserId;
     }
 
+    setCallId(callId: string | null): void {
+        this.callId = callId;
+    }
+
+    getSignalingCallId(): string {
+        return this.getCallId();
+    }
+
     async startCall(): Promise<void> {
         if (this.peerConnection) throw new Error('Call already started');
         await this.initPeerConnection();
@@ -164,6 +175,7 @@ export class WebRTCService {
             sdp: this.peerConnection!.localDescription!.sdp,
             to_user_id: this.remoteUserId,
         }).receive('ok', ({ call_id }: { call_id: string }) => {
+            this.setCallId(call_id);
             if (this.onCallIdReceived) this.onCallIdReceived(call_id);
         });
     }
@@ -181,11 +193,10 @@ export class WebRTCService {
         const answer = await this.peerConnection!.createAnswer();
         await this.peerConnection!.setLocalDescription(answer);
 
-        const callId = `${this.remoteUserId}:${this.localUserId}`;
         this.channel.push('answer', {
             sdp: this.peerConnection!.localDescription!.sdp,
             to_user_id: this.remoteUserId,
-            call_id: callId,
+            call_id: this.getCallId(),
         });
     }
 
@@ -197,6 +208,7 @@ export class WebRTCService {
         this.remoteDescriptionSet = true;
         await this.refreshDiagnostics();
         await this.flushIceCandidateQueue();
+        this.runQueuedRenegotiationIfStable();
     }
 
     async handleOffer(sdp: string): Promise<void> {
@@ -345,6 +357,9 @@ export class WebRTCService {
         this.clearRemoteScreenStream();
         this.iceCandidateQueue = [];
         this.remoteDescriptionSet = false;
+        this.isCreatingRenegotiationOffer = false;
+        this.hasQueuedRenegotiation = false;
+        this.callId = null;
         this.diagnostics = cloneDiagnostics(EMPTY_DIAGNOSTICS);
         this.emitDiagnostics();
         this.onRemoteStream = () => { };
@@ -370,20 +385,43 @@ export class WebRTCService {
     }
 
     private getCallId(): string {
-        return `${this.remoteUserId}:${this.localUserId}`;
+        return this.callId ?? `${this.remoteUserId}:${this.localUserId}`;
     }
 
     private async renegotiate(): Promise<void> {
         const peerConnection = this.peerConnection;
         if (!peerConnection) return;
+        if (this.isCreatingRenegotiationOffer || peerConnection.signalingState !== 'stable') {
+            this.hasQueuedRenegotiation = true;
+            return;
+        }
 
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        this.channel.push('offer', {
-            sdp: peerConnection.localDescription!.sdp,
-            to_user_id: this.remoteUserId,
-            call_id: this.getCallId(),
-        });
+        this.isCreatingRenegotiationOffer = true;
+        try {
+            const offer = await peerConnection.createOffer();
+            if (peerConnection.signalingState !== 'stable') {
+                this.hasQueuedRenegotiation = true;
+                return;
+            }
+            await peerConnection.setLocalDescription(offer);
+            this.channel.push('offer', {
+                sdp: peerConnection.localDescription!.sdp,
+                to_user_id: this.remoteUserId,
+                call_id: this.getCallId(),
+            });
+        } finally {
+            this.isCreatingRenegotiationOffer = false;
+        }
+    }
+
+    private runQueuedRenegotiationIfStable(): void {
+        const peerConnection = this.peerConnection;
+        if (!peerConnection || !this.hasQueuedRenegotiation || peerConnection.signalingState !== 'stable') {
+            return;
+        }
+
+        this.hasQueuedRenegotiation = false;
+        void this.renegotiate();
     }
 
     private clearRemoteScreenStream(): void {
@@ -452,6 +490,7 @@ export class WebRTCService {
         };
         peerConnection.onsignalingstatechange = () => {
             void this.refreshDiagnostics();
+            this.runQueuedRenegotiationIfStable();
         };
     }
 
