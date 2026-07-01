@@ -405,6 +405,34 @@ describe('useCall', () => {
             expect(result.current.status).toBe('idle');
             expect(result.current.remoteUserId).toBeNull();
         });
+
+        it('keeps the timeout armed while the outgoing call is unanswered', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            act(() => {
+                vi.advanceTimersByTime(29_999);
+            });
+
+            expect(result.current.status).toBe('calling');
+            expect(service.dispose).not.toHaveBeenCalled();
+
+            act(() => {
+                vi.advanceTimersByTime(1);
+            });
+
+            expect(service.dispose).toHaveBeenCalled();
+            expect(result.current.status).toBe('ended');
+        });
     });
 
     describe('incoming_call', () => {
@@ -528,6 +556,33 @@ describe('useCall', () => {
                 });
             }
             expect(service.handleAnswer).toHaveBeenCalledWith('answer-sdp');
+            expect(result.current.status).toBe('active');
+        });
+
+        it('clears the outgoing timeout when an answer is received', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+            });
+
+            act(() => {
+                vi.advanceTimersByTime(30_000);
+            });
+
+            expect(service.handleAnswer).toHaveBeenCalledWith('answer-sdp');
+            expect(service.dispose).not.toHaveBeenCalled();
             expect(result.current.status).toBe('active');
         });
     });
@@ -686,6 +741,32 @@ describe('useCall', () => {
             expect(result.current.status).toBe('active');
             const service = MockWebRTCService.mock.results[0]?.value;
             expect(service.acceptCall).toHaveBeenCalledWith('test-sdp');
+        });
+
+        it('does not leave a stale outgoing timeout after acceptCall', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            const incomingHandler = mockUserChannel.on.mock.calls.find((c: any[]) => c[0] === 'incoming_call')?.[1];
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const offerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'offer')?.[1];
+
+            act(() => {
+                incomingHandler({ from_user_id: 2, call_id: 'call-123' });
+                offerHandler({ sdp: 'test-sdp', from_user_id: 2 });
+            });
+
+            act(() => {
+                result.current.acceptCall();
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+
+            act(() => {
+                vi.advanceTimersByTime(30_000);
+            });
+
+            expect(service.acceptCall).toHaveBeenCalledWith('test-sdp');
+            expect(service.dispose).not.toHaveBeenCalled();
+            expect(result.current.status).toBe('active');
         });
 
         it('игнорирует если статус не ringing', () => {

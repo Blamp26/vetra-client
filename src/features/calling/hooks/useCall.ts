@@ -89,14 +89,20 @@ export function useCall(currentUserId: number): UseCallReturn {
         cleanupScreenShare({ stopTracks: true });
     }, [cleanupScreenShare]);
 
+    const clearCallTimeout = useCallback(() => {
+        if (callTimeoutRef.current) {
+            clearTimeout(callTimeoutRef.current);
+            callTimeoutRef.current = null;
+        }
+    }, []);
+
     const teardownCall = useCallback((options?: { resetState?: boolean; unsubscribe?: boolean }) => {
         const resetState = options?.resetState ?? true;
         const unsubscribe = options?.unsubscribe ?? true;
 
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
         endedTimerRef.current = null;
-        if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
-        callTimeoutRef.current = null;
+        clearCallTimeout();
         if (unsubscribe) {
             signalingUnsubsRef.current.forEach((unsub) => unsub());
             signalingUnsubsRef.current = [];
@@ -118,7 +124,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             setSeconds(0);
             setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
         }
-    }, [cleanupScreenShare]);
+    }, [cleanupScreenShare, clearCallTimeout]);
 
     const resetAfterDelay = useCallback(() => {
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
@@ -181,6 +187,12 @@ export function useCall(currentUserId: number): UseCallReturn {
     }, [status]);
 
     useEffect(() => {
+        if (status === 'active') {
+            clearCallTimeout();
+        }
+    }, [status, clearCallTimeout]);
+
+    useEffect(() => {
         return () => {
             teardownCallRef.current?.();
         };
@@ -219,6 +231,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         signalingUnsubsRef.current.forEach((unsub) => unsub());
         const unsubs = [
             callSignalingService.onAnswer((payload) => {
+                clearCallTimeout();
                 webrtcRef.current?.handleAnswer(payload.sdp);
                 setRemoteUsername(payload.from_username);
                 setStatus('active');
@@ -253,7 +266,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 signalingUnsubsRef.current = [];
             }
         };
-    }, [cleanupScreenShare, socketManager, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
+    }, [cleanupScreenShare, clearCallTimeout, socketManager, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
 
     const startCall = useCallback((targetUserId: ResourceRef) => {
         console.log('[useCall] startCall -> targetUserId:', targetUserId, '| current status:', status);
@@ -310,6 +323,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         service.onDiagnosticsChange = (nextDiagnostics) => setDiagnostics(mapDiagnostics(nextDiagnostics));
 
         webrtcRef.current = service;
+        clearCallTimeout();
         setStatus('active');
         offerSdpRef.current = null;
         setDiagnostics(mapDiagnostics(service.getDiagnosticsSnapshot()));
@@ -318,7 +332,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             console.error('[useCall] acceptCall failed', err);
             resetAfterDelay();
         });
-    }, [status, remoteUserId, currentUserId, resetAfterDelay]);
+    }, [clearCallTimeout, status, remoteUserId, currentUserId, resetAfterDelay]);
 
     const rejectCall = useCallback(() => {
         const channel = callChannelRef.current;
