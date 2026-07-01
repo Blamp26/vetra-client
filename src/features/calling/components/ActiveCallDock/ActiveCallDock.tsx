@@ -108,7 +108,7 @@ export function ActiveCallDock({
   return (
     <section
       className={cn(
-        "relative shrink-0 overflow-hidden border-b border-border bg-[#202225] text-foreground",
+        "relative shrink-0 overflow-hidden border-b border-border bg-muted text-foreground",
         hasScreenStage ? "h-[clamp(340px,55vh,620px)]" : "h-[300px]",
       )}
       data-testid="active-call-dock"
@@ -135,7 +135,7 @@ export function ActiveCallDock({
             "absolute left-4 right-4 top-14 z-20 rounded-md border px-3 py-2 text-sm",
             callIssue.tone === "error"
               ? "border-destructive/50 bg-destructive/10 text-foreground"
-              : "border-border bg-[#2b2d31] text-foreground",
+              : "border-border bg-card text-foreground",
           )}
           data-testid="call-issue-banner"
         >
@@ -152,7 +152,7 @@ export function ActiveCallDock({
       >
         {hasScreenStage ? (
           <div className="grid h-full w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
-            <div className="flex min-h-0 items-center justify-center rounded-md border border-border bg-[#2b2d31] p-2">
+            <div className="flex min-h-0 items-center justify-center rounded-md border border-border bg-card p-2">
               {remoteScreenStream ? (
                 <video
                   ref={remoteScreenRef}
@@ -163,7 +163,7 @@ export function ActiveCallDock({
                 />
               ) : isRemoteScreenLoading ? (
                 <div
-                  className="flex h-full min-h-48 w-full items-center justify-center rounded bg-[#1e1f22] text-sm text-muted-foreground"
+                  className="flex h-full min-h-48 w-full items-center justify-center rounded bg-background text-sm text-muted-foreground"
                   data-testid="remote-screen-loading"
                 >
                   Waiting for shared screen
@@ -178,7 +178,7 @@ export function ActiveCallDock({
             <div className="flex min-h-0 flex-col gap-3">
               <ParticipantTile name={remoteUsername} label={callStateLabel} compact />
               {localScreenStream && (
-                <div className="min-h-0 rounded-md border border-border bg-[#2b2d31] p-2">
+                <div className="min-h-0 rounded-md border border-border bg-card p-2">
                   <div className="mb-2 text-[10px] uppercase text-muted-foreground">
                     Local Preview
                   </div>
@@ -204,7 +204,7 @@ export function ActiveCallDock({
 
       {shouldShowDiagnostics && (
         <div
-          className="absolute bottom-3 left-4 z-20 hidden max-w-[calc(100%-2rem)] rounded-md border border-border bg-[#1e1f22] px-3 py-2 text-[11px] text-muted-foreground lg:block"
+          className="absolute bottom-3 left-4 z-20 hidden max-w-[calc(100%-2rem)] rounded-md border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground lg:block"
           data-testid="webrtc-diagnostics"
         >
           <span className="mr-3 text-foreground">WebRTC Debug</span>
@@ -215,7 +215,7 @@ export function ActiveCallDock({
       )}
 
       <div
-        className="absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center justify-center gap-2 rounded-md border border-border bg-[#2b2d31] px-3 py-2"
+        className="absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2"
         data-testid="active-call-dock-controls"
       >
         <button
@@ -223,7 +223,7 @@ export function ActiveCallDock({
             "flex h-10 w-10 items-center justify-center rounded-md border border-border transition-colors",
             isMuted
               ? "bg-destructive text-destructive-foreground"
-              : "bg-[#1e1f22] text-foreground hover:bg-[#313338]",
+              : "bg-background text-foreground hover:bg-accent",
           )}
           onClick={onMuteToggle}
           aria-label={isMuted ? "Unmute" : "Mute"}
@@ -235,8 +235,8 @@ export function ActiveCallDock({
           className={cn(
             "inline-flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm transition-colors disabled:pointer-events-none disabled:opacity-60",
             isScreenSharing
-              ? "bg-[#313338] text-foreground"
-              : "bg-[#1e1f22] text-foreground hover:bg-[#313338]",
+              ? "bg-accent text-foreground"
+              : "bg-background text-foreground hover:bg-accent",
           )}
           onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
           aria-label={
@@ -282,14 +282,14 @@ function ParticipantTile({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-md border border-border bg-[#2b2d31] p-4",
+        "flex flex-col items-center justify-center rounded-md border border-border bg-card p-4",
         compact ? "min-h-28" : "min-h-36",
       )}
       data-testid="active-call-participant-tile"
     >
       <div
         className={cn(
-          "flex items-center justify-center rounded-full border border-border bg-[#1e1f22] text-foreground",
+          "flex items-center justify-center rounded-full border border-border bg-background text-foreground",
           compact ? "h-14 w-14 text-xl" : "h-16 w-16 text-2xl",
         )}
       >
