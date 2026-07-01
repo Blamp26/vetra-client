@@ -46,33 +46,46 @@ export function useCall(currentUserId: number): UseCallReturn {
     const callChannelRef = useRef<Channel | null>(null);
     const webrtcRef = useRef<WebRTCService | null>(null);
     const endedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const signalingUnsubsRef = useRef<Array<() => void>>([]);
     const offerSdpRef = useRef<string | null>(null);
     const previousUserIdRef = useRef<number | null>(null);
 
-    const clearCallState = useCallback(() => {
+    const teardownCall = useCallback((options?: { resetState?: boolean; unsubscribe?: boolean }) => {
+        const resetState = options?.resetState ?? true;
+        const unsubscribe = options?.unsubscribe ?? true;
+
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
         endedTimerRef.current = null;
-        webrtcRef.current?.hangUp();
+        if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+        if (unsubscribe) {
+            signalingUnsubsRef.current.forEach((unsub) => unsub());
+            signalingUnsubsRef.current = [];
+        }
+        webrtcRef.current?.dispose();
         webrtcRef.current = null;
         callChannelRef.current = null;
         offerSdpRef.current = null;
-        setStatus('idle');
-        setRemoteUserId(null);
-        setRemoteUsername(null);
-        setCallId(null);
-        setRemoteStream(null);
-        setIsMuted(false);
-        setSeconds(0);
-        setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
+        if (resetState) {
+            setStatus('idle');
+            setRemoteUserId(null);
+            setRemoteUsername(null);
+            setCallId(null);
+            setRemoteStream(null);
+            setIsMuted(false);
+            setSeconds(0);
+            setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
+        }
     }, []);
 
     const resetAfterDelay = useCallback(() => {
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
         setStatus('ended');
         endedTimerRef.current = setTimeout(() => {
-            clearCallState();
+            teardownCall();
         }, 2000);
-    }, [clearCallState]);
+    }, [teardownCall]);
 
     const handleOffer = useCallback((payload: OfferPayload) => {
         offerSdpRef.current = payload.sdp;
@@ -120,7 +133,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         previousUserIdRef.current = currentUserId > 0 ? currentUserId : null;
 
         if (!socketManager || currentUserId <= 0 || userChanged) {
-            clearCallState();
+            teardownCall();
         }
 
         if (!socketManager || currentUserId <= 0) return;
@@ -133,6 +146,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         );
         callChannelRef.current = callSignalingService.getChannel();
 
+        signalingUnsubsRef.current.forEach((unsub) => unsub());
         const unsubs = [
             callSignalingService.onAnswer((payload) => {
                 webrtcRef.current?.handleAnswer(payload.sdp);
@@ -143,7 +157,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 webrtcRef.current?.addIceCandidate(payload.candidate);
             }),
             callSignalingService.onHangUp(() => {
-                webrtcRef.current?.hangUp();
+                webrtcRef.current?.dispose();
                 resetAfterDelay();
             }),
             callSignalingService.onIncomingCall((payload) => {
@@ -155,6 +169,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             }),
             callSignalingService.onOffer(handleOffer),
         ];
+        signalingUnsubsRef.current = unsubs;
 
         const pendingOffer = callSignalingService.consumePendingOffer();
         if (pendingOffer) {
@@ -162,11 +177,9 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
 
         return () => {
-            callChannelRef.current = null;
-            unsubs.forEach((unsub) => unsub());
-            if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
+            teardownCall({ resetState: false });
         };
-    }, [socketManager, currentUserCallRef, currentUserId, clearCallState, handleOffer, resetAfterDelay]);
+    }, [socketManager, currentUserCallRef, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
 
     const startCall = useCallback((targetUserId: ResourceRef) => {
         console.log('[useCall] startCall -> targetUserId:', targetUserId, '| current status:', status);
@@ -190,10 +203,10 @@ export function useCall(currentUserId: number): UseCallReturn {
 
         service.startCall()
             .then(() => {
-                endedTimerRef.current = setTimeout(() => {
+                callTimeoutRef.current = setTimeout(() => {
                     if (webrtcRef.current) {
                         console.warn('[useCall] Call timeout');
-                        webrtcRef.current.hangUp();
+                        webrtcRef.current.dispose();
                         resetAfterDelay();
                     }
                 }, 30_000);
@@ -246,7 +259,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         if (channel && callId && remoteUserId) {
             channel.push('hang_up', { call_id: callId, to_user_id: remoteUserId });
         }
-        webrtcRef.current?.hangUp();
+        webrtcRef.current?.dispose();
         offerSdpRef.current = null;
         resetAfterDelay();
     }, [callId, remoteUserId, resetAfterDelay]);
