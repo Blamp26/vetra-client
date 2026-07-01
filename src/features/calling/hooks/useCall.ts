@@ -53,7 +53,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const offerSdpRef = useRef<string | null>(null);
     const previousUserIdRef = useRef<number | null>(null);
     const previousSocketManagerRef = useRef<typeof socketManager>(null);
-    const previousUserCallRefRef = useRef<ResourceRef | null>(null);
+    const latestUserCallRefRef = useRef<ResourceRef | null>(null);
     const teardownCallRef = useRef<(() => void) | null>(null);
     const localScreenStreamRef = useRef<MediaStream | null>(null);
     const screenTrackRef = useRef<MediaStreamTrack | null>(null);
@@ -160,6 +160,15 @@ export function useCall(currentUserId: number): UseCallReturn {
     }, [teardownCall]);
 
     useEffect(() => {
+        if (currentUserId > 0) {
+            latestUserCallRefRef.current = currentUserCallRef ?? currentUserId;
+            return;
+        }
+
+        latestUserCallRefRef.current = null;
+    }, [currentUserCallRef, currentUserId]);
+
+    useEffect(() => {
         if (!shouldPollDiagnostics() || status !== 'active') return;
 
         const interval = setInterval(() => {
@@ -180,7 +189,6 @@ export function useCall(currentUserId: number): UseCallReturn {
     useEffect(() => {
         const previousUserId = previousUserIdRef.current;
         const previousSocketManager = previousSocketManagerRef.current;
-        const previousUserCallRef = previousUserCallRefRef.current;
         const userChanged =
             previousUserId !== null &&
             currentUserId > 0 &&
@@ -188,17 +196,12 @@ export function useCall(currentUserId: number): UseCallReturn {
         const socketChanged =
             previousSocketManager !== null &&
             previousSocketManager !== socketManager;
-        const nextUserCallRef = currentUserCallRef ?? currentUserId ?? null;
-        const userCallRefChanged =
-            previousUserCallRef !== null &&
-            nextUserCallRef !== null &&
-            previousUserCallRef !== nextUserCallRef;
 
         previousUserIdRef.current = currentUserId > 0 ? currentUserId : null;
         previousSocketManagerRef.current = socketManager;
-        previousUserCallRefRef.current = nextUserCallRef;
 
-        if (!socketManager || currentUserId <= 0 || userChanged || socketChanged || userCallRefChanged) {
+        if (!socketManager || currentUserId <= 0 || userChanged || socketChanged) {
+            latestUserCallRefRef.current = null;
             teardownCall();
             callSignalingService.disconnect();
         }
@@ -209,7 +212,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             socketManager.socket,
             socketManager.userChannel,
             currentUserId,
-            currentUserCallRef ?? currentUserId,
+            latestUserCallRefRef.current ?? currentUserId,
         );
         callChannelRef.current = callSignalingService.getChannel();
 
@@ -250,7 +253,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 signalingUnsubsRef.current = [];
             }
         };
-    }, [cleanupScreenShare, socketManager, currentUserCallRef, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
+    }, [cleanupScreenShare, socketManager, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
 
     const startCall = useCallback((targetUserId: ResourceRef) => {
         console.log('[useCall] startCall -> targetUserId:', targetUserId, '| current status:', status);

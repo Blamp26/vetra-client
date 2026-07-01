@@ -293,6 +293,88 @@ describe('useCall', () => {
             expect(mockUserChannel.off).not.toHaveBeenCalled();
         });
 
+        it('does not disconnect signaling after startCall creates the offer flow', async () => {
+            const disconnectSpy = vi.spyOn(callSignalingService, 'disconnect');
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            disconnectSpy.mockClear();
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            expect(service.startCall).toHaveBeenCalled();
+            expect(service.dispose).not.toHaveBeenCalled();
+            expect(disconnectSpy).not.toHaveBeenCalled();
+        });
+
+        it('does not teardown when the current user call ref changes during an outgoing call', async () => {
+            const disconnectSpy = vi.spyOn(callSignalingService, 'disconnect');
+            const { result, rerender } = renderHook(() => useCall(currentUserId));
+
+            disconnectSpy.mockClear();
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+
+            act(() => {
+                service.onCallIdReceived?.('call-123');
+                mockStoreState.currentUser = { id: 1, public_id: 'user-public-id' };
+                rerender();
+            });
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            expect(result.current.status).toBe('calling');
+            expect(result.current.callId).toBe('call-123');
+            expect(service.dispose).not.toHaveBeenCalled();
+            expect(disconnectSpy).not.toHaveBeenCalled();
+            expect(callChannel.leave).not.toHaveBeenCalled();
+            expect(mockUserChannel.off).not.toHaveBeenCalled();
+            expect(mockUserChannel.on).toHaveBeenCalledTimes(1);
+            expect(mockSocketManager.socket.channel).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not teardown on a normal rerender after startCall', async () => {
+            const disconnectSpy = vi.spyOn(callSignalingService, 'disconnect');
+            const { result, rerender } = renderHook(({ userId }) => useCall(userId), {
+                initialProps: { userId: currentUserId },
+            });
+
+            disconnectSpy.mockClear();
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+
+            act(() => {
+                rerender({ userId: currentUserId });
+            });
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            expect(service.dispose).not.toHaveBeenCalled();
+            expect(disconnectSpy).not.toHaveBeenCalled();
+            expect(mockUserChannel.on).toHaveBeenCalledTimes(1);
+            expect(mockSocketManager.socket.channel).toHaveBeenCalledTimes(1);
+        });
+
         it('устанавливает таймаут 30 секунд и при его истечении завершает звонок', async () => {
             const { result } = renderHook(() => useCall(currentUserId));
 
