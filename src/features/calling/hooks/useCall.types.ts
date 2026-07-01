@@ -12,13 +12,23 @@ export interface IncomingCallPayload {
 
 export interface AnswerPayload {
     from_user_id: ResourceRef;
-    from_username: string;
+    from_username?: string;
     sdp: string;
+    call_id?: string;
 }
+
+export interface RenegotiationSignalPayload {
+    __vetra_call_signal: 'renegotiation_offer' | 'renegotiation_answer';
+    sdp: string;
+    sdp_type: 'offer' | 'answer';
+}
+
+export type CallIceCandidatePayload = RTCIceCandidateInit | RenegotiationSignalPayload;
 
 export interface IceCandidatePayload {
     from_user_id: ResourceRef;
-    candidate: RTCIceCandidateInit;
+    call_id?: string;
+    candidate: CallIceCandidatePayload;
 }
 
 export interface HangUpPayload {

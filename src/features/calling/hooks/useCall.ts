@@ -15,9 +15,23 @@ const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
 };
 
 const DIAGNOSTICS_POLL_INTERVAL_MS = 1500;
+const CALL_DEBUG_KEY = 'vetra.debug.calls';
 
 function shouldPollDiagnostics(): boolean {
     return import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === 'true';
+}
+
+function isCallDebugEnabled(): boolean {
+    try {
+        return globalThis.localStorage?.getItem(CALL_DEBUG_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function debugCall(message: string, details?: Record<string, unknown>): void {
+    if (!isCallDebugEnabled()) return;
+    console.log(message, details ?? {});
 }
 
 function mapDiagnostics(diagnostics: WebRTCDiagnostics): CallDiagnostics {
@@ -52,6 +66,8 @@ export function useCall(currentUserId: number): UseCallReturn {
     const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const signalingUnsubsRef = useRef<Array<() => void>>([]);
     const offerSdpRef = useRef<string | null>(null);
+    const statusRef = useRef<CallStatus>('idle');
+    const callIdRef = useRef<string | null>(null);
     const previousUserIdRef = useRef<number | null>(null);
     const previousSocketManagerRef = useRef<typeof socketManager>(null);
     const latestUserCallRefRef = useRef<ResourceRef | null>(null);
@@ -85,6 +101,14 @@ export function useCall(currentUserId: number): UseCallReturn {
             });
         }
     }, []);
+
+    useEffect(() => {
+        statusRef.current = status;
+    }, [status]);
+
+    useEffect(() => {
+        callIdRef.current = callId;
+    }, [callId]);
 
     const stopScreenShare = useCallback(() => {
         const service = webrtcRef.current;
@@ -141,6 +165,13 @@ export function useCall(currentUserId: number): UseCallReturn {
     }, [teardownCall]);
 
     const handleOffer = useCallback((payload: OfferPayload) => {
+        debugCall('[useCall] receive offer', {
+            event: 'offer',
+            call_id: payload.call_id,
+            active_call_id: callIdRef.current,
+            status: statusRef.current,
+            signalingState: webrtcRef.current?.getDiagnosticsSnapshot().signalingState,
+        });
         offerSdpRef.current = payload.sdp;
         setRemoteUserId((prev) => prev ?? payload.from_user_id);
         setRemoteUsername((prev) => prev ?? payload.from_username);
@@ -151,6 +182,10 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
         setStatus((prev) => {
             if (prev === 'active' && service) {
+                debugCall('[useCall] renegotiation offer received', {
+                    call_id: payload.call_id,
+                    active_call_id: callIdRef.current,
+                });
                 service.handleOffer(payload.sdp).catch((err) => {
                     console.error('[useCall] renegotiation offer failed', err);
                 });
@@ -250,6 +285,11 @@ export function useCall(currentUserId: number): UseCallReturn {
         const unsubs = [
             callSignalingService.onAnswer((payload) => {
                 clearCallTimeout();
+                debugCall('[useCall] receive answer', {
+                    call_id: payload.call_id,
+                    active_call_id: callIdRef.current,
+                    signalingState: webrtcRef.current?.getDiagnosticsSnapshot().signalingState,
+                });
                 if ('call_id' in payload && typeof payload.call_id === 'string') {
                     const nextCallId = payload.call_id;
                     setCallId((prev) => prev ?? nextCallId);
@@ -260,6 +300,15 @@ export function useCall(currentUserId: number): UseCallReturn {
                 setStatus('active');
             }),
             callSignalingService.onIceCandidate((payload) => {
+                debugCall('[useCall] receive ICE', {
+                    call_id: payload.call_id,
+                    active_call_id: callIdRef.current,
+                    signalingState: webrtcRef.current?.getDiagnosticsSnapshot().signalingState,
+                    isCallSignal:
+                        typeof payload.candidate === 'object' &&
+                        payload.candidate !== null &&
+                        '__vetra_call_signal' in payload.candidate,
+                });
                 webrtcRef.current?.addIceCandidate(payload.candidate);
             }),
             callSignalingService.onHangUp(() => {

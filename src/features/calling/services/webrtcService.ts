@@ -1,6 +1,7 @@
 import { Channel } from 'phoenix';
 import { getState } from '@/store';
 import type { ResourceRef } from '@/shared/types';
+import type { CallIceCandidatePayload, RenegotiationSignalPayload } from '../hooks/useCall.types';
 
 const DEFAULT_STUN_URL = 'stun:stun.l.google.com:19302';
 
@@ -34,6 +35,9 @@ type StatsValue = {
     candidateType?: string;
 };
 
+const CALL_DEBUG_KEY = 'vetra.debug.calls';
+const RENEGOTIATION_SIGNAL_KEY = '__vetra_call_signal';
+
 const EMPTY_DIAGNOSTICS: WebRTCDiagnostics = {
     connectionState: 'unknown',
     iceConnectionState: 'unknown',
@@ -54,6 +58,19 @@ function cloneDiagnostics(diagnostics: WebRTCDiagnostics): WebRTCDiagnostics {
             ? { ...diagnostics.selectedCandidatePair }
             : null,
     };
+}
+
+function isCallDebugEnabled(): boolean {
+    try {
+        return globalThis.localStorage?.getItem(CALL_DEBUG_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function debugCall(message: string, details?: Record<string, unknown>): void {
+    if (!isCallDebugEnabled()) return;
+    console.log(message, details ?? {});
 }
 
 function getStatsValues(stats: { values?: () => IterableIterator<StatsValue> } | null | undefined): StatsValue[] {
@@ -128,6 +145,32 @@ function remoteSdpHasSendingVideo(sdp: string): boolean {
     return !direction || direction === 'sendrecv' || direction === 'sendonly';
 }
 
+function isRenegotiationSignal(candidate: CallIceCandidatePayload): candidate is RenegotiationSignalPayload {
+    return (
+        typeof candidate === 'object' &&
+        candidate !== null &&
+        RENEGOTIATION_SIGNAL_KEY in candidate &&
+        (candidate as RenegotiationSignalPayload).__vetra_call_signal !== undefined
+    );
+}
+
+function candidateKey(candidate: RTCIceCandidateInit): string {
+    return JSON.stringify({
+        candidate: candidate.candidate ?? '',
+        sdpMid: candidate.sdpMid ?? null,
+        sdpMLineIndex: candidate.sdpMLineIndex ?? null,
+        usernameFragment: candidate.usernameFragment ?? null,
+    });
+}
+
+function isExpectedCandidateOrderingError(error: unknown): boolean {
+    return (
+        typeof DOMException !== 'undefined' &&
+        error instanceof DOMException &&
+        error.name === 'OperationError'
+    );
+}
+
 export class WebRTCService {
     private peerConnection: RTCPeerConnection | null = null;
     private localStream: MediaStream | null = null;
@@ -141,6 +184,8 @@ export class WebRTCService {
     private remoteUserId: ResourceRef;
     private callId: string | null = null;
     private iceCandidateQueue: RTCIceCandidateInit[] = [];
+    private queuedIceCandidateKeys = new Set<string>();
+    private appliedIceCandidateKeys = new Set<string>();
     private remoteDescriptionSet = false;
     private localMuted = false;
     private isCreatingRenegotiationOffer = false;
@@ -171,6 +216,12 @@ export class WebRTCService {
         await this.initPeerConnection();
         const offer = await this.peerConnection!.createOffer();
         await this.peerConnection!.setLocalDescription(offer);
+        debugCall('[WebRTCService] send offer', {
+            event: 'offer',
+            call_id: this.callId,
+            target_user_id: this.remoteUserId,
+            sdp_type: offer.type,
+        });
         this.channel.push('offer', {
             sdp: this.peerConnection!.localDescription!.sdp,
             to_user_id: this.remoteUserId,
@@ -193,6 +244,11 @@ export class WebRTCService {
         const answer = await this.peerConnection!.createAnswer();
         await this.peerConnection!.setLocalDescription(answer);
 
+        debugCall('[WebRTCService] send answer', {
+            event: 'answer',
+            call_id: this.getCallId(),
+            sdp_type: answer.type,
+        });
         this.channel.push('answer', {
             sdp: this.peerConnection!.localDescription!.sdp,
             to_user_id: this.remoteUserId,
@@ -202,6 +258,10 @@ export class WebRTCService {
 
     async handleAnswer(sdp: string): Promise<void> {
         if (!this.peerConnection) throw new Error('No peer connection');
+        debugCall('[WebRTCService] apply renegotiation answer', {
+            call_id: this.getCallId(),
+            signalingState: this.peerConnection.signalingState,
+        });
         await this.peerConnection.setRemoteDescription(
             new RTCSessionDescription({ type: 'answer', sdp })
         );
@@ -213,6 +273,10 @@ export class WebRTCService {
 
     async handleOffer(sdp: string): Promise<void> {
         if (!this.peerConnection) throw new Error('No peer connection');
+        debugCall('[WebRTCService] handle active-call renegotiation offer', {
+            call_id: this.getCallId(),
+            signalingState: this.peerConnection.signalingState,
+        });
         await this.peerConnection.setRemoteDescription(
             new RTCSessionDescription({ type: 'offer', sdp })
         );
@@ -226,25 +290,27 @@ export class WebRTCService {
         const answer = await this.peerConnection.createAnswer();
         await this.peerConnection.setLocalDescription(answer);
 
-        this.channel.push('answer', {
-            sdp: this.peerConnection.localDescription!.sdp,
-            to_user_id: this.remoteUserId,
-            call_id: this.getCallId(),
+        this.sendRenegotiationSignal({
+            __vetra_call_signal: 'renegotiation_answer',
+            sdp: this.peerConnection.localDescription!.sdp ?? answer.sdp ?? '',
+            sdp_type: 'answer',
         });
     }
 
-    async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+    async addIceCandidate(candidate: CallIceCandidatePayload): Promise<void> {
         if (!this.peerConnection) return;
-        if (!this.remoteDescriptionSet) {
-            this.iceCandidateQueue.push(candidate);
+
+        if (isRenegotiationSignal(candidate)) {
+            if (candidate.__vetra_call_signal === 'renegotiation_offer') {
+                await this.handleOffer(candidate.sdp);
+                return;
+            }
+
+            await this.handleAnswer(candidate.sdp);
             return;
         }
-        try {
-            await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-            await this.refreshDiagnostics();
-        } catch (err) {
-            console.error('[WebRTC] Failed to add ICE candidate:', err);
-        }
+
+        await this.addRealIceCandidate(candidate);
     }
 
     getDiagnosticsSnapshot(): WebRTCDiagnostics {
@@ -356,6 +422,8 @@ export class WebRTCService {
         }
         this.clearRemoteScreenStream();
         this.iceCandidateQueue = [];
+        this.queuedIceCandidateKeys.clear();
+        this.appliedIceCandidateKeys.clear();
         this.remoteDescriptionSet = false;
         this.isCreatingRenegotiationOffer = false;
         this.hasQueuedRenegotiation = false;
@@ -373,15 +441,75 @@ export class WebRTCService {
     }
 
     private async flushIceCandidateQueue(): Promise<void> {
-        while (this.iceCandidateQueue.length > 0) {
-            const candidate = this.iceCandidateQueue.shift()!;
-            try {
-                await this.peerConnection!.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (err) {
-                console.error('[WebRTC] Failed to flush ICE candidate:', err);
-            }
+        if (this.iceCandidateQueue.length > 0) {
+            debugCall('[WebRTCService] flush queued ICE', {
+                call_id: this.getCallId(),
+                count: this.iceCandidateQueue.length,
+                signalingState: this.peerConnection?.signalingState,
+            });
+        }
+
+        const queuedCandidates = [...this.iceCandidateQueue];
+        this.iceCandidateQueue = [];
+        this.queuedIceCandidateKeys.clear();
+
+        for (const candidate of queuedCandidates) {
+            await this.addRealIceCandidate(candidate, { fromFlush: true });
         }
         await this.refreshDiagnostics();
+    }
+
+    private queueIceCandidate(candidate: RTCIceCandidateInit): void {
+        const key = candidateKey(candidate);
+        if (this.queuedIceCandidateKeys.has(key) || this.appliedIceCandidateKeys.has(key)) {
+            return;
+        }
+
+        this.queuedIceCandidateKeys.add(key);
+        this.iceCandidateQueue.push(candidate);
+    }
+
+    private async addRealIceCandidate(candidate: RTCIceCandidateInit, options?: { fromFlush?: boolean }): Promise<void> {
+        const peerConnection = this.peerConnection;
+        if (!peerConnection) return;
+
+        const hasRemoteDescription = Boolean(peerConnection.remoteDescription) || this.remoteDescriptionSet;
+        debugCall('[WebRTCService] receive ICE', {
+            call_id: this.getCallId(),
+            hasRemoteDescription,
+            signalingState: peerConnection.signalingState,
+            queued: !hasRemoteDescription,
+        });
+
+        if (!hasRemoteDescription) {
+            this.queueIceCandidate(candidate);
+            return;
+        }
+
+        const key = candidateKey(candidate);
+        if (this.appliedIceCandidateKeys.has(key)) {
+            return;
+        }
+
+        try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            this.appliedIceCandidateKeys.add(key);
+            await this.refreshDiagnostics();
+        } catch (err) {
+            if (isExpectedCandidateOrderingError(err)) {
+                if (!options?.fromFlush) {
+                    this.queueIceCandidate(candidate);
+                }
+                debugCall('[WebRTCService] queued/dropped out-of-order ICE', {
+                    call_id: this.getCallId(),
+                    signalingState: peerConnection.signalingState,
+                    fromFlush: Boolean(options?.fromFlush),
+                });
+                return;
+            }
+
+            console.error('[WebRTC] Failed to add ICE candidate:', err);
+        }
     }
 
     private getCallId(): string {
@@ -404,14 +532,36 @@ export class WebRTCService {
                 return;
             }
             await peerConnection.setLocalDescription(offer);
-            this.channel.push('offer', {
-                sdp: peerConnection.localDescription!.sdp,
-                to_user_id: this.remoteUserId,
+            debugCall('[WebRTCService] create renegotiation offer', {
+                event: 'ice_candidate',
                 call_id: this.getCallId(),
+                target_user_id: this.remoteUserId,
+                sdp_type: offer.type,
+                signalingState: peerConnection.signalingState,
+            });
+            this.sendRenegotiationSignal({
+                __vetra_call_signal: 'renegotiation_offer',
+                sdp: peerConnection.localDescription!.sdp ?? offer.sdp ?? '',
+                sdp_type: 'offer',
             });
         } finally {
             this.isCreatingRenegotiationOffer = false;
         }
+    }
+
+    private sendRenegotiationSignal(signal: RenegotiationSignalPayload): void {
+        debugCall('[WebRTCService] send call signal', {
+            event: 'ice_candidate',
+            call_id: this.getCallId(),
+            target_user_id: this.remoteUserId,
+            signal: signal.__vetra_call_signal,
+            sdp_type: signal.sdp_type,
+        });
+        this.channel.push('ice_candidate', {
+            candidate: signal,
+            to_user_id: this.remoteUserId,
+            call_id: this.getCallId(),
+        });
     }
 
     private runQueuedRenegotiationIfStable(): void {

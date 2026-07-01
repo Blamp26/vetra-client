@@ -336,6 +336,75 @@ describe('WebRTCService', () => {
             expect(pc.addIceCandidate).toHaveBeenCalledTimes(2);
             expect((service as any).iceCandidateQueue).toEqual([]);
         });
+
+        it('deduplicates queued ICE candidates before the remote description is set', async () => {
+            await service.startCall();
+            await service.addIceCandidate({ candidate: 'c1', sdpMid: '0', sdpMLineIndex: 0 });
+            await service.addIceCandidate({ candidate: 'c1', sdpMid: '0', sdpMLineIndex: 0 });
+
+            expect((service as any).iceCandidateQueue).toHaveLength(1);
+
+            await service.handleAnswer('answer');
+
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            expect(pc.addIceCandidate).toHaveBeenCalledTimes(1);
+        });
+
+        it('queues out-of-order OperationError candidates without noisy console errors', async () => {
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+            await service.acceptCall('offer-sdp');
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            pc.addIceCandidate.mockRejectedValueOnce(new DOMException('ufrag mismatch', 'OperationError'));
+
+            await service.addIceCandidate({ candidate: 'early-renegotiation-candidate', sdpMid: '0', sdpMLineIndex: 0 });
+
+            expect((service as any).iceCandidateQueue).toHaveLength(1);
+            expect(consoleSpy).not.toHaveBeenCalledWith('[WebRTC] Failed to add ICE candidate:', expect.anything());
+        });
+
+        it('applies a tunneled renegotiation offer and answers over the existing ICE event', async () => {
+            await service.acceptCall('initial-offer-sdp');
+            mockChannelPush.mockClear();
+
+            await service.addIceCandidate({
+                __vetra_call_signal: 'renegotiation_offer',
+                sdp: 'renegotiation-offer-sdp',
+                sdp_type: 'offer',
+            });
+
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            expect(pc.setRemoteDescription).toHaveBeenCalledWith(
+                new RTCSessionDescription({ type: 'offer', sdp: 'renegotiation-offer-sdp' }),
+            );
+            expect(pc.createAnswer).toHaveBeenCalled();
+            expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', {
+                candidate: {
+                    __vetra_call_signal: 'renegotiation_answer',
+                    sdp: expect.any(String),
+                    sdp_type: 'answer',
+                },
+                to_user_id: remoteUserId,
+                call_id: expect.stringContaining(':'),
+            });
+        });
+
+        it('applies a tunneled renegotiation answer to the existing peer', async () => {
+            await service.startCall();
+            await service.handleAnswer('initial-answer-sdp');
+            await service.startScreenShare();
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+
+            await service.addIceCandidate({
+                __vetra_call_signal: 'renegotiation_answer',
+                sdp: 'renegotiation-answer-sdp',
+                sdp_type: 'answer',
+            });
+
+            expect(pc.setRemoteDescription).toHaveBeenLastCalledWith(
+                new RTCSessionDescription({ type: 'answer', sdp: 'renegotiation-answer-sdp' }),
+            );
+            expect(pc.signalingState).toBe('stable');
+        });
     });
 
     describe('local media controls', () => {
@@ -397,10 +466,14 @@ describe('WebRTCService', () => {
             });
             expect(pc.addTrack).toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
             expect(pc.createOffer).toHaveBeenCalledTimes(2);
-            expect(mockChannelPush).toHaveBeenCalledWith('offer', {
-                sdp: expect.any(String),
+            expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', {
+                candidate: {
+                    __vetra_call_signal: 'renegotiation_offer',
+                    sdp: expect.any(String),
+                    sdp_type: 'offer',
+                },
                 to_user_id: remoteUserId,
-                call_id: expect.stringContaining(':'),
+                call_id: '123:456',
             });
         });
 
@@ -422,8 +495,12 @@ describe('WebRTCService', () => {
             await service.handleAnswer('answer-sdp');
 
             await vi.waitFor(() => {
-                expect(mockChannelPush).toHaveBeenCalledWith('offer', expect.objectContaining({
-                    sdp: expect.any(String),
+                expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', expect.objectContaining({
+                    candidate: {
+                        __vetra_call_signal: 'renegotiation_offer',
+                        sdp: expect.any(String),
+                        sdp_type: 'offer',
+                    },
                     to_user_id: remoteUserId,
                     call_id: '123:456',
                 }));
@@ -463,8 +540,12 @@ describe('WebRTCService', () => {
             expect(mockScreenTrack.stop).toHaveBeenCalled();
             expect(pc.close).not.toHaveBeenCalled();
             expect((service as any).peerConnection).toBe(pc);
-            expect(mockChannelPush).toHaveBeenCalledWith('offer', expect.objectContaining({
-                sdp: expect.any(String),
+            expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', expect.objectContaining({
+                candidate: {
+                    __vetra_call_signal: 'renegotiation_offer',
+                    sdp: expect.any(String),
+                    sdp_type: 'offer',
+                },
                 to_user_id: remoteUserId,
             }));
         });
@@ -585,8 +666,12 @@ describe('WebRTCService', () => {
             ].join('\r\n'));
 
             expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
-            expect(mockChannelPush).toHaveBeenCalledWith('answer', expect.objectContaining({
-                sdp: expect.any(String),
+            expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', expect.objectContaining({
+                candidate: {
+                    __vetra_call_signal: 'renegotiation_answer',
+                    sdp: expect.any(String),
+                    sdp_type: 'answer',
+                },
                 to_user_id: remoteUserId,
             }));
         });

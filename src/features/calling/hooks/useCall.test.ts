@@ -1362,6 +1362,42 @@ describe('useCall', () => {
             expect(MockWebRTCService).toHaveBeenCalledTimes(1);
         });
 
+        it('active-call renegotiation signal received over ICE stays in the active call', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+            const iceHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'ice_candidate')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'initial-answer-sdp', from_username: 'caller', call_id: 'call-123' });
+            });
+
+            act(() => {
+                iceHandler({
+                    from_user_id: 2,
+                    call_id: 'call-123',
+                    candidate: {
+                        __vetra_call_signal: 'renegotiation_offer',
+                        sdp: 'renegotiation-offer-sdp',
+                        sdp_type: 'offer',
+                    },
+                });
+            });
+
+            expect(result.current.status).toBe('active');
+            expect(result.current.remoteUserId).toBe(2);
+            expect(service.addIceCandidate).toHaveBeenCalledWith({
+                __vetra_call_signal: 'renegotiation_offer',
+                sdp: 'renegotiation-offer-sdp',
+                sdp_type: 'offer',
+            });
+            expect(MockWebRTCService).toHaveBeenCalledTimes(1);
+        });
+
         it('remote hang_up closes the call even during renegotiation', async () => {
             const { result } = renderHook(() => useCall(currentUserId));
             act(() => {
