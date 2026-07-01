@@ -489,16 +489,18 @@ describe('WebRTCService', () => {
             expect(pc.signalingState).toBe('have-local-offer');
             mockChannelPush.mockClear();
 
-            await service.startScreenShare();
+            const startPromise = service.startScreenShare();
 
-            expect(pc.addTrack).toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
+            expect(pc.addTrack).not.toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
             expect(pc.createOffer).toHaveBeenCalledTimes(1);
             expect(mockChannelPush).not.toHaveBeenCalledWith('offer', expect.objectContaining({
                 call_id: expect.any(String),
             }));
-            expect((service as any).pendingRenegotiationReason).toBe('start_screen_share');
+            expect((service as any).pendingScreenShareChange).toBe(true);
+            expect((service as any).desiredScreenShareActive).toBe(true);
 
             await service.handleAnswer('answer-sdp');
+            await expect(startPromise).resolves.toBe(mockScreenStream);
 
             await vi.waitFor(() => {
                 expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', expect.objectContaining({
@@ -519,16 +521,18 @@ describe('WebRTCService', () => {
             await service.startCall();
             mockChannelPush.mockClear();
 
-            await service.startScreenShare();
-            await service.startScreenShare();
+            void service.startScreenShare().catch(() => undefined);
+            void service.startScreenShare().catch(() => undefined);
 
             const pc = (service as any).peerConnection as MockRTCPeerConnection;
             expect(pc.signalingState).toBe('have-local-offer');
             expect(pc.createOffer).toHaveBeenCalledTimes(1);
+            expect(pc.addTrack).not.toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
             expect(mockChannelPush).not.toHaveBeenCalledWith('offer', expect.objectContaining({
                 call_id: expect.any(String),
             }));
-            expect((service as any).pendingRenegotiationReason).toBe('start_screen_share');
+            expect((service as any).pendingScreenShareChange).toBe(true);
+            expect((service as any).desiredScreenShareActive).toBe(true);
         });
 
         it('stopScreenShare removes the sender and renegotiates without disposing the peer', async () => {
@@ -600,6 +604,67 @@ describe('WebRTCService', () => {
             expect(sender.replaceTrack).toHaveBeenCalledWith(mockScreenTrack);
         });
 
+        it('stop while start renegotiation is in flight queues one follow-up stop after the answer', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            mockChannelPush.mockClear();
+
+            await service.startScreenShare();
+            const sender = (service as any).screenSender;
+
+            await service.stopScreenShare();
+
+            let renegotiationOffers = mockChannelPush.mock.calls.filter(([event, payload]) => (
+                event === 'ice_candidate' &&
+                payload?.candidate?.__vetra_call_signal === 'renegotiation_offer'
+            ));
+            expect(renegotiationOffers).toHaveLength(1);
+            expect(renegotiationOffers[0]?.[1].candidate.screen_share_active).toBe(true);
+            expect(sender.replaceTrack).not.toHaveBeenCalledWith(null);
+            expect((service as any).desiredScreenShareActive).toBe(false);
+            expect((service as any).pendingScreenShareChange).toBe(true);
+
+            await service.handleAnswer('screen-start-answer-sdp');
+
+            await vi.waitFor(() => {
+                renegotiationOffers = mockChannelPush.mock.calls.filter(([event, payload]) => (
+                    event === 'ice_candidate' &&
+                    payload?.candidate?.__vetra_call_signal === 'renegotiation_offer'
+                ));
+                expect(renegotiationOffers).toHaveLength(2);
+            });
+            expect(renegotiationOffers[1]?.[1].candidate.screen_share_active).toBe(false);
+            expect(sender.replaceTrack).toHaveBeenCalledWith(null);
+        });
+
+        it('rapid start stop start while unstable applies only the latest desired start after the answer', async () => {
+            await service.startCall();
+            const firstStart = service.startScreenShare().catch(() => null);
+
+            await service.stopScreenShare();
+            const secondStart = service.startScreenShare();
+
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            expect(pc.addTrack).not.toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
+            expect(mockGetDisplayMedia).not.toHaveBeenCalled();
+            expect((service as any).desiredScreenShareActive).toBe(true);
+            expect((service as any).pendingScreenShareChange).toBe(true);
+
+            await service.handleAnswer('initial-answer-sdp');
+
+            await expect(firstStart).resolves.toBeNull();
+            await expect(secondStart).resolves.toBe(mockScreenStream);
+
+            const renegotiationOffers = mockChannelPush.mock.calls.filter(([event, payload]) => (
+                event === 'ice_candidate' &&
+                payload?.candidate?.__vetra_call_signal === 'renegotiation_offer'
+            ));
+            expect(renegotiationOffers).toHaveLength(1);
+            expect(renegotiationOffers[0]?.[1].candidate.screen_share_active).toBe(true);
+            expect(pc.addTrack).toHaveBeenCalledWith(mockScreenTrack, mockScreenStream);
+            expect(mockGetDisplayMedia).toHaveBeenCalledTimes(1);
+        });
+
         it('screen track ended cleans up through the provided callback without disposing the peer', async () => {
             const onEnded = vi.fn();
             await service.startCall();
@@ -617,6 +682,12 @@ describe('WebRTCService', () => {
             });
             expect(mockScreenTrack.stop).not.toHaveBeenCalled();
             expect(pc.close).not.toHaveBeenCalled();
+            expect((service as any).desiredScreenShareActive).toBe(false);
+            expect((service as any).pendingScreenShareChange).toBe(true);
+            expect((service as any).screenStream).toBe(mockScreenStream);
+
+            await service.handleAnswer('screen-start-answer-sdp');
+
             expect((service as any).screenStream).toBeNull();
         });
 

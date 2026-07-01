@@ -17,6 +17,13 @@ interface ActiveCallWindowProps {
   onHangUp: () => void;
 }
 
+function detachVideo(video: HTMLVideoElement): void {
+  video.pause();
+  video.srcObject = null;
+  video.removeAttribute('src');
+  video.load();
+}
+
 export const ActiveCallWindow = ({
   remoteUsername,
   seconds,
@@ -39,10 +46,15 @@ export const ActiveCallWindow = ({
     const remoteScreen = remoteScreenRef.current;
     if (!remoteScreen) return;
 
+    if (!remoteScreenStream) {
+      detachVideo(remoteScreen);
+      return;
+    }
+
     remoteScreen.srcObject = remoteScreenStream;
 
     return () => {
-      remoteScreen.srcObject = null;
+      detachVideo(remoteScreen);
     };
   }, [remoteScreenStream]);
 
@@ -50,10 +62,15 @@ export const ActiveCallWindow = ({
     const preview = previewRef.current;
     if (!preview) return;
 
+    if (!localScreenStream) {
+      detachVideo(preview);
+      return;
+    }
+
     preview.srcObject = localScreenStream;
 
     return () => {
-      preview.srcObject = null;
+      detachVideo(preview);
     };
   }, [localScreenStream]);
 

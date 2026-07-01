@@ -180,6 +180,14 @@ export class WebRTCService {
     private screenStream: MediaStream | null = null;
     private screenSender: RTCRtpSender | null = null;
     private screenTrackEndedHandler: (() => void) | null = null;
+    private isScreenShareActiveLocal = false;
+    private desiredScreenShareActive = false;
+    private pendingScreenShareChange = false;
+    private pendingScreenShareStartResolvers: Array<{
+        resolve: (stream: MediaStream) => void;
+        reject: (error: Error) => void;
+    }> = [];
+    private pendingScreenShareOnEnded: (() => void) | null = null;
     private channel: Channel;
     private localUserId: number;
     private remoteUserId: ResourceRef;
@@ -271,6 +279,7 @@ export class WebRTCService {
         this.isRenegotiationInFlight = false;
         await this.refreshDiagnostics();
         await this.flushIceCandidateQueue();
+        this.consumePendingScreenShareChangeIfStable();
         this.runQueuedRenegotiationIfStable();
     }
 
@@ -356,11 +365,111 @@ export class WebRTCService {
     async startScreenShare(onEnded?: () => void): Promise<MediaStream> {
         if (!this.peerConnection) throw new Error('No peer connection');
 
-        await this.stopScreenShare({ stopTracks: true, renegotiate: false });
         debugCall('[WebRTCService] screenShare start requested', {
             call_id: this.getCallId(),
+            current: this.isScreenShareActiveLocal,
+            desired: this.desiredScreenShareActive,
+            pending: this.pendingScreenShareChange,
+            inFlight: this.isRenegotiationInFlight,
             signalingState: this.peerConnection.signalingState,
         });
+
+        this.desiredScreenShareActive = true;
+        this.pendingScreenShareOnEnded = onEnded ?? null;
+
+        if (this.isScreenShareActiveLocal && this.screenStream) {
+            this.pendingScreenShareChange = false;
+            return this.screenStream;
+        }
+
+        if (!this.canApplyScreenShareChangeNow()) {
+            this.pendingScreenShareChange = true;
+            debugCall('[WebRTCService] pending screen desired state queued', {
+                call_id: this.getCallId(),
+                desired: this.desiredScreenShareActive,
+                signalingState: this.peerConnection.signalingState,
+                inFlight: this.isRenegotiationInFlight,
+            });
+            return new Promise<MediaStream>((resolve, reject) => {
+                this.pendingScreenShareStartResolvers.push({ resolve, reject });
+            });
+        }
+
+        return this.applyDesiredScreenShareState();
+    }
+
+    async stopScreenShare(options?: { stopTracks?: boolean; renegotiate?: boolean }): Promise<void> {
+        const shouldRenegotiate = options?.renegotiate ?? true;
+
+        debugCall('[WebRTCService] screenShare stop requested', {
+            call_id: this.callId,
+            current: this.isScreenShareActiveLocal,
+            desired: this.desiredScreenShareActive,
+            pending: this.pendingScreenShareChange,
+            inFlight: this.isRenegotiationInFlight,
+            signalingState: this.peerConnection?.signalingState,
+        });
+
+        this.desiredScreenShareActive = false;
+        this.rejectPendingScreenShareStarts(new Error('Screen share start was superseded by stop'));
+
+        if (!shouldRenegotiate || !this.peerConnection) {
+            await this.detachScreenTrack({ stopTracks: options?.stopTracks ?? true });
+            this.pendingScreenShareChange = false;
+            return;
+        }
+
+        if (!this.isScreenShareActiveLocal && !this.screenStream) {
+            this.pendingScreenShareChange = false;
+            return;
+        }
+
+        if (!this.canApplyScreenShareChangeNow()) {
+            this.pendingScreenShareChange = true;
+            debugCall('[WebRTCService] pending screen desired state queued', {
+                call_id: this.getCallId(),
+                desired: this.desiredScreenShareActive,
+                signalingState: this.peerConnection.signalingState,
+                inFlight: this.isRenegotiationInFlight,
+            });
+            return;
+        }
+
+        await this.applyDesiredScreenShareState({ stopTracks: options?.stopTracks ?? true });
+    }
+
+    private async applyDesiredScreenShareState(options?: { stopTracks?: boolean }): Promise<MediaStream> {
+        if (!this.peerConnection) throw new Error('No peer connection');
+
+        debugCall('[WebRTCService] apply screen desired state', {
+            call_id: this.getCallId(),
+            current: this.isScreenShareActiveLocal,
+            desired: this.desiredScreenShareActive,
+            signalingState: this.peerConnection.signalingState,
+        });
+
+        if (this.desiredScreenShareActive) {
+            const stream = await this.attachScreenTrack();
+            this.pendingScreenShareChange = false;
+            this.resolvePendingScreenShareStarts(stream);
+            await this.renegotiate('start_screen_share');
+            return stream;
+        }
+
+        await this.detachScreenTrack({ stopTracks: options?.stopTracks ?? true });
+        this.pendingScreenShareChange = false;
+        await this.renegotiate('stop_screen_share');
+        return this.screenStream ?? new MediaStream();
+    }
+
+    private async attachScreenTrack(): Promise<MediaStream> {
+        if (!this.peerConnection) throw new Error('No peer connection');
+
+        if (this.isScreenShareActiveLocal && this.screenStream) {
+            return this.screenStream;
+        }
+
+        await this.detachScreenTrack({ stopTracks: true });
 
         const stream = await navigator.mediaDevices.getDisplayMedia({
             video: true,
@@ -373,9 +482,8 @@ export class WebRTCService {
         }
 
         const handleEnded = () => {
-            void this.stopScreenShare({ stopTracks: false }).finally(() => {
-                onEnded?.();
-            });
+            this.pendingScreenShareOnEnded?.();
+            void this.stopScreenShare({ stopTracks: false });
         };
 
         if ('addEventListener' in screenTrack) {
@@ -385,6 +493,7 @@ export class WebRTCService {
 
         this.screenStream = stream;
         this.screenTrackEndedHandler = handleEnded;
+        this.isScreenShareActiveLocal = true;
         if (this.screenSender) {
             await this.screenSender.replaceTrack(screenTrack);
         } else {
@@ -395,13 +504,11 @@ export class WebRTCService {
             track_id: screenTrack.id,
         });
 
-        await this.renegotiate('start_screen_share');
         return stream;
     }
 
-    async stopScreenShare(options?: { stopTracks?: boolean; renegotiate?: boolean }): Promise<void> {
+    private async detachScreenTrack(options?: { stopTracks?: boolean }): Promise<void> {
         const stopTracks = options?.stopTracks ?? true;
-        const shouldRenegotiate = options?.renegotiate ?? true;
         const stream = this.screenStream;
         const sender = this.screenSender;
         const track = stream?.getVideoTracks()[0] ?? null;
@@ -409,6 +516,7 @@ export class WebRTCService {
 
         this.screenStream = null;
         this.screenTrackEndedHandler = null;
+        this.isScreenShareActiveLocal = false;
 
         if (track && endedHandler) {
             if ('removeEventListener' in track) {
@@ -428,10 +536,6 @@ export class WebRTCService {
                 track_id: track?.id,
             });
         }
-
-        if (shouldRenegotiate && this.peerConnection && sender) {
-            await this.renegotiate('stop_screen_share');
-        }
     }
 
     dispose(): void {
@@ -447,6 +551,10 @@ export class WebRTCService {
         }
         this.remoteScreenShareActive = false;
         this.clearRemoteScreenStream('dispose');
+        this.desiredScreenShareActive = false;
+        this.isScreenShareActiveLocal = false;
+        this.pendingScreenShareChange = false;
+        this.rejectPendingScreenShareStarts(new Error('Screen share stopped because the peer was disposed'));
         this.iceCandidateQueue = [];
         this.queuedIceCandidateKeys.clear();
         this.appliedIceCandidateKeys.clear();
@@ -585,11 +693,51 @@ export class WebRTCService {
                 __vetra_call_signal: 'renegotiation_offer',
                 sdp: peerConnection.localDescription!.sdp ?? offer.sdp ?? '',
                 sdp_type: 'offer',
-                screen_share_active: Boolean(this.screenStream),
+                screen_share_active: this.isScreenShareActiveLocal,
             });
         } finally {
             this.isCreatingRenegotiationOffer = false;
         }
+    }
+
+    private canApplyScreenShareChangeNow(): boolean {
+        const peerConnection = this.peerConnection;
+        return Boolean(
+            peerConnection &&
+            peerConnection.signalingState === 'stable' &&
+            !this.isCreatingRenegotiationOffer &&
+            !this.isRenegotiationInFlight
+        );
+    }
+
+    private consumePendingScreenShareChangeIfStable(): void {
+        if (!this.pendingScreenShareChange || !this.canApplyScreenShareChangeNow()) return;
+        if (this.desiredScreenShareActive === this.isScreenShareActiveLocal) {
+            this.pendingScreenShareChange = false;
+            return;
+        }
+
+        debugCall('[WebRTCService] pending screen desired state consumed', {
+            call_id: this.getCallId(),
+            current: this.isScreenShareActiveLocal,
+            desired: this.desiredScreenShareActive,
+        });
+        void this.applyDesiredScreenShareState().catch((err) => {
+            this.rejectPendingScreenShareStarts(err instanceof Error ? err : new Error('Screen share change failed'));
+            console.warn('[WebRTCService] Failed to apply pending screen share change', err);
+        });
+    }
+
+    private resolvePendingScreenShareStarts(stream: MediaStream): void {
+        const resolvers = this.pendingScreenShareStartResolvers;
+        this.pendingScreenShareStartResolvers = [];
+        resolvers.forEach(({ resolve }) => resolve(stream));
+    }
+
+    private rejectPendingScreenShareStarts(error: Error): void {
+        const resolvers = this.pendingScreenShareStartResolvers;
+        this.pendingScreenShareStartResolvers = [];
+        resolvers.forEach(({ reject }) => reject(error));
     }
 
     private sendRenegotiationSignal(signal: RenegotiationSignalPayload): void {

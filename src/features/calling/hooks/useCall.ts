@@ -68,6 +68,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const offerSdpRef = useRef<string | null>(null);
     const statusRef = useRef<CallStatus>('idle');
     const callIdRef = useRef<string | null>(null);
+    const remoteUserIdRef = useRef<ResourceRef | null>(null);
     const hangUpSentRef = useRef(false);
     const previousUserIdRef = useRef<number | null>(null);
     const previousSocketManagerRef = useRef<typeof socketManager>(null);
@@ -110,6 +111,10 @@ export function useCall(currentUserId: number): UseCallReturn {
     useEffect(() => {
         callIdRef.current = callId;
     }, [callId]);
+
+    useEffect(() => {
+        remoteUserIdRef.current = remoteUserId;
+    }, [remoteUserId]);
 
     const stopScreenShare = useCallback(() => {
         const service = webrtcRef.current;
@@ -320,6 +325,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                     active_call_id: callIdRef.current,
                     status: statusRef.current,
                     accepted: true,
+                    reason: 'active_or_recent_call_context',
                 });
                 cleanupScreenShare({ stopTracks: !webrtcRef.current });
                 setRemoteScreenStream(null);
@@ -435,28 +441,29 @@ export function useCall(currentUserId: number): UseCallReturn {
 
     const hangUp = useCallback(() => {
         const channel = callChannelRef.current;
-        const activeCallId = callId ?? webrtcRef.current?.getSignalingCallId() ?? null;
-        if (!hangUpSentRef.current && channel && activeCallId && remoteUserId) {
+        const activeCallId = callIdRef.current ?? webrtcRef.current?.getSignalingCallId() ?? null;
+        const activeRemoteUserId = remoteUserIdRef.current;
+        if (!hangUpSentRef.current && channel && activeCallId && activeRemoteUserId) {
             hangUpSentRef.current = true;
             debugCall('[useCall] hang_up sent', {
                 call_id: activeCallId,
-                to_user_id: remoteUserId,
-                status,
+                to_user_id: activeRemoteUserId,
+                status: statusRef.current,
             });
-            channel.push('hang_up', { call_id: activeCallId, to_user_id: remoteUserId });
+            channel.push('hang_up', { call_id: activeCallId, to_user_id: activeRemoteUserId });
         } else {
             debugCall('[useCall] hang_up not sent', {
                 reason: hangUpSentRef.current ? 'already_sent' : 'missing_context',
                 call_id: activeCallId,
-                to_user_id: remoteUserId,
-                status,
+                to_user_id: activeRemoteUserId,
+                status: statusRef.current,
             });
         }
         cleanupScreenShare({ stopTracks: !webrtcRef.current });
         webrtcRef.current?.dispose();
         offerSdpRef.current = null;
         resetAfterDelay();
-    }, [callId, cleanupScreenShare, remoteUserId, resetAfterDelay]);
+    }, [cleanupScreenShare, resetAfterDelay]);
 
     const toggleMute = useCallback(() => {
         const service = webrtcRef.current;

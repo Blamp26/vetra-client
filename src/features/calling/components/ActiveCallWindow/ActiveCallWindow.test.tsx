@@ -192,4 +192,37 @@ describe('ActiveCallWindow', () => {
 
     expect(screen.getByTestId('remote-screen-view')).toBeInTheDocument();
   });
+
+  it('detaches the remote video element when the remote stream clears', () => {
+    const pauseSpy = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    const loadSpy = vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
+    const { rerender } = renderWindow({
+      remoteScreenStream: new MediaStream(),
+    });
+
+    expect(screen.getByTestId('remote-screen-view')).toBeInTheDocument();
+
+    rerender(
+      <ActiveCallWindow
+        remoteUsername="Alice"
+        seconds={12}
+        isMuted={false}
+        isScreenSharing={false}
+        remoteScreenStream={null}
+        localScreenStream={null}
+        diagnostics={defaultDiagnostics}
+        onMuteToggle={vi.fn()}
+        onStartScreenShare={async () => undefined}
+        onStopScreenShare={vi.fn()}
+        onHangUp={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('remote-screen-view')).not.toBeInTheDocument();
+    expect(pauseSpy).toHaveBeenCalled();
+    expect(loadSpy).toHaveBeenCalled();
+
+    pauseSpy.mockRestore();
+    loadSpy.mockRestore();
+  });
 });

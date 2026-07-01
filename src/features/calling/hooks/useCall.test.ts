@@ -913,6 +913,27 @@ describe('useCall', () => {
             expect(service.dispose).toHaveBeenCalled();
             expect(result.current.status).toBe('ended');
         });
+
+        it('sends hang_up from a stale callback using current call refs', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            const staleHangUp = result.current.hangUp;
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+
+            act(() => {
+                service.onCallIdReceived?.('call-123');
+                staleHangUp();
+            });
+
+            expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
+            expect(service.dispose).toHaveBeenCalled();
+            expect(result.current.status).toBe('ended');
+        });
     });
 
     describe('toggleMute', () => {
