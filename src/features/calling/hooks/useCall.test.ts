@@ -190,7 +190,8 @@ describe('useCall', () => {
         expect(callChannel.on).toHaveBeenCalledWith('offer', expect.any(Function));
 
         unmount();
-        expect(callChannel.leave).not.toHaveBeenCalled();
+        expect(callChannel.leave).toHaveBeenCalled();
+        expect(mockUserChannel.off).toHaveBeenCalledWith('incoming_call', 101);
     });
 
     it('does not duplicate signaling listeners for the same socket initialization', () => {
@@ -263,6 +264,33 @@ describe('useCall', () => {
             );
             const service = MockWebRTCService.mock.results[0]?.value;
             expect(service.startCall).toHaveBeenCalled();
+        });
+
+        it('does not tear down the outgoing call during local state updates', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+
+            act(() => {
+                service.onCallIdReceived?.('call-123');
+                service.onRemoteStream?.({ id: 'remote-preview' });
+            });
+
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            expect(result.current.status).toBe('calling');
+            expect(result.current.callId).toBe('call-123');
+            expect(result.current.remoteStream).toEqual({ id: 'remote-preview' });
+            expect(service.dispose).not.toHaveBeenCalled();
+            expect(callChannel.leave).not.toHaveBeenCalled();
+            expect(mockUserChannel.off).not.toHaveBeenCalled();
         });
 
         it('устанавливает таймаут 30 секунд и при его истечении завершает звонок', async () => {
@@ -1033,6 +1061,8 @@ describe('useCall', () => {
             unmount();
 
             expect(service.dispose).toHaveBeenCalled();
+            expect(callChannel.leave).toHaveBeenCalled();
+            expect(mockUserChannel.off).toHaveBeenCalledWith('incoming_call', 101);
         });
 
         it('clears local state when the socket manager becomes unavailable', () => {
@@ -1059,6 +1089,38 @@ describe('useCall', () => {
             });
 
             expect(service.dispose).toHaveBeenCalled();
+            expect(callChannel.leave).toHaveBeenCalled();
+            expect(mockUserChannel.off).toHaveBeenCalledWith('incoming_call', 101);
+            expect(result.current.status).toBe('idle');
+            expect(result.current.remoteUserId).toBeNull();
+            expect(result.current.remoteStream).toBeNull();
+            expect(result.current.callId).toBeNull();
+        });
+
+        it('clears local state when the authenticated user logs out', () => {
+            const { result, rerender } = renderHook(({ userId }) => useCall(userId), {
+                initialProps: { userId: currentUserId },
+            });
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+                service.onRemoteStream?.({ id: 'remote-stream' });
+            });
+
+            act(() => {
+                rerender({ userId: 0 });
+            });
+
+            expect(service.dispose).toHaveBeenCalled();
+            expect(callChannel.leave).toHaveBeenCalled();
+            expect(mockUserChannel.off).toHaveBeenCalledWith('incoming_call', 101);
             expect(result.current.status).toBe('idle');
             expect(result.current.remoteUserId).toBeNull();
             expect(result.current.remoteStream).toBeNull();

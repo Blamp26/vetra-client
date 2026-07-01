@@ -52,6 +52,9 @@ export function useCall(currentUserId: number): UseCallReturn {
     const signalingUnsubsRef = useRef<Array<() => void>>([]);
     const offerSdpRef = useRef<string | null>(null);
     const previousUserIdRef = useRef<number | null>(null);
+    const previousSocketManagerRef = useRef<typeof socketManager>(null);
+    const previousUserCallRefRef = useRef<ResourceRef | null>(null);
+    const teardownCallRef = useRef<(() => void) | null>(null);
     const localScreenStreamRef = useRef<MediaStream | null>(null);
     const screenTrackRef = useRef<MediaStreamTrack | null>(null);
     const screenTrackEndedHandlerRef = useRef<(() => void) | null>(null);
@@ -150,6 +153,13 @@ export function useCall(currentUserId: number): UseCallReturn {
     }, [status]);
 
     useEffect(() => {
+        teardownCallRef.current = () => {
+            teardownCall();
+            callSignalingService.disconnect();
+        };
+    }, [teardownCall]);
+
+    useEffect(() => {
         if (!shouldPollDiagnostics() || status !== 'active') return;
 
         const interval = setInterval(() => {
@@ -162,16 +172,35 @@ export function useCall(currentUserId: number): UseCallReturn {
     }, [status]);
 
     useEffect(() => {
+        return () => {
+            teardownCallRef.current?.();
+        };
+    }, []);
+
+    useEffect(() => {
         const previousUserId = previousUserIdRef.current;
+        const previousSocketManager = previousSocketManagerRef.current;
+        const previousUserCallRef = previousUserCallRefRef.current;
         const userChanged =
             previousUserId !== null &&
             currentUserId > 0 &&
             previousUserId !== currentUserId;
+        const socketChanged =
+            previousSocketManager !== null &&
+            previousSocketManager !== socketManager;
+        const nextUserCallRef = currentUserCallRef ?? currentUserId ?? null;
+        const userCallRefChanged =
+            previousUserCallRef !== null &&
+            nextUserCallRef !== null &&
+            previousUserCallRef !== nextUserCallRef;
 
         previousUserIdRef.current = currentUserId > 0 ? currentUserId : null;
+        previousSocketManagerRef.current = socketManager;
+        previousUserCallRefRef.current = nextUserCallRef;
 
-        if (!socketManager || currentUserId <= 0 || userChanged) {
+        if (!socketManager || currentUserId <= 0 || userChanged || socketChanged || userCallRefChanged) {
             teardownCall();
+            callSignalingService.disconnect();
         }
 
         if (!socketManager || currentUserId <= 0) return;
@@ -216,7 +245,10 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
 
         return () => {
-            teardownCall({ resetState: false });
+            unsubs.forEach((unsub) => unsub());
+            if (signalingUnsubsRef.current === unsubs) {
+                signalingUnsubsRef.current = [];
+            }
         };
     }, [cleanupScreenShare, socketManager, currentUserCallRef, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
 
