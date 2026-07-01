@@ -44,5 +44,13 @@ describe("MessageContextMenu", () => {
         name: "Forward unavailable for attachments",
       }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole("button", {
+        name: "Forward unavailable for attachments",
+      }),
+    ).toHaveAttribute(
+      "title",
+      "Messages with attachments cannot be forwarded yet.",
+    );
   });
 });

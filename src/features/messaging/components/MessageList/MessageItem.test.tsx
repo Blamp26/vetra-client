@@ -120,4 +120,30 @@ describe("MessageItem attachments", () => {
       screen.getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
   });
+
+  it("renders legacy photo attachments without an attachment object", () => {
+    renderMessageItem({
+      media_file_id: "legacy-photo-1",
+      media_mime_type: "image/jpeg",
+      attachment: null,
+    });
+
+    expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain(
+      "/api/v1/media/legacy-photo-1",
+    );
+  });
+
+  it("renders legacy file attachments without crashing", () => {
+    renderMessageItem({
+      media_file_id: "legacy-file-1",
+      media_mime_type: "application/pdf",
+      attachment: null,
+    });
+
+    expect(screen.getByText("File")).toBeInTheDocument();
+    expect(screen.getByText("PDF · Unknown size")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+  });
 });
