@@ -95,7 +95,12 @@ vi.mock("@/features/messaging/components/Sidebar/SidebarFooter", () => ({
 }));
 
 vi.mock("@/features/messaging/components/ChatWindow/ChatWindow", () => ({
-  ChatWindow: () => <div>chat</div>,
+  ChatWindow: ({ call }: { call: { status: string } }) => (
+    <div>
+      chat
+      {call.status === "active" && <div data-testid="call-surface" />}
+    </div>
+  ),
 }));
 
 vi.mock("@/features/messaging/components/ChannelPanel/ChannelPanel", () => ({
@@ -280,6 +285,7 @@ describe("App hash sync", () => {
     render(<App />);
 
     expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
+    expect(screen.getByTestId("call-surface")).toBeTruthy();
     expect(audioMounts.current).toBe(1);
     expect(useCallMock).toHaveBeenCalledTimes(1);
     expect(useCallMock).toHaveBeenCalledWith(1);
@@ -288,6 +294,7 @@ describe("App hash sync", () => {
 
     await waitFor(() => expect(window.location.hash).toBe("#/settings"));
     expect(screen.getByText("settings")).toBeTruthy();
+    expect(screen.queryByTestId("call-surface")).toBeNull();
     expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
     expect(audioMounts.current).toBe(1);
     expect(audioUnmounts.current).toBe(0);

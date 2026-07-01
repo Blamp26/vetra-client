@@ -14,7 +14,6 @@ import {
   resolveHashToActiveChat,
 } from "@/shared/utils/chatRoutes";
 import { IncomingCallModal } from "./features/calling/components/IncomingCallModal";
-import { ActiveCallWindow } from "./features/calling/components/ActiveCallWindow";
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 import { CallProvider, useCallContext } from "@/features/calling/context";
 
@@ -75,28 +74,22 @@ function App() {
 
 function AppShell() {
   const currentUser = useAppStore((s) => s.currentUser);
+  const call = useCallContext();
   const {
     status,
-    remoteScreenStream,
-    localScreenStream,
     remoteUsername,
     remoteUserId,
     isMuted,
     isScreenSharing,
     isScreenShareUpdating,
-    isRemoteScreenLoading,
     seconds,
-    diagnostics,
     callIssue,
     isIncomingActionPending,
     toggleMute,
     hangUp,
     acceptCall,
     rejectCall,
-    startCall,
-    startScreenShare,
-    stopScreenShare,
-  } = useCallContext();
+  } = call;
   const activeChat = useAppStore((s) => s.activeChat);
   const conversationPreviews = useAppStore((s) => s.conversationPreviews);
   const roomPreviews = useAppStore((s) => s.roomPreviews);
@@ -281,20 +274,19 @@ function AppShell() {
       </div>
 
       <div className="flex min-w-0 flex-1 overflow-hidden">
-        {chatTarget ? (
+        {!isSettingsRoute && chatTarget ? (
           <ChatWindow
             activeChat={chatTarget}
-            callStatus={status}
-            onStartCall={startCall}
+            call={call}
           />
-        ) : activeChat?.type === "server" ? (
+        ) : !isSettingsRoute && activeChat?.type === "server" ? (
           <EmptyState
             eyebrow="Workspace"
             title="Choose a channel"
             description="Open any channel to start messaging."
             mode="channel"
           />
-        ) : (
+        ) : !isSettingsRoute ? (
           <EmptyState
             eyebrow="Inbox"
             title="Pick a conversation"
@@ -303,7 +295,7 @@ function AppShell() {
             onAction={() => openModal("CREATE_PICKER")}
             mode="conversation"
           />
-        )}
+        ) : null}
       </div>
 
       {isSettingsRoute && (
@@ -316,25 +308,6 @@ function AppShell() {
           isPending={isIncomingActionPending}
           onAccept={acceptCall}
           onReject={rejectCall}
-        />
-      )}
-
-      {status === "active" && (
-        <ActiveCallWindow
-          remoteUsername={remoteUsername ?? `User #${remoteUserId}`}
-          seconds={seconds}
-          isMuted={isMuted}
-          isScreenSharing={isScreenSharing}
-          isScreenShareUpdating={isScreenShareUpdating}
-          isRemoteScreenLoading={isRemoteScreenLoading}
-          callIssue={callIssue}
-          remoteScreenStream={remoteScreenStream}
-          localScreenStream={localScreenStream}
-          diagnostics={diagnostics}
-          onMuteToggle={toggleMute}
-          onStartScreenShare={startScreenShare}
-          onStopScreenShare={stopScreenShare}
-          onHangUp={hangUp}
         />
       )}
 

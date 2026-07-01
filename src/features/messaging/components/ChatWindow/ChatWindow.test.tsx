@@ -45,6 +45,7 @@ vi.mock("@/features/calling/components/CallButton", () => ({
 }));
 
 import { ChatWindow } from "./ChatWindow";
+import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 
 function makeState() {
   return {
@@ -58,6 +59,40 @@ function makeState() {
     conversationPreviews: {},
     typingRoomMemberIds: new Set<number>(),
     typingRoomMemberInfo: {},
+  };
+}
+
+function makeCall(overrides: Partial<UseCallReturn> = {}): UseCallReturn {
+  return {
+    status: "idle",
+    remoteUserId: null,
+    remoteUsername: null,
+    callId: null,
+    isMuted: false,
+    isScreenSharing: false,
+    isScreenShareUpdating: false,
+    isRemoteScreenLoading: false,
+    remoteStream: null,
+    remoteScreenStream: null,
+    localScreenStream: null,
+    seconds: 0,
+    diagnostics: {
+      connectionState: "unknown",
+      iceConnectionState: "unknown",
+      iceGatheringState: "unknown",
+      signalingState: "unknown",
+      selectedLocalCandidateType: "unknown",
+    },
+    callIssue: null,
+    isIncomingActionPending: false,
+    startCall: vi.fn(),
+    startScreenShare: vi.fn(),
+    stopScreenShare: vi.fn(),
+    acceptCall: vi.fn(),
+    rejectCall: vi.fn(),
+    hangUp: vi.fn(),
+    toggleMute: vi.fn(),
+    ...overrides,
   };
 }
 
@@ -86,8 +121,7 @@ describe("ChatWindow presence rendering", () => {
     const { container } = render(
       <ChatWindow
         activeChat={{ type: "direct", partnerId: 2 }}
-        callStatus="idle"
-        onStartCall={vi.fn()}
+        call={makeCall()}
       />,
     );
 
@@ -123,8 +157,7 @@ describe("ChatWindow presence rendering", () => {
     const { container } = render(
       <ChatWindow
         activeChat={{ type: "direct", partnerId: 2 }}
-        callStatus="idle"
-        onStartCall={vi.fn()}
+        call={makeCall()}
       />,
     );
 
@@ -134,5 +167,77 @@ describe("ChatWindow presence rendering", () => {
 
     expect(container.querySelector(".bg-online")).toBeTruthy();
     expect(container.querySelector(".bg-offline")).toBeFalsy();
+  });
+
+  it("replaces messages and composer with CallSurface for the active direct call", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2 }}
+        call={makeCall({
+          status: "active",
+          remoteUserId: 2,
+          remoteUsername: "Alice",
+          seconds: 8,
+          diagnostics: {
+            connectionState: "connected",
+            iceConnectionState: "connected",
+            iceGatheringState: "complete",
+            signalingState: "stable",
+            selectedLocalCandidateType: "host",
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("call-surface")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-input")).not.toBeInTheDocument();
+  });
+
+  it("keeps messages visible when the active call belongs to another direct chat", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2 }}
+        call={makeCall({
+          status: "active",
+          remoteUserId: 3,
+          remoteUsername: "Bob",
+        })}
+      />,
+    );
+
+    expect(screen.queryByTestId("call-surface")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-list")).toBeInTheDocument();
+    expect(screen.getByTestId("message-input")).toBeInTheDocument();
   });
 });

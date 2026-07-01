@@ -12,7 +12,8 @@ import { formatLastSeen } from "@/utils/formatDate";
 import type { ActiveChat, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from "@/features/calling/components/CallButton";
-import type { CallStatus } from "@/features/calling/hooks/useCall.types";
+import { CallSurface } from "@/features/calling/components/CallSurface";
+import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { cn } from "@/shared/utils/cn";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
@@ -22,8 +23,7 @@ import {
 
 interface Props {
   activeChat: ActiveChat;
-  callStatus: CallStatus;
-  onStartCall: (targetUserId: string | number, targetUsername?: string) => void;
+  call: UseCallReturn;
 }
 
 interface ReplyTarget {
@@ -41,7 +41,19 @@ function TypingIndicator({ nickname }: { nickname: string }) {
   );
 }
 
-export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
+function isActiveCallForChat(activeChat: ActiveChat, call: UseCallReturn): boolean {
+  if (call.status !== "active") return false;
+  if (activeChat.type !== "direct") return false;
+  if (call.remoteUserId === null || call.remoteUserId === undefined) return false;
+
+  const callRemoteId = String(call.remoteUserId);
+  return (
+    callRemoteId === String(activeChat.partnerId) ||
+    (activeChat.partnerRef !== undefined && callRemoteId === String(activeChat.partnerRef))
+  );
+}
+
+export function ChatWindow({ activeChat, call }: Props) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
 
@@ -179,6 +191,8 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
 
   if (!currentUser) return null;
 
+  const shouldShowCallSurface = isActiveCallForChat(activeChat, call);
+
   const renderHeader = () => {
     if (activeChat.type === "direct") {
       if (!partner)
@@ -239,8 +253,8 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
                 activeChat.partnerId
               }
               targetUsername={partner.display_name || partner.username}
-              status={callStatus}
-              onCall={onStartCall}
+              status={call.status}
+              onCall={call.startCall}
             />
             <button onClick={() => setIsSearchOpen(true)}>Search</button>
           </div>
@@ -273,28 +287,49 @@ export function ChatWindow({ activeChat, callStatus, onStartCall }: Props) {
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-background">
       {renderHeader()}
 
-      <div className="relative flex-1 overflow-hidden p-2">
-        <MessageList
-          key={chatId}
-          messages={messages}
-          currentUserId={currentUser.id}
-          isLoading={isLoading}
-          hasMore={hasMore}
-          onLoadMore={loadMore}
-          chatContext={chatContext!}
-          onReply={setReplyTo}
+      {shouldShowCallSurface ? (
+        <CallSurface
+          remoteUsername={call.remoteUsername ?? `User #${call.remoteUserId}`}
+          seconds={call.seconds}
+          isMuted={call.isMuted}
+          isScreenSharing={call.isScreenSharing}
+          isScreenShareUpdating={call.isScreenShareUpdating}
+          isRemoteScreenLoading={call.isRemoteScreenLoading}
+          callIssue={call.callIssue}
+          remoteScreenStream={call.remoteScreenStream}
+          localScreenStream={call.localScreenStream}
+          diagnostics={call.diagnostics}
+          onMuteToggle={call.toggleMute}
+          onStartScreenShare={call.startScreenShare}
+          onStopScreenShare={call.stopScreenShare}
+          onHangUp={call.hangUp}
         />
-      </div>
+      ) : (
+        <>
+          <div className="relative flex-1 overflow-hidden p-2">
+            <MessageList
+              key={chatId}
+              messages={messages}
+              currentUserId={currentUser.id}
+              isLoading={isLoading}
+              hasMore={hasMore}
+              onLoadMore={loadMore}
+              chatContext={chatContext!}
+              onReply={setReplyTo}
+            />
+          </div>
 
-      {typingNickname && <TypingIndicator nickname={typingNickname} />}
+          {typingNickname && <TypingIndicator nickname={typingNickname} />}
 
-      <MessageInput
-        onSend={sendMessage}
-        onTypingStart={handleTypingStart}
-        onTypingStop={handleTypingStop}
-        replyTo={replyTo}
-        onCancelReply={() => setReplyTo(null)}
-      />
+          <MessageInput
+            onSend={sendMessage}
+            onTypingStart={handleTypingStart}
+            onTypingStop={handleTypingStop}
+            replyTo={replyTo}
+            onCancelReply={() => setReplyTo(null)}
+          />
+        </>
+      )}
 
       {isSearchOpen && (
         <MessageSearch
