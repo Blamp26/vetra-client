@@ -164,6 +164,7 @@ function buildConfig() {
     "channel-messages",
     "dm-messages",
     "media-upload",
+    "media-download",
     "call-signaling",
     "soak",
   ]);
@@ -177,7 +178,8 @@ function buildConfig() {
     args.write === "true" ||
     env.VETRA_LOAD_WRITE === "1";
   const joinRoomDuringStartupDefault = mode === "channel-messages";
-  const defaultVus = mode === "media-upload" ? 1 : 10;
+  const defaultVus =
+    mode === "media-upload" || mode === "media-download" ? 1 : 10;
 
   const config = {
     apiUrl: env.VETRA_LOAD_API_URL?.replace(/\/+$/, "") || "",
@@ -190,6 +192,7 @@ function buildConfig() {
     durationSeconds: envInt("VETRA_LOAD_DURATION_SECONDS", 60),
     messagesPerSecond: envNumber("VETRA_LOAD_MESSAGES_PER_SECOND", 5),
     uploadsPerSecond: envNumber("VETRA_LOAD_UPLOADS_PER_SECOND", 1),
+    downloadsPerSecond: envNumber("VETRA_LOAD_DOWNLOADS_PER_SECOND", 1),
     // Example for higher-throughput write tests:
     // VETRA_LOAD_MESSAGES_PER_SECOND=20
     // VETRA_LOAD_MESSAGE_MAX_IN_FLIGHT=50
@@ -199,6 +202,7 @@ function buildConfig() {
     ),
     messageTimeoutMs: envInt("VETRA_LOAD_MESSAGE_TIMEOUT_MS", 15000),
     uploadMaxInFlight: envInt("VETRA_LOAD_UPLOAD_MAX_IN_FLIGHT", 10),
+    downloadMaxInFlight: envInt("VETRA_LOAD_DOWNLOAD_MAX_IN_FLIGHT", 20),
     rampBatchSize: envInt("VETRA_LOAD_RAMP_BATCH_SIZE", 25),
     rampBatchDelayMs: envInt("VETRA_LOAD_RAMP_BATCH_DELAY_MS", 1000),
     startupTimeoutMs: envInt("VETRA_LOAD_STARTUP_TIMEOUT_MS", 15000),
@@ -302,6 +306,10 @@ function buildConfig() {
     );
   }
 
+  if (mode === "media-download" && !config.loadMediaFileId) {
+    fail("VETRA_LOAD_MEDIA_FILE_ID is required for media-download mode.");
+  }
+
   if (config.serverMonitorEnabled) {
     if (!config.serverService) {
       fail("VETRA_LOAD_SERVER_SERVICE resolved to empty");
@@ -323,7 +331,7 @@ function buildConfig() {
     fail("Missing required environment variable VETRA_LOAD_API_URL.");
   }
 
-  if (mode !== "media-upload" && !config.socketUrl) {
+  if (mode !== "media-upload" && mode !== "media-download" && !config.socketUrl) {
     fail("Missing required environment variable VETRA_LOAD_SOCKET_URL.");
   }
 
@@ -588,6 +596,39 @@ async function uploadMediaFixture(apiBaseUrl, auth, fixture) {
   };
 }
 
+function normalizeContentType(value) {
+  if (!value) return "unknown";
+  return String(value).split(";")[0].trim().toLowerCase() || "unknown";
+}
+
+function truncateText(value, maxLength = 1000) {
+  const text = typeof value === "string" ? value : String(value ?? "");
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}...`;
+}
+
+async function downloadMediaFile(apiBaseUrl, auth, mediaFileId) {
+  const response = await fetch(`${apiBaseUrl}/media/${mediaFileId}`, {
+    method: "GET",
+    headers: authHeaders(auth.token),
+  });
+
+  const contentType = normalizeContentType(response.headers.get("content-type"));
+  const buffer = await response.arrayBuffer();
+  const bytes = buffer.byteLength;
+  const decoder = new TextDecoder();
+  const bodyText = response.ok ? null : truncateText(decoder.decode(buffer));
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    contentType,
+    bytes,
+    bodyText,
+  };
+}
+
 async function probeBackend(apiBaseUrl) {
   const origin = new URL(apiBaseUrl).origin;
   const rootResponse = await fetch(origin, { method: "GET" });
@@ -782,6 +823,24 @@ function createMetrics(mode, vus, durationSeconds) {
     uploadSchedulerCatchUpSends: 0,
     uploadSchedulerLagMs: [],
     uploadSchedulerEffectiveUploadsPerSecond: null,
+    downloadAttempts: 0,
+    downloadSuccesses: 0,
+    downloadFailures: 0,
+    downloadStatusCounts: {},
+    downloadContentTypeCounts: {},
+    downloadFailureSamples: [],
+    downloadLatenciesMs: [],
+    downloadBytesTotal: 0,
+    downloadMaxInFlightObserved: 0,
+    downloadFinalInFlightCount: 0,
+    downloadSkippedTicksMaxInFlight: 0,
+    downloadSkippedSendsMaxInFlight: 0,
+    downloadSchedulerRequestedRate: null,
+    downloadSchedulerExpectedByElapsedDuration: 0,
+    downloadSchedulerWakeCount: 0,
+    downloadSchedulerCatchUpSends: 0,
+    downloadSchedulerLagMs: [],
+    downloadSchedulerEffectiveDownloadsPerSecond: null,
     authFailures: 0,
     authFailuresByType: {},
     serverMonitor: {
@@ -836,8 +895,24 @@ function recordUploadStatus(metrics, status) {
   metrics.uploadStatusCounts[key] = (metrics.uploadStatusCounts[key] ?? 0) + 1;
 }
 
+function recordDownloadStatus(metrics, status) {
+  const key = String(status);
+  metrics.downloadStatusCounts[key] =
+    (metrics.downloadStatusCounts[key] ?? 0) + 1;
+}
+
+function recordDownloadContentType(metrics, contentType) {
+  const key = normalizeContentType(contentType);
+  metrics.downloadContentTypeCounts[key] =
+    (metrics.downloadContentTypeCounts[key] ?? 0) + 1;
+}
+
 function recordUploadFailure(metrics, sample) {
   pushLimitedSample(metrics.uploadFailureSamples, sample);
+}
+
+function recordDownloadFailure(metrics, sample) {
+  pushLimitedSample(metrics.downloadFailureSamples, sample);
 }
 
 function recordUploadSuccessMediaId(metrics, mediaFileId) {
@@ -1131,6 +1206,36 @@ function summarizeMetrics(metrics) {
     uploadSchedulerLagMs: buildLatencyStats(metrics.uploadSchedulerLagMs),
     uploadSchedulerEffectiveUploadsPerSecond:
       metrics.uploadSchedulerEffectiveUploadsPerSecond,
+    downloadAttempts: metrics.downloadAttempts,
+    downloadSuccesses: metrics.downloadSuccesses,
+    downloadFailures: metrics.downloadFailures,
+    downloadSuccessRate:
+      metrics.downloadAttempts === 0
+        ? null
+        : Number(
+            ((metrics.downloadSuccesses / metrics.downloadAttempts) * 100).toFixed(2),
+          ),
+    downloadStatusCounts: metrics.downloadStatusCounts,
+    downloadContentTypeCounts: metrics.downloadContentTypeCounts,
+    downloadFailureSamples: metrics.downloadFailureSamples,
+    downloadLatenciesMs: buildLatencyStats(metrics.downloadLatenciesMs),
+    effectiveDownloadsPerSecond: approxRate(
+      metrics.downloadSuccesses,
+      metrics.durationSeconds * 1000,
+    ),
+    downloadBytesTotal: metrics.downloadBytesTotal,
+    downloadMaxInFlightObserved: metrics.downloadMaxInFlightObserved,
+    downloadFinalInFlightCount: metrics.downloadFinalInFlightCount,
+    downloadSkippedTicksMaxInFlight: metrics.downloadSkippedTicksMaxInFlight,
+    downloadSkippedSendsMaxInFlight: metrics.downloadSkippedSendsMaxInFlight,
+    downloadSchedulerRequestedRate: metrics.downloadSchedulerRequestedRate,
+    downloadSchedulerExpectedByElapsedDuration:
+      metrics.downloadSchedulerExpectedByElapsedDuration,
+    downloadSchedulerWakeCount: metrics.downloadSchedulerWakeCount,
+    downloadSchedulerCatchUpSends: metrics.downloadSchedulerCatchUpSends,
+    downloadSchedulerLagMs: buildLatencyStats(metrics.downloadSchedulerLagMs),
+    downloadSchedulerEffectiveDownloadsPerSecond:
+      metrics.downloadSchedulerEffectiveDownloadsPerSecond,
     authFailures: metrics.authFailures,
     authFailuresByType: metrics.authFailuresByType,
     approximateMessagesPerSecond: approxMessagesPerSecond(metrics),
@@ -1234,6 +1339,57 @@ function printSummary(metrics) {
     );
     console.log(
       `upload failure samples: ${JSON.stringify(summary.uploadFailureSamples)}`,
+    );
+  }
+  if (summary.targetMode === "media-download") {
+    console.log(`download attempts: ${summary.downloadAttempts}`);
+    console.log(`download successes: ${summary.downloadSuccesses}`);
+    console.log(`download failures: ${summary.downloadFailures}`);
+    console.log(`download success rate %: ${summary.downloadSuccessRate ?? "-"}`);
+    console.log(
+      `download HTTP status counts: ${JSON.stringify(summary.downloadStatusCounts)}`,
+    );
+    console.log(
+      `download content-type counts: ${JSON.stringify(summary.downloadContentTypeCounts)}`,
+    );
+    console.log(`download bytes total: ${summary.downloadBytesTotal}`);
+    console.log(
+      `download max in-flight observed: ${summary.downloadMaxInFlightObserved}`,
+    );
+    console.log(
+      `download final in-flight count: ${summary.downloadFinalInFlightCount}`,
+    );
+    console.log(
+      `download skipped ticks (max in-flight): ${summary.downloadSkippedTicksMaxInFlight}`,
+    );
+    console.log(
+      `download skipped sends (max in-flight): ${summary.downloadSkippedSendsMaxInFlight}`,
+    );
+    console.log(
+      `download requested/sec: ${summary.downloadSchedulerRequestedRate ?? "-"}`,
+    );
+    console.log(
+      `download expected by elapsed duration: ${summary.downloadSchedulerExpectedByElapsedDuration}`,
+    );
+    console.log(`download scheduler wakes: ${summary.downloadSchedulerWakeCount}`);
+    console.log(
+      `download catch-up sends: ${summary.downloadSchedulerCatchUpSends}`,
+    );
+    console.log(
+      `download scheduler lag ms: p50=${summary.downloadSchedulerLagMs.p50 ?? "-"} p95=${summary.downloadSchedulerLagMs.p95 ?? "-"} p99=${summary.downloadSchedulerLagMs.p99 ?? "-"} max=${summary.downloadSchedulerLagMs.max ?? "-"}`,
+    );
+    console.log(
+      `download effective downloads/sec: ${summary.downloadSchedulerEffectiveDownloadsPerSecond ?? summary.effectiveDownloadsPerSecond ?? "-"}`,
+    );
+    console.log(
+      `download latency ms: p50=${summary.downloadLatenciesMs.p50 ?? "-"} p95=${summary.downloadLatenciesMs.p95 ?? "-"} p99=${summary.downloadLatenciesMs.p99 ?? "-"} max=${summary.downloadLatenciesMs.max ?? "-"}`,
+    );
+    console.log(`auth failures: ${summary.authFailures}`);
+    console.log(
+      `auth failures by type: ${JSON.stringify(summary.authFailuresByType)}`,
+    );
+    console.log(
+      `download failure samples: ${JSON.stringify(summary.downloadFailureSamples)}`,
     );
   }
   console.log(`max in-flight observed: ${summary.maxMessageInFlightObserved}`);
@@ -3027,6 +3183,119 @@ async function runMediaUploadMode(workers, metrics) {
     schedulerSummary.schedulerEffectiveMessagesPerSecond;
 }
 
+async function runMediaDownloadMode(auth, metrics) {
+  if (!config.loadMediaFileId) {
+    fail("media-download mode requires VETRA_LOAD_MEDIA_FILE_ID.");
+  }
+
+  info(`Download target: ${config.apiUrl}/media/${config.loadMediaFileId}`);
+  info(
+    `Download rate=${config.downloadsPerSecond}/sec VUs=${config.vus} max in-flight=${config.downloadMaxInFlight}`,
+  );
+
+  const workers = Array.from({ length: config.vus }, (_, index) => ({
+    label: `download-vu-${index + 1}`,
+    auth,
+  }));
+
+  metrics.startedVus = workers.length;
+
+  const intervalMs = rateToIntervalMs(config.downloadsPerSecond);
+  const drainTimeoutMs = Math.max(config.messageTimeoutMs, 5000);
+  const durationMs = config.durationSeconds * 1000;
+  const stopAtMs = performance.now() + durationMs;
+  let downloadIndex = 0;
+
+  const scheduler = createBoundedInFlightScheduler({
+    intervalMs,
+    requestedMessageRate: config.downloadsPerSecond,
+    maxInFlight: config.downloadMaxInFlight,
+    stopAtMs: config.downloadMaxInFlight > 1 ? stopAtMs : null,
+    onTick: async () => {
+      const downloadNumber = downloadIndex + 1;
+      const worker = workers[downloadIndex % workers.length];
+      downloadIndex = downloadNumber;
+      const startedAt = performance.now();
+
+      metrics.downloadAttempts += 1;
+
+      try {
+        const result = await downloadMediaFile(
+          config.apiUrl,
+          worker.auth,
+          config.loadMediaFileId,
+        );
+
+        recordDownloadStatus(metrics, result.status);
+        recordDownloadContentType(metrics, result.contentType);
+        metrics.downloadBytesTotal += result.bytes;
+
+        if (!result.ok) {
+          metrics.downloadFailures += 1;
+          recordDownloadFailure(metrics, {
+            vuId: worker.label,
+            downloadNumber,
+            status: result.status,
+            statusText: result.statusText,
+            contentType: result.contentType,
+            bodyText: result.bodyText,
+          });
+          throw new Error(
+            `media download failed: status=${result.status} statusText=${result.statusText} contentType=${result.contentType} body=${result.bodyText ?? ""}`,
+          );
+        }
+
+        metrics.downloadSuccesses += 1;
+        metrics.downloadLatenciesMs.push(performance.now() - startedAt);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          !metrics.downloadFailureSamples.some(
+            (sample) =>
+              sample.vuId === worker.label &&
+              sample.downloadNumber === downloadNumber,
+          )
+        ) {
+          recordDownloadFailure(metrics, {
+            vuId: worker.label,
+            downloadNumber,
+            status: null,
+            statusText: null,
+            contentType: null,
+            bodyText: truncateText(message),
+          });
+        }
+        recordError(metrics, error);
+      }
+    },
+    onUnhandledError: (error) => {
+      recordError(metrics, error);
+    },
+  });
+
+  scheduler.start();
+  await sleep(durationMs);
+  const schedulerSummary = await scheduler.stopAndDrain(drainTimeoutMs);
+  metrics.downloadMaxInFlightObserved = Math.max(
+    metrics.downloadMaxInFlightObserved,
+    schedulerSummary.maxInFlightObserved,
+  );
+  metrics.downloadFinalInFlightCount = schedulerSummary.finalInFlightCount;
+  metrics.downloadSkippedTicksMaxInFlight +=
+    schedulerSummary.skippedTicksMaxInFlight;
+  metrics.downloadSkippedSendsMaxInFlight +=
+    schedulerSummary.skippedSendsMaxInFlight;
+  metrics.downloadSchedulerRequestedRate =
+    schedulerSummary.requestedMessageRate;
+  metrics.downloadSchedulerExpectedByElapsedDuration =
+    schedulerSummary.expectedSendsByElapsedDuration;
+  metrics.downloadSchedulerWakeCount = schedulerSummary.schedulerWakeCount;
+  metrics.downloadSchedulerCatchUpSends = schedulerSummary.catchUpSends;
+  metrics.downloadSchedulerLagMs.push(...schedulerSummary.schedulerLagMs);
+  metrics.downloadSchedulerEffectiveDownloadsPerSecond =
+    schedulerSummary.schedulerEffectiveMessagesPerSecond;
+}
+
 async function runCallSignalingMode(primarySessions, metrics, secondaryAuth) {
   for (const session of primarySessions) {
     await ensureCallChannel(session, metrics);
@@ -3191,6 +3460,13 @@ async function main() {
     );
   }
 
+  if (config.mode === "media-download") {
+    info(`Download target URL: ${config.apiUrl}/media/${config.loadMediaFileId}`);
+    info(
+      `Download config: rate=${config.downloadsPerSecond}/sec vus=${config.vus} maxInFlight=${config.downloadMaxInFlight}`,
+    );
+  }
+
   await probeBackend(config.apiUrl);
   let primaryAuth = null;
   let secondaryAuth = null;
@@ -3276,6 +3552,9 @@ async function main() {
       case "media-upload":
         uploadWorkers = buildUploadWorkers(primaryAuth, metrics);
         await runMediaUploadMode(uploadWorkers, metrics);
+        break;
+      case "media-download":
+        await runMediaDownloadMode(primaryAuth, metrics);
         break;
       default:
         fail(`Unsupported mode ${config.mode}`);
