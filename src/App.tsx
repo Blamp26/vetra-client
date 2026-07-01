@@ -13,12 +13,10 @@ import {
   buildHashForActiveChat,
   resolveHashToActiveChat,
 } from "@/shared/utils/chatRoutes";
-import { useCall } from "./features/calling/hooks/useCall";
-
 import { IncomingCallModal } from "./features/calling/components/IncomingCallModal";
 import { ActiveCallWindow } from "./features/calling/components/ActiveCallWindow";
-import { CallAudioRenderer } from "./features/calling/components/CallAudioRenderer/CallAudioRenderer";
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
+import { CallProvider, useCallContext } from "@/features/calling/context";
 
 function EmptyState({
   eyebrow,
@@ -61,9 +59,24 @@ function EmptyState({
 
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
+  useAuthHydration();
+  useSocketEvents();
+
+  if (!currentUser) {
+    return <AuthPage />;
+  }
+
+  return (
+    <CallProvider currentUserId={currentUser.id}>
+      <AppShell />
+    </CallProvider>
+  );
+}
+
+function AppShell() {
+  const currentUser = useAppStore((s) => s.currentUser);
   const {
     status,
-    remoteStream,
     remoteScreenStream,
     localScreenStream,
     remoteUsername,
@@ -83,15 +96,13 @@ function App() {
     startCall,
     startScreenShare,
     stopScreenShare,
-  } = useCall(currentUser?.id ?? 0);
+  } = useCallContext();
   const activeChat = useAppStore((s) => s.activeChat);
   const conversationPreviews = useAppStore((s) => s.conversationPreviews);
   const roomPreviews = useAppStore((s) => s.roomPreviews);
   const servers = useAppStore((s) => s.servers);
   const serverChannels = useAppStore((s) => s.serverChannels);
   const searchResults = useAppStore((s) => s.searchResults);
-  const selectedOutputDeviceId = useAppStore((s) => s.selectedOutputDeviceId);
-  const setOutputDevice = useAppStore((s) => s.setOutputDevice);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
 
@@ -100,30 +111,10 @@ function App() {
   );
   const currentActiveChatKey = activeChatKey(activeChat);
   const currentActiveChatKeyRef = useRef(currentActiveChatKey);
-  const lastOutputDeviceFallbackRef = useRef<string | null>(null);
 
   useEffect(() => {
     currentActiveChatKeyRef.current = currentActiveChatKey;
   }, [currentActiveChatKey]);
-
-  const handleOutputDeviceFallback = useCallback((missingDeviceId?: string) => {
-    setOutputDevice('default');
-    if (typeof window === "undefined") return;
-    if (missingDeviceId && lastOutputDeviceFallbackRef.current === missingDeviceId) {
-      return;
-    }
-
-    lastOutputDeviceFallbackRef.current = missingDeviceId ?? 'unknown';
-    window.dispatchEvent(
-      new CustomEvent("vetra:toast", {
-        detail: {
-          title: "Audio output switched to default",
-          body: "Your previous output device is unavailable, so call audio is using the system default device.",
-          durationMs: 4000,
-        },
-      }),
-    );
-  }, [setOutputDevice]);
 
   const navigateToHash = useCallback((nextHash: string) => {
     const normalizedHash = nextHash || "#";
@@ -226,9 +217,6 @@ function App() {
     routeHash,
   ]);
 
-  useAuthHydration();
-  useSocketEvents();
-
   const lastServerIdRef = useRef<number | null>(null);
 
   const showChannelPanel =
@@ -262,18 +250,8 @@ function App() {
     return activeChat;
   }, [activeChat]);
 
-  if (!currentUser) {
-    return <AuthPage />;
-  }
-
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-      <CallAudioRenderer
-        remoteStream={remoteStream}
-        selectedOutputDeviceId={selectedOutputDeviceId}
-        onOutputDeviceFallback={handleOutputDeviceFallback}
-      />
-
       <div className="flex h-full w-[400px] flex-shrink-0 flex-col border-r border-border bg-sidebar">
         <div className="flex flex-1 overflow-hidden">
           <Sidebar isServerMode={showChannelPanel} />

@@ -1,9 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useAppStoreMock, setActiveChatMock } = vi.hoisted(() => ({
+const {
+  useAppStoreMock,
+  setActiveChatMock,
+  useCallMock,
+  audioMounts,
+  audioUnmounts,
+} = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
   setActiveChatMock: vi.fn(),
+  useCallMock: vi.fn(),
+  audioMounts: { current: 0 },
+  audioUnmounts: { current: 0 },
 }));
 
 vi.mock("@/store", () => ({
@@ -11,8 +20,33 @@ vi.mock("@/store", () => ({
     useAppStoreMock(selector),
 }));
 
-vi.mock("./features/calling/hooks/useCall", () => ({
-  useCall: () => ({
+vi.mock("@/features/calling/hooks/useCall", () => ({
+  useCall: (currentUserId: number) => useCallMock(currentUserId),
+}));
+
+vi.mock("@/features/calling/components/CallAudioRenderer/CallAudioRenderer", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+
+  return {
+    CallAudioRenderer: ({ remoteStream }: { remoteStream: MediaStream | null }) => {
+      React.useEffect(() => {
+        audioMounts.current += 1;
+        return () => {
+          audioUnmounts.current += 1;
+        };
+      }, []);
+
+      return (
+        <div data-testid="call-audio-renderer">
+          {remoteStream ? "audio-active" : "audio-idle"}
+        </div>
+      );
+    },
+  };
+});
+
+function makeCallState(overrides = {}) {
+  return {
     status: "idle",
     remoteStream: null,
     remoteScreenStream: null,
@@ -34,8 +68,9 @@ vi.mock("./features/calling/hooks/useCall", () => ({
     startCall: vi.fn(),
     startScreenShare: vi.fn(),
     stopScreenShare: vi.fn(),
-  }),
-}));
+    ...overrides,
+  };
+}
 
 vi.mock("@/shared/hooks/useAuthHydration", () => ({
   useAuthHydration: vi.fn(),
@@ -102,6 +137,8 @@ function makeState() {
     serverChannels: {},
     searchResults: { users: [], servers: [] },
     setActiveChat: setActiveChatMock,
+    selectedOutputDeviceId: "default",
+    setOutputDevice: vi.fn(),
     openModal: vi.fn(),
   };
 }
@@ -110,6 +147,10 @@ describe("App hash sync", () => {
   beforeEach(() => {
     useAppStoreMock.mockReset();
     setActiveChatMock.mockReset();
+    useCallMock.mockReset();
+    useCallMock.mockReturnValue(makeCallState());
+    audioMounts.current = 0;
+    audioUnmounts.current = 0;
     window.location.hash = "#";
   });
 
@@ -209,5 +250,49 @@ describe("App hash sync", () => {
 
     await waitFor(() => expect(window.location.hash).toBe("#/settings"));
     expect(screen.getByText("settings")).toBeTruthy();
+  });
+
+  it("keeps provider-owned active call state and audio mounted while opening settings", async () => {
+    const remoteStream = { id: "remote-stream-1" } as MediaStream;
+    const startCall = vi.fn();
+    const state = makeState();
+    state.activeChat = {
+      type: "direct",
+      partnerId: 2,
+      partnerRef: "a0d2a839-4b37-441e-958e-6d4369e94de9",
+    };
+    window.location.hash = "#/a0d2a839-4b37-441e-958e-6d4369e94de9";
+
+    useCallMock.mockReturnValue(
+      makeCallState({
+        status: "active",
+        remoteStream,
+        remoteUsername: "Partner",
+        remoteUserId: 2,
+        seconds: 42,
+        startCall,
+      }),
+    );
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
+    expect(audioMounts.current).toBe(1);
+    expect(useCallMock).toHaveBeenCalledTimes(1);
+    expect(useCallMock).toHaveBeenCalledWith(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "open settings" }));
+
+    await waitFor(() => expect(window.location.hash).toBe("#/settings"));
+    expect(screen.getByText("settings")).toBeTruthy();
+    expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
+    expect(audioMounts.current).toBe(1);
+    expect(audioUnmounts.current).toBe(0);
+    expect(useCallMock).toHaveBeenCalledTimes(1);
+    expect(startCall).not.toHaveBeenCalled();
+    expect(setActiveChatMock).not.toHaveBeenCalled();
   });
 });
