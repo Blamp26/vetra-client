@@ -222,16 +222,18 @@ export class WebRTCService {
         debugCall('[WebRTCService] send offer', {
             event: 'offer',
             call_id: this.callId,
-            target_user_id: this.remoteUserId,
+            to_user_id: this.remoteUserId,
             sdp_type: offer.type,
         });
-        this.channel.push('offer', {
+        const { call_id } = await this.pushWithReply<{ call_id: string }>('offer', {
             sdp: this.peerConnection!.localDescription!.sdp,
             to_user_id: this.remoteUserId,
-        }).receive('ok', ({ call_id }: { call_id: string }) => {
-            this.setCallId(call_id);
-            if (this.onCallIdReceived) this.onCallIdReceived(call_id);
         });
+        if (typeof call_id !== 'string' || call_id.length === 0) {
+            throw new Error('Call offer was accepted without a call_id');
+        }
+        this.setCallId(call_id);
+        if (this.onCallIdReceived) this.onCallIdReceived(call_id);
     }
 
     async acceptCall(remoteSdp: string): Promise<void> {
@@ -252,7 +254,7 @@ export class WebRTCService {
             call_id: this.getCallId(),
             sdp_type: answer.type,
         });
-        this.channel.push('answer', {
+        await this.pushWithReply('answer', {
             sdp: this.peerConnection!.localDescription!.sdp,
             to_user_id: this.remoteUserId,
             call_id: this.getCallId(),
@@ -683,6 +685,45 @@ export class WebRTCService {
         return this.callId ?? `${this.remoteUserId}:${this.localUserId}`;
     }
 
+    private pushWithReply<T = void>(event: string, payload: Record<string, unknown>): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            this.channel.push(event, payload)
+                .receive('ok', (response: T) => {
+                    debugCall('[WebRTCService] signal acknowledged', {
+                        event,
+                        call_id: this.callId,
+                    });
+                    resolve(response);
+                })
+                .receive('error', (reason: unknown) => {
+                    debugCall('[WebRTCService] signal rejected', {
+                        event,
+                        call_id: this.callId,
+                        reason: typeof reason === 'object' ? JSON.stringify(reason) : String(reason),
+                    });
+                    reject(new Error(`Call signaling ${event} failed: ${this.describeSignalFailure(reason)}`));
+                })
+                .receive('timeout', () => {
+                    debugCall('[WebRTCService] signal timed out', {
+                        event,
+                        call_id: this.callId,
+                    });
+                    reject(new Error(`Call signaling ${event} timed out`));
+                });
+        });
+    }
+
+    private describeSignalFailure(reason: unknown): string {
+        if (!reason || typeof reason !== 'object') {
+            return String(reason ?? 'unknown');
+        }
+
+        const value = (reason as Record<string, unknown>).reason;
+        return typeof value === 'string' && value.length > 0
+            ? value
+            : JSON.stringify(reason);
+    }
+
     private async renegotiate(reason: string): Promise<void> {
         const peerConnection = this.peerConnection;
         if (!peerConnection) return;
@@ -716,7 +757,7 @@ export class WebRTCService {
             debugCall('[WebRTCService] create renegotiation offer', {
                 event: 'renegotiate',
                 call_id: this.getCallId(),
-                target_user_id: this.remoteUserId,
+                to_user_id: this.remoteUserId,
                 reason,
                 sdp_type: offer.type,
                 signalingState: peerConnection.signalingState,
@@ -797,7 +838,7 @@ export class WebRTCService {
         debugCall('[WebRTCService] send call signal', {
             event: 'renegotiate',
             call_id: this.getCallId(),
-            target_user_id: this.remoteUserId,
+            to_user_id: this.remoteUserId,
             sdp_type: signal.type,
             screen_share_active: signal.screen_share_active,
         });

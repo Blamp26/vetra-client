@@ -156,11 +156,23 @@ const mockGetUserMedia = vi.fn(async () => ({
 
 const mockGetDisplayMedia = vi.fn(async () => mockScreenStream);
 
-const mockChannelPush = vi.fn().mockReturnValue({
-    receive: vi.fn((event, cb) => {
-        if (event === 'ok') cb({ call_id: '123:456' });
-        return { receive: vi.fn() };
-    }),
+const mockPushReply = {
+    ok: { call_id: '123:456' } as unknown,
+    error: null as unknown,
+    timeout: false,
+};
+
+const mockChannelPush = vi.fn().mockImplementation(() => {
+    const response = {
+        receive(event: string, cb: (payload?: unknown) => void) {
+            if (event === 'ok' && mockPushReply.ok !== null) cb(mockPushReply.ok);
+            if (event === 'error' && mockPushReply.error !== null) cb(mockPushReply.error);
+            if (event === 'timeout' && mockPushReply.timeout) cb();
+            return response;
+        },
+    };
+
+    return response;
 });
 
 const mockChannel = {
@@ -199,6 +211,9 @@ beforeEach(() => {
         getAudioTracks: vi.fn(() => []),
         getVideoTracks: vi.fn(() => [mockScreenTrack]),
     };
+    mockPushReply.ok = { call_id: '123:456' };
+    mockPushReply.error = null;
+    mockPushReply.timeout = false;
 
     (global as any).RTCPeerConnection = MockRTCPeerConnection as any;
 
@@ -255,6 +270,13 @@ describe('WebRTCService', () => {
             await service.startCall();
 
             expect(onCallId).toHaveBeenCalledWith('123:456');
+        });
+
+        it('rejects when the server rejects the initial offer', async () => {
+            mockPushReply.ok = null;
+            mockPushReply.error = { reason: 'not_found' };
+
+            await expect(service.startCall()).rejects.toThrow('Call signaling offer failed: not_found');
         });
 
         it('throws on a repeated startCall invocation', async () => {
@@ -314,6 +336,13 @@ describe('WebRTCService', () => {
             await service.acceptCall(remoteSdp);
 
             await expect(service.acceptCall(remoteSdp)).rejects.toThrow('Call already accepted');
+        });
+
+        it('rejects when the server rejects the answer', async () => {
+            mockPushReply.ok = null;
+            mockPushReply.error = { reason: 'unauthorized' };
+
+            await expect(service.acceptCall(remoteSdp)).rejects.toThrow('Call signaling answer failed: unauthorized');
         });
     });
 

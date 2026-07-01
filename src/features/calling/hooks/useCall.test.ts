@@ -1471,6 +1471,33 @@ describe('useCall', () => {
             });
         });
 
+        it('initial answer for an outgoing call started with a public user ref stores the real call id', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            act(() => {
+                result.current.startCall('user-public-id-2');
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            act(() => {
+                answerHandler({
+                    from_user_id: 2,
+                    from_username: 'callee',
+                    sdp: 'initial-answer-sdp',
+                    call_id: 'call-123',
+                });
+            });
+
+            expect(result.current.status).toBe('active');
+            expect(result.current.remoteUserId).toBe(2);
+            expect(result.current.callId).toBe('call-123');
+            expect(service.setCallId).toHaveBeenCalledWith('call-123');
+            expect(service.handleAnswer).toHaveBeenCalledWith('initial-answer-sdp');
+        });
+
         it('remote hang_up closes the call even during renegotiation', async () => {
             const { result } = renderHook(() => useCall(currentUserId));
             act(() => {
