@@ -16,6 +16,7 @@ import {
 import { IncomingCallModal } from "./features/calling/components/IncomingCallModal";
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 import { CallProvider, useCallContext } from "@/features/calling/context";
+import { debugCall } from "@/features/calling/utils/callDebug";
 
 function EmptyState({
   eyebrow,
@@ -177,6 +178,60 @@ function AppShell() {
     ],
   );
 
+  const activeCallChatHash = useMemo(() => {
+    if (status !== "active" || remoteUserId === null || remoteUserId === undefined) {
+      return null;
+    }
+
+    const lookup = {
+      activeChat,
+      currentUser,
+      conversationPreviews,
+      roomPreviews,
+      servers,
+      serverChannels,
+      searchResults,
+    };
+
+    if (typeof remoteUserId === "number") {
+      return buildHashForActiveChat(
+        { type: "direct", partnerId: remoteUserId, partnerRef: remoteUserId },
+        lookup,
+      );
+    }
+
+    const resolved = resolveHashToActiveChat(`#/${remoteUserId}`, lookup);
+    if (resolved?.type === "direct") {
+      return buildHashForActiveChat(resolved, lookup);
+    }
+
+    return `#/${remoteUserId}`;
+  }, [
+    activeChat,
+    conversationPreviews,
+    currentUser,
+    remoteUserId,
+    roomPreviews,
+    searchResults,
+    serverChannels,
+    servers,
+    status,
+  ]);
+
+  const handleReturnToActiveCall = useCallback(() => {
+    if (status !== "active") return;
+
+    if (!activeCallChatHash) {
+      debugCall("[AppShell] return to call skipped", {
+        reason: "missing_active_call_route",
+        remoteUserId,
+      });
+      return;
+    }
+
+    navigateToHash(activeCallChatHash);
+  }, [activeCallChatHash, navigateToHash, remoteUserId, status]);
+
   useEffect(() => {
     if (!routeHash || routeHash === "#") return;
 
@@ -198,6 +253,15 @@ function AppShell() {
   useEffect(() => {
     if (!activeChat) return;
     if (isSettingsRoute) return;
+    if (
+      status === "active" &&
+      activeCallChatHash &&
+      routeHash === activeCallChatHash &&
+      routeTarget &&
+      routeTargetKey !== currentActiveChatKeyRef.current
+    ) {
+      return;
+    }
 
     if (activeChatHash && routeHash !== activeChatHash) {
       navigateToHash(activeChatHash);
@@ -205,9 +269,13 @@ function AppShell() {
   }, [
     activeChat,
     activeChatHash,
+    activeCallChatHash,
     isSettingsRoute,
     navigateToHash,
     routeHash,
+    routeTarget,
+    routeTargetKey,
+    status,
   ]);
 
   const lastServerIdRef = useRef<number | null>(null);
@@ -270,6 +338,7 @@ function AppShell() {
           onAcceptCall={acceptCall}
           onRejectCall={rejectCall}
           onOpenSettings={() => navigateToHash("#/settings")}
+          onReturnToCall={handleReturnToActiveCall}
         />
       </div>
 

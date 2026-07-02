@@ -89,16 +89,39 @@ vi.mock("@/features/messaging/components/Sidebar", () => ({
 }));
 
 vi.mock("@/features/messaging/components/Sidebar/SidebarFooter", () => ({
-  SidebarFooter: ({ onOpenSettings }: { onOpenSettings: () => void }) => (
-    <button onClick={onOpenSettings}>open settings</button>
+  SidebarFooter: ({
+    callStatus,
+    onOpenSettings,
+    onReturnToCall,
+  }: {
+    callStatus: string;
+    onOpenSettings: () => void;
+    onReturnToCall?: () => void;
+  }) => (
+    <div>
+      <button onClick={onOpenSettings}>open settings</button>
+      {callStatus === "active" && (
+        <button onClick={onReturnToCall}>return to call</button>
+      )}
+    </div>
   ),
 }));
 
 vi.mock("@/features/messaging/components/ChatWindow/ChatWindow", () => ({
-  ChatWindow: ({ call }: { call: { status: string } }) => (
+  ChatWindow: ({
+    activeChat,
+    call,
+  }: {
+    activeChat: { type: string; partnerId?: number };
+    call: { status: string; remoteUserId: number | string | null };
+  }) => (
     <div>
       chat
-      {call.status === "active" && <div data-testid="active-call-dock" />}
+      {call.status === "active" &&
+        activeChat.type === "direct" &&
+        String(activeChat.partnerId) === String(call.remoteUserId) && (
+          <div data-testid="active-call-dock" />
+        )}
     </div>
   ),
 }));
@@ -301,5 +324,123 @@ describe("App hash sync", () => {
     expect(useCallMock).toHaveBeenCalledTimes(1);
     expect(startCall).not.toHaveBeenCalled();
     expect(setActiveChatMock).not.toHaveBeenCalled();
+  });
+
+  it("returns from settings to the active call direct chat through the sidebar call block", async () => {
+    const remoteStream = { id: "remote-stream-1" } as MediaStream;
+    const state = makeState();
+    state.activeChat = {
+      type: "direct",
+      partnerId: 3,
+      partnerRef: 3,
+    };
+    window.location.hash = "#/settings";
+
+    useCallMock.mockReturnValue(
+      makeCallState({
+        status: "active",
+        remoteStream,
+        remoteUsername: "Partner",
+        remoteUserId: 2,
+        seconds: 42,
+      }),
+    );
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    const view = render(<App />);
+
+    expect(screen.getByText("settings")).toBeTruthy();
+    expect(screen.queryByTestId("active-call-dock")).toBeNull();
+    expect(audioMounts.current).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "return to call" }));
+
+    await waitFor(() => expect(window.location.hash).toBe("#/2"));
+    await waitFor(() =>
+      expect(setActiveChatMock).toHaveBeenCalledWith({
+        type: "direct",
+        partnerId: 2,
+        partnerRef: "2",
+      }),
+    );
+
+    state.activeChat = { type: "direct", partnerId: 2, partnerRef: "2" };
+    view.rerender(<App />);
+
+    expect(screen.getByTestId("active-call-dock")).toBeTruthy();
+    expect(audioMounts.current).toBe(1);
+    expect(audioUnmounts.current).toBe(0);
+    expect(useCallMock).toHaveBeenCalledWith(1);
+  });
+
+  it("returns from another direct chat to the active call direct chat", async () => {
+    const state = makeState();
+    state.activeChat = {
+      type: "direct",
+      partnerId: 3,
+      partnerRef: 3,
+    };
+    window.location.hash = "#/3";
+
+    useCallMock.mockReturnValue(
+      makeCallState({
+        status: "active",
+        remoteUsername: "Partner",
+        remoteUserId: 2,
+      }),
+    );
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    expect(screen.queryByTestId("active-call-dock")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "return to call" }));
+
+    await waitFor(() => expect(window.location.hash).toBe("#/2"));
+    await waitFor(() =>
+      expect(setActiveChatMock).toHaveBeenCalledWith({
+        type: "direct",
+        partnerId: 2,
+        partnerRef: "2",
+      }),
+    );
+  });
+
+  it("keeps the current route when returning to the call chat that is already open", async () => {
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState");
+    const state = makeState();
+    state.activeChat = {
+      type: "direct",
+      partnerId: 2,
+      partnerRef: 2,
+    };
+    window.location.hash = "#/2";
+
+    useCallMock.mockReturnValue(
+      makeCallState({
+        status: "active",
+        remoteUsername: "Partner",
+        remoteUserId: 2,
+      }),
+    );
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    expect(screen.getByTestId("active-call-dock")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "return to call" }));
+
+    expect(window.location.hash).toBe("#/2");
+    expect(replaceStateSpy).not.toHaveBeenCalled();
+
+    replaceStateSpy.mockRestore();
   });
 });

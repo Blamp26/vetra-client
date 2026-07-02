@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
-const { useAppStoreMock } = vi.hoisted(() => ({
+const { useAppStoreMock, toggleMicMock, toggleSoundMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
+  toggleMicMock: vi.fn(),
+  toggleSoundMock: vi.fn(),
 }));
 
 vi.mock("@/store", () => ({
@@ -15,7 +17,9 @@ vi.mock("@/features/profile/components/ProfileModal/ProfileModal", () => ({
 }));
 
 vi.mock("@/shared/components/ConfirmModal/ConfirmModal", () => ({
-  ConfirmModal: () => null,
+  ConfirmModal: ({ onConfirm }: { onConfirm: () => void }) => (
+    <button onClick={onConfirm}>confirm hang up</button>
+  ),
 }));
 
 import { SidebarFooter } from "./SidebarFooter";
@@ -30,6 +34,9 @@ function renderFooter({
   isIncomingActionPending = false,
   onAcceptCall = vi.fn(),
   onRejectCall = vi.fn(),
+  onHangUp = vi.fn(),
+  onMuteToggle = vi.fn(),
+  onReturnToCall = vi.fn(),
 }: {
   callStatus?: CallStatus;
   remoteUsername?: string | null;
@@ -39,6 +46,9 @@ function renderFooter({
   isIncomingActionPending?: boolean;
   onAcceptCall?: () => void;
   onRejectCall?: () => void;
+  onHangUp?: () => void;
+  onMuteToggle?: () => void;
+  onReturnToCall?: () => void;
 } = {}) {
   return render(
     <SidebarFooter
@@ -50,17 +60,20 @@ function renderFooter({
       isScreenShareUpdating={isScreenShareUpdating}
       callIssue={callIssue}
       isIncomingActionPending={isIncomingActionPending}
-      onMuteToggle={vi.fn()}
-      onHangUp={vi.fn()}
+      onMuteToggle={onMuteToggle}
+      onHangUp={onHangUp}
       onAcceptCall={onAcceptCall}
       onRejectCall={onRejectCall}
       onOpenSettings={vi.fn()}
+      onReturnToCall={onReturnToCall}
     />,
   );
 }
 
 describe("SidebarFooter call UX", () => {
   beforeEach(() => {
+    toggleMicMock.mockReset();
+    toggleSoundMock.mockReset();
     useAppStoreMock.mockImplementation((selector: (state: any) => unknown) =>
       selector({
         currentUser: { id: 1, username: "tester", display_name: "Tester", status: "online" },
@@ -68,8 +81,8 @@ describe("SidebarFooter call UX", () => {
         userStatuses: {},
         micEnabled: true,
         soundEnabled: true,
-        toggleMic: vi.fn(),
-        toggleSound: vi.fn(),
+        toggleMic: toggleMicMock,
+        toggleSound: toggleSoundMock,
       }),
     );
   });
@@ -84,6 +97,19 @@ describe("SidebarFooter call UX", () => {
     renderFooter({ callStatus: "active" });
 
     expect(screen.getByText("Connected")).toBeInTheDocument();
+  });
+
+  it("renders the connected call block as a return-to-call navigation control", () => {
+    const onReturnToCall = vi.fn();
+    renderFooter({ callStatus: "active", onReturnToCall });
+
+    const returnButton = screen.getByRole("button", {
+      name: "Return to call with Alice",
+    });
+
+    fireEvent.click(returnButton);
+
+    expect(onReturnToCall).toHaveBeenCalledTimes(1);
   });
 
   it("shows Updating screen share... while a screen-share transaction is in flight", () => {
@@ -126,5 +152,29 @@ describe("SidebarFooter call UX", () => {
 
     expect(onAcceptCall).not.toHaveBeenCalled();
     expect(onRejectCall).not.toHaveBeenCalled();
+  });
+
+  it("keeps hangup separate from return-to-call navigation", () => {
+    const onHangUp = vi.fn();
+    const onReturnToCall = vi.fn();
+    renderFooter({ callStatus: "active", onHangUp, onReturnToCall });
+
+    fireEvent.click(screen.getByTitle("Hang up"));
+    fireEvent.click(screen.getByRole("button", { name: "confirm hang up" }));
+
+    expect(onHangUp).toHaveBeenCalledTimes(1);
+    expect(onReturnToCall).not.toHaveBeenCalled();
+  });
+
+  it("keeps the footer mute control separate from return-to-call navigation", () => {
+    const onMuteToggle = vi.fn();
+    const onReturnToCall = vi.fn();
+    renderFooter({ callStatus: "active", onMuteToggle, onReturnToCall });
+
+    fireEvent.click(screen.getByTitle("Mic"));
+
+    expect(toggleMicMock).toHaveBeenCalledTimes(1);
+    expect(onMuteToggle).toHaveBeenCalledTimes(1);
+    expect(onReturnToCall).not.toHaveBeenCalled();
   });
 });

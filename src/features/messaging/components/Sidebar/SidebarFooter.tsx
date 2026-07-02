@@ -34,6 +34,7 @@ interface SidebarFooterProps {
   onAcceptCall: () => void;
   onRejectCall: () => void;
   onOpenSettings: () => void;
+  onReturnToCall?: () => void;
 }
 
 export function SidebarFooter({
@@ -50,6 +51,7 @@ export function SidebarFooter({
   onAcceptCall,
   onRejectCall,
   onOpenSettings,
+  onReturnToCall,
 }: SidebarFooterProps) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
@@ -142,24 +144,52 @@ export function SidebarFooter({
               callPanel.tone === "error" ? "border-destructive/50" : "border-border",
             )}
           >
-            <div className="flex flex-col min-w-0">
-              <span
+            {callStatus === "active" ? (
+              <button
+                type="button"
                 className={cn(
-                  "text-xs uppercase",
-                  callPanel.tone === "error" ? "text-destructive" : "text-muted-foreground",
+                  "flex min-w-0 flex-1 flex-col text-left",
+                  onReturnToCall && "cursor-pointer hover:bg-accent",
                 )}
+                onClick={onReturnToCall}
+                aria-label={`Return to call with ${remoteUsername || "current user"}`}
+                title="Return to active call"
               >
-                {callPanel.title}
-              </span>
-              <span className="text-xs text-foreground truncate">
-                {callPanel.subtitle}
-              </span>
-            </div>
+                <span
+                  className={cn(
+                    "text-xs uppercase",
+                    callPanel.tone === "error" ? "text-destructive" : "text-muted-foreground",
+                  )}
+                >
+                  {callPanel.title}
+                </span>
+                <span className="text-xs text-foreground truncate">
+                  {callPanel.subtitle}
+                </span>
+              </button>
+            ) : (
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span
+                  className={cn(
+                    "text-xs uppercase",
+                    callPanel.tone === "error" ? "text-destructive" : "text-muted-foreground",
+                  )}
+                >
+                  {callPanel.title}
+                </span>
+                <span className="text-xs text-foreground truncate">
+                  {callPanel.subtitle}
+                </span>
+              </div>
+            )}
             <div className="flex items-center gap-1">
               {callStatus === "ringing" && (
                 <>
                   <button
-                    onClick={onAcceptCall}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAcceptCall();
+                    }}
                     title="Accept call"
                     className="flex h-7 w-7 items-center justify-center bg-online text-white disabled:pointer-events-none disabled:opacity-60"
                     disabled={isIncomingActionPending}
@@ -167,7 +197,10 @@ export function SidebarFooter({
                     <Phone className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={onRejectCall}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRejectCall();
+                    }}
                     title="Decline call"
                     className="flex h-7 w-7 items-center justify-center bg-destructive text-destructive-foreground disabled:pointer-events-none disabled:opacity-60"
                     disabled={isIncomingActionPending}
@@ -178,11 +211,12 @@ export function SidebarFooter({
               )}
               {(callStatus === "active" || callStatus === "calling") && (
                 <button
-                  onClick={() =>
+                  onClick={(event) => {
+                    event.stopPropagation();
                     callStatus === "calling"
                       ? onHangUp()
-                      : setConfirmHangUp(true)
-                  }
+                      : setConfirmHangUp(true);
+                  }}
                   title="Hang up"
                   className="flex h-7 w-7 items-center justify-center bg-destructive text-destructive-foreground"
                 >
