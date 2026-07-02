@@ -58,6 +58,27 @@ describe('CallButton', () => {
     expect(screen.getByRole('button')).not.toBeDisabled();
   });
 
+  it('is disabled with a temporary reason while the call service is connecting', () => {
+    render(
+      <CallButton
+        targetUserId={42}
+        targetUsername="Alice"
+        status="idle"
+        callServiceStatus="connecting"
+        onCall={onCall}
+      />,
+    );
+
+    const button = screen.getByRole('button', {
+      name: 'Call service is connecting. Try again in a moment.',
+    });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute(
+      'title',
+      'Call service is connecting. Try again in a moment.',
+    );
+  });
+
   it('title содержит имя пользователя когда idle', () => {
     renderButton('idle', onCall);
     const btn = screen.getByRole('button');

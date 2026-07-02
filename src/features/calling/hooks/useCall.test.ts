@@ -367,7 +367,7 @@ describe('useCall', () => {
             expect(result.current.status).toBe('idle');
             expect(result.current.callIssue).toEqual({
                 tone: 'error',
-                message: 'Call service is not ready. Try again in a moment.',
+                message: 'Call service is connecting. Try again in a moment.',
             });
         });
 
@@ -386,7 +386,7 @@ describe('useCall', () => {
             expect(result.current.status).toBe('idle');
             expect(result.current.callIssue).toEqual({
                 tone: 'error',
-                message: 'Call service is still connecting. Try again in a moment.',
+                message: 'Call service is connecting. Try again in a moment.',
             });
         });
 

@@ -77,6 +77,7 @@ function makeState() {
 function makeCall(overrides: Partial<UseCallReturn> = {}): UseCallReturn {
   return {
     status: "idle",
+    callServiceStatus: "ready",
     remoteUserId: null,
     remoteUsername: null,
     callId: null,

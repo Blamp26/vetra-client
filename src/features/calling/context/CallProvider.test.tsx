@@ -46,6 +46,7 @@ vi.mock("@/features/calling/components/CallAudioRenderer/CallAudioRenderer", asy
 function makeCallState(overrides = {}) {
   return {
     status: "active",
+    callServiceStatus: "ready",
     remoteUserId: 2,
     remoteUsername: "Partner",
     callId: "call-1",

@@ -1,6 +1,6 @@
 // src/features/calling/components/CallButton/CallButton.tsx
 
-import type { CallStatus } from '../../hooks/useCall.types';
+import type { CallServiceStatus, CallStatus } from '../../hooks/useCall.types';
 import type { ResourceRef } from '@/shared/types';
 import { Phone } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
@@ -10,6 +10,7 @@ interface Props {
   targetUserId: ResourceRef | null | undefined;
   targetUsername: string;
   status: CallStatus;
+  callServiceStatus?: CallServiceStatus;
   onCall: (targetUserId: ResourceRef, targetUsername?: string) => void;
   onUnavailable?: (reason: string) => void;
   className?: string;
@@ -19,8 +20,14 @@ function hasValidTarget(targetUserId: ResourceRef | null | undefined): targetUse
   return targetUserId !== null && targetUserId !== undefined && String(targetUserId).trim().length > 0;
 }
 
-export function CallButton({ targetUserId, targetUsername, status, onCall, onUnavailable, className }: Props) {
-  const isDisabled = status !== 'idle';
+function callServiceUnavailableReason(status: CallServiceStatus | undefined): string | null {
+  if (!status || status === 'ready') return null;
+  return 'Call service is connecting. Try again in a moment.';
+}
+
+export function CallButton({ targetUserId, targetUsername, status, callServiceStatus, onCall, onUnavailable, className }: Props) {
+  const serviceUnavailableReason = callServiceUnavailableReason(callServiceStatus);
+  const isDisabled = status !== 'idle' || Boolean(serviceUnavailableReason);
   const isMissingTarget = !hasValidTarget(targetUserId);
 
   const handleClick = () => {
@@ -28,9 +35,15 @@ export function CallButton({ targetUserId, targetUsername, status, onCall, onUna
       status,
       targetUserId,
       targetUsername,
+      callServiceStatus,
       disabled: isDisabled,
       missingTarget: isMissingTarget,
     });
+
+    if (serviceUnavailableReason) {
+      onUnavailable?.(serviceUnavailableReason);
+      return;
+    }
 
     if (isDisabled) {
       onUnavailable?.(`Call unavailable while ${status}.`);
@@ -54,13 +67,15 @@ export function CallButton({ targetUserId, targetUsername, status, onCall, onUna
       onClick={handleClick}
       disabled={isDisabled}
       title={
-        isDisabled
+        serviceUnavailableReason
+          ? serviceUnavailableReason
+          : isDisabled
           ? `Call unavailable while ${status}`
           : isMissingTarget
             ? `Call unavailable: missing user`
             : `Call ${targetUsername}`
       }
-      aria-label={isMissingTarget ? `Call unavailable` : `Call ${targetUsername}`}
+      aria-label={serviceUnavailableReason ?? (isMissingTarget ? `Call unavailable` : `Call ${targetUsername}`)}
     >
       <Phone className="h-4 w-4" />
     </button>

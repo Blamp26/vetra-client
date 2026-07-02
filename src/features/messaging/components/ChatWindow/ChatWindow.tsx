@@ -273,6 +273,7 @@ export function ChatWindow({ activeChat, call }: Props) {
               }
               targetUsername={partner.display_name || partner.username}
               status={call.status}
+              callServiceStatus={call.callServiceStatus}
               onCall={handleStartCall}
               onUnavailable={handleCallUnavailable}
             />

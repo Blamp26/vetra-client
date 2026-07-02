@@ -277,7 +277,6 @@ export async function connectSocket(
   socket.connect();
 
   const userChannel = socket.channel(`user:${userId}`, {});
-  callSignalingService.initialize(socket, userChannel, userId, callUserRef);
 
   // ── User channel buses ───────────────────────────────────────────
 
@@ -411,6 +410,7 @@ export async function connectSocket(
       )
       .receive("timeout", () => reject(new Error("Channel join timed out")));
   });
+  callSignalingService.initialize(socket, userChannel, userId, callUserRef);
 
   // ── Room channel registry ─────────────────────────────────────────────────
 

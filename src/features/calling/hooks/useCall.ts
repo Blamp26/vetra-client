@@ -4,7 +4,7 @@ import { useAppStore } from '@/store';
 import type { ResourceRef } from '@/shared/types';
 import { WebRTCService, type WebRTCDiagnostics } from '../services/webrtcService';
 import { callSignalingService, type OfferPayload } from '../services/callSignalingService';
-import type { CallDiagnostics, CallIssue, CallStatus, UseCallReturn } from './useCall.types';
+import type { CallDiagnostics, CallIssue, CallServiceStatus, CallStatus, UseCallReturn } from './useCall.types';
 import { debugCall } from '../utils/callDebug';
 
 const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
@@ -101,6 +101,10 @@ function isUnavailableRemoteError(error: unknown): boolean {
     );
 }
 
+function isRemoteCallServiceNotReadyError(error: unknown): boolean {
+    return getErrorMessage(error).toLowerCase().includes('remote_call_service_not_ready');
+}
+
 function isAlreadyInCallError(error: unknown): boolean {
     return getErrorMessage(error).toLowerCase().includes('already_in_call');
 }
@@ -110,6 +114,10 @@ function buildCallIssue(message: string, tone: CallIssue['tone'] = 'error'): Cal
 }
 
 function mapStartCallIssue(error: unknown): CallIssue {
+    if (isRemoteCallServiceNotReadyError(error)) {
+        return buildCallIssue('User is not ready to receive calls yet. Try again in a moment.');
+    }
+
     if (isAlreadyInCallError(error)) {
         return buildCallIssue('Call could not start because one side is already in a call.');
     }
@@ -190,6 +198,9 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [diagnostics, setDiagnostics] = useState<CallDiagnostics>(EMPTY_CALL_DIAGNOSTICS);
     const [callIssue, setCallIssue] = useState<CallIssue | null>(null);
     const [isIncomingActionPending, setIsIncomingActionPending] = useState(false);
+    const [callServiceStatus, setCallServiceStatus] = useState<CallServiceStatus>(
+        callSignalingService.getReadinessStatus(),
+    );
 
     const callChannelRef = useRef<Channel | null>(null);
     const webrtcRef = useRef<WebRTCService | null>(null);
@@ -473,9 +484,14 @@ export function useCall(currentUserId: number): UseCallReturn {
             latestUserCallRefRef.current ?? currentUserId,
         );
         callChannelRef.current = callSignalingService.getChannel();
+        setCallServiceStatus(callSignalingService.getReadinessStatus());
 
         signalingUnsubsRef.current.forEach((unsub) => unsub());
         const unsubs = [
+            callSignalingService.onReadinessChange((nextStatus) => {
+                callChannelRef.current = callSignalingService.getChannel();
+                setCallServiceStatus(nextStatus);
+            }),
             callSignalingService.onAnswer((payload) => {
                 clearCallTimeout();
                 debugCall('[useCall] receive answer', {
@@ -629,7 +645,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 status: statusRef.current,
             });
             cleanupLocalCall('call_channel_missing', {
-                issue: buildCallIssue('Call service is not ready. Try again in a moment.'),
+                issue: buildCallIssue('Call service is connecting. Try again in a moment.'),
             });
             return;
         }
@@ -641,7 +657,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 status: statusRef.current,
             });
             cleanupLocalCall('call_channel_not_joined', {
-                issue: buildCallIssue('Call service is still connecting. Try again in a moment.'),
+                issue: buildCallIssue('Call service is connecting. Try again in a moment.'),
             });
             return;
         }
@@ -843,6 +859,7 @@ export function useCall(currentUserId: number): UseCallReturn {
 
     return {
         status,
+        callServiceStatus,
         remoteUserId,
         remoteUsername,
         callId,

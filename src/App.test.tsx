@@ -48,6 +48,7 @@ vi.mock("@/features/calling/components/CallAudioRenderer/CallAudioRenderer", asy
 function makeCallState(overrides = {}) {
   return {
     status: "idle",
+    callServiceStatus: "ready",
     remoteStream: null,
     remoteScreenStream: null,
     localScreenStream: null,

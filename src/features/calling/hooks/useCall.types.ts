@@ -1,6 +1,7 @@
 import type { ResourceRef } from "@/shared/types";
 
 export type CallStatus = 'idle' | 'calling' | 'ringing' | 'active' | 'ended' | 'failed';
+export type CallServiceStatus = 'idle' | 'connecting' | 'ready' | 'retrying' | 'closed' | 'failed';
 
 // ── Входящие события от сервера ──────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ export interface CallIssue {
 
 export interface UseCallReturn {
     status: CallStatus;
+    callServiceStatus: CallServiceStatus;
     remoteUserId: ResourceRef | null;
     remoteUsername: string | null;
     callId: string | null;
