@@ -76,7 +76,7 @@ function renderMessageItem(
   );
 }
 
-describe("MessageItem stream layout", () => {
+describe("MessageItem bubble layout", () => {
   beforeEach(() => {
     useAppStoreMock.mockReset();
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
@@ -84,20 +84,24 @@ describe("MessageItem stream layout", () => {
     );
   });
 
-  it("renders incoming messages as a Discord-like stream row", () => {
+  it("renders incoming messages as left-aligned bubbles", () => {
     renderMessageItem({ content: "Hello from Alice" });
 
-    const row = screen.getByTestId("message-stream-row");
+    const row = screen.getByTestId("message-bubble-row");
+    const bubble = screen.getByTestId("message-bubble");
+
     expect(row).toHaveAttribute("data-own-message", "false");
-    expect(row).toContainElement(screen.getByTestId("message-avatar"));
-    expect(row).toContainElement(screen.getByTestId("message-body"));
-    expect(row).toContainElement(screen.getByTestId("message-meta"));
+    expect(row).toHaveClass("justify-start");
+    expect(row).not.toHaveClass("justify-end");
+    expect(bubble).toHaveClass("max-w-[80%]");
+    expect(bubble).toHaveClass("bg-bubble-incoming");
+    expect(bubble).not.toHaveClass("flex-1");
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
   });
 
-  it("renders own messages in the same stream layout instead of a right-aligned bubble", () => {
+  it("renders own messages as right-aligned bubbles at all widths", () => {
     renderMessageItem(
       {
         content: "My message",
@@ -108,16 +112,25 @@ describe("MessageItem stream layout", () => {
       { isOwn: true },
     );
 
-    const row = screen.getByTestId("message-stream-row");
-    const body = screen.getByTestId("message-body");
+    const row = screen.getByTestId("message-bubble-row");
+    const bubble = screen.getByTestId("message-bubble");
 
     expect(row).toHaveAttribute("data-own-message", "true");
-    expect(row.className).not.toContain("justify-end");
-    expect(row.className).not.toContain("justify-start");
-    expect(body.className).not.toContain("max-w-[80%]");
-    expect(body.className).not.toContain("bg-bubble-outgoing");
-    expect(screen.getByText("Tester")).toBeInTheDocument();
+    expect(row).toHaveClass("justify-end");
+    expect(row).not.toHaveClass("justify-start");
+    expect(bubble).toHaveClass("max-w-[80%]");
+    expect(bubble).toHaveClass("bg-bubble-outgoing");
+    expect(bubble).not.toHaveClass("flex-1");
+    expect(screen.queryByText("Tester")).not.toBeInTheDocument();
     expect(screen.getByText("My message")).toBeInTheDocument();
+  });
+
+  it("does not render Discord-style avatar/meta stream structure", () => {
+    renderMessageItem({ content: "No stream row" });
+
+    expect(screen.queryByTestId("message-stream-row")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-avatar")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-meta")).not.toBeInTheDocument();
   });
 
   it("preserves the message context menu trigger", () => {
@@ -127,7 +140,7 @@ describe("MessageItem stream layout", () => {
       { onContextMenu },
     );
 
-    screen.getByTestId("message-body").dispatchEvent(
+    screen.getByTestId("message-bubble").dispatchEvent(
       new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
     );
 

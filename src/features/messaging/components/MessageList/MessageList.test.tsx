@@ -53,7 +53,7 @@ function renderMessageList(messages = [makeMessage()]) {
   );
 }
 
-describe("MessageList stream layout", () => {
+describe("MessageList bubble layout", () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
     useAppStoreMock.mockReset();
@@ -79,7 +79,7 @@ describe("MessageList stream layout", () => {
     );
   });
 
-  it("renders date dividers while keeping messages in a vertical stream", () => {
+  it("renders date dividers while keeping messages in a vertical bubble list", () => {
     renderMessageList([
       makeMessage({
         id: 1,
@@ -95,15 +95,15 @@ describe("MessageList stream layout", () => {
 
     expect(screen.getByText(new Date("2026-06-30T12:00:00Z").toLocaleDateString())).toBeInTheDocument();
     expect(screen.getByText(new Date("2026-07-01T12:00:00Z").toLocaleDateString())).toBeInTheDocument();
-    expect(screen.getAllByTestId("message-stream-row")).toHaveLength(2);
+    expect(screen.getAllByTestId("message-bubble-row")).toHaveLength(2);
     expect(screen.getByText("First day")).toBeInTheDocument();
     expect(screen.getByText("Second day")).toBeInTheDocument();
   });
 
-  it("opens the existing context menu from a stream row", () => {
+  it("opens the existing context menu from a message bubble", () => {
     renderMessageList([makeMessage({ content: "Context menu message" })]);
 
-    fireEvent.contextMenu(screen.getByTestId("message-body"));
+    fireEvent.contextMenu(screen.getByTestId("message-bubble"));
 
     expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();

@@ -60,7 +60,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
-  const avatarLabel = authorName.trim().charAt(0).toUpperCase() || "?";
 
   const handleAttachmentAction = async (action: "download" | "open") => {
     if (!attachment || isAttachmentActionPending) return;
@@ -198,60 +197,40 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     <div
       ref={ref}
       className={cn(
-        "group flex w-full items-start gap-3 px-2 py-1.5 text-left hover:bg-muted/50",
-        isSelected && "bg-muted",
+        "flex w-full",
+        isOwn ? "justify-end" : "justify-start",
       )}
-      data-testid="message-stream-row"
+      data-testid="message-bubble-row"
       data-own-message={isOwn ? "true" : "false"}
       onClick={() => selectionMode && onToggleSelection(msg.id)}
     >
       {selectionMode && (
-        <div className="pt-2">
+        <div className="p-1">
           <input type="checkbox" checked={isSelected} readOnly />
         </div>
       )}
-      <div
-        className={cn(
-          "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-xs text-foreground",
-          isConsecutive && "opacity-70",
-        )}
-        data-testid="message-avatar"
-        aria-hidden="true"
-      >
-        {avatarLabel}
-      </div>
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "min-w-0 flex-1 rounded-md px-1 py-0.5 text-foreground",
-          selectionMode && "cursor-pointer",
+          "max-w-[80%] border border-border p-2",
+          isSelected && "ring-1 ring-primary",
+          isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text",
         )}
-        data-testid="message-body"
+        data-testid="message-bubble"
       >
-        <div
-          className="mb-0.5 flex min-w-0 items-baseline gap-2"
-          data-testid="message-meta"
-        >
-          <span className="truncate text-sm font-medium text-foreground">
+        {!isOwn && !isConsecutive && (
+          <div className="mb-1 text-[10px] text-primary">
             {authorName}
-          </span>
-          <span className="shrink-0 text-[10px] text-muted-foreground">
-            {formatTime(msg.inserted_at)}
-          </span>
-          {msg.edited_at && (
-            <span className="shrink-0 text-[10px] text-muted-foreground">
-              (ed.)
-            </span>
-          )}
-          {isOwn && !isRoom && <StatusIcon status={msg.status} />}
-        </div>
-        {isConsecutive && (
-          <div className="sr-only">
-            Consecutive message from {authorName}
           </div>
         )}
         {renderReplyPreview(msg, isOwn)}
         {renderContent()}
+
+        <div className="mt-1 flex items-center gap-1 text-[10px] opacity-70">
+          <span>{formatTime(msg.inserted_at)}</span>
+          {msg.edited_at && <span>(ed.)</span>}
+          {isOwn && !isRoom && <StatusIcon status={msg.status} />}
+        </div>
         
         {renderReactions()}
       </div>
