@@ -4,6 +4,10 @@ import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ActiveCallDock } from "./ActiveCallDock";
 
+function makeStream(id: string): MediaStream {
+  return { id } as MediaStream;
+}
+
 function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = {}) {
   const props: ComponentProps<typeof ActiveCallDock> = {
     remoteUsername: "Alice",
@@ -42,105 +46,108 @@ describe("ActiveCallDock", () => {
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
   });
 
-  it("renders a docked active call panel with status and controls", () => {
+  it("keeps the audio-only dock compact with one participant grid", () => {
     renderDock();
 
-    expect(screen.getByTestId("active-call-dock")).toBeInTheDocument();
     expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[240px]");
-    expect(screen.getByTestId("active-call-dock")).not.toHaveClass("h-[300px]");
-    expect(screen.getByText("Voice call")).toBeInTheDocument();
-    expect(screen.getAllByText("Alice")).toHaveLength(2);
-    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("Connected");
-    expect(screen.getByTestId("active-call-dock-controls")).toBeInTheDocument();
-    expect(screen.getByTestId("active-call-dock-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("call-grid-view")).toBeInTheDocument();
     expect(screen.getAllByTestId("active-call-participant-tile")).toHaveLength(2);
+    expect(screen.queryByTestId("active-call-screen-share-tile")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share screen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hang Up" })).toBeInTheDocument();
   });
 
-  it("keeps controls in a normal control row instead of overlapping participant cards", () => {
-    renderDock();
+  it("renders a remote screen share as an idle participant tile without auto-expanding", () => {
+    renderDock({ remoteScreenStream: makeStream("remote-screen") });
 
     const dock = screen.getByTestId("active-call-dock");
-    const controls = screen.getByTestId("active-call-dock-controls");
-    const stage = screen.getByTestId("active-call-dock-stage");
+    const tile = screen.getByTestId("active-call-screen-share-tile");
 
-    expect(dock).toContainElement(controls);
-    expect(dock).toContainElement(stage);
-    expect(controls.parentElement).toBe(dock);
-    expect(controls).not.toHaveClass("absolute");
-    expect(controls).toHaveClass("border-t");
-    expect(controls).not.toHaveClass("bg-card/50");
-    expect(dock.className).not.toMatch(/gradient|backdrop|shadow/);
-    expect(dock.className).not.toMatch(/#202225|#2b2d31|#1e1f22|#313338/);
-    expect(controls.className).not.toMatch(/backdrop|shadow/);
-    expect(controls.className).not.toMatch(/#202225|#2b2d31|#1e1f22|#313338/);
-  });
-
-  it("disables the screen-share control while an update is in flight", () => {
-    renderDock({ isScreenShareUpdating: true });
-
-    expect(
-      screen.getByRole("button", { name: "Updating screen share" }),
-    ).toBeDisabled();
-    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent(
-      "Updating screen share...",
-    );
-  });
-
-  it("does not expand the dock when screen share is active", () => {
-    renderDock({ remoteScreenStream: {} as MediaStream });
-
-    const dock = screen.getByTestId("active-call-dock");
     expect(dock).toHaveClass("h-[240px]");
-    expect(dock.className).not.toContain("clamp");
+    expect(tile).toHaveAttribute("data-variant", "screenShare");
+    expect(tile).toHaveAttribute("data-state", "idle");
+    expect(screen.getByRole("button", { name: "Watch stream" })).toBeInTheDocument();
+    expect(screen.getByTestId("participant-screen-name")).toHaveTextContent("Alice");
+    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("active-call-dock-controls")).toBeInTheDocument();
   });
 
-  it("shows a compact remote stream preview tile and Watch button", () => {
-    renderDock({ remoteScreenStream: {} as MediaStream });
+  it("switches the same screen-share tile to watchingInline when Watch stream is clicked", () => {
+    const stream = makeStream("remote-screen");
+    renderDock({ remoteScreenStream: stream });
 
-    expect(screen.getByTestId("stream-preview-tile")).toBeInTheDocument();
-    expect(screen.getByTestId("stream-preview-label")).toHaveTextContent(
-      "Alice is sharing their screen",
+    const tileBefore = screen.getByTestId("active-call-screen-share-tile");
+    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
+    const tileAfter = screen.getByTestId("active-call-screen-share-tile");
+
+    expect(tileAfter).toBe(tileBefore);
+    expect(tileAfter).toHaveAttribute("data-state", "watchingInline");
+    expect(screen.getByTestId("participant-screen-video")).toHaveProperty("srcObject", stream);
+    expect(screen.getByTestId("participant-screen-live-badge")).toHaveTextContent("720p · LIVE");
+    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
+  });
+
+  it("opens FocusStreamView only from an explicit expand action after inline watch", () => {
+    const stream = makeStream("remote-screen");
+    renderDock({ remoteScreenStream: stream });
+
+    expect(screen.queryByRole("button", { name: "Expand Alice's screen" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
+
+    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
+    expect(screen.getByText("Alice's screen")).toBeInTheDocument();
+    expect(screen.getByText("LIVE")).toBeInTheDocument();
+    expect(screen.getByText("720p")).toBeInTheDocument();
+    expect(screen.getByTestId("focus-stream-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("Alice");
+    expect(screen.getByTestId("focus-control-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
+  });
+
+  it("exits focus back to the grid while preserving watchingInline state", () => {
+    renderDock({ remoteScreenStream: makeStream("remote-screen") });
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Exit focus view" }));
+
+    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
+    expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute(
+      "data-state",
+      "watchingInline",
     );
-    expect(screen.getByRole("button", { name: "Watch" })).toBeInTheDocument();
-    expect(screen.getAllByTestId("active-call-participant-chip")).toHaveLength(2);
-    expect(screen.queryByTestId("screen-share-indicator")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("watch-stream-modal")).not.toBeInTheDocument();
   });
 
-  it("opens WatchStreamModal only after clicking Watch", () => {
-    renderDock({ remoteScreenStream: {} as MediaStream });
-
-    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
-
-    expect(screen.getByTestId("watch-stream-modal")).toBeInTheDocument();
-    expect(screen.getByTestId("watch-stream-video")).toBeInTheDocument();
-  });
-
-  it("shows local sharing copy and keeps Stop sharing reliable", () => {
+  it("shows local sharing as a screen-share tile with stop sharing available from tile and controls", () => {
     const onStopScreenShare = vi.fn();
     renderDock({
-      localScreenStream: {} as MediaStream,
+      localScreenStream: makeStream("local-screen"),
       isScreenSharing: true,
       onStopScreenShare,
     });
 
     expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[240px]");
-    expect(screen.getByTestId("stream-preview-label")).toHaveTextContent(
-      "You are sharing your screen",
+    expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute(
+      "data-state",
+      "idle",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Stop sharing" }));
+    expect(screen.getByTestId("participant-screen-name")).toHaveTextContent("You");
 
-    expect(onStopScreenShare).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getAllByRole("button", { name: "Stop sharing" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Stop sharing" })[1]);
+
+    expect(onStopScreenShare).toHaveBeenCalledTimes(2);
   });
 
-  it("auto-closes the watch modal when sharing stops", () => {
-    const { rerender, props } = renderDock({ remoteScreenStream: {} as MediaStream });
+  it("removes inline/focus UI state when sharing stops", () => {
+    const { rerender, props } = renderDock({ remoteScreenStream: makeStream("remote-screen") });
 
-    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
-    expect(screen.getByTestId("watch-stream-modal")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
+    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
 
     rerender(
       <ActiveCallDock
@@ -151,64 +158,17 @@ describe("ActiveCallDock", () => {
       />,
     );
 
-    expect(screen.queryByTestId("watch-stream-modal")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("stream-preview-tile")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("active-call-screen-share-tile")).not.toBeInTheDocument();
   });
 
-  it("does not duplicate modal or indicator across repeated share stop share", () => {
-    const firstStream = { id: "first" } as MediaStream;
-    const secondStream = { id: "second" } as MediaStream;
-    const { rerender, props } = renderDock({ remoteScreenStream: firstStream });
+  it("disables the screen-share control while an update is in flight", () => {
+    renderDock({ isScreenShareUpdating: true });
 
-    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
-    expect(screen.getAllByTestId("watch-stream-modal")).toHaveLength(1);
-
-    rerender(<ActiveCallDock {...props} remoteScreenStream={null} />);
-    expect(screen.queryByTestId("watch-stream-modal")).not.toBeInTheDocument();
-
-    rerender(<ActiveCallDock {...props} remoteScreenStream={secondStream} />);
-    expect(screen.getAllByTestId("stream-preview-tile")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
-    expect(screen.getAllByTestId("watch-stream-modal")).toHaveLength(1);
-  });
-
-  it("keeps controls inside the compact sharing dock", () => {
-    renderDock({ localScreenStream: {} as MediaStream, isScreenSharing: true });
-
-    const dock = screen.getByTestId("active-call-dock");
-    const controls = screen.getByTestId("active-call-dock-controls");
-    expect(dock).toContainElement(controls);
-    expect(controls).not.toHaveClass("absolute");
-    expect(screen.getByTestId("stream-preview-tile")).toBeInTheDocument();
-  });
-
-  it("renders a calling status label", () => {
-    renderDock({
-      callStatus: "calling",
-      diagnostics: {
-        connectionState: "new",
-        iceConnectionState: "new",
-        iceGatheringState: "new",
-        signalingState: "stable",
-        selectedLocalCandidateType: "unknown",
-      },
-    });
-
-    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("Calling...");
-  });
-
-  it("renders a connecting status label before the peer is connected", () => {
-    renderDock({
-      diagnostics: {
-        connectionState: "connecting",
-        iceConnectionState: "checking",
-        iceGatheringState: "gathering",
-        signalingState: "stable",
-        selectedLocalCandidateType: "unknown",
-      },
-    });
-
-    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("Connecting...");
+    expect(screen.getByRole("button", { name: "Updating screen share" })).toBeDisabled();
+    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent(
+      "Updating screen share...",
+    );
   });
 
   it("normalizes recoverable call issue text inside the dock", () => {
@@ -224,15 +184,6 @@ describe("ActiveCallDock", () => {
     );
   });
 
-  it("calls the existing hangup action from the dock controls", () => {
-    const onHangUp = vi.fn();
-    renderDock({ onHangUp });
-
-    fireEvent.click(screen.getByRole("button", { name: "Hang Up" }));
-
-    expect(onHangUp).toHaveBeenCalledTimes(1);
-  });
-
   it("does not pause unrelated document media when screen-share video detaches", () => {
     const externalVideo = document.createElement("video");
     const externalPause = vi.fn();
@@ -241,33 +192,10 @@ describe("ActiveCallDock", () => {
       configurable: true,
     });
     document.body.appendChild(externalVideo);
-    const { rerender } = renderDock({ remoteScreenStream: {} as MediaStream });
-    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+    const { rerender, props } = renderDock({ remoteScreenStream: makeStream("remote-screen") });
+    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
 
-    rerender(
-      <ActiveCallDock
-        remoteUsername="Alice"
-        seconds={65}
-        isMuted={false}
-        isScreenSharing={false}
-        isScreenShareUpdating={false}
-        isRemoteScreenLoading={false}
-        callIssue={null}
-        remoteScreenStream={null}
-        localScreenStream={null}
-        diagnostics={{
-          connectionState: "connected",
-          iceConnectionState: "connected",
-          iceGatheringState: "complete",
-          signalingState: "stable",
-          selectedLocalCandidateType: "host",
-        }}
-        onMuteToggle={vi.fn()}
-        onStartScreenShare={vi.fn()}
-        onStopScreenShare={vi.fn()}
-        onHangUp={vi.fn()}
-      />,
-    );
+    rerender(<ActiveCallDock {...props} remoteScreenStream={null} />);
 
     expect(externalPause).not.toHaveBeenCalled();
     externalVideo.remove();

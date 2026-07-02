@@ -4,8 +4,8 @@ import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
 import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
-import { StreamPreviewTile } from "@/features/calling/components/StreamPreviewTile";
-import { WatchStreamModal } from "@/features/calling/components/WatchStreamModal";
+import { CallGridView, type CallGridParticipant, type CallGridScreenShare } from "./CallGridView";
+import { FocusStreamView } from "./FocusStreamView";
 
 interface ActiveCallDockProps {
   remoteUsername: string;
@@ -42,7 +42,8 @@ export function ActiveCallDock({
   onStopScreenShare,
   onHangUp,
 }: ActiveCallDockProps) {
-  const [isWatchOpen, setIsWatchOpen] = useState(false);
+  const [watchingInlineIds, setWatchingInlineIds] = useState<Set<string>>(() => new Set());
+  const [focusedStreamId, setFocusedStreamId] = useState<string | null>(null);
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
   const displayIssue = normalizeCallIssue(callIssue);
@@ -52,29 +53,130 @@ export function ActiveCallDock({
     isScreenSharing,
     isScreenShareUpdating,
   });
-  const watchStream = remoteScreenStream ?? localScreenStream;
-  const isWatchingLocalStream = Boolean(watchStream && watchStream === localScreenStream);
   const hasScreenSharePresence = isRemoteScreenLoading || Boolean(remoteScreenStream) || Boolean(localScreenStream) || isScreenSharing;
   const compactParticipantCards = Boolean(displayIssue);
 
   useEffect(() => {
-    if (!watchStream || callStatus !== "active") {
-      setIsWatchOpen(false);
-    }
-  }, [callStatus, watchStream]);
+    const activeIds = new Set<string>();
+    if (remoteScreenStream || isRemoteScreenLoading) activeIds.add("remote-screen");
+    if (localScreenStream || isScreenSharing) activeIds.add("local-screen");
 
-  const modalSharerName = useMemo(() => {
-    if (isWatchingLocalStream) return "You";
-    return remoteUsername;
-  }, [isWatchingLocalStream, remoteUsername]);
+    setWatchingInlineIds((current) => {
+      const next = new Set([...current].filter((id) => activeIds.has(id)));
+      if (next.size === current.size && [...next].every((id) => current.has(id))) {
+        return current;
+      }
+      return next;
+    });
+
+    if (!focusedStreamId || activeIds.has(focusedStreamId)) {
+      return;
+    }
+    setFocusedStreamId(null);
+  }, [
+    focusedStreamId,
+    isRemoteScreenLoading,
+    isScreenSharing,
+    localScreenStream,
+    remoteScreenStream,
+  ]);
+
+  useEffect(() => {
+    if (callStatus !== "active") {
+      setFocusedStreamId(null);
+      setWatchingInlineIds(new Set());
+    }
+  }, [callStatus]);
+
+  const participants: CallGridParticipant[] = useMemo(
+    () => [
+      {
+        id: "local-audio",
+        name: "You",
+        label: isScreenSharing ? "Sharing" : "Connected",
+        isMuted,
+      },
+      {
+        id: "remote-audio",
+        name: remoteUsername,
+        label: callStateLabel,
+      },
+    ],
+    [callStateLabel, isMuted, isScreenSharing, remoteUsername],
+  );
+
+  const screenShares: CallGridScreenShare[] = useMemo(() => {
+    const shares: CallGridScreenShare[] = [];
+    if (remoteScreenStream || isRemoteScreenLoading) {
+      shares.push({
+        id: "remote-screen",
+        sharerName: remoteUsername,
+        stream: remoteScreenStream,
+        state: watchingInlineIds.has("remote-screen") ? "watchingInline" : "idle",
+        isLocalSharer: false,
+      });
+    }
+    if (localScreenStream || isScreenSharing) {
+      shares.push({
+        id: "local-screen",
+        sharerName: "You",
+        stream: localScreenStream,
+        state: watchingInlineIds.has("local-screen") ? "watchingInline" : "idle",
+        isLocalSharer: true,
+      });
+    }
+    return shares;
+  }, [
+    isRemoteScreenLoading,
+    isScreenSharing,
+    localScreenStream,
+    remoteScreenStream,
+    remoteUsername,
+    watchingInlineIds,
+  ]);
+
+  const focusedShare = screenShares.find((share) => share.id === focusedStreamId && share.stream);
+  const dockHeight = focusedShare ? "h-[min(56vh,560px)] min-h-[420px]" : "h-[240px]";
+
+  const handleWatchStream = (id: string) => {
+    setWatchingInlineIds((current) => {
+      const next = new Set(current);
+      next.add(id);
+      return next;
+    });
+  };
+
+  const handleExpandStream = (id: string) => {
+    if (!watchingInlineIds.has(id)) return;
+    setFocusedStreamId(id);
+  };
 
   return (
-    <>
-      <section
-        className="flex h-[240px] shrink-0 flex-col overflow-hidden border-b border-border bg-muted text-foreground"
-        data-testid="active-call-dock"
-        aria-label="Active call dock"
-      >
+    <section
+      className={cn(
+        "flex shrink-0 flex-col overflow-hidden border-b border-border bg-muted text-foreground",
+        dockHeight,
+      )}
+      data-testid="active-call-dock"
+      aria-label="Active call dock"
+    >
+      {focusedShare?.stream ? (
+        <FocusStreamView
+          stream={focusedShare.stream}
+          sharerName={focusedShare.sharerName}
+          isLocalSharer={focusedShare.isLocalSharer}
+          participants={participants}
+          isMuted={isMuted}
+          isScreenSharing={isScreenSharing}
+          isScreenShareUpdating={isScreenShareUpdating}
+          onExitFocus={() => setFocusedStreamId(null)}
+          onMuteToggle={onMuteToggle}
+          onStartScreenShare={onStartScreenShare}
+          onStopScreenShare={onStopScreenShare}
+          onHangUp={onHangUp}
+        />
+      ) : (
+        <>
         <div className="flex shrink-0 items-start justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -108,34 +210,15 @@ export function ActiveCallDock({
           className="flex min-h-0 flex-1 items-center justify-center px-4"
           data-testid="active-call-dock-stage"
         >
-          {hasScreenSharePresence ? (
-            <div className="grid h-full w-full max-w-3xl grid-cols-[minmax(0,1fr)_150px] gap-3">
-              {watchStream ? (
-                <StreamPreviewTile
-                  stream={watchStream}
-                  sharerName={modalSharerName}
-                  isLocalSharer={isWatchingLocalStream}
-                  onWatch={() => setIsWatchOpen(true)}
-                />
-              ) : (
-                <div
-                  className="flex h-full items-center justify-center rounded-md border border-border bg-card text-sm text-muted-foreground"
-                  data-testid="stream-preview-loading"
-                >
-                  Waiting for shared screen...
-                </div>
-              )}
-              <div className="flex min-h-0 flex-col gap-2" data-testid="compact-call-participants">
-                <ParticipantChip name="You" label={isMuted ? "Muted" : isScreenSharing ? "Sharing" : "Connected"} />
-                <ParticipantChip name={remoteUsername} label={callStateLabel} />
-              </div>
-            </div>
-          ) : (
-            <div className="grid w-full max-w-3xl grid-cols-2 gap-3">
-              <ParticipantTile name="You" label={isMuted ? "Muted" : "Connected"} compact={compactParticipantCards} />
-              <ParticipantTile name={remoteUsername} label={callStateLabel} compact={compactParticipantCards} />
-            </div>
-          )}
+          <CallGridView
+            participants={participants}
+            screenShares={screenShares}
+            compactParticipants={compactParticipantCards || hasScreenSharePresence}
+            isScreenShareUpdating={isScreenShareUpdating}
+            onWatchStream={handleWatchStream}
+            onExpandStream={handleExpandStream}
+            onStopScreenShare={onStopScreenShare}
+          />
         </div>
 
         {shouldShowDiagnostics && (
@@ -202,75 +285,8 @@ export function ActiveCallDock({
             <PhoneOff className="h-5 w-5" />
           </button>
         </div>
-      </section>
-
-      {isWatchOpen && watchStream && (
-        <WatchStreamModal
-          stream={watchStream}
-          sharerName={modalSharerName}
-          isLocalSharer={isWatchingLocalStream}
-          remoteUsername={remoteUsername}
-          isMuted={isMuted}
-          isScreenShareUpdating={isScreenShareUpdating}
-          onClose={() => setIsWatchOpen(false)}
-          onStopScreenShare={onStopScreenShare}
-        />
+        </>
       )}
-    </>
-  );
-}
-
-function ParticipantChip({ name, label }: { name: string; label: string }) {
-  return (
-    <div
-      className="flex min-h-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
-      data-testid="active-call-participant-chip"
-    >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-sm text-foreground">
-        {name.charAt(0).toUpperCase()}
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-sm text-foreground">{name}</p>
-        <p className="truncate text-[10px] uppercase text-muted-foreground">{label}</p>
-      </div>
-    </div>
-  );
-}
-
-function ParticipantTile({
-  name,
-  label,
-  compact = false,
-}: {
-  name: string;
-  label: string;
-  compact?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center rounded-md border border-border bg-card p-3",
-        compact ? "min-h-14" : "min-h-24",
-      )}
-      data-testid="active-call-participant-tile"
-    >
-      <div
-        className={cn(
-          "flex items-center justify-center rounded-full border border-border bg-background text-foreground",
-          compact ? "h-9 w-9 text-base" : "h-14 w-14 text-xl",
-        )}
-      >
-        {name.charAt(0).toUpperCase()}
-      </div>
-      <p
-        className={cn(
-          "max-w-full truncate font-normal text-foreground",
-          compact ? "mt-1 text-sm" : "mt-2 text-base",
-        )}
-      >
-        {name}
-      </p>
-      <p className="text-xs uppercase text-muted-foreground">{label}</p>
-    </div>
+    </section>
   );
 }
