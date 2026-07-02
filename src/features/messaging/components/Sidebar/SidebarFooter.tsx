@@ -164,6 +164,7 @@ export function SidebarFooter({
             }}
             onKeyDown={(event) => {
               if (callStatus !== "active") return;
+              if (event.target !== event.currentTarget) return;
               if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();
               debugCall("[SidebarFooter] connected call block activated by keyboard", {

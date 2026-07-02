@@ -112,6 +112,20 @@ describe("SidebarFooter call UX", () => {
     expect(onReturnToCall).toHaveBeenCalledTimes(1);
   });
 
+  it("supports keyboard activation for the connected call block", () => {
+    const onReturnToCall = vi.fn();
+    renderFooter({ callStatus: "active", onReturnToCall });
+
+    const returnButton = screen.getByRole("button", {
+      name: "Return to call with Alice",
+    });
+
+    fireEvent.keyDown(returnButton, { key: "Enter" });
+    fireEvent.keyDown(returnButton, { key: " " });
+
+    expect(onReturnToCall).toHaveBeenCalledTimes(2);
+  });
+
   it("shows Updating screen share... while a screen-share transaction is in flight", () => {
     renderFooter({
       callStatus: "active",

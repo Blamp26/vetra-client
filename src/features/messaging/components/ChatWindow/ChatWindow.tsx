@@ -41,7 +41,11 @@ function TypingIndicator({ nickname }: { nickname: string }) {
   );
 }
 
-function isActiveCallForChat(activeChat: ActiveChat, call: UseCallReturn): boolean {
+function isActiveCallForChat(
+  activeChat: ActiveChat,
+  call: UseCallReturn,
+  conversationPreviews: RootState["conversationPreviews"],
+): boolean {
   if (call.status !== "active") return false;
   if (activeChat.type !== "direct") return false;
   if (call.remoteUserId === null || call.remoteUserId === undefined) return false;
@@ -49,7 +53,8 @@ function isActiveCallForChat(activeChat: ActiveChat, call: UseCallReturn): boole
   const callRemoteId = String(call.remoteUserId);
   return (
     callRemoteId === String(activeChat.partnerId) ||
-    (activeChat.partnerRef !== undefined && callRemoteId === String(activeChat.partnerRef))
+    (activeChat.partnerRef !== undefined && callRemoteId === String(activeChat.partnerRef)) ||
+    callRemoteId === String(conversationPreviews[activeChat.partnerId]?.partner_public_id ?? "")
   );
 }
 
@@ -205,7 +210,7 @@ export function ChatWindow({ activeChat, call }: Props) {
 
   if (!currentUser) return null;
 
-  const shouldShowActiveCallDock = isActiveCallForChat(activeChat, call);
+  const shouldShowActiveCallDock = isActiveCallForChat(activeChat, call, conversationPreviews);
 
   const renderHeader = () => {
     if (activeChat.type === "direct") {

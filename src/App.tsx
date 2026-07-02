@@ -17,6 +17,7 @@ import { IncomingCallModal } from "./features/calling/components/IncomingCallMod
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 import { CallProvider, useCallContext } from "@/features/calling/context";
 import { debugCall } from "@/features/calling/utils/callDebug";
+import type { ActiveChat } from "@/shared/types";
 
 function EmptyState({
   eyebrow,
@@ -105,6 +106,7 @@ function AppShell() {
   );
   const currentActiveChatKey = activeChatKey(activeChat);
   const currentActiveChatKeyRef = useRef(currentActiveChatKey);
+  const activeCallDirectChatRef = useRef<Extract<ActiveChat, { type: "direct" }> | null>(null);
 
   useEffect(() => {
     currentActiveChatKeyRef.current = currentActiveChatKey;
@@ -156,17 +158,16 @@ function AppShell() {
   );
   const routeTargetKey = activeChatKey(routeTarget);
   const isSettingsRoute = routeTarget?.type === "settings";
-  const activeChatHash = useMemo(
-    () =>
-      buildHashForActiveChat(activeChat, {
-        activeChat,
-        currentUser,
-        conversationPreviews,
-        roomPreviews,
-        servers,
-        serverChannels,
-        searchResults,
-      }),
+  const routeLookup = useMemo(
+    () => ({
+      activeChat,
+      currentUser,
+      conversationPreviews,
+      roomPreviews,
+      servers,
+      serverChannels,
+      searchResults,
+    }),
     [
       activeChat,
       currentUser,
@@ -177,52 +178,89 @@ function AppShell() {
       searchResults,
     ],
   );
+  const activeChatHash = useMemo(
+    () =>
+      buildHashForActiveChat(activeChat, routeLookup),
+    [
+      activeChat,
+      routeLookup,
+    ],
+  );
 
-  const activeCallChatHash = useMemo(() => {
+  const activeDirectChatMatchesRemote = useCallback(
+    (chat: Extract<ActiveChat, { type: "direct" }>) => {
+      if (remoteUserId === null || remoteUserId === undefined) return false;
+
+      const remoteRef = String(remoteUserId);
+      return (
+        remoteRef === String(chat.partnerId) ||
+        (chat.partnerRef !== undefined && remoteRef === String(chat.partnerRef)) ||
+        remoteRef === String(conversationPreviews[chat.partnerId]?.partner_public_id ?? "")
+      );
+    },
+    [conversationPreviews, remoteUserId],
+  );
+
+  useEffect(() => {
+    if (status === "idle" || status === "ended" || status === "failed") {
+      activeCallDirectChatRef.current = null;
+      return;
+    }
+
+    if (activeChat?.type !== "direct") return;
+
+    if (status === "calling" && !activeCallDirectChatRef.current) {
+      activeCallDirectChatRef.current = activeChat;
+      return;
+    }
+
+    if (activeDirectChatMatchesRemote(activeChat)) {
+      activeCallDirectChatRef.current = activeChat;
+    }
+  }, [activeChat, activeDirectChatMatchesRemote, status]);
+
+  const activeCallChatTarget = useMemo((): Extract<ActiveChat, { type: "direct" }> | null => {
     if (status !== "active" || remoteUserId === null || remoteUserId === undefined) {
       return null;
     }
 
-    const lookup = {
-      activeChat,
-      currentUser,
-      conversationPreviews,
-      roomPreviews,
-      servers,
-      serverChannels,
-      searchResults,
-    };
+    if (activeCallDirectChatRef.current) {
+      return activeCallDirectChatRef.current;
+    }
 
     if (typeof remoteUserId === "number") {
-      return buildHashForActiveChat(
-        { type: "direct", partnerId: remoteUserId, partnerRef: remoteUserId },
-        lookup,
-      );
+      return { type: "direct", partnerId: remoteUserId, partnerRef: remoteUserId };
     }
 
-    const resolved = resolveHashToActiveChat(`#/${remoteUserId}`, lookup);
+    const resolved = resolveHashToActiveChat(`#/${remoteUserId}`, routeLookup);
     if (resolved?.type === "direct") {
-      return buildHashForActiveChat(resolved, lookup);
+      return resolved;
     }
 
-    return `#/${remoteUserId}`;
+    if (activeChat?.type === "direct" && activeDirectChatMatchesRemote(activeChat)) {
+      return activeChat;
+    }
+
+    return null;
   }, [
     activeChat,
-    conversationPreviews,
-    currentUser,
+    activeDirectChatMatchesRemote,
     remoteUserId,
-    roomPreviews,
-    searchResults,
-    serverChannels,
-    servers,
+    routeLookup,
     status,
   ]);
+
+  const activeCallChatHash = useMemo(
+    () => activeCallChatTarget ? buildHashForActiveChat(activeCallChatTarget, routeLookup) : null,
+    [activeCallChatTarget, routeLookup],
+  );
 
   const handleReturnToActiveCall = useCallback(() => {
     if (status !== "active") return;
 
     debugCall("[AppShell] return to call requested", {
       remoteUserId,
+      activeCallChatTarget,
       activeCallChatHash,
       routeHash,
       activeChatKey: currentActiveChatKeyRef.current,
@@ -236,8 +274,29 @@ function AppShell() {
       return;
     }
 
+    if (activeCallChatTarget && activeChatKey(activeCallChatTarget) === currentActiveChatKeyRef.current) {
+      debugCall("[AppShell] return to call skipped", {
+        reason: "already_on_call_chat",
+        remoteUserId,
+        activeCallChatHash,
+      });
+      navigateToHash(activeCallChatHash);
+      return;
+    }
+
+    if (activeCallChatTarget) {
+      setActiveChat(activeCallChatTarget);
+    }
     navigateToHash(activeCallChatHash);
-  }, [activeCallChatHash, navigateToHash, remoteUserId, routeHash, status]);
+  }, [
+    activeCallChatHash,
+    activeCallChatTarget,
+    navigateToHash,
+    remoteUserId,
+    routeHash,
+    setActiveChat,
+    status,
+  ]);
 
   useEffect(() => {
     if (!routeHash || routeHash === "#") return;

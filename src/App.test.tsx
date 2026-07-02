@@ -112,14 +112,15 @@ vi.mock("@/features/messaging/components/ChatWindow/ChatWindow", () => ({
     activeChat,
     call,
   }: {
-    activeChat: { type: string; partnerId?: number };
+    activeChat: { type: string; partnerId?: number; partnerRef?: string | number };
     call: { status: string; remoteUserId: number | string | null };
   }) => (
     <div>
       chat
       {call.status === "active" &&
         activeChat.type === "direct" &&
-        String(activeChat.partnerId) === String(call.remoteUserId) && (
+        (String(activeChat.partnerId) === String(call.remoteUserId) ||
+          String(activeChat.partnerRef) === String(call.remoteUserId)) && (
           <div data-testid="active-call-dock" />
         )}
     </div>
@@ -409,6 +410,52 @@ describe("App hash sync", () => {
         partnerRef: "2",
       }),
     );
+  });
+
+  it("returns to the remembered call DM when the active call remote id is a public id", async () => {
+    const state = makeState();
+    const callState = makeCallState({
+      status: "calling",
+      remoteUsername: "Partner",
+      remoteUserId: "alice-public-id",
+    });
+    state.activeChat = {
+      type: "direct",
+      partnerId: 2,
+      partnerRef: 2,
+    };
+    window.location.hash = "#/2";
+
+    useCallMock.mockReturnValue(callState);
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    const view = render(<App />);
+
+    Object.assign(callState, {
+      status: "active",
+      remoteUserId: "alice-public-id",
+    });
+    state.activeChat = {
+      type: "direct",
+      partnerId: 3,
+      partnerRef: 3,
+    };
+    view.rerender(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open settings" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/settings"));
+    expect(screen.getByText("settings")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "return to call" }));
+
+    await waitFor(() => expect(window.location.hash).toBe("#/2"));
+    expect(setActiveChatMock).toHaveBeenCalledWith({
+      type: "direct",
+      partnerId: 2,
+      partnerRef: 2,
+    });
   });
 
   it("keeps the current route when returning to the call chat that is already open", async () => {

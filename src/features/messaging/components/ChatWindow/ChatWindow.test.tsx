@@ -349,6 +349,50 @@ describe("ChatWindow presence rendering", () => {
     ).toBeTruthy();
   });
 
+  it("renders ActiveCallDock when the active call remote id matches the conversation public id", async () => {
+    const state = makeState();
+    state.conversationPreviews = {
+      2: {
+        partner_id: 2,
+        partner_public_id: "alice-public-id",
+        username: "alice",
+        display_name: "Alice",
+        avatar_url: null,
+        last_message: null,
+        last_message_at: null,
+        unread_count: 0,
+      },
+    } as any;
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2, partnerRef: 2 }}
+        call={makeCall({
+          status: "active",
+          remoteUserId: "alice-public-id",
+          remoteUsername: "Alice",
+        })}
+      />,
+    );
+
+    expect(await screen.findByTestId("active-call-dock")).toBeInTheDocument();
+    expect(screen.getByText("message visible during active call")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message composer" })).toBeInTheDocument();
+  });
+
   it("keeps messages visible when the active call belongs to another direct chat", async () => {
     const state = makeState();
     useAppStoreMock.mockImplementation(
