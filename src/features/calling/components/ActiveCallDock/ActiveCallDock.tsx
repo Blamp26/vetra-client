@@ -23,10 +23,15 @@ interface ActiveCallDockProps {
 }
 
 function detachVideo(video: HTMLVideoElement): void {
-  video.pause();
+  const hadAttachedMedia = Boolean(video.srcObject || video.currentSrc || video.hasAttribute("src"));
+  if (hadAttachedMedia) {
+    video.pause();
+  }
   video.srcObject = null;
   video.removeAttribute("src");
-  video.load();
+  if (hadAttachedMedia) {
+    video.load();
+  }
 }
 
 async function safelyPlayVideo(video: HTMLVideoElement, reason: string): Promise<void> {

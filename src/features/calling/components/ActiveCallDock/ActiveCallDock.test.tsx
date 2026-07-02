@@ -29,8 +29,10 @@ function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = 
     ...overrides,
   };
 
-  render(<ActiveCallDock {...props} />);
-  return props;
+  return {
+    props,
+    ...render(<ActiveCallDock {...props} />),
+  };
 }
 
 describe("ActiveCallDock", () => {
@@ -85,5 +87,44 @@ describe("ActiveCallDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Hang Up" }));
 
     expect(onHangUp).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not pause unrelated document media when screen-share video detaches", () => {
+    const externalVideo = document.createElement("video");
+    const externalPause = vi.fn();
+    Object.defineProperty(externalVideo, "pause", {
+      value: externalPause,
+      configurable: true,
+    });
+    document.body.appendChild(externalVideo);
+    const { rerender } = renderDock({ remoteScreenStream: {} as MediaStream });
+
+    rerender(
+      <ActiveCallDock
+        remoteUsername="Alice"
+        seconds={65}
+        isMuted={false}
+        isScreenSharing={false}
+        isScreenShareUpdating={false}
+        isRemoteScreenLoading={false}
+        callIssue={null}
+        remoteScreenStream={null}
+        localScreenStream={null}
+        diagnostics={{
+          connectionState: "connected",
+          iceConnectionState: "connected",
+          iceGatheringState: "complete",
+          signalingState: "stable",
+          selectedLocalCandidateType: "host",
+        }}
+        onMuteToggle={vi.fn()}
+        onStartScreenShare={vi.fn()}
+        onStopScreenShare={vi.fn()}
+        onHangUp={vi.fn()}
+      />,
+    );
+
+    expect(externalPause).not.toHaveBeenCalled();
+    externalVideo.remove();
   });
 });

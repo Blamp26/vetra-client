@@ -63,6 +63,27 @@ describe('CallAudioRenderer', () => {
     expect(audio.srcObject).toBeNull();
   });
 
+  it('does not pause unrelated document media during cleanup', () => {
+    const externalVideo = document.createElement('video');
+    const externalPause = vi.fn();
+    Object.defineProperty(externalVideo, 'pause', {
+      value: externalPause,
+      configurable: true,
+    });
+    document.body.appendChild(externalVideo);
+    const remoteStream = new MediaStream();
+
+    const { rerender, unmount } = render(
+      <CallAudioRenderer remoteStream={remoteStream} selectedOutputDeviceId="default" />
+    );
+
+    rerender(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" />);
+    unmount();
+
+    expect(externalPause).not.toHaveBeenCalled();
+    externalVideo.remove();
+  });
+
   it('calls setSinkId with the selected output device when supported', async () => {
     render(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="speaker-123" />);
 
