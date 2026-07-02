@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPresenceLabel, resolvePresenceStatus } from "./presence";
+import { getPresenceLabel, getPresenceText, resolvePresenceStatus } from "./presence";
 
 describe("resolvePresenceStatus", () => {
   it("treats a user with last_seen_at and no live presence as offline", () => {
@@ -59,5 +59,20 @@ describe("getPresenceLabel", () => {
   it("returns the expected user-facing label", () => {
     expect(getPresenceLabel("offline")).toBe("Offline");
     expect(getPresenceLabel("online")).toBe("Online");
+  });
+});
+
+describe("getPresenceText", () => {
+  it("formats offline last-seen text with normalized casing", () => {
+    expect(
+      getPresenceText({
+        status: "offline",
+        lastSeenAt: "2026-06-27T09:15:00Z",
+      }),
+    ).toMatch(/^Last seen (at|on) /);
+  });
+
+  it("returns a simple online label for active presence", () => {
+    expect(getPresenceText({ status: "online" })).toBe("Online");
   });
 });

@@ -1,4 +1,5 @@
 import type { User } from "@/shared/types";
+import { formatLastSeen } from "@/utils/formatDate";
 
 export type PresenceStatus = User["status"];
 
@@ -46,4 +47,22 @@ export function resolvePresenceStatus({
 
 export function getPresenceLabel(status: PresenceStatus): string {
   return PRESENCE_LABELS[status];
+}
+
+interface PresenceTextParams {
+  status: PresenceStatus;
+  lastSeenAt?: string | null;
+}
+
+export function getPresenceText({
+  status,
+  lastSeenAt,
+}: PresenceTextParams): string {
+  if (status === "offline") {
+    return lastSeenAt
+      ? formatLastSeen(lastSeenAt).replace(/^last seen/, "Last seen")
+      : "Offline";
+  }
+
+  return getPresenceLabel(status);
 }

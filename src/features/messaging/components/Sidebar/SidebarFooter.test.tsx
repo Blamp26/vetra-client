@@ -99,6 +99,12 @@ describe("SidebarFooter call UX", () => {
     expect(screen.getByText("Connected")).toBeInTheDocument();
   });
 
+  it("renders the current user presence status in the footer", () => {
+    renderFooter();
+
+    expect(screen.getByTestId("sidebar-footer-status")).toHaveTextContent("Online");
+  });
+
   it("renders the connected call block as a return-to-call navigation control", () => {
     const onReturnToCall = vi.fn();
     renderFooter({ callStatus: "active", onReturnToCall });

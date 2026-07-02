@@ -16,7 +16,7 @@ import { ProfileModal } from "@/features/profile/components/ProfileModal/Profile
 import { ConfirmModal } from "@/shared/components/ConfirmModal/ConfirmModal";
 import { formatCallTime } from "@/utils/formatDate";
 import {
-  getPresenceLabel,
+  getPresenceText,
   resolvePresenceStatus,
 } from "@/shared/utils/presence";
 import { debugCall } from "@/features/calling/utils/callDebug";
@@ -79,12 +79,14 @@ export function SidebarFooter({
       })
     : "offline";
 
-  const statusText = useMemo(() => {
-    if (!soundEnabled) return "Sound muted";
-    if (!micEnabled) return "Microphone muted";
-
-    return getPresenceLabel(currentStatus);
-  }, [micEnabled, soundEnabled, currentStatus]);
+  const statusText = useMemo(
+    () =>
+      getPresenceText({
+        status: currentStatus,
+        lastSeenAt: currentUser?.last_seen_at,
+      }),
+    [currentStatus, currentUser?.last_seen_at],
+  );
 
   const isMicMuted = callStatus === "active" ? isMuted : !micEnabled;
   const displayIssue = normalizeCallIssue(callIssue);
@@ -273,6 +275,7 @@ export function SidebarFooter({
                 {displayName}
               </span>
               <span
+                data-testid="sidebar-footer-status"
                 className={cn(
                   "text-[10px] truncate",
                   currentStatus === "online"

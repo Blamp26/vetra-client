@@ -45,11 +45,15 @@ export const Avatar: React.FC<AvatarProps> = ({
   const renderStatus = () => {
     if (!status) return null;
     return (
-      <span className={cn(
-        "absolute -bottom-1 -right-1 border border-background",
-        size === 'small' ? 'h-2 w-2' : 'h-3 w-3',
-        statusColors[status]
-      )} />
+      <span
+        className={cn(
+          "absolute -bottom-0.5 -right-0.5 rounded-full border border-background",
+          size === 'small' ? 'h-2.5 w-2.5' : 'h-3 w-3',
+          statusColors[status]
+        )}
+        data-testid="avatar-status-indicator"
+        data-status={status}
+      />
     );
   };
 

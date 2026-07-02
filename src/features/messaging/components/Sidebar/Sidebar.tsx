@@ -14,7 +14,7 @@ import {
   roomChatForPreview,
   serverChatForServer,
 } from "@/shared/utils/chatRoutes";
-import { resolvePresenceStatus } from "@/shared/utils/presence";
+import { getPresenceText, resolvePresenceStatus } from "@/shared/utils/presence";
 import { getPreviewText } from "../../utils/attachments";
 
 interface SidebarProps {
@@ -31,6 +31,7 @@ type SidebarItem =
       unread: number;
       isOnline: boolean;
       status?: "online" | "away" | "dnd" | "offline" | null;
+      presenceText?: string;
     }
   | {
       kind: "room";
@@ -68,23 +69,30 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
       .catch((err) => console.error("Failed to load servers:", err));
   }, [currentUser, setServers]);
 
-  const directItems: SidebarItem[] = Object.values(conversationPreviews).map(
-    (p) => ({
+  const directItems: SidebarItem[] = Object.values(conversationPreviews).map((p) => {
+    const partnerId = Number(p.partner_id);
+    const status = resolvePresenceStatus({
+      userId: partnerId,
+      onlineUserIds,
+      userStatuses,
+      lastSeenAt: lastSeenAt[partnerId],
+    });
+
+    return {
       kind: "direct",
       id: p.partner_id,
       name: p.partner_display_name ?? p.partner_username,
       time: p.last_message.inserted_at,
       preview: getPreviewText(p.last_message, "No messages yet"),
       unread: p.unread_count,
-      isOnline: onlineUserIds.has(Number(p.partner_id)),
-      status: resolvePresenceStatus({
-        userId: Number(p.partner_id),
-        onlineUserIds,
-        userStatuses,
-        lastSeenAt: lastSeenAt[Number(p.partner_id)],
+      isOnline: onlineUserIds.has(partnerId),
+      status,
+      presenceText: getPresenceText({
+        status,
+        lastSeenAt: lastSeenAt[partnerId],
       }),
-    }),
-  );
+    };
+  });
 
   const roomItems: SidebarItem[] = Object.values(roomPreviews)
     .filter((r) => r.server_id == null)
@@ -191,6 +199,8 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
                 isActive && "border-border bg-card",
               )}
               data-testid={`sidebar-item-${item.kind}-${item.id}`}
+              data-presence-status={item.kind === "direct" ? item.status ?? "offline" : undefined}
+              title={item.kind === "direct" ? item.presenceText : undefined}
             >
               <Avatar
                 name={item.name}
@@ -209,6 +219,9 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
                       {formatPreviewTime(item.time)}
                     </span>
                   </div>
+                  {item.kind === "direct" && item.presenceText && (
+                    <span className="sr-only">{item.presenceText}</span>
+                  )}
                   <p className="truncate text-xs text-muted-foreground">
                     <EmojiText text={item.preview} size={12} />
                   </p>

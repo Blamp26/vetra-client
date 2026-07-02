@@ -8,7 +8,6 @@ import { authApi } from "@/api/auth";
 import { MessageList } from "../MessageList/MessageList";
 import { MessageInput } from "../MessageInput/MessageInput";
 import { MessageSearch } from "../MessageSearch/MessageSearch";
-import { formatLastSeen } from "@/utils/formatDate";
 import type { ActiveChat, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from "@/features/calling/components/CallButton";
@@ -18,7 +17,7 @@ import { normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import { cn } from "@/shared/utils/cn";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
-  getPresenceLabel,
+  getPresenceText,
   resolvePresenceStatus,
 } from "@/shared/utils/presence";
 
@@ -236,13 +235,10 @@ export function ChatWindow({ activeChat, call }: Props) {
         lastSeenAt: resolvedLastSeenAt,
       });
 
-      const statusLine = (() => {
-        if (currentStatus !== "offline") {
-          return getPresenceLabel(currentStatus);
-        }
-        if (resolvedLastSeenAt) return formatLastSeen(resolvedLastSeenAt);
-        return "Offline";
-      })();
+      const statusLine = getPresenceText({
+        status: currentStatus,
+        lastSeenAt: resolvedLastSeenAt,
+      });
 
       return (
         <div
@@ -261,6 +257,7 @@ export function ChatWindow({ activeChat, call }: Props) {
                 {partner.display_name || partner.username}
               </h3>
               <p
+                data-testid="chat-header-status"
                 className={cn(
                   "truncate text-xs leading-4",
                   currentStatus === "online"

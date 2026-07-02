@@ -115,7 +115,7 @@ describe("ChatWindow presence rendering", () => {
     useAppStoreMock.mockReset();
   });
 
-  it("shows a gray offline dot when the header says last seen", async () => {
+  it("shows a normalized last-seen status when the user is offline", async () => {
     const state = makeState();
     useAppStoreMock.mockImplementation(
       (selector: (value: ReturnType<typeof makeState>) => unknown) =>
@@ -139,12 +139,13 @@ describe("ChatWindow presence rendering", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/last seen on|last seen at/i),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("chat-header-status")).toHaveTextContent(
+        /Last seen on|Last seen at/,
+      );
     });
 
-    expect(container.querySelector(".bg-offline")).toBeTruthy();
+    const indicator = container.querySelector('[data-testid="avatar-status-indicator"]');
+    expect(indicator).toHaveAttribute("data-status", "offline");
     expect(container.querySelector(".bg-online")).toBeFalsy();
   });
 
@@ -175,10 +176,11 @@ describe("ChatWindow presence rendering", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Online")).toBeInTheDocument();
+      expect(screen.getByTestId("chat-header-status")).toHaveTextContent("Online");
     });
 
-    expect(container.querySelector(".bg-online")).toBeTruthy();
+    const indicator = container.querySelector('[data-testid="avatar-status-indicator"]');
+    expect(indicator).toHaveAttribute("data-status", "online");
     expect(container.querySelector(".bg-offline")).toBeFalsy();
   });
 
@@ -213,7 +215,7 @@ describe("ChatWindow presence rendering", () => {
 
     expect(header).toHaveClass("min-h-14");
     expect(screen.getByText("Alice")).toBeInTheDocument();
-    expect(screen.getByText("Online")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-header-status")).toHaveTextContent("Online");
     expect(actions).toContainElement(screen.getByRole("button", { name: "Call Alice" }));
 
     const searchButton = screen.getByRole("button", { name: "Search" });

@@ -163,6 +163,8 @@ describe("Sidebar attachment previews", () => {
   it("keeps DM rows selectable with selected and unread indicators", async () => {
     const state = makeState();
     state.activeChat = { type: "direct", partnerId: 2, partnerRef: "user-public-id" };
+    state.onlineUserIds = new Set<number>([2]);
+    state.userStatuses = { 2: "online" };
 
     useAppStoreMock.mockImplementation(
       (selector: (value: ReturnType<typeof makeState>) => unknown) =>
@@ -174,6 +176,8 @@ describe("Sidebar attachment previews", () => {
     const directRow = await screen.findByTestId("sidebar-item-direct-2");
     expect(directRow).toHaveClass("rounded-md");
     expect(directRow).toHaveClass("bg-card");
+    expect(directRow).toHaveAttribute("data-presence-status", "online");
+    expect(directRow).toHaveAttribute("title", "Online");
     expect(screen.getByText("1")).toBeInTheDocument();
 
     fireEvent.click(directRow);
