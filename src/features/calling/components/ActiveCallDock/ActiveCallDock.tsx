@@ -1,10 +1,9 @@
-import { useEffect, useRef } from "react";
 import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
-import { debugCall } from "@/features/calling/utils/callDebug";
 import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
+import { ScreenShareStage } from "@/features/calling/components/ScreenShareStage";
 
 interface ActiveCallDockProps {
   remoteUsername: string;
@@ -24,30 +23,6 @@ interface ActiveCallDockProps {
   onHangUp: () => void;
 }
 
-function detachVideo(video: HTMLVideoElement): void {
-  const hadAttachedMedia = Boolean(video.srcObject || video.currentSrc || video.hasAttribute("src"));
-  if (hadAttachedMedia) {
-    video.pause();
-  }
-  video.srcObject = null;
-  video.removeAttribute("src");
-  if (hadAttachedMedia) {
-    video.load();
-  }
-}
-
-async function safelyPlayVideo(video: HTMLVideoElement, reason: string): Promise<void> {
-  try {
-    await video.play();
-    debugCall("[ActiveCallDock] video play success", { reason });
-  } catch (error) {
-    debugCall("[ActiveCallDock] video play failed", {
-      reason,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
 export function ActiveCallDock({
   remoteUsername,
   callStatus = "active",
@@ -65,8 +40,6 @@ export function ActiveCallDock({
   onStopScreenShare,
   onHangUp,
 }: ActiveCallDockProps) {
-  const remoteScreenRef = useRef<HTMLVideoElement>(null);
-  const previewRef = useRef<HTMLVideoElement>(null);
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
   const displayIssue = normalizeCallIssue(callIssue);
@@ -78,45 +51,11 @@ export function ActiveCallDock({
   });
   const hasScreenStage = isRemoteScreenLoading || remoteScreenStream || localScreenStream;
 
-  useEffect(() => {
-    const remoteScreen = remoteScreenRef.current;
-    if (!remoteScreen) return;
-
-    if (!remoteScreenStream) {
-      detachVideo(remoteScreen);
-      return;
-    }
-
-    remoteScreen.srcObject = remoteScreenStream;
-    void safelyPlayVideo(remoteScreen, "remote_screen_stream");
-
-    return () => {
-      detachVideo(remoteScreen);
-    };
-  }, [remoteScreenStream]);
-
-  useEffect(() => {
-    const preview = previewRef.current;
-    if (!preview) return;
-
-    if (!localScreenStream) {
-      detachVideo(preview);
-      return;
-    }
-
-    preview.srcObject = localScreenStream;
-    void safelyPlayVideo(preview, "local_screen_preview");
-
-    return () => {
-      detachVideo(preview);
-    };
-  }, [localScreenStream]);
-
   return (
     <section
       className={cn(
         "relative shrink-0 overflow-hidden border-b border-border bg-muted text-foreground",
-        hasScreenStage ? "h-[clamp(340px,55vh,620px)]" : "h-[240px]",
+        hasScreenStage ? "h-[clamp(420px,60vh,760px)]" : "h-[240px]",
       )}
       data-testid="active-call-dock"
       aria-label="Active call dock"
@@ -158,47 +97,21 @@ export function ActiveCallDock({
         data-testid="active-call-dock-stage"
       >
         {hasScreenStage ? (
-          <div className="grid h-full w-full max-w-6xl grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
-            <div className="flex min-h-0 items-center justify-center rounded-md border border-border bg-card p-2">
-              {remoteScreenStream ? (
-                <video
-                  ref={remoteScreenRef}
-                  autoPlay
-                  playsInline
-                  className="max-h-full w-full rounded bg-black object-contain"
-                  data-testid="remote-screen-view"
-                />
-              ) : isRemoteScreenLoading ? (
-                <div
-                  className="flex h-full min-h-48 w-full items-center justify-center rounded bg-background text-sm text-muted-foreground"
-                  data-testid="remote-screen-loading"
-                >
-                  Waiting for shared screen
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  Screen sharing from this device
-                </div>
-              )}
-            </div>
+          <div className="grid h-full w-full max-w-7xl grid-cols-1 gap-3 lg:grid-cols-[1fr_180px]">
+            <ScreenShareStage
+              remoteScreenStream={remoteScreenStream}
+              localScreenStream={localScreenStream}
+              isRemoteScreenLoading={isRemoteScreenLoading}
+              isScreenShareUpdating={isScreenShareUpdating}
+              remoteUsername={remoteUsername}
+            />
 
-            <div className="flex min-h-0 flex-col gap-3">
-              <ParticipantTile name={remoteUsername} label={callStateLabel} compact />
-              {localScreenStream && (
-                <div className="min-h-0 rounded-md border border-border bg-card p-2">
-                  <div className="mb-2 text-[10px] uppercase text-muted-foreground">
-                    Local Preview
-                  </div>
-                  <video
-                    ref={previewRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    className="max-h-36 w-full rounded border border-border bg-black object-contain"
-                    data-testid="local-screen-preview"
-                  />
-                </div>
-              )}
+            <div
+              className="flex min-h-0 flex-row gap-2 overflow-x-auto lg:flex-col lg:overflow-x-visible"
+              data-testid="active-call-compact-participants"
+            >
+              <ParticipantChip name="You" label={isMuted ? "Muted" : isScreenSharing ? "Sharing" : "Connected"} />
+              <ParticipantChip name={remoteUsername} label={callStateLabel} />
             </div>
           </div>
         ) : (
@@ -274,6 +187,29 @@ export function ActiveCallDock({
         </button>
       </div>
     </section>
+  );
+}
+
+function ParticipantChip({
+  name,
+  label,
+}: {
+  name: string;
+  label: string;
+}) {
+  return (
+    <div
+      className="flex min-w-36 items-center gap-2 rounded-md border border-border bg-card px-3 py-2 lg:min-w-0"
+      data-testid="active-call-participant-chip"
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-sm text-foreground">
+        {name.charAt(0).toUpperCase()}
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm text-foreground">{name}</p>
+        <p className="truncate text-[10px] uppercase text-muted-foreground">{label}</p>
+      </div>
+    </div>
   );
 }
 

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ActiveCallDock } from "./ActiveCallDock";
 
 function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = {}) {
@@ -36,6 +36,12 @@ function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = 
 }
 
 describe("ActiveCallDock", () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
+  });
+
   it("renders a docked active call panel with status and controls", () => {
     renderDock();
 
@@ -86,8 +92,26 @@ describe("ActiveCallDock", () => {
     renderDock({ remoteScreenStream: {} as MediaStream });
 
     const dock = screen.getByTestId("active-call-dock");
-    expect(dock).toHaveClass("h-[clamp(340px,55vh,620px)]");
+    expect(dock).toHaveClass("h-[clamp(420px,60vh,760px)]");
     expect(dock).not.toHaveClass("h-[240px]");
+  });
+
+  it("uses compact participant chips instead of large cards in screen-share mode", () => {
+    renderDock({ remoteScreenStream: {} as MediaStream });
+
+    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+    expect(screen.getAllByTestId("active-call-participant-chip")).toHaveLength(2);
+    expect(screen.queryByTestId("active-call-participant-tile")).not.toBeInTheDocument();
+  });
+
+  it("keeps controls inside the larger screen-share dock", () => {
+    renderDock({ localScreenStream: {} as MediaStream, isScreenSharing: true });
+
+    const dock = screen.getByTestId("active-call-dock");
+    const controls = screen.getByTestId("active-call-dock-controls");
+    expect(dock).toContainElement(controls);
+    expect(controls).toHaveClass("absolute");
+    expect(screen.getByTestId("local-screen-view")).toBeInTheDocument();
   });
 
   it("renders a calling status label", () => {

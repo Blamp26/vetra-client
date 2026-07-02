@@ -113,6 +113,9 @@ describe("ChatWindow presence rendering", () => {
   beforeEach(() => {
     getUser.mockReset();
     useAppStoreMock.mockReset();
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
   });
 
   it("shows a normalized last-seen status when the user is offline", async () => {
@@ -392,6 +395,53 @@ describe("ChatWindow presence rendering", () => {
     expect(composer).toBeInTheDocument();
     composer.focus();
     expect(composer).toHaveFocus();
+    expect(
+      dock.compareDocumentPosition(messageRegion) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps messages and composer visible below the screen-share watch surface", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2 }}
+        call={makeCall({
+          status: "active",
+          remoteUserId: 2,
+          remoteUsername: "Alice",
+          remoteScreenStream: { id: "remote-screen" } as MediaStream,
+          diagnostics: {
+            connectionState: "connected",
+            iceConnectionState: "connected",
+            iceGatheringState: "complete",
+            signalingState: "stable",
+            selectedLocalCandidateType: "host",
+          },
+        })}
+      />,
+    );
+
+    const dock = screen.getByTestId("active-call-dock");
+    const messageRegion = screen.getByTestId("message-list-region");
+
+    expect(dock).toHaveClass("h-[clamp(420px,60vh,760px)]");
+    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+    expect(screen.getByText("message visible during active call")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message composer" })).toBeInTheDocument();
     expect(
       dock.compareDocumentPosition(messageRegion) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
