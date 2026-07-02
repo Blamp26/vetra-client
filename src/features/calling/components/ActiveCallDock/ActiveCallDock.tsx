@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
@@ -136,7 +136,14 @@ export function ActiveCallDock({
   ]);
 
   const focusedShare = screenShares.find((share) => share.id === focusedStreamId && share.stream);
-  const dockHeight = focusedShare ? "h-[min(56vh,560px)] min-h-[420px]" : "h-[240px]";
+  const dockHeight = focusedShare ? "h-[min(50vh,420px)]" : "min-h-[240px]";
+  const callSurfaceStyle = {
+    "--call-surface-bg": "var(--surface-1, var(--muted))",
+    "--call-tile-bg": "var(--surface-2, var(--card))",
+    "--call-controls-bg": "var(--surface-2, var(--card))",
+    "--call-text-primary": "var(--text-primary, var(--foreground))",
+    "--call-text-muted": "var(--text-secondary, var(--muted-foreground))",
+  } as CSSProperties;
 
   const handleWatchStream = (id: string) => {
     setWatchingInlineIds((current) => {
@@ -154,9 +161,11 @@ export function ActiveCallDock({
   return (
     <section
       className={cn(
-        "flex shrink-0 flex-col overflow-hidden border-b border-border bg-muted text-foreground",
+        "flex shrink-0 flex-col border-b border-border bg-[var(--call-surface-bg)] text-[var(--call-text-primary)]",
+        focusedShare ? "overflow-hidden" : "overflow-visible",
         dockHeight,
       )}
+      style={callSurfaceStyle}
       data-testid="active-call-dock"
       aria-label="Active call dock"
     >
@@ -177,16 +186,16 @@ export function ActiveCallDock({
         />
       ) : (
         <>
-        <div className="flex shrink-0 items-start justify-between gap-3 px-4 py-3">
+        <div className="flex shrink-0 items-start justify-between gap-3 px-4 py-2">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <p className="text-[10px] uppercase tracking-wide text-[var(--call-text-muted)]">
               Voice call
             </p>
-            <h2 className="truncate text-sm font-normal text-foreground">
+            <h2 className="truncate text-sm font-normal text-[var(--call-text-primary)]">
               {remoteUsername}
             </h2>
           </div>
-          <div className="flex items-center gap-2 text-xs uppercase text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs uppercase text-[var(--call-text-muted)]">
             <span data-testid="active-call-dock-status">{callStateLabel}</span>
             <span>{formatCallTime(seconds)}</span>
           </div>
@@ -207,7 +216,7 @@ export function ActiveCallDock({
         )}
 
         <div
-          className="flex min-h-0 flex-1 items-center justify-center px-4"
+          className="flex min-h-[120px] shrink-0 items-center justify-center px-4 py-2"
           data-testid="active-call-dock-stage"
         >
           <CallGridView
@@ -234,7 +243,7 @@ export function ActiveCallDock({
         )}
 
         <div
-          className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-card px-3 py-2"
+          className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-[var(--call-controls-bg)] px-3 py-2"
           data-testid="active-call-dock-controls"
         >
           <button

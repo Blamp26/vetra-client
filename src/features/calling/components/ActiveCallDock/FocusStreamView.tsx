@@ -60,17 +60,20 @@ export function FocusStreamView({
   }, [stream]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-zinc-950 text-white" data-testid="focus-stream-view">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
+    <div
+      className="flex h-full min-h-0 flex-col bg-[var(--call-surface-bg)] text-[var(--call-text-primary)]"
+      data-testid="focus-stream-view"
+    >
+      <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-b border-border bg-[var(--call-controls-bg)] px-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Monitor className="h-4 w-4 shrink-0 text-zinc-300" />
-          <h2 className="truncate text-sm text-zinc-100">{sharerName}'s screen</h2>
+          <Monitor className="h-4 w-4 shrink-0 text-[var(--call-text-muted)]" />
+          <h2 className="truncate text-sm text-[var(--call-text-primary)]">{sharerName}'s screen</h2>
           <span className="rounded-sm bg-red-600 px-2 py-1 text-[10px] uppercase text-white">LIVE</span>
-          <span className="text-xs uppercase text-zinc-400">720p</span>
+          <span className="text-xs text-[var(--call-text-muted)]">720p</span>
         </div>
         <button
           type="button"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--call-tile-bg)] text-[var(--call-text-primary)] hover:bg-accent"
           onClick={onExitFocus}
           aria-label="Exit focus view"
         >
@@ -78,7 +81,10 @@ export function FocusStreamView({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 bg-black p-3" data-testid="focus-stream-stage">
+      <div
+        className="min-h-0 flex-1 max-h-[min(38vh,260px)] bg-black p-2"
+        data-testid="focus-stream-stage"
+      >
         <div className="relative h-full overflow-hidden rounded-md bg-black">
           <video
             ref={videoRef}
@@ -102,20 +108,20 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="flex shrink-0 gap-2 overflow-x-auto border-t border-zinc-800 bg-zinc-900 px-4 py-2"
+        className="flex h-12 shrink-0 gap-2 overflow-x-auto border-t border-border bg-[var(--call-controls-bg)] px-3 py-1.5"
         data-testid="focus-participant-strip"
       >
         {participants.map((participant) => (
           <div
             key={participant.id}
-            className="flex min-w-36 items-center gap-2 rounded-md bg-zinc-800 px-3 py-2"
+            className="flex min-w-32 items-center gap-2 rounded-md bg-[var(--call-tile-bg)] px-2"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm text-zinc-100">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
               {participant.name.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm text-zinc-100">{participant.name}</p>
-              <p className="truncate text-[10px] uppercase text-zinc-500">
+              <p className="truncate text-xs text-[var(--call-text-primary)]">{participant.name}</p>
+              <p className="truncate text-[10px] uppercase text-[var(--call-text-muted)]">
                 {participant.isMuted ? "Muted" : participant.label}
               </p>
             </div>
@@ -124,15 +130,15 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-t border-zinc-800 bg-zinc-900 px-4 py-2"
+        className="grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border bg-[var(--call-controls-bg)] px-3"
         data-testid="focus-control-bar"
       >
         <div />
         <div className="flex items-center justify-center gap-2">
           <button
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-md border border-zinc-700 transition-colors",
-              isMuted ? "bg-red-600 text-white" : "bg-zinc-800 text-zinc-100 hover:bg-zinc-700",
+              "flex h-8 w-8 items-center justify-center rounded-md border border-border transition-colors",
+              isMuted ? "bg-destructive text-destructive-foreground" : "bg-background text-foreground hover:bg-accent",
             )}
             onClick={onMuteToggle}
             aria-label={isMuted ? "Unmute" : "Mute"}
@@ -142,8 +148,8 @@ export function FocusStreamView({
 
           <button
             className={cn(
-              "inline-flex h-10 items-center gap-2 rounded-md border border-zinc-700 px-3 text-sm text-zinc-100 transition-colors disabled:pointer-events-none disabled:opacity-60",
-              isScreenSharing ? "bg-zinc-700" : "bg-zinc-800 hover:bg-zinc-700",
+              "flex h-8 w-8 items-center justify-center rounded-md border border-border transition-colors disabled:pointer-events-none disabled:opacity-60",
+              isScreenSharing ? "bg-accent text-foreground" : "bg-background text-foreground hover:bg-accent",
             )}
             onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
             aria-label={
@@ -156,11 +162,10 @@ export function FocusStreamView({
             disabled={isScreenShareUpdating}
           >
             {isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}
-            <span>{isScreenShareUpdating ? "Updating..." : isScreenSharing ? "Stop sharing" : "Share screen"}</span>
           </button>
 
           <button
-            className="flex h-10 w-10 items-center justify-center rounded-md border border-red-700 bg-red-600 text-white hover:bg-red-700"
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-destructive/40 bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={onHangUp}
             aria-label="Hang Up"
           >
@@ -171,21 +176,21 @@ export function FocusStreamView({
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-background text-foreground hover:bg-accent"
             aria-label="Stream volume"
           >
             <Volume2 className="h-4 w-4" />
           </button>
           <button
             type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-background text-foreground hover:bg-accent"
             aria-label="Pop out stream"
           >
             <Maximize2 className="h-4 w-4" />
           </button>
           <button
             type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-background text-foreground hover:bg-accent"
             aria-label="Fullscreen stream"
           >
             <Maximize2 className="h-4 w-4" />

@@ -35,17 +35,13 @@ export function CallGridView({
   onStopScreenShare,
 }: CallGridViewProps) {
   const tileCount = participants.length + screenShares.length;
-  const gridCols =
-    tileCount <= 1
-      ? "grid-cols-1"
-      : tileCount === 2
-        ? "grid-cols-2"
-        : "grid-cols-2 lg:grid-cols-3";
+  const tileSizeClass = getTileSizeClass(tileCount);
 
   return (
     <div
-      className={`grid h-full w-full max-w-4xl auto-rows-fr gap-3 ${gridCols}`}
+      className="flex w-full max-w-[720px] flex-wrap items-center justify-center gap-2"
       data-testid="call-grid-view"
+      data-tile-count={tileCount}
     >
       {participants.map((participant) => (
         <ParticipantTile
@@ -55,6 +51,7 @@ export function CallGridView({
           variant="avatar"
           isMuted={participant.isMuted}
           compact={compactParticipants}
+          className={tileSizeClass}
           data-testid="active-call-participant-tile"
         />
       ))}
@@ -72,9 +69,20 @@ export function CallGridView({
           onExpand={() => onExpandStream(share.id)}
           onStopScreenShare={share.isLocalSharer ? onStopScreenShare : undefined}
           isScreenShareUpdating={isScreenShareUpdating}
+          className={tileSizeClass}
           data-testid="active-call-screen-share-tile"
         />
       ))}
     </div>
   );
+}
+
+function getTileSizeClass(tileCount: number): string {
+  if (tileCount <= 2) {
+    return "h-[150px] w-[min(220px,calc((100vw-6rem)/2))]";
+  }
+  if (tileCount <= 4) {
+    return "h-[120px] w-[min(170px,calc((100vw-6rem)/2))]";
+  }
+  return "h-[95px] w-[min(130px,calc((100vw-5rem)/2))]";
 }

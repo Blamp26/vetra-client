@@ -49,9 +49,13 @@ describe("ActiveCallDock", () => {
   it("keeps the audio-only dock compact with one participant grid", () => {
     renderDock();
 
-    expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[240px]");
+    expect(screen.getByTestId("active-call-dock")).toHaveClass("min-h-[240px]");
     expect(screen.getByTestId("call-grid-view")).toBeInTheDocument();
+    expect(screen.getByTestId("call-grid-view")).toHaveClass("flex", "max-w-[720px]", "justify-center");
     expect(screen.getAllByTestId("active-call-participant-tile")).toHaveLength(2);
+    expect(screen.getAllByTestId("active-call-participant-tile")[0]).toHaveClass("w-[min(220px,calc((100vw-6rem)/2))]");
+    expect(screen.getAllByTestId("active-call-participant-tile")[0]).not.toHaveClass("border");
+    expect(screen.getAllByTestId("participant-avatar-name")[0]).toHaveTextContent("You");
     expect(screen.queryByTestId("active-call-screen-share-tile")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share screen" })).toBeInTheDocument();
@@ -64,9 +68,10 @@ describe("ActiveCallDock", () => {
     const dock = screen.getByTestId("active-call-dock");
     const tile = screen.getByTestId("active-call-screen-share-tile");
 
-    expect(dock).toHaveClass("h-[240px]");
+    expect(dock).toHaveClass("min-h-[240px]");
     expect(tile).toHaveAttribute("data-variant", "screenShare");
     expect(tile).toHaveAttribute("data-state", "idle");
+    expect(tile).toHaveClass("w-[min(170px,calc((100vw-6rem)/2))]");
     expect(screen.getByRole("button", { name: "Watch stream" })).toBeInTheDocument();
     expect(screen.getByTestId("participant-screen-name")).toHaveTextContent("Alice");
     expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
@@ -97,10 +102,12 @@ describe("ActiveCallDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
 
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
+    expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[min(50vh,420px)]");
     expect(screen.getByText("Alice's screen")).toBeInTheDocument();
     expect(screen.getByText("LIVE")).toBeInTheDocument();
     expect(screen.getByText("720p")).toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("focus-stream-stage")).toHaveClass("max-h-[min(38vh,260px)]");
     expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
     expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("Alice");
     expect(screen.getByTestId("focus-control-bar")).toBeInTheDocument();
@@ -129,7 +136,7 @@ describe("ActiveCallDock", () => {
       onStopScreenShare,
     });
 
-    expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[240px]");
+    expect(screen.getByTestId("active-call-dock")).toHaveClass("min-h-[240px]");
     expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute(
       "data-state",
       "idle",

@@ -24,6 +24,7 @@ export interface ParticipantTileProps {
   onStopScreenShare?: () => void;
   isScreenShareUpdating?: boolean;
   compact?: boolean;
+  className?: string;
   "data-testid"?: string;
 }
 
@@ -40,6 +41,7 @@ export function ParticipantTile({
   onStopScreenShare,
   isScreenShareUpdating = false,
   compact = false,
+  className,
   "data-testid": testId = "participant-tile",
 }: ParticipantTileProps) {
   if (variant === "screenShare") {
@@ -53,6 +55,7 @@ export function ParticipantTile({
         onExpand={onExpand}
         onStopScreenShare={onStopScreenShare}
         isScreenShareUpdating={isScreenShareUpdating}
+        className={className}
         testId={testId}
       />
     );
@@ -61,26 +64,27 @@ export function ParticipantTile({
   return (
     <div
       className={cn(
-        "relative flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-md border border-border bg-card p-3",
-        compact ? "aspect-[16/9]" : "aspect-[16/9] min-h-24",
+        "relative flex min-h-0 items-center justify-center overflow-hidden rounded-md bg-[var(--call-tile-bg)]",
+        className,
       )}
       data-testid={testId}
       data-variant={variant}
     >
       <div
         className={cn(
-          "flex items-center justify-center rounded-full border border-border bg-background text-foreground",
-          compact ? "h-9 w-9 text-base" : "h-14 w-14 text-xl",
+          "flex items-center justify-center rounded-full bg-primary text-primary-foreground",
+          compact ? "h-12 w-12 text-lg" : "h-14 w-14 text-xl",
         )}
       >
         {name.charAt(0).toUpperCase()}
       </div>
-      <p className={cn("mt-2 max-w-full truncate text-foreground", compact ? "text-sm" : "text-base")}>
+      <p
+        className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-sm bg-black/55 px-2 py-1 text-xs leading-none text-white"
+        data-testid="participant-avatar-name"
+      >
         {name}
       </p>
-      <p className="max-w-full truncate text-xs uppercase text-muted-foreground">
-        {isMuted ? "Muted" : label}
-      </p>
+      <span className="sr-only">{isMuted ? "Muted" : label}</span>
     </div>
   );
 }
@@ -94,6 +98,7 @@ function ScreenShareParticipantTile({
   onExpand,
   onStopScreenShare,
   isScreenShareUpdating,
+  className,
   testId,
 }: {
   name: string;
@@ -104,6 +109,7 @@ function ScreenShareParticipantTile({
   onExpand?: () => void;
   onStopScreenShare?: () => void;
   isScreenShareUpdating: boolean;
+  className?: string;
   testId: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -130,7 +136,10 @@ function ScreenShareParticipantTile({
 
   return (
     <div
-      className="relative aspect-[16/9] min-h-0 overflow-hidden rounded-md border border-border bg-zinc-950 text-white"
+      className={cn(
+        "relative min-h-0 overflow-hidden rounded-md bg-zinc-950 text-white",
+        className,
+      )}
       data-testid={testId}
       data-variant="screenShare"
       data-state={state}
@@ -156,7 +165,7 @@ function ScreenShareParticipantTile({
             </div>
           )}
           <span
-            className="absolute left-2 top-2 rounded-sm bg-red-600 px-2 py-1 text-[10px] uppercase text-white"
+            className="absolute left-2 top-2 rounded-sm bg-red-600 px-2 py-1 text-[10px] leading-none text-white"
             data-testid="participant-screen-live-badge"
           >
             720p · LIVE
