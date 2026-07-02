@@ -94,6 +94,9 @@ describe("MessageItem bubble layout", () => {
     expect(row).toHaveClass("justify-start");
     expect(row).not.toHaveClass("justify-end");
     expect(bubble).toHaveClass("max-w-[80%]");
+    expect(bubble).toHaveClass("rounded-xl");
+    expect(bubble).toHaveClass("px-3");
+    expect(bubble).toHaveClass("py-2");
     expect(bubble).toHaveClass("bg-bubble-incoming");
     expect(bubble).not.toHaveClass("flex-1");
     expect(screen.getByText("Alice")).toBeInTheDocument();
@@ -119,6 +122,9 @@ describe("MessageItem bubble layout", () => {
     expect(row).toHaveClass("justify-end");
     expect(row).not.toHaveClass("justify-start");
     expect(bubble).toHaveClass("max-w-[80%]");
+    expect(bubble).toHaveClass("rounded-xl");
+    expect(bubble).toHaveClass("px-3");
+    expect(bubble).toHaveClass("py-2");
     expect(bubble).toHaveClass("bg-bubble-outgoing");
     expect(bubble).not.toHaveClass("flex-1");
     expect(screen.queryByText("Tester")).not.toBeInTheDocument();

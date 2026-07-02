@@ -263,42 +263,42 @@ interface Props {
    return ( 
      <div className="flex flex-col border-t border-border bg-background"> 
        {isEditing && ( 
-         <div className="flex items-center justify-between border-b border-border p-2"> 
+         <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2"> 
            <div className="flex flex-col text-xs"> 
              <span className="font-normal">Editing</span> 
              <span className="text-muted-foreground truncate max-w-md"> 
                <EmojiText text={editingMessage!.content} /> 
              </span> 
            </div>
-           <button onClick={cancelEditing}>Cancel</button> 
+          <button className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent" onClick={cancelEditing}>Cancel</button> 
          </div> 
        )} 
  
        {replyTo && !isEditing && ( 
-        <div className="flex items-center justify-between border-b border-border p-2">
+        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
           <div className="flex flex-col text-xs">
             <span className="font-normal">Reply to {replyTo.author}</span>
             <span className="text-muted-foreground truncate max-w-md">
               <EmojiText text={replyTo.content} />
             </span>
           </div>
-          <button onClick={onCancelReply}>Cancel</button>
+          <button className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent" onClick={onCancelReply}>Cancel</button>
         </div>
        )}
 
        {pendingFile && (
-         <div className="p-2 flex items-center gap-3 border-b border-border">
-           <div className="relative border border-border p-1 shrink-0">
+         <div className="flex items-center gap-3 border-b border-border px-3 py-2">
+           <div className="relative shrink-0 rounded-md border border-border p-1">
              {previewUrl ? (
-               <img src={previewUrl} className="w-12 h-12 object-cover" alt="preview" />
+               <img src={previewUrl} className="h-12 w-12 rounded object-cover" alt="preview" />
              ) : (
-               <div className="w-12 h-12 bg-muted flex items-center justify-center text-[10px]">
+               <div className="flex h-12 w-12 items-center justify-center rounded bg-muted text-[10px]">
                  {pendingKindLabel}
                </div>
              )}
              <button 
                onClick={cancelPreview}
-               className="absolute -top-2 -right-2 bg-background border border-border px-1 text-[10px]"
+               className="absolute -right-2 -top-2 rounded border border-border bg-background px-1 text-[10px]"
              >X</button>
            </div>
            <div className="min-w-0 flex-1">
@@ -311,7 +311,7 @@ interface Props {
        )}
 
        {uploadStatus !== "idle" && (
-        <div className="p-1 px-2 text-[10px] border-b border-border">
+        <div className="border-b border-border px-3 py-1 text-[10px]">
           {uploadStatus === "uploading" ? (
             <span>Uploading: {uploadProgress}%</span>
           ) : (
@@ -320,10 +320,11 @@ interface Props {
         </div>
        )}
  
-       <div className="p-2 flex items-end gap-2">
+       <div className="flex items-end gap-2 p-3">
           <button 
             onClick={handleAttachClick}
             disabled={disabled || isSending || isEditing || isUploading}
+            className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
           >File</button>
           <input 
             type="file" 
@@ -335,7 +336,7 @@ interface Props {
 
           <textarea
             ref={textareaRef}
-            className="flex-1 p-2 text-sm border border-border bg-background resize-none min-h-[36px]"
+            className="min-h-10 flex-1 resize-none rounded-md border border-border bg-card px-3 py-2 text-sm leading-5 outline-none focus:border-ring disabled:opacity-60"
             placeholder="Message..."
             value={content}
             onChange={(e) => handleChange(e.target.value)}
@@ -348,7 +349,7 @@ interface Props {
           <button 
             onClick={handleSend}
             disabled={(!content.trim() && !pendingFile) || disabled || isSending || isUploading}
-            className={cn("px-4 py-2 text-sm", (content.trim() || pendingFile) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
+            className={cn("h-10 rounded-md px-4 text-sm disabled:pointer-events-none disabled:opacity-60", (content.trim() || pendingFile) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
           >Send</button>
        </div>
      </div> 

@@ -169,7 +169,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const renderReactions = () => {
     if (!messageReactions || messageReactions.length === 0) return null;
     return (
-      <div className="flex flex-wrap gap-1 mt-1">
+      <div className="mt-1.5 flex flex-wrap gap-1">
         {messageReactions.map((g) => {
           const mine = g.user_ids.includes(currentUserId);
           return (
@@ -180,7 +180,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 onToggleReaction(msg.id, g.emoji);
               }}
               className={cn(
-                "inline-flex items-center gap-1 px-1 border border-border text-[10px]",
+                "inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[10px]",
                 mine ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
               )}
             >
@@ -212,21 +212,21 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "max-w-[80%] border border-border p-2",
+          "max-w-[80%] rounded-xl border border-border px-3 py-2 text-sm leading-relaxed",
           isSelected && "ring-1 ring-primary",
           isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text",
         )}
         data-testid="message-bubble"
       >
         {!isOwn && !isConsecutive && (
-          <div className="mb-1 text-[10px] text-primary">
+          <div className="mb-1 text-[10px] font-medium text-primary">
             {authorName}
           </div>
         )}
         {renderReplyPreview(msg, isOwn)}
         {renderContent()}
 
-        <div className="mt-1 flex items-center gap-1 text-[10px] opacity-70">
+        <div className="mt-1.5 flex items-center justify-end gap-1 text-[10px] leading-none opacity-70">
           <span>{formatTime(msg.inserted_at)}</span>
           {msg.edited_at && <span>(ed.)</span>}
           {isOwn && !isRoom && <StatusIcon status={msg.status} />}

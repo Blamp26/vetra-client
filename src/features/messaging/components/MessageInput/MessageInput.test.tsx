@@ -53,6 +53,26 @@ describe("MessageInput attachments", () => {
     expect(screen.getByText("File · 3 B")).toBeInTheDocument();
   });
 
+  it("keeps composer controls aligned with simple button and input styling", () => {
+    render(<MessageInput onSend={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "File" })).toHaveClass("h-10");
+    expect(screen.getByPlaceholderText("Message...")).toHaveClass("min-h-10");
+    expect(screen.getByRole("button", { name: "Send" })).toHaveClass("h-10");
+  });
+
+  it("sends typed text with the existing send action", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    render(<MessageInput onSend={onSend} />);
+
+    fireEvent.change(screen.getByPlaceholderText("Message..."), {
+      target: { value: "Hello" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(onSend).toHaveBeenCalledWith({ content: "Hello", mediaFileId: null }, undefined);
+  });
+
   it("accepts images and labels them as photos", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;

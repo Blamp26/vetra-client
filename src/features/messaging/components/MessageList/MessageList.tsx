@@ -356,7 +356,7 @@ export function MessageList({
       <div 
         ref={containerRef} 
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-2 space-y-2 scrollbar-hide"
+        className="flex-1 overflow-y-auto space-y-2.5 p-3 scrollbar-hide"
       >
         {hasMore && (
           <div className="flex justify-center p-2">
@@ -369,8 +369,8 @@ export function MessageList({
           <div className="text-center p-4 text-muted-foreground text-sm">No messages.</div>
         )}
         {groupedMessages.map(({ date, messages: dayMessages }) => (
-          <div key={date} className="space-y-2">
-            <div className="text-center border-b border-border my-4">
+          <div key={date} className="space-y-2.5">
+            <div className="my-4 border-b border-border text-center">
               <span className="bg-background px-2 text-[10px] text-muted-foreground uppercase">{date}</span>
             </div>
             {dayMessages.map((msg, idx) => {
