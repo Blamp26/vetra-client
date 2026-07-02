@@ -309,6 +309,7 @@ export function MessageList({
   };
 
   const renderReplyPreview = (msg: Message, isOwn: boolean) => {
+    void isOwn;
     if (!msg.reply_to_id) return null;
     const target = messagesById.get(msg.reply_to_id);
     const author = target?.sender_display_name || target?.sender_username || (target ? `User #${target.sender_id}` : "Message");
@@ -324,7 +325,7 @@ export function MessageList({
     return (
       <button
         type="button"
-        className={cn("block w-full text-left p-1 border-l-2 border-border mb-1 text-xs", isOwn ? "bg-white/10" : "bg-black/5")}
+        className="mb-1 block w-full border-l-2 border-border bg-muted/50 p-1 text-left text-xs"
         onClick={() => {
           const el = messageRefs.current[msg.reply_to_id!];
           if (el) el.scrollIntoView();

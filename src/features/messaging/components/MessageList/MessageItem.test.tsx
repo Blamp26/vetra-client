@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { useAppStoreMock } = vi.hoisted(() => ({
@@ -50,7 +51,10 @@ function makeMessage(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderMessageItem(messageOverrides: Record<string, unknown>) {
+function renderMessageItem(
+  messageOverrides: Record<string, unknown>,
+  propOverrides: Partial<ComponentProps<typeof MessageItem>> = {},
+) {
   return render(
     <MessageItem
       msg={makeMessage(messageOverrides)}
@@ -67,16 +71,68 @@ function renderMessageItem(messageOverrides: Record<string, unknown>) {
       onLightbox={vi.fn()}
       renderReplyPreview={() => null}
       formatTime={() => "12:00"}
+      {...propOverrides}
     />,
   );
 }
 
-describe("MessageItem attachments", () => {
+describe("MessageItem stream layout", () => {
   beforeEach(() => {
     useAppStoreMock.mockReset();
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
       selector({ authToken: "secret-token" }),
     );
+  });
+
+  it("renders incoming messages as a Discord-like stream row", () => {
+    renderMessageItem({ content: "Hello from Alice" });
+
+    const row = screen.getByTestId("message-stream-row");
+    expect(row).toHaveAttribute("data-own-message", "false");
+    expect(row).toContainElement(screen.getByTestId("message-avatar"));
+    expect(row).toContainElement(screen.getByTestId("message-body"));
+    expect(row).toContainElement(screen.getByTestId("message-meta"));
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
+  });
+
+  it("renders own messages in the same stream layout instead of a right-aligned bubble", () => {
+    renderMessageItem(
+      {
+        content: "My message",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+      },
+      { isOwn: true },
+    );
+
+    const row = screen.getByTestId("message-stream-row");
+    const body = screen.getByTestId("message-body");
+
+    expect(row).toHaveAttribute("data-own-message", "true");
+    expect(row.className).not.toContain("justify-end");
+    expect(row.className).not.toContain("justify-start");
+    expect(body.className).not.toContain("max-w-[80%]");
+    expect(body.className).not.toContain("bg-bubble-outgoing");
+    expect(screen.getByText("Tester")).toBeInTheDocument();
+    expect(screen.getByText("My message")).toBeInTheDocument();
+  });
+
+  it("preserves the message context menu trigger", () => {
+    const onContextMenu = vi.fn();
+    renderMessageItem(
+      { content: "Open menu" },
+      { onContextMenu },
+    );
+
+    screen.getByTestId("message-body").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+
+    expect(onContextMenu).toHaveBeenCalledTimes(1);
+    expect(onContextMenu.mock.calls[0][1]).toMatchObject({ id: 1, content: "Open menu" });
   });
 
   it("renders photo attachments through AuthenticatedImage", () => {
