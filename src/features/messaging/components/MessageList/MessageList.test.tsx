@@ -96,6 +96,10 @@ describe("MessageList bubble layout", () => {
     expect(screen.getByText(new Date("2026-06-30T12:00:00Z").toLocaleDateString())).toBeInTheDocument();
     expect(screen.getByText(new Date("2026-07-01T12:00:00Z").toLocaleDateString())).toBeInTheDocument();
     expect(screen.getAllByTestId("message-bubble-row")).toHaveLength(2);
+    expect(screen.getByTestId("message-list-scroll")).toHaveClass("space-y-2");
+    expect(screen.getByTestId("message-list-scroll")).toHaveClass("px-2");
+    expect(screen.getByTestId("message-list-scroll")).toHaveClass("py-2");
+    expect(screen.getAllByTestId("message-date-group")[0]).toHaveClass("space-y-1.5");
     expect(screen.getByText("First day")).toBeInTheDocument();
     expect(screen.getByText("Second day")).toBeInTheDocument();
   });
