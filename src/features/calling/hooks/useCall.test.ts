@@ -98,7 +98,15 @@ beforeAll(async () => {
 });
 
 const createMockChannel = () => ({
+    _closeHandler: null as null | (() => void),
+    _errorHandler: null as null | (() => void),
     on: vi.fn(),
+    onClose: vi.fn(function (this: any, cb: () => void) {
+        this._closeHandler = cb;
+    }),
+    onError: vi.fn(function (this: any, cb: () => void) {
+        this._errorHandler = cb;
+    }),
     push: vi.fn(),
     join: vi.fn().mockReturnValue({
         receive: vi.fn((event: string, cb: Function) => {
@@ -356,10 +364,29 @@ describe('useCall', () => {
             });
 
             expect(MockWebRTCService).not.toHaveBeenCalled();
-            expect(result.current.status).toBe('failed');
+            expect(result.current.status).toBe('idle');
             expect(result.current.callIssue).toEqual({
                 tone: 'error',
                 message: 'Call service is not ready. Try again in a moment.',
+            });
+        });
+
+        it('surfaces an unjoined call channel start attempt and re-enables calling', async () => {
+            mockCallChannel.join.mockReturnValueOnce({
+                receive: vi.fn(() => ({ receive: vi.fn() })),
+            });
+
+            const { result } = renderHook(() => useCall(currentUserId));
+
+            act(() => {
+                result.current.startCall(2, 'Alice');
+            });
+
+            expect(MockWebRTCService).not.toHaveBeenCalled();
+            expect(result.current.status).toBe('idle');
+            expect(result.current.callIssue).toEqual({
+                tone: 'error',
+                message: 'Call service is still connecting. Try again in a moment.',
             });
         });
 
@@ -505,15 +532,8 @@ describe('useCall', () => {
             });
 
             expect(service.dispose).toHaveBeenCalled();
-            expect(result.current.status).toBe('failed');
-            expect(result.current.callIssue?.message).toBe('Call timed out. No answer.');
-
-            await act(async () => {
-                vi.advanceTimersByTime(2000);
-                vi.runOnlyPendingTimers();
-                await Promise.resolve();
-            });
             expect(result.current.status).toBe('idle');
+            expect(result.current.callIssue?.message).toBe('Call timed out. No answer.');
             expect(result.current.remoteUserId).toBeNull();
         });
 
@@ -542,7 +562,7 @@ describe('useCall', () => {
             });
 
             expect(service.dispose).toHaveBeenCalled();
-            expect(result.current.status).toBe('failed');
+            expect(result.current.status).toBe('idle');
         });
 
         it('surfaces a microphone permission denied message when the call cannot start', async () => {
@@ -572,7 +592,7 @@ describe('useCall', () => {
                 await Promise.resolve();
             });
 
-            expect(result.current.status).toBe('failed');
+            expect(result.current.status).toBe('idle');
             expect(result.current.callIssue?.message).toBe('Microphone permission denied.');
         });
     });
@@ -836,7 +856,7 @@ describe('useCall', () => {
     });
 
     describe('hang_up event', () => {
-        it('завершает звонок и переводит в ended -> idle', async () => {
+        it('завершает звонок и сразу возвращает состояние в idle', async () => {
             const { result } = renderHook(() => useCall(currentUserId));
             act(() => {
                 result.current.startCall(2);
@@ -850,14 +870,59 @@ describe('useCall', () => {
                 });
             }
             expect(service.dispose).toHaveBeenCalled();
-            expect(result.current.status).toBe('ended');
-            await act(async () => {
-                vi.advanceTimersByTime(2000);
-                vi.runOnlyPendingTimers();
-                await Promise.resolve();
-            });
             expect(result.current.status).toBe('idle');
             expect(result.current.remoteUserId).toBeNull();
+        });
+    });
+
+    describe('call channel lifecycle', () => {
+        it('cleans local call state when the call channel closes during a call', () => {
+            const { result, rerender } = renderHook(() => useCall(currentUserId));
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller', call_id: 'call-123' });
+            });
+
+            expect(result.current.status).toBe('active');
+
+            act(() => {
+                callChannel._closeHandler?.();
+            });
+
+            expect(service.dispose).toHaveBeenCalled();
+            expect(result.current.status).toBe('idle');
+            expect(result.current.remoteUserId).toBeNull();
+            expect(result.current.callIssue?.message).toBe('Call ended because the call channel closed.');
+
+            const nextCallChannel = createMockChannel();
+            const nextUserChannel = {
+                on: vi.fn().mockReturnValue(202),
+                push: vi.fn(),
+                off: vi.fn(),
+            };
+            mockStoreState.socketManager = {
+                ...mockSocketManager,
+                socket: { channel: vi.fn().mockReturnValue(nextCallChannel) },
+                userChannel: nextUserChannel,
+            };
+
+            act(() => {
+                rerender();
+            });
+
+            act(() => {
+                result.current.startCall(2);
+            });
+
+            expect(MockWebRTCService).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -934,12 +999,6 @@ describe('useCall', () => {
                 result.current.rejectCall();
             });
             expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
-            expect(result.current.status).toBe('ended');
-            await act(async () => {
-                vi.advanceTimersByTime(2000);
-                vi.runOnlyPendingTimers();
-                await Promise.resolve();
-            });
             expect(result.current.status).toBe('idle');
             expect(result.current.remoteUserId).toBeNull();
         });
@@ -987,13 +1046,6 @@ describe('useCall', () => {
 
             expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
             expect(service.dispose).toHaveBeenCalled();
-            expect(result.current.status).toBe('ended');
-
-            await act(async () => {
-                vi.advanceTimersByTime(2000);
-                vi.runOnlyPendingTimers();
-                await Promise.resolve();
-            });
             expect(result.current.status).toBe('idle');
         });
 
@@ -1018,11 +1070,11 @@ describe('useCall', () => {
                 });
             }).not.toThrow();
 
-            expect(result.current.status).toBe('ended');
+            expect(result.current.status).toBe('idle');
             const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
             expect(callChannel.push).toHaveBeenCalledTimes(1);
             expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
-            expect(service.dispose).toHaveBeenCalledTimes(2);
+            expect(service.dispose).toHaveBeenCalledTimes(1);
         });
 
         it('sends hang_up with the service call id while renegotiation is pending', () => {
@@ -1042,7 +1094,7 @@ describe('useCall', () => {
             expect(service.getSignalingCallId).toHaveBeenCalled();
             expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
             expect(service.dispose).toHaveBeenCalled();
-            expect(result.current.status).toBe('ended');
+            expect(result.current.status).toBe('idle');
         });
 
         it('sends hang_up from a stale callback using current call refs', () => {
@@ -1063,7 +1115,7 @@ describe('useCall', () => {
 
             expect(callChannel.push).toHaveBeenCalledWith('hang_up', { call_id: 'call-123', to_user_id: 2 });
             expect(service.dispose).toHaveBeenCalled();
-            expect(result.current.status).toBe('ended');
+            expect(result.current.status).toBe('idle');
         });
     });
 
@@ -1654,13 +1706,6 @@ describe('useCall', () => {
             expect(service.handleOffer).toHaveBeenCalledWith('renegotiation-offer-sdp');
             expect(service.dispose).toHaveBeenCalled();
             expect(result.current.remoteScreenStream).toBeNull();
-            expect(result.current.status).toBe('ended');
-
-            await act(async () => {
-                vi.advanceTimersByTime(2000);
-                vi.runOnlyPendingTimers();
-                await Promise.resolve();
-            });
             expect(result.current.status).toBe('idle');
         });
     });

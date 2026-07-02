@@ -262,6 +262,42 @@ describe("ChatWindow presence rendering", () => {
     );
   });
 
+  it("shows provider call failures while the call state is idle", async () => {
+    const state = makeState();
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      public_id: "alice-public-id",
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2 }}
+        call={makeCall({
+          status: "idle",
+          callIssue: {
+            tone: "error",
+            message: "Call service is still connecting. Try again in a moment.",
+          },
+        })}
+      />,
+    );
+
+    expect(await screen.findByTestId("call-start-issue")).toHaveTextContent(
+      "Call service is still connecting. Try again in a moment.",
+    );
+  });
+
   it("renders ActiveCallDock above messages without hiding history or composer", async () => {
     const state = makeState();
     useAppStoreMock.mockImplementation(

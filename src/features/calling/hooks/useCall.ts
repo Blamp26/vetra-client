@@ -287,7 +287,6 @@ export function useCall(currentUserId: number): UseCallReturn {
         webrtcRef.current = null;
         callChannelRef.current = null;
         offerSdpRef.current = null;
-        hangUpSentRef.current = false;
         incomingActionPendingRef.current = false;
         if (resetState) {
             statusRef.current = 'idle';
@@ -307,6 +306,41 @@ export function useCall(currentUserId: number): UseCallReturn {
             setCallIssue(null);
             setIsIncomingActionPending(false);
         }
+    }, [cleanupScreenShare, clearCallTimeout]);
+
+    const cleanupLocalCall = useCallback((reason: string, options?: { issue?: CallIssue | null }) => {
+        debugCall('[useCall] cleanup local call', {
+            reason,
+            call_id: callIdRef.current,
+            remote_user_id: remoteUserIdRef.current,
+            status: statusRef.current,
+        });
+
+        if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
+        endedTimerRef.current = null;
+        clearCallTimeout();
+        cleanupScreenShare({ stopTracks: !webrtcRef.current });
+        webrtcRef.current?.dispose();
+        webrtcRef.current = null;
+        offerSdpRef.current = null;
+        incomingActionPendingRef.current = false;
+
+        statusRef.current = 'idle';
+        setStatus('idle');
+        setRemoteUserId(null);
+        setRemoteUsername(null);
+        setCallId(null);
+        setRemoteStream(null);
+        setRemoteScreenStream(null);
+        setIsScreenShareUpdating(false);
+        setIsRemoteScreenLoading(false);
+        setIsMuted(false);
+        setIsScreenSharing(false);
+        setLocalScreenStream(null);
+        setSeconds(0);
+        setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
+        setCallIssue(options?.issue ?? null);
+        setIsIncomingActionPending(false);
     }, [cleanupScreenShare, clearCallTimeout]);
 
     const resetAfterDelay = useCallback((options?: { status?: 'ended' | 'failed'; issue?: CallIssue | null }) => {
@@ -546,11 +580,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                     accepted: true,
                     reason: 'active_or_recent_call_context',
                 });
-                cleanupScreenShare({ stopTracks: !webrtcRef.current });
-                setIsRemoteScreenLoading(false);
-                setRemoteScreenStream(null);
-                webrtcRef.current?.dispose();
-                resetAfterDelay();
+                cleanupLocalCall('remote_hang_up');
             }),
             callSignalingService.onIncomingCall((payload) => {
                 debugCall('[useCall] incoming_call received', { ...payload });
@@ -564,6 +594,16 @@ export function useCall(currentUserId: number): UseCallReturn {
                 setCallId(payload.call_id);
             }),
             callSignalingService.onOffer(handleOffer),
+            callSignalingService.onChannelClose((payload) => {
+                if (statusRef.current === 'idle') return;
+                cleanupLocalCall('call_channel_closed', {
+                    issue: buildCallIssue(
+                        payload.reason === 'error'
+                            ? 'Call ended because the call connection was lost.'
+                            : 'Call ended because the call channel closed.',
+                    ),
+                });
+            }),
         ];
         signalingUnsubsRef.current = unsubs;
 
@@ -578,7 +618,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 signalingUnsubsRef.current = [];
             }
         };
-    }, [cleanupScreenShare, clearCallTimeout, socketManager, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
+    }, [cleanupLocalCall, cleanupScreenShare, clearCallTimeout, socketManager, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
 
     const startCall = useCallback((targetUserId: ResourceRef, targetUsername?: string) => {
         const channel = callChannelRef.current;
@@ -588,9 +628,20 @@ export function useCall(currentUserId: number): UseCallReturn {
                 targetUserId,
                 status: statusRef.current,
             });
-            resetAfterDelay({
-                status: 'failed',
+            cleanupLocalCall('call_channel_missing', {
                 issue: buildCallIssue('Call service is not ready. Try again in a moment.'),
+            });
+            return;
+        }
+
+        if (!callSignalingService.isReady()) {
+            debugCall('[useCall] startCall skipped', {
+                reason: 'call_channel_not_joined',
+                targetUserId,
+                status: statusRef.current,
+            });
+            cleanupLocalCall('call_channel_not_joined', {
+                issue: buildCallIssue('Call service is still connecting. Try again in a moment.'),
             });
             return;
         }
@@ -611,6 +662,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
 
         statusRef.current = 'calling';
+        hangUpSentRef.current = false;
         setStatus('calling');
         setCallIssue(null);
         setRemoteUserId(targetUserId);
@@ -634,10 +686,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 callTimeoutRef.current = setTimeout(() => {
                     if (webrtcRef.current) {
                         console.warn('[useCall] Call timeout');
-                        cleanupScreenShare({ stopTracks: false });
-                        webrtcRef.current.dispose();
-                        resetAfterDelay({
-                            status: 'failed',
+                        cleanupLocalCall('outgoing_call_timeout', {
                             issue: buildCallIssue('Call timed out. No answer.'),
                         });
                     }
@@ -649,32 +698,14 @@ export function useCall(currentUserId: number): UseCallReturn {
                     debugCall('[useCall] startCall rejected because a participant is already in a call', {
                         targetUserId,
                     });
-                    service.dispose();
-                    if (webrtcRef.current === service) {
-                        webrtcRef.current = null;
-                    }
-                    clearCallTimeout();
-                    cleanupScreenShare({ stopTracks: false });
-                    statusRef.current = 'idle';
-                    setStatus('idle');
-                    setCallId(null);
-                    setRemoteStream(null);
-                    setRemoteScreenStream(null);
-                    setIsScreenShareUpdating(false);
-                    setIsRemoteScreenLoading(false);
-                    setIsMuted(false);
-                    setIsScreenSharing(false);
-                    setLocalScreenStream(null);
-                    setSeconds(0);
-                    setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
-                    setCallIssue(issue);
+                    cleanupLocalCall('offer_rejected_already_in_call', { issue });
                     return;
                 }
 
                 console.error('[useCall] startCall failed', err);
-                resetAfterDelay({ status: 'failed', issue });
+                cleanupLocalCall('start_call_failed', { issue });
             });
-    }, [cleanupScreenShare, clearCallTimeout, currentUserId, resetAfterDelay]);
+    }, [cleanupLocalCall, currentUserId]);
 
     const acceptCall = useCallback(() => {
         const channel = callChannelRef.current;
@@ -688,6 +719,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
 
         incomingActionPendingRef.current = true;
+        hangUpSentRef.current = false;
         setIsIncomingActionPending(true);
         setCallIssue(null);
 
@@ -716,12 +748,13 @@ export function useCall(currentUserId: number): UseCallReturn {
             setCallIssue(null);
         }).catch((err) => {
             console.error('[useCall] acceptCall failed', err);
-            resetAfterDelay({ status: 'failed', issue: mapAcceptCallIssue(err) });
+            cleanupLocalCall('accept_call_failed', { issue: mapAcceptCallIssue(err) });
         });
-    }, [callId, clearCallTimeout, status, remoteUserId, currentUserId, resetAfterDelay]);
+    }, [callId, clearCallTimeout, status, remoteUserId, currentUserId, cleanupLocalCall]);
 
     const rejectCall = useCallback(() => {
         const channel = callChannelRef.current;
+        if (statusRef.current !== 'ringing') return;
         if (incomingActionPendingRef.current) return;
         incomingActionPendingRef.current = true;
         setIsIncomingActionPending(true);
@@ -729,8 +762,8 @@ export function useCall(currentUserId: number): UseCallReturn {
             channel.push('hang_up', { call_id: callId, to_user_id: remoteUserId });
         }
         offerSdpRef.current = null;
-        resetAfterDelay();
-    }, [callId, remoteUserId, resetAfterDelay]);
+        cleanupLocalCall('reject_call');
+    }, [callId, cleanupLocalCall, remoteUserId]);
 
     const hangUp = useCallback(() => {
         const channel = callChannelRef.current;
@@ -752,11 +785,8 @@ export function useCall(currentUserId: number): UseCallReturn {
                 status: statusRef.current,
             });
         }
-        cleanupScreenShare({ stopTracks: !webrtcRef.current });
-        webrtcRef.current?.dispose();
-        offerSdpRef.current = null;
-        resetAfterDelay();
-    }, [cleanupScreenShare, resetAfterDelay]);
+        cleanupLocalCall('local_hang_up');
+    }, [cleanupLocalCall]);
 
     const toggleMute = useCallback(() => {
         const service = webrtcRef.current;

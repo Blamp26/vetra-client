@@ -44,6 +44,7 @@ class CallSignalingService {
     private currentUserCallRef: ResourceRef | null = null;
     private incomingCallRef: number | null = null;
     private pendingOffer: OfferPayload | null = null;
+    private channelReady = false;
 
     private readonly offerBus = createBus<OfferPayload>();
     private readonly incomingCallBus = createBus<IncomingCallPayload>();
@@ -51,6 +52,7 @@ class CallSignalingService {
     private readonly iceCandidateBus = createBus<IceCandidatePayload>();
     private readonly renegotiationBus = createBus<RenegotiationSignalPayload & { from_user_id: ResourceRef; call_id?: string }>();
     private readonly hangUpBus = createBus<HangUpPayload>();
+    private readonly channelCloseBus = createBus<{ reason: string }>();
 
     initialize(socket: Socket, userChannel: Channel, currentUserId: number, currentUserCallRef: ResourceRef = currentUserId): void {
         if (
@@ -85,10 +87,24 @@ class CallSignalingService {
         channel.on('hang_up', (payload: HangUpPayload) => {
             this.hangUpBus.emit(payload);
         });
+        channel.onClose?.(() => {
+            this.channelReady = false;
+            this.channelCloseBus.emit({ reason: 'closed' });
+        });
+        channel.onError?.(() => {
+            this.channelReady = false;
+            this.channelCloseBus.emit({ reason: 'error' });
+        });
 
         channel.join()
-            .receive('ok', () => debugCall('[callSignaling] call channel joined', { currentUserCallRef }))
-            .receive('error', (reason) => console.error('[callSignaling] call channel join error', reason));
+            .receive('ok', () => {
+                this.channelReady = true;
+                debugCall('[callSignaling] call channel joined', { currentUserCallRef });
+            })
+            .receive('error', (reason) => {
+                this.channelReady = false;
+                console.error('[callSignaling] call channel join error', reason);
+            });
 
         this.incomingCallRef = userChannel.on('incoming_call', (payload: IncomingCallPayload) => {
             this.incomingCallBus.emit(payload);
@@ -111,10 +127,15 @@ class CallSignalingService {
         this.currentUserCallRef = null;
         this.incomingCallRef = null;
         this.pendingOffer = null;
+        this.channelReady = false;
     }
 
     getChannel(): Channel | null {
         return this.channel;
+    }
+
+    isReady(): boolean {
+        return Boolean(this.channel && this.channelReady);
     }
 
     consumePendingOffer(): OfferPayload | null {
@@ -151,6 +172,10 @@ class CallSignalingService {
 
     onHangUp(handler: Handler<HangUpPayload>): () => void {
         return this.hangUpBus.subscribe(handler);
+    }
+
+    onChannelClose(handler: Handler<{ reason: string }>): () => void {
+        return this.channelCloseBus.subscribe(handler);
     }
 }
 

@@ -19,6 +19,7 @@ import {
   getPresenceLabel,
   resolvePresenceStatus,
 } from "@/shared/utils/presence";
+import { debugCall } from "@/features/calling/utils/callDebug";
 
 interface SidebarFooterProps {
   callStatus: CallStatus;
@@ -142,19 +143,38 @@ export function SidebarFooter({
             className={cn(
               "flex items-center justify-between border p-2 bg-background",
               callPanel.tone === "error" ? "border-destructive/50" : "border-border",
+              callStatus === "active" && "cursor-pointer hover:bg-accent",
             )}
+            data-testid={callStatus === "active" ? "sidebar-connected-call-block" : undefined}
+            role={callStatus === "active" ? "button" : undefined}
+            tabIndex={callStatus === "active" ? 0 : undefined}
+            aria-label={
+              callStatus === "active"
+                ? `Return to call with ${remoteUsername || "current user"}`
+                : undefined
+            }
+            title={callStatus === "active" ? "Return to active call" : undefined}
+            onClick={() => {
+              if (callStatus !== "active") return;
+              debugCall("[SidebarFooter] connected call block clicked", {
+                remoteUsername,
+                hasReturnHandler: Boolean(onReturnToCall),
+              });
+              onReturnToCall?.();
+            }}
+            onKeyDown={(event) => {
+              if (callStatus !== "active") return;
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              debugCall("[SidebarFooter] connected call block activated by keyboard", {
+                remoteUsername,
+                hasReturnHandler: Boolean(onReturnToCall),
+              });
+              onReturnToCall?.();
+            }}
           >
             {callStatus === "active" ? (
-              <button
-                type="button"
-                className={cn(
-                  "flex min-w-0 flex-1 flex-col text-left",
-                  onReturnToCall && "cursor-pointer hover:bg-accent",
-                )}
-                onClick={onReturnToCall}
-                aria-label={`Return to call with ${remoteUsername || "current user"}`}
-                title="Return to active call"
-              >
+              <div className="flex min-w-0 flex-1 flex-col text-left">
                 <span
                   className={cn(
                     "text-xs uppercase",
@@ -166,7 +186,7 @@ export function SidebarFooter({
                 <span className="text-xs text-foreground truncate">
                   {callPanel.subtitle}
                 </span>
-              </button>
+              </div>
             ) : (
               <div className="flex min-w-0 flex-1 flex-col">
                 <span

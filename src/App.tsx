@@ -221,6 +221,13 @@ function AppShell() {
   const handleReturnToActiveCall = useCallback(() => {
     if (status !== "active") return;
 
+    debugCall("[AppShell] return to call requested", {
+      remoteUserId,
+      activeCallChatHash,
+      routeHash,
+      activeChatKey: currentActiveChatKeyRef.current,
+    });
+
     if (!activeCallChatHash) {
       debugCall("[AppShell] return to call skipped", {
         reason: "missing_active_call_route",
@@ -230,7 +237,7 @@ function AppShell() {
     }
 
     navigateToHash(activeCallChatHash);
-  }, [activeCallChatHash, navigateToHash, remoteUserId, status]);
+  }, [activeCallChatHash, navigateToHash, remoteUserId, routeHash, status]);
 
   useEffect(() => {
     if (!routeHash || routeHash === "#") return;

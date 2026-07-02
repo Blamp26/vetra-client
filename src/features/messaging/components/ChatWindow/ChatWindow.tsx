@@ -302,12 +302,12 @@ export function ChatWindow({ activeChat, call }: Props) {
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-background">
       {renderHeader()}
 
-      {callStartIssue && (
+      {(callStartIssue || (call.status === "idle" && call.callIssue?.message)) && (
         <div
           className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-foreground"
           data-testid="call-start-issue"
         >
-          {callStartIssue}
+          {callStartIssue ?? call.callIssue?.message}
         </div>
       )}
 
