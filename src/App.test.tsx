@@ -211,6 +211,18 @@ describe("App hash sync", () => {
     );
   });
 
+  it("uses a 455px sidebar shell width", () => {
+    const state = makeState();
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    expect(screen.getByTestId("app-sidebar-shell").className).toContain("w-[455px]");
+  });
+
   it("does not restore the stale server hash after a channel is selected", async () => {
     const state = makeState();
     state.activeChat = { type: "server", serverId: 1, serverRef: 1 };

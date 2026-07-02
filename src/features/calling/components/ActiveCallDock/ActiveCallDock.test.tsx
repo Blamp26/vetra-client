@@ -40,6 +40,8 @@ describe("ActiveCallDock", () => {
     renderDock();
 
     expect(screen.getByTestId("active-call-dock")).toBeInTheDocument();
+    expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[240px]");
+    expect(screen.getByTestId("active-call-dock")).not.toHaveClass("h-[300px]");
     expect(screen.getByText("Voice call")).toBeInTheDocument();
     expect(screen.getAllByText("Alice")).toHaveLength(2);
     expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("Connected");
@@ -78,6 +80,14 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent(
       "Updating screen share...",
     );
+  });
+
+  it("keeps screen-share mode on the larger capped height", () => {
+    renderDock({ remoteScreenStream: {} as MediaStream });
+
+    const dock = screen.getByTestId("active-call-dock");
+    expect(dock).toHaveClass("h-[clamp(340px,55vh,620px)]");
+    expect(dock).not.toHaveClass("h-[240px]");
   });
 
   it("renders a calling status label", () => {

@@ -379,7 +379,7 @@ function AppShell() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-      <div className="flex h-full w-[400px] flex-shrink-0 flex-col border-r border-border bg-sidebar">
+      <div className="flex h-full w-[455px] flex-shrink-0 flex-col border-r border-border bg-sidebar" data-testid="app-sidebar-shell">
         <div className="flex flex-1 overflow-hidden">
           <Sidebar isServerMode={showChannelPanel} />
 

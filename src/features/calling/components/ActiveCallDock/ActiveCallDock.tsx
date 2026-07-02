@@ -116,7 +116,7 @@ export function ActiveCallDock({
     <section
       className={cn(
         "relative shrink-0 overflow-hidden border-b border-border bg-muted text-foreground",
-        hasScreenStage ? "h-[clamp(340px,55vh,620px)]" : "h-[300px]",
+        hasScreenStage ? "h-[clamp(340px,55vh,620px)]" : "h-[240px]",
       )}
       data-testid="active-call-dock"
       aria-label="Active call dock"
