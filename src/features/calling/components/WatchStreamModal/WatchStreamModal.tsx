@@ -65,23 +65,26 @@ export function WatchStreamModal({
 
   return (
     <div
-      className="fixed inset-0 z-modal flex bg-black/80 p-4 text-white"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-black/75 p-5 text-white"
       data-testid="watch-stream-modal"
       role="dialog"
       aria-modal="true"
       aria-label="Watch screen share"
     >
-      <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col rounded-md border border-zinc-700 bg-zinc-950">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
+      <div
+        className="flex h-[min(88vh,920px)] w-[min(92vw,1320px)] min-h-0 flex-col overflow-hidden rounded-2xl bg-[#1e1f22]"
+        data-testid="watch-stream-surface"
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 bg-[#2b2d31] px-5 py-3">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wide text-zinc-500">Watching screen share</p>
-            <h2 className="truncate text-sm font-normal text-zinc-100">
-              {isLocalSharer ? "You are sharing your screen" : `${sharerName} is sharing their screen`}
+            <p className="text-[10px] uppercase tracking-wide text-zinc-400">Live stream</p>
+            <h2 className="truncate text-sm font-medium text-zinc-100">
+              {isLocalSharer ? "Watching your screen" : `Watching ${sharerName}'s screen`}
             </h2>
           </div>
           <button
             type="button"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#313338] text-zinc-200 hover:bg-[#3f4147]"
             onClick={onClose}
             aria-label="Close stream"
           >
@@ -89,28 +92,33 @@ export function WatchStreamModal({
           </button>
         </div>
 
-        <div className="relative min-h-0 flex-1 bg-black">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted={isLocalSharer}
-            onLoadedData={() => setIsVideoReady(true)}
-            onCanPlay={() => setIsVideoReady(true)}
-            className="h-full w-full bg-black object-contain"
-            data-testid="watch-stream-video"
-          />
-          {!isVideoReady && (
-            <div
-              className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400"
-              data-testid="watch-stream-loading"
-            >
-              Loading shared screen...
-            </div>
-          )}
+        <div className="min-h-0 flex-1 bg-[#111214] p-4">
+          <div
+            className="relative h-full overflow-hidden rounded-xl bg-black"
+            data-testid="watch-stream-stage"
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted={isLocalSharer}
+              onLoadedData={() => setIsVideoReady(true)}
+              onCanPlay={() => setIsVideoReady(true)}
+              className="h-full w-full bg-black object-contain"
+              data-testid="watch-stream-video"
+            />
+            {!isVideoReady && (
+              <div
+                className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400"
+                data-testid="watch-stream-loading"
+              >
+                Loading shared screen...
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex shrink-0 flex-col gap-3 border-t border-zinc-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex shrink-0 flex-col gap-3 bg-[#2b2d31] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 gap-2 overflow-x-auto" data-testid="watch-stream-participants">
             <ParticipantChip name="You" label={isMuted ? "Muted" : isLocalSharer ? "Sharing" : "Connected"} />
             <ParticipantChip name={remoteUsername} label={isLocalSharer ? "Connected" : "Sharing"} />
@@ -120,8 +128,8 @@ export function WatchStreamModal({
             <button
               type="button"
               className={cn(
-                "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-zinc-700 px-3 text-sm text-zinc-100",
-                isScreenShareUpdating ? "bg-zinc-900 opacity-60" : "bg-zinc-900 hover:bg-zinc-800",
+                "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md px-3 text-sm text-zinc-100",
+                isScreenShareUpdating ? "bg-[#313338] opacity-60" : "bg-[#313338] hover:bg-[#3f4147]",
               )}
               onClick={onStopScreenShare}
               disabled={isScreenShareUpdating}
@@ -139,8 +147,8 @@ export function WatchStreamModal({
 
 function ParticipantChip({ name, label }: { name: string; label: string }) {
   return (
-    <div className="flex min-w-36 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 text-sm text-zinc-100">
+    <div className="flex min-w-36 items-center gap-2 rounded-md bg-[#313338] px-3 py-2">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1e1f22] text-sm text-zinc-100">
         {name.charAt(0).toUpperCase()}
       </div>
       <div className="min-w-0">

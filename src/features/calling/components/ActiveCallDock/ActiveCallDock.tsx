@@ -4,6 +4,7 @@ import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
 import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
+import { StreamPreviewTile } from "@/features/calling/components/StreamPreviewTile";
 import { WatchStreamModal } from "@/features/calling/components/WatchStreamModal";
 
 interface ActiveCallDockProps {
@@ -54,10 +55,7 @@ export function ActiveCallDock({
   const watchStream = remoteScreenStream ?? localScreenStream;
   const isWatchingLocalStream = Boolean(watchStream && watchStream === localScreenStream);
   const hasScreenSharePresence = isRemoteScreenLoading || Boolean(remoteScreenStream) || Boolean(localScreenStream) || isScreenSharing;
-  const screenShareText = localScreenStream || isScreenSharing
-    ? "You are sharing your screen"
-    : `${remoteUsername} is sharing their screen`;
-  const compactParticipantCards = hasScreenSharePresence || Boolean(displayIssue);
+  const compactParticipantCards = Boolean(displayIssue);
 
   useEffect(() => {
     if (!watchStream || callStatus !== "active") {
@@ -110,37 +108,35 @@ export function ActiveCallDock({
           className="flex min-h-0 flex-1 items-center justify-center px-4"
           data-testid="active-call-dock-stage"
         >
-          <div className="grid w-full max-w-3xl grid-cols-2 gap-3">
-            <ParticipantTile name="You" label={isMuted ? "Muted" : isScreenSharing ? "Sharing" : "Connected"} compact={compactParticipantCards} />
-            <ParticipantTile name={remoteUsername} label={callStateLabel} compact={compactParticipantCards} />
-          </div>
-        </div>
-
-        {hasScreenSharePresence && (
-          <div
-            className="mx-4 mb-2 flex shrink-0 items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
-            data-testid="screen-share-indicator"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm text-foreground">{screenShareText}</p>
-              {isScreenShareUpdating && (
-                <p className="text-[10px] uppercase text-muted-foreground">Updating screen share...</p>
+          {hasScreenSharePresence ? (
+            <div className="grid h-full w-full max-w-3xl grid-cols-[minmax(0,1fr)_150px] gap-3">
+              {watchStream ? (
+                <StreamPreviewTile
+                  stream={watchStream}
+                  sharerName={modalSharerName}
+                  isLocalSharer={isWatchingLocalStream}
+                  onWatch={() => setIsWatchOpen(true)}
+                />
+              ) : (
+                <div
+                  className="flex h-full items-center justify-center rounded-md border border-border bg-card text-sm text-muted-foreground"
+                  data-testid="stream-preview-loading"
+                >
+                  Waiting for shared screen...
+                </div>
               )}
-              {isRemoteScreenLoading && !watchStream && (
-                <p className="text-[10px] uppercase text-muted-foreground">Waiting for stream...</p>
-              )}
+              <div className="flex min-h-0 flex-col gap-2" data-testid="compact-call-participants">
+                <ParticipantChip name="You" label={isMuted ? "Muted" : isScreenSharing ? "Sharing" : "Connected"} />
+                <ParticipantChip name={remoteUsername} label={callStateLabel} />
+              </div>
             </div>
-            {watchStream && (
-              <button
-                type="button"
-                className="h-8 shrink-0 rounded-md border border-border bg-background px-3 text-sm text-foreground hover:bg-accent"
-                onClick={() => setIsWatchOpen(true)}
-              >
-                Watch
-              </button>
-            )}
-          </div>
-        )}
+          ) : (
+            <div className="grid w-full max-w-3xl grid-cols-2 gap-3">
+              <ParticipantTile name="You" label={isMuted ? "Muted" : "Connected"} compact={compactParticipantCards} />
+              <ParticipantTile name={remoteUsername} label={callStateLabel} compact={compactParticipantCards} />
+            </div>
+          )}
+        </div>
 
         {shouldShowDiagnostics && (
           <div
@@ -221,6 +217,23 @@ export function ActiveCallDock({
         />
       )}
     </>
+  );
+}
+
+function ParticipantChip({ name, label }: { name: string; label: string }) {
+  return (
+    <div
+      className="flex min-h-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
+      data-testid="active-call-participant-chip"
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-sm text-foreground">
+        {name.charAt(0).toUpperCase()}
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm text-foreground">{name}</p>
+        <p className="truncate text-[10px] uppercase text-muted-foreground">{label}</p>
+      </div>
+    </div>
   );
 }
 

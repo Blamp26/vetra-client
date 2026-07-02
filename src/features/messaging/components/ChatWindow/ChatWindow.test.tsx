@@ -439,7 +439,8 @@ describe("ChatWindow presence rendering", () => {
     const messageRegion = screen.getByTestId("message-list-region");
 
     expect(dock).toHaveClass("h-[240px]");
-    expect(screen.getByTestId("screen-share-indicator")).toHaveTextContent(
+    expect(screen.getByTestId("stream-preview-tile")).toBeInTheDocument();
+    expect(screen.getByTestId("stream-preview-label")).toHaveTextContent(
       "Alice is sharing their screen",
     );
     expect(screen.queryByTestId("watch-stream-modal")).not.toBeInTheDocument();

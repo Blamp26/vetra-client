@@ -97,14 +97,16 @@ describe("ActiveCallDock", () => {
     expect(dock.className).not.toContain("clamp");
   });
 
-  it("shows a compact remote sharing indicator and Watch button", () => {
+  it("shows a compact remote stream preview tile and Watch button", () => {
     renderDock({ remoteScreenStream: {} as MediaStream });
 
-    expect(screen.getByTestId("screen-share-indicator")).toHaveTextContent(
+    expect(screen.getByTestId("stream-preview-tile")).toBeInTheDocument();
+    expect(screen.getByTestId("stream-preview-label")).toHaveTextContent(
       "Alice is sharing their screen",
     );
     expect(screen.getByRole("button", { name: "Watch" })).toBeInTheDocument();
-    expect(screen.getAllByTestId("active-call-participant-tile")).toHaveLength(2);
+    expect(screen.getAllByTestId("active-call-participant-chip")).toHaveLength(2);
+    expect(screen.queryByTestId("screen-share-indicator")).not.toBeInTheDocument();
     expect(screen.queryByTestId("watch-stream-modal")).not.toBeInTheDocument();
   });
 
@@ -126,7 +128,7 @@ describe("ActiveCallDock", () => {
     });
 
     expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[240px]");
-    expect(screen.getByTestId("screen-share-indicator")).toHaveTextContent(
+    expect(screen.getByTestId("stream-preview-label")).toHaveTextContent(
       "You are sharing your screen",
     );
     fireEvent.click(screen.getByRole("button", { name: "Stop sharing" }));
@@ -150,7 +152,7 @@ describe("ActiveCallDock", () => {
     );
 
     expect(screen.queryByTestId("watch-stream-modal")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("screen-share-indicator")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("stream-preview-tile")).not.toBeInTheDocument();
   });
 
   it("does not duplicate modal or indicator across repeated share stop share", () => {
@@ -165,7 +167,7 @@ describe("ActiveCallDock", () => {
     expect(screen.queryByTestId("watch-stream-modal")).not.toBeInTheDocument();
 
     rerender(<ActiveCallDock {...props} remoteScreenStream={secondStream} />);
-    expect(screen.getAllByTestId("screen-share-indicator")).toHaveLength(1);
+    expect(screen.getAllByTestId("stream-preview-tile")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Watch" }));
     expect(screen.getAllByTestId("watch-stream-modal")).toHaveLength(1);
   });
@@ -177,7 +179,7 @@ describe("ActiveCallDock", () => {
     const controls = screen.getByTestId("active-call-dock-controls");
     expect(dock).toContainElement(controls);
     expect(controls).not.toHaveClass("absolute");
-    expect(screen.getByTestId("screen-share-indicator")).toBeInTheDocument();
+    expect(screen.getByTestId("stream-preview-tile")).toBeInTheDocument();
   });
 
   it("renders a calling status label", () => {

@@ -34,14 +34,23 @@ describe("WatchStreamModal", () => {
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
   });
 
-  it("renders the watch modal with a contained video", () => {
+  it("renders the dark watch surface with a contained video", () => {
     const stream = makeStream("remote-screen");
     renderModal({ stream });
 
     const video = screen.getByTestId("watch-stream-video") as HTMLVideoElement;
     expect(screen.getByTestId("watch-stream-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("watch-stream-surface")).toHaveClass("bg-[#1e1f22]");
+    expect(screen.getByTestId("watch-stream-stage")).toHaveClass("bg-black");
     expect(video).toHaveClass("object-contain");
     expect(video.srcObject).toBe(stream);
+  });
+
+  it("renders the participant strip", () => {
+    renderModal();
+
+    expect(screen.getByTestId("watch-stream-participants")).toHaveTextContent("You");
+    expect(screen.getByTestId("watch-stream-participants")).toHaveTextContent("Alice");
   });
 
   it("close button closes only the modal", () => {
