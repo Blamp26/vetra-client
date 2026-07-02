@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,7 +19,7 @@ vi.mock("@/api/servers", () => ({
 }));
 
 vi.mock("../UserSearch/UserSearch", () => ({
-  UserSearch: () => <div data-testid="user-search" />,
+  UserSearch: () => <input data-testid="user-search" placeholder="Search..." />,
 }));
 
 vi.mock("../CreateRoomModal/CreateRoomModal", () => ({
@@ -43,7 +43,7 @@ import { Sidebar } from "./Sidebar";
 function makeState() {
   return {
     currentUser: { id: 1, username: "me", display_name: "Me" },
-    activeChat: null,
+    activeChat: null as any,
     conversationPreviews: {
       2: {
         partner_id: 2,
@@ -135,5 +135,83 @@ describe("Sidebar attachment previews", () => {
 
     expect(screen.getByText("Photo")).toBeInTheDocument();
     expect(screen.getByText("File: report.pdf")).toBeInTheDocument();
+  });
+
+  it("renders cleaned sidebar header controls without changing behavior", async () => {
+    const state = makeState();
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+
+    render(<Sidebar />);
+
+    await waitFor(() => {
+      expect(getListMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(screen.getByText("Messages")).toBeInTheDocument();
+    expect(screen.getByTestId("user-search")).toBeInTheDocument();
+
+    const newButton = screen.getByRole("button", { name: "New" });
+    expect(newButton).toHaveClass("rounded-md");
+    fireEvent.click(newButton);
+    expect(state.openModal).toHaveBeenCalledWith("CREATE_PICKER");
+  });
+
+  it("keeps DM rows selectable with selected and unread indicators", async () => {
+    const state = makeState();
+    state.activeChat = { type: "direct", partnerId: 2, partnerRef: "user-public-id" };
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+
+    render(<Sidebar />);
+
+    const directRow = await screen.findByTestId("sidebar-item-direct-2");
+    expect(directRow).toHaveClass("rounded-md");
+    expect(directRow).toHaveClass("bg-card");
+    expect(screen.getByText("1")).toBeInTheDocument();
+
+    fireEvent.click(directRow);
+
+    expect(state.setActiveChat).toHaveBeenCalledWith({
+      type: "direct",
+      partnerId: 2,
+      partnerRef: "user-public-id",
+    });
+  });
+
+  it("renders server section controls and preserves server navigation", async () => {
+    const state = makeState();
+    state.servers = {
+      5: {
+        id: 5,
+        name: "Workspace",
+        created_by: 1,
+        inserted_at: "2026-06-30T10:00:00Z",
+      },
+    };
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+
+    render(<Sidebar />);
+
+    expect(await screen.findByText("Servers")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create server" }));
+    expect(state.openModal).toHaveBeenCalledWith("CREATE_SERVER");
+
+    fireEvent.click(screen.getByRole("button", { name: /Workspace/ }));
+    expect(state.setActiveChat).toHaveBeenCalledWith({
+      type: "server",
+      serverId: 5,
+      serverRef: 5,
+    });
   });
 });

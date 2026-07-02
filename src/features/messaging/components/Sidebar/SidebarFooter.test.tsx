@@ -107,6 +107,7 @@ describe("SidebarFooter call UX", () => {
       name: "Return to call with Alice",
     });
 
+    expect(returnButton).toHaveClass("rounded-md");
     fireEvent.click(returnButton);
 
     expect(onReturnToCall).toHaveBeenCalledTimes(1);
@@ -190,5 +191,13 @@ describe("SidebarFooter call UX", () => {
     expect(toggleMicMock).toHaveBeenCalledTimes(1);
     expect(onMuteToggle).toHaveBeenCalledTimes(1);
     expect(onReturnToCall).not.toHaveBeenCalled();
+  });
+
+  it("keeps footer quick controls aligned as compact buttons", () => {
+    renderFooter();
+
+    expect(screen.getByTitle("Mic")).toHaveClass("h-8");
+    expect(screen.getByTitle("Sound")).toHaveClass("h-8");
+    expect(screen.getByTitle("Settings")).toHaveClass("h-8");
   });
 });

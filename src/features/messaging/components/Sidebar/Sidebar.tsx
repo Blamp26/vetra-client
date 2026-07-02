@@ -134,22 +134,33 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
       className={cn("flex h-full w-full flex-col", isServerMode && "w-[60px]")}
     >
       {!isServerMode && (
-        <div className="p-2 border-b border-border">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-normal">Messages</h1>
-            <button onClick={() => openModal("CREATE_PICKER")}>New</button>
+        <div className="border-b border-border p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h1 className="text-lg font-medium tracking-tight">Messages</h1>
+            <button
+              onClick={() => openModal("CREATE_PICKER")}
+              className="rounded-md border border-border bg-card px-3 py-1.5 text-sm hover:bg-accent"
+            >
+              New
+            </button>
           </div>
           <UserSearch />
         </div>
       )}
 
       {!isServerMode && serverList.length > 0 && (
-        <div className="p-2 border-b border-border">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs uppercase text-muted-foreground">
+        <div className="border-b border-border p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Servers
             </span>
-            <button onClick={() => openModal("CREATE_SERVER")}>+</button>
+            <button
+              onClick={() => openModal("CREATE_SERVER")}
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-sm hover:bg-accent"
+              aria-label="Create server"
+            >
+              +
+            </button>
           </div>
           <div className="space-y-1">
             {serverList.map((server) => (
@@ -158,7 +169,7 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
                 onClick={() =>
                   setActiveChat(serverChatForServer(server))
                 }
-                className="flex w-full items-center gap-2 p-1 text-left"
+                className="flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left hover:border-border hover:bg-card"
               >
                 <Avatar name={server.name} size="small" />
                 <span className="truncate text-sm">{server.name}</span>
@@ -168,7 +179,7 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-1 space-y-1">
+      <div className="flex-1 space-y-1 overflow-y-auto p-2">
         {allItems.map((item) => {
           const isActive = isItemActive(item);
           return (
@@ -176,9 +187,10 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
               key={`${item.kind}-${item.id}`}
               onClick={() => handleItemClick(item)}
               className={cn(
-                "flex w-full items-center gap-2 p-2 text-left border border-transparent",
+                "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left hover:border-border hover:bg-card/70",
                 isActive && "border-border bg-card",
               )}
+              data-testid={`sidebar-item-${item.kind}-${item.id}`}
             >
               <Avatar
                 name={item.name}
@@ -203,7 +215,7 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
                 </div>
               )}
               {!isServerMode && item.unread > 0 && (
-                <span className="bg-primary text-primary-foreground px-1 text-[10px]">
+                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none text-primary-foreground">
                   {item.unread}
                 </span>
               )}

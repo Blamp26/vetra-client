@@ -34,14 +34,14 @@ export function UserSearch() {
     <div className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
       <input
-        className="h-9 w-full bg-background border border-border pl-9 pr-8 text-sm outline-none focus:border-primary"
+        className="h-10 w-full rounded-md border border-border bg-card pl-9 pr-8 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
         placeholder="Search..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
       {query && (
         <button
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={clearSearch}
         >
           <X className="h-4 w-4" />
@@ -49,19 +49,19 @@ export function UserSearch() {
       )}
 
       {isSearching && (
-        <div className="absolute left-0 right-0 top-full mt-1 px-3 py-2 text-xs text-muted-foreground bg-popover border border-border z-[110]">
+        <div className="absolute left-0 right-0 top-full z-[110] mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground">
           Searching...
         </div>
       )}
 
       {!isSearching && query && !hasResults && (
-        <div className="absolute left-0 right-0 top-full mt-1 px-3 py-2 text-xs text-muted-foreground bg-popover border border-border z-[110]">
+        <div className="absolute left-0 right-0 top-full z-[110] mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground">
           No results for "{query}"
         </div>
       )}
 
       {hasResults && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-border z-[110] max-h-[320px] overflow-y-auto p-1">
+        <div className="absolute left-0 right-0 top-full z-[110] mt-1 max-h-[320px] overflow-y-auto rounded-md border border-border bg-popover p-1">
           {searchResults.users.length > 0 && (
             <div className="mb-2">
               <div className="px-2 py-1 text-[10px] uppercase text-muted-foreground">
@@ -71,7 +71,7 @@ export function UserSearch() {
                 {searchResults.users.map((user) => (
                   <button
                     key={`user-${user.id}`}
-                    className="flex items-center gap-2 w-full px-2 py-1.5 text-left hover:bg-accent"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
                     onClick={() => handleSelectUser(user)}
                   >
                     <Avatar
@@ -113,7 +113,7 @@ export function UserSearch() {
                     className="flex items-center gap-2 w-full px-2 py-1.5 text-left hover:bg-accent"
                     onClick={() => handleSelectServer(server)}
                   >
-                    <div className="w-6 h-6 border border-border bg-muted flex items-center justify-center shrink-0 text-[10px]">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-[10px]">
                       #
                     </div>
                     <span className="text-xs font-normal truncate">
