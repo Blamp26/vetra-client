@@ -212,7 +212,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "max-w-[80%] rounded-xl border border-border px-3 py-2 text-sm leading-relaxed",
+          "min-w-[72px] max-w-[80%] rounded-xl border border-border px-3.5 py-2.5 text-sm leading-relaxed",
           isSelected && "ring-1 ring-primary",
           isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text",
         )}
