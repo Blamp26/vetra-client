@@ -288,14 +288,14 @@ describe("ChatWindow presence rendering", () => {
           status: "idle",
           callIssue: {
             tone: "error",
-            message: "Call service is still connecting. Try again in a moment.",
+            message: "Call service is connecting. Try again in a moment.",
           },
         })}
       />,
     );
 
     expect(await screen.findByTestId("call-start-issue")).toHaveTextContent(
-      "Call service is still connecting. Try again in a moment.",
+      "Call service is connecting. Try again in a moment.",
     );
   });
 

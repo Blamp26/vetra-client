@@ -111,8 +111,8 @@ describe('IncomingCallModal', () => {
   it('disables both actions while the incoming call is being accepted', () => {
     renderModal('Alice', true, onAccept, onReject);
 
-    const accept = screen.getByRole('button', { name: /Connecting.../i });
-    const decline = screen.getByRole('button', { name: /Decline/i });
+    const accept = screen.getByRole('button', { name: 'Accept call' });
+    const decline = screen.getByRole('button', { name: 'Decline call' });
 
     expect(accept).toBeDisabled();
     expect(decline).toBeDisabled();
@@ -124,12 +124,22 @@ describe('IncomingCallModal', () => {
     expect(onReject).not.toHaveBeenCalled();
   });
 
-  it('повторные клики на "Accept" вызывают onAccept соответствующее число раз when pending is false', () => {
+  it('fires accept only once even if the button is clicked repeatedly', () => {
     renderModal('Alice', false, onAccept, onReject);
     const btn = screen.getByRole('button', { name: /Accept/i });
     fireEvent.click(btn);
     fireEvent.click(btn);
-    expect(onAccept).toHaveBeenCalledTimes(2);
+    expect(onAccept).toHaveBeenCalledTimes(1);
+    expect(onReject).not.toHaveBeenCalled();
+  });
+
+  it('fires decline only once even if the button is clicked repeatedly', () => {
+    renderModal('Alice', false, onAccept, onReject);
+    const btn = screen.getByRole('button', { name: /Decline/i });
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(onReject).toHaveBeenCalledTimes(1);
+    expect(onAccept).not.toHaveBeenCalled();
   });
 
   // ── Граничные случаи ─────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from "@/features/calling/components/CallButton";
 import { ActiveCallDock } from "@/features/calling/components/ActiveCallDock";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
+import { normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import { cn } from "@/shared/utils/cn";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
@@ -211,6 +212,7 @@ export function ChatWindow({ activeChat, call }: Props) {
   if (!currentUser) return null;
 
   const shouldShowActiveCallDock = isActiveCallForChat(activeChat, call, conversationPreviews);
+  const displayCallIssue = normalizeCallIssue(call.callIssue);
 
   const renderHeader = () => {
     if (activeChat.type === "direct") {
@@ -308,18 +310,19 @@ export function ChatWindow({ activeChat, call }: Props) {
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-background">
       {renderHeader()}
 
-      {(callStartIssue || (call.status === "idle" && call.callIssue?.message)) && (
+      {(callStartIssue || (call.status === "idle" && displayCallIssue?.message)) && (
         <div
           className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-foreground"
           data-testid="call-start-issue"
         >
-          {callStartIssue ?? call.callIssue?.message}
+          {callStartIssue ?? displayCallIssue?.message}
         </div>
       )}
 
       {shouldShowActiveCallDock && (
         <ActiveCallDock
           remoteUsername={call.remoteUsername ?? `User #${call.remoteUserId}`}
+          callStatus={call.status}
           seconds={call.seconds}
           isMuted={call.isMuted}
           isScreenSharing={call.isScreenSharing}

@@ -96,11 +96,11 @@ describe('CallButton', () => {
   );
 
   it.each(ALL_STATUSES.filter((s) => s !== 'idle'))(
-    'title содержит статус "%s" когда кнопка disabled',
+    'title explains why the button is disabled for status "%s"',
     (status) => {
       renderButton(status, onCall);
       const btn = screen.getByRole('button');
-      expect(btn.getAttribute('title')).toContain(status);
+      expect(btn.getAttribute('title')).toContain('Call unavailable while');
     },
   );
 

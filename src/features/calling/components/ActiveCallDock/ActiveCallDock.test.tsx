@@ -80,6 +80,48 @@ describe("ActiveCallDock", () => {
     );
   });
 
+  it("renders a calling status label", () => {
+    renderDock({
+      callStatus: "calling",
+      diagnostics: {
+        connectionState: "new",
+        iceConnectionState: "new",
+        iceGatheringState: "new",
+        signalingState: "stable",
+        selectedLocalCandidateType: "unknown",
+      },
+    });
+
+    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("Calling...");
+  });
+
+  it("renders a connecting status label before the peer is connected", () => {
+    renderDock({
+      diagnostics: {
+        connectionState: "connecting",
+        iceConnectionState: "checking",
+        iceGatheringState: "gathering",
+        signalingState: "stable",
+        selectedLocalCandidateType: "unknown",
+      },
+    });
+
+    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("Connecting...");
+  });
+
+  it("normalizes recoverable call issue text inside the dock", () => {
+    renderDock({
+      callIssue: {
+        tone: "error",
+        message: "Call could not start because one side is already in a call.",
+      },
+    });
+
+    expect(screen.getByTestId("call-issue-banner")).toHaveTextContent(
+      "One side is already in a call.",
+    );
+  });
+
   it("calls the existing hangup action from the dock controls", () => {
     const onHangUp = vi.fn();
     renderDock({ onHangUp });

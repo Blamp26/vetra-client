@@ -2,11 +2,13 @@ import { useEffect, useRef } from "react";
 import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
-import type { CallDiagnostics, CallIssue } from "@/features/calling/hooks/useCall.types";
+import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
+import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
 
 interface ActiveCallDockProps {
   remoteUsername: string;
+  callStatus?: CallStatus;
   seconds: number;
   isMuted: boolean;
   isScreenSharing: boolean;
@@ -48,6 +50,7 @@ async function safelyPlayVideo(video: HTMLVideoElement, reason: string): Promise
 
 export function ActiveCallDock({
   remoteUsername,
+  callStatus = "active",
   seconds,
   isMuted,
   isScreenSharing,
@@ -66,14 +69,13 @@ export function ActiveCallDock({
   const previewRef = useRef<HTMLVideoElement>(null);
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
-  const callStateLabel = isScreenShareUpdating
-    ? "Updating screen share..."
-    : isScreenSharing
-      ? "Screen sharing"
-      : diagnostics.connectionState === "connected" ||
-          diagnostics.iceConnectionState === "connected"
-        ? "Connected"
-        : "Connecting...";
+  const displayIssue = normalizeCallIssue(callIssue);
+  const callStateLabel = getCallStatusLabel({
+    status: callStatus,
+    diagnostics,
+    isScreenSharing,
+    isScreenShareUpdating,
+  });
   const hasScreenStage = isRemoteScreenLoading || remoteScreenStream || localScreenStream;
 
   useEffect(() => {
@@ -134,24 +136,24 @@ export function ActiveCallDock({
         </div>
       </div>
 
-      {callIssue && (
+      {displayIssue && (
         <div
           className={cn(
             "absolute left-4 right-4 top-14 z-20 rounded-md border px-3 py-2 text-sm",
-            callIssue.tone === "error"
+            displayIssue.tone === "error"
               ? "border-destructive/50 bg-destructive/10 text-foreground"
               : "border-border bg-card text-foreground",
           )}
           data-testid="call-issue-banner"
         >
-          {callIssue.message}
+          {displayIssue.message}
         </div>
       )}
 
       <div
         className={cn(
           "flex h-full min-h-0 items-center justify-center px-4 pb-20 pt-16",
-          callIssue && "pt-24",
+          displayIssue && "pt-24",
         )}
         data-testid="active-call-dock-stage"
       >

@@ -20,6 +20,7 @@ import {
   resolvePresenceStatus,
 } from "@/shared/utils/presence";
 import { debugCall } from "@/features/calling/utils/callDebug";
+import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
 
 interface SidebarFooterProps {
   callStatus: CallStatus;
@@ -86,49 +87,57 @@ export function SidebarFooter({
   }, [micEnabled, soundEnabled, currentStatus]);
 
   const isMicMuted = callStatus === "active" ? isMuted : !micEnabled;
+  const displayIssue = normalizeCallIssue(callIssue);
   const callPanel = useMemo(() => {
     switch (callStatus) {
       case "calling":
         return {
-          title: "Calling...",
+          title: getCallStatusLabel({ status: callStatus }),
           subtitle: remoteUsername ? `Ringing ${remoteUsername}` : "Trying to reach the other user",
           tone: "default" as const,
         };
       case "ringing":
         return {
-          title: isIncomingActionPending ? "Connecting..." : "Incoming call",
+          title: getCallStatusLabel({ status: callStatus, isIncomingActionPending }),
           subtitle: remoteUsername ? `${remoteUsername} is calling` : "Someone is calling you",
           tone: "default" as const,
         };
       case "active":
         return {
-          title: isScreenShareUpdating
-            ? "Updating screen share..."
-            : isScreenSharing
-              ? "Screen sharing"
-              : "Connected",
-          subtitle: callIssue?.message ?? `${remoteUsername || "User"} · ${formatCallTime(callSeconds)}`,
-          tone: callIssue?.tone ?? "default",
+          title: getCallStatusLabel({
+            status: callStatus,
+            diagnostics: {
+              connectionState: "connected",
+              iceConnectionState: "connected",
+              iceGatheringState: "unknown",
+              signalingState: "unknown",
+              selectedLocalCandidateType: "unknown",
+            },
+            isScreenSharing,
+            isScreenShareUpdating,
+          }),
+          subtitle: displayIssue?.message ?? `${remoteUsername || "User"} · ${formatCallTime(callSeconds)}`,
+          tone: displayIssue?.tone ?? "default",
         };
       case "ended":
         return {
-          title: "Call ended",
+          title: getCallStatusLabel({ status: callStatus }),
           subtitle: remoteUsername ? `${remoteUsername}` : "The call has been closed",
           tone: "default" as const,
         };
       case "failed":
         return {
-          title: "Call failed",
-          subtitle: callIssue?.message ?? "Please try again.",
+          title: getCallStatusLabel({ status: callStatus }),
+          subtitle: displayIssue?.message ?? "Please try again.",
           tone: "error" as const,
         };
       default:
         return null;
     }
   }, [
-    callIssue,
     callSeconds,
     callStatus,
+    displayIssue,
     isIncomingActionPending,
     isScreenShareUpdating,
     isScreenSharing,

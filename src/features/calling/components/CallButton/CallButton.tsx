@@ -5,6 +5,7 @@ import type { ResourceRef } from '@/shared/types';
 import { Phone } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { debugCall } from "../../utils/callDebug";
+import { getCallServiceUnavailableMessage, getCallStatusLabel } from "../../utils/callUxText";
 
 interface Props {
   targetUserId: ResourceRef | null | undefined;
@@ -20,15 +21,11 @@ function hasValidTarget(targetUserId: ResourceRef | null | undefined): targetUse
   return targetUserId !== null && targetUserId !== undefined && String(targetUserId).trim().length > 0;
 }
 
-function callServiceUnavailableReason(status: CallServiceStatus | undefined): string | null {
-  if (!status || status === 'ready') return null;
-  return 'Call service is connecting. Try again in a moment.';
-}
-
 export function CallButton({ targetUserId, targetUsername, status, callServiceStatus, onCall, onUnavailable, className }: Props) {
-  const serviceUnavailableReason = callServiceUnavailableReason(callServiceStatus);
+  const serviceUnavailableReason = getCallServiceUnavailableMessage(callServiceStatus);
   const isDisabled = status !== 'idle' || Boolean(serviceUnavailableReason);
   const isMissingTarget = !hasValidTarget(targetUserId);
+  const statusLabel = getCallStatusLabel({ status });
 
   const handleClick = () => {
     debugCall('[CallButton] clicked', {
@@ -46,7 +43,7 @@ export function CallButton({ targetUserId, targetUsername, status, callServiceSt
     }
 
     if (isDisabled) {
-      onUnavailable?.(`Call unavailable while ${status}.`);
+      onUnavailable?.(`Call unavailable while ${statusLabel}`);
       return;
     }
 
@@ -70,7 +67,7 @@ export function CallButton({ targetUserId, targetUsername, status, callServiceSt
         serviceUnavailableReason
           ? serviceUnavailableReason
           : isDisabled
-          ? `Call unavailable while ${status}`
+          ? `Call unavailable while ${statusLabel}`
           : isMissingTarget
             ? `Call unavailable: missing user`
             : `Call ${targetUsername}`

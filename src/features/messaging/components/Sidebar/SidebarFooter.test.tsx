@@ -142,7 +142,7 @@ describe("SidebarFooter call UX", () => {
     });
 
     expect(screen.getByText("Call failed")).toBeInTheDocument();
-    expect(screen.getByText("Microphone permission denied.")).toBeInTheDocument();
+    expect(screen.getByText("Microphone access was denied.")).toBeInTheDocument();
   });
 
   it("disables Accept and Decline while an incoming action is pending", () => {
