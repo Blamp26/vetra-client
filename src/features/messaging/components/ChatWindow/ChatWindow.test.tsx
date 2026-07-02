@@ -400,7 +400,7 @@ describe("ChatWindow presence rendering", () => {
     ).toBeTruthy();
   });
 
-  it("keeps messages and composer visible below the screen-share watch surface", async () => {
+  it("keeps messages and composer visible below compact screen-share call presence", async () => {
     const state = makeState();
     useAppStoreMock.mockImplementation(
       (selector: (value: ReturnType<typeof makeState>) => unknown) =>
@@ -438,8 +438,11 @@ describe("ChatWindow presence rendering", () => {
     const dock = screen.getByTestId("active-call-dock");
     const messageRegion = screen.getByTestId("message-list-region");
 
-    expect(dock).toHaveClass("h-[clamp(420px,60vh,760px)]");
-    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+    expect(dock).toHaveClass("h-[240px]");
+    expect(screen.getByTestId("screen-share-indicator")).toHaveTextContent(
+      "Alice is sharing their screen",
+    );
+    expect(screen.queryByTestId("watch-stream-modal")).not.toBeInTheDocument();
     expect(screen.getByText("message visible during active call")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Message composer" })).toBeInTheDocument();
     expect(
