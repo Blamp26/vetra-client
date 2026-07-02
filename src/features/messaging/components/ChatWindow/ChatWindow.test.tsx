@@ -182,6 +182,46 @@ describe("ChatWindow presence rendering", () => {
     expect(container.querySelector(".bg-offline")).toBeFalsy();
   });
 
+  it("renders a cleaned chat header with user status and search control", async () => {
+    const state = makeState();
+    state.onlineUserIds = new Set<number>([2]);
+    state.userStatuses = { 2: "online" };
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2 }}
+        call={makeCall()}
+      />,
+    );
+
+    const header = await screen.findByTestId("chat-header");
+    const actions = screen.getByTestId("chat-header-actions");
+
+    expect(header).toHaveClass("min-h-14");
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("Online")).toBeInTheDocument();
+    expect(actions).toContainElement(screen.getByRole("button", { name: "Call Alice" }));
+
+    const searchButton = screen.getByRole("button", { name: "Search" });
+    expect(searchButton).toHaveClass("h-9");
+    fireEvent.click(searchButton);
+    expect(screen.getByTestId("message-search")).toBeInTheDocument();
+  });
+
   it("renders an enabled direct-call button that invokes provider startCall once", async () => {
     const state = makeState();
     const startCall = vi.fn();
@@ -221,6 +261,7 @@ describe("ChatWindow presence rendering", () => {
     );
 
     const callButton = await screen.findByRole("button", { name: "Call Alice" });
+    expect(callButton).toHaveClass("border");
     expect(callButton).not.toBeDisabled();
 
     fireEvent.click(callButton);
@@ -335,10 +376,14 @@ describe("ChatWindow presence rendering", () => {
     );
 
     const dock = screen.getByTestId("active-call-dock");
+    const header = await screen.findByTestId("chat-header");
     const messageRegion = screen.getByTestId("message-list-region");
     const composer = screen.getByRole("textbox", { name: "Message composer" });
 
     expect(dock).toBeInTheDocument();
+    expect(
+      header.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(messageRegion).toBeInTheDocument();
     expect(screen.getByTestId("message-list")).toBeInTheDocument();
     expect(screen.getByText("message visible during active call")).toBeInTheDocument();

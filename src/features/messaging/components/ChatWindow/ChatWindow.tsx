@@ -217,7 +217,14 @@ export function ChatWindow({ activeChat, call }: Props) {
   const renderHeader = () => {
     if (activeChat.type === "direct") {
       if (!partner)
-        return <div className="p-4 border-b border-border">Loading...</div>;
+        return (
+          <div
+            className="flex min-h-14 items-center border-b border-border px-4 py-2 text-sm text-muted-foreground"
+            data-testid="chat-header"
+          >
+            Loading...
+          </div>
+        );
 
       const resolvedLastSeenAt =
         lastSeenAt[activeChat.partnerId] ?? partner.last_seen_at;
@@ -238,21 +245,24 @@ export function ChatWindow({ activeChat, call }: Props) {
       })();
 
       return (
-        <div className="flex items-center justify-between border-b border-border p-2">
-          <div className="flex items-center gap-2">
+        <div
+          className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4 py-2"
+          data-testid="chat-header"
+        >
+          <div className="flex min-w-0 items-center gap-3">
             <Avatar
               name={partner.display_name || partner.username}
               src={partner.avatar_url}
               size="medium"
               status={currentStatus as any}
             />
-            <div>
-              <h3 className="text-sm font-normal">
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-medium leading-5">
                 {partner.display_name || partner.username}
               </h3>
               <p
                 className={cn(
-                  "text-[10px]",
+                  "truncate text-xs leading-4",
                   currentStatus === "online"
                     ? "text-online"
                     : currentStatus === "away"
@@ -262,11 +272,11 @@ export function ChatWindow({ activeChat, call }: Props) {
                         : "text-muted-foreground",
                 )}
               >
-                {statusLine}
+              {statusLine}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2" data-testid="chat-header-actions">
             <CallButton
               targetUserId={
                 partner?.public_id ??
@@ -278,8 +288,14 @@ export function ChatWindow({ activeChat, call }: Props) {
               callServiceStatus={call.callServiceStatus}
               onCall={handleStartCall}
               onUnavailable={handleCallUnavailable}
+              className="border border-border bg-card hover:bg-accent"
             />
-            <button onClick={() => setIsSearchOpen(true)}>Search</button>
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-card px-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              Search
+            </button>
           </div>
         </div>
       );
@@ -287,18 +303,26 @@ export function ChatWindow({ activeChat, call }: Props) {
       const roomId = activeChat.roomId;
       const roomPreview = roomPreviews[roomId];
       return (
-        <div className="flex items-center justify-between border-b border-border p-2">
-          <div className="flex items-center gap-2">
+        <div
+          className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4 py-2"
+          data-testid="chat-header"
+        >
+          <div className="flex min-w-0 items-center gap-3">
             <Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />
-            <div>
-              <h3 className="text-sm font-normal">
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-medium leading-5">
                 {roomPreview?.name || `Room #${roomId}`}
               </h3>
-              <p className="text-[10px] text-muted-foreground">Group chat</p>
+              <p className="truncate text-xs leading-4 text-muted-foreground">Group chat</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setIsSearchOpen(true)}>Search</button>
+          <div className="flex shrink-0 items-center gap-2" data-testid="chat-header-actions">
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-card px-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              Search
+            </button>
           </div>
         </div>
       );
