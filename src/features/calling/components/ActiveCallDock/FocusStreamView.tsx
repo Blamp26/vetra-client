@@ -64,11 +64,11 @@ export function FocusStreamView({
     };
   }, [stream]);
 
-  const stripParticipants = participants.filter((participant) => participant.name !== sharerName);
+  const stripParticipants = participants;
 
   return (
     <div
-      className="focus-stream-view flex h-full w-full min-w-0 flex-col gap-[clamp(10px,2vh,20px)] bg-[var(--call-surface-1)] text-[var(--call-text-primary)]"
+      className="focus-stream-view group flex h-full w-full min-w-0 flex-col gap-[clamp(10px,2vh,20px)] bg-[var(--call-surface-1)] text-[var(--call-text-primary)]"
       data-testid="focus-stream-view"
     >
       <div className="focus-header flex shrink-0 items-center gap-2">
@@ -116,7 +116,7 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="focus-strip flex shrink-0 justify-center gap-[clamp(12px,2vw,24px)] overflow-x-auto"
+        className="focus-strip watch-stage-ui flex shrink-0 justify-center gap-[clamp(12px,2vw,24px)] overflow-x-auto opacity-20 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
         data-testid="focus-participant-strip"
       >
         {stripParticipants.map((participant) => (
@@ -135,7 +135,7 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="focus-controls flex h-[50px] shrink-0 items-center justify-center gap-[clamp(16px,2.2vw,42px)]"
+        className="focus-controls watch-stage-ui flex h-[50px] shrink-0 items-center justify-center gap-[clamp(16px,2.2vw,42px)] opacity-20 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
         data-testid="focus-control-bar"
       >
         <div className="cluster flex items-center gap-2.5">
@@ -222,7 +222,7 @@ export function FullscreenStreamView({
 }: FullscreenStreamViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isVideoReady, setIsVideoReady] = useState(false);
-  const stripParticipants = participants.filter((participant) => participant.name !== sharerName);
+  const stripParticipants = participants;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -239,7 +239,7 @@ export function FullscreenStreamView({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-[#050506] text-white"
+      className="fullscreen-stream-view group fixed inset-0 z-50 flex flex-col bg-[#050506] text-white"
       data-testid="fullscreen-stream-view"
     >
       <button
@@ -275,7 +275,10 @@ export function FullscreenStreamView({
         )}
       </div>
 
-      <div className="absolute bottom-24 left-1/2 flex max-w-[calc(100vw-48px)] -translate-x-1/2 items-center justify-center gap-3 overflow-x-auto rounded-[4px] border border-white/15 bg-black/55 p-3">
+      <div
+        className="fullscreen-ui absolute bottom-24 left-1/2 flex max-w-[calc(100vw-48px)] -translate-x-1/2 items-center justify-center gap-3 overflow-x-auto rounded-[4px] border border-white/15 bg-black/55 p-3 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+        data-testid="fullscreen-participant-strip"
+      >
         <div className="relative flex h-[74px] w-[132px] shrink-0 items-center justify-center rounded-[4px] border-2 border-white bg-[#111214]">
           <ScreenShare className="h-6 w-6 text-white/90" />
           <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
@@ -299,7 +302,7 @@ export function FullscreenStreamView({
       </div>
 
       <div
-        className="absolute bottom-5 left-1/2 flex h-[52px] -translate-x-1/2 items-center justify-center gap-3 rounded-[4px] border border-white/15 bg-black/60 px-4"
+        className="fullscreen-ui absolute bottom-5 left-1/2 flex h-[52px] -translate-x-1/2 items-center justify-center gap-3 rounded-[4px] border border-white/15 bg-black/60 px-4 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
         data-testid="fullscreen-control-bar"
       >
         <button

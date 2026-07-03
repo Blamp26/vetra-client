@@ -138,10 +138,15 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
     expect(screen.getByTestId("focus-stream-video")).toHaveClass("object-contain");
     expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
-    expect(screen.getByTestId("focus-participant-strip")).not.toHaveTextContent("Alice");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("Alice");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveClass(
+      "watch-stage-ui",
+      "opacity-20",
+      "group-hover:opacity-100",
+    );
     expect(
       screen.getByTestId("focus-participant-strip").querySelectorAll(".focus-strip-tile"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   it("opens fullscreen stream view from the in-dock pop out action", () => {
@@ -166,13 +171,19 @@ describe("ActiveCallDock", () => {
       "border",
     );
     expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
-    expect(screen.getByTestId("focus-participant-strip")).not.toHaveTextContent("Alice");
-    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("focus-strip");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("Alice");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("focus-strip", "watch-stage-ui", "opacity-20");
     expect(
       screen.getByTestId("focus-participant-strip").querySelectorAll(".focus-strip-tile"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     expect(screen.getByTestId("focus-control-bar")).toBeInTheDocument();
-    expect(screen.getByTestId("focus-control-bar")).toHaveClass("focus-controls", "h-[50px]");
+    expect(screen.getByTestId("focus-control-bar")).toHaveClass(
+      "focus-controls",
+      "h-[50px]",
+      "watch-stage-ui",
+      "opacity-20",
+      "group-hover:opacity-100",
+    );
     expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("h-12", "w-12", "rounded-[4px]");
     expect(screen.getByRole("button", { name: "Mute" })).not.toHaveClass("rounded-full");
     expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
@@ -183,8 +194,21 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("fullscreen-stream-view")).toBeInTheDocument();
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveProperty("srcObject", stream);
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveClass("object-contain");
-    expect(screen.getByTestId("fullscreen-control-bar")).toBeInTheDocument();
-    expect(screen.getByTestId("fullscreen-participant-avatar-tile")).toHaveTextContent("You");
+    expect(screen.getByTestId("fullscreen-control-bar")).toHaveClass(
+      "fullscreen-ui",
+      "opacity-0",
+      "pointer-events-none",
+      "group-hover:opacity-100",
+    );
+    expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass(
+      "fullscreen-ui",
+      "opacity-0",
+      "pointer-events-none",
+      "group-hover:opacity-100",
+    );
+    expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")).toHaveLength(2);
+    expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("You");
+    expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("Alice");
     fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen stream" }));
     expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
@@ -217,6 +241,11 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
     expect(screen.getByTestId("focus-stream-video")).toHaveClass("object-contain");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("Alice");
+    expect(
+      screen.getByTestId("focus-participant-strip").querySelectorAll(".focus-strip-tile"),
+    ).toHaveLength(2);
 
     expect(screen.getAllByRole("button", { name: "Stop sharing" })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Stop sharing" }));
