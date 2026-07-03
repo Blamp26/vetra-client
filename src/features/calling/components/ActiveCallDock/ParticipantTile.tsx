@@ -65,7 +65,7 @@ export function ParticipantTile({
   return (
     <div
       className={cn(
-        "participant-tile participant-tile--avatar relative flex shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-[var(--call-surface-1)]",
+        "participant-tile participant-tile--avatar relative flex shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)]",
         className,
       )}
       data-testid={testId}
@@ -140,7 +140,7 @@ function ScreenShareParticipantTile({
   return (
     <div
       className={cn(
-        "participant-tile participant-tile--screen relative flex shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-[#111214] text-white",
+        "participant-tile participant-tile--screen relative flex shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-[var(--call-border)] bg-[#111214] text-white",
         isWatchingInline && "participant-tile--watching bg-[#0d0e10]",
         className,
       )}
@@ -192,7 +192,7 @@ function ScreenShareParticipantTile({
           {stream ? (
             <button
               type="button"
-              className="watch-btn flex items-center gap-2 rounded-2xl border border-white/35 bg-black/55 px-4 py-2 text-sm text-white hover:bg-black/70"
+              className="watch-btn flex items-center gap-2 rounded-[4px] border border-white/35 bg-black/55 px-4 py-2 text-sm text-white hover:bg-black/70"
               onClick={onWatch}
             >
               <Play className="h-4 w-4 fill-current" />

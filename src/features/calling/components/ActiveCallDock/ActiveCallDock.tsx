@@ -258,7 +258,7 @@ export function ActiveCallDock({
             >
               <button
                 className={cn(
-                  "ctrl-btn flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors",
+                  "ctrl-btn flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors",
                   isMuted
                     ? "bg-[var(--call-bg-danger)] text-[var(--call-text-danger)]"
                     : "hover:opacity-90",
@@ -271,7 +271,7 @@ export function ActiveCallDock({
 
               <button
                 className={cn(
-                  "ctrl-btn flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors hover:opacity-90 disabled:pointer-events-none disabled:opacity-60",
+                  "ctrl-btn flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors hover:opacity-90 disabled:pointer-events-none disabled:opacity-60",
                   hasScreenSharePresence && "ctrl-btn--active bg-[var(--call-text-accent)] text-white",
                 )}
                 onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
@@ -288,7 +288,7 @@ export function ActiveCallDock({
               </button>
 
               <button
-                className="ctrl-btn ctrl-btn--danger flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] transition-colors hover:opacity-90"
+                className="ctrl-btn ctrl-btn--danger flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-fill-danger)] bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] transition-colors hover:opacity-90"
                 onClick={onHangUp}
                 aria-label="Hang Up"
               >

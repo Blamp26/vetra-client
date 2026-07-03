@@ -78,7 +78,7 @@ export function FocusStreamView({
         <div className="spacer flex-1" />
         <button
           type="button"
-          className="focus-close flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md border border-[var(--call-border)] bg-[var(--call-surface-1)] p-0 text-[var(--call-text-secondary)] hover:opacity-90"
+          className="focus-close flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-0 text-[var(--call-text-secondary)] hover:opacity-90"
           onClick={onExitFocus}
           aria-label="Exit focus view"
         >
@@ -87,7 +87,7 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="focus-stage relative flex min-h-[180px] flex-1 items-center justify-center overflow-hidden rounded-[10px] bg-[#0b0c0d]"
+        className="focus-stage relative flex min-h-[180px] flex-1 items-center justify-center overflow-hidden rounded-[4px] border border-[var(--call-border)] bg-[#0b0c0d]"
         data-testid="focus-stream-stage"
       >
         <video
@@ -117,7 +117,7 @@ export function FocusStreamView({
         {stripParticipants.map((participant) => (
           <div
             key={participant.id}
-            className="focus-strip-tile relative flex h-[clamp(76px,12vh,120px)] w-[clamp(120px,18vw,220px)] shrink-0 items-center justify-center rounded-md bg-[var(--call-surface-2)]"
+            className="focus-strip-tile relative flex h-[clamp(76px,12vh,120px)] w-[clamp(120px,18vw,220px)] shrink-0 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)]"
           >
             <div className="avatar-circle flex h-[clamp(34px,6vh,56px)] w-[clamp(34px,6vh,56px)] shrink-0 items-center justify-center rounded-full bg-[var(--call-fill-control)] text-[clamp(13px,2vh,20px)] text-[var(--call-text-primary)]">
               {participant.name.charAt(0).toUpperCase()}
@@ -127,7 +127,7 @@ export function FocusStreamView({
             </div>
           </div>
         ))}
-        <div className="focus-strip-tile sharing relative flex h-[clamp(76px,12vh,120px)] w-[clamp(120px,18vw,220px)] shrink-0 items-center justify-center rounded-md border-[1.5px] border-[#d4785a] bg-[#111214]">
+        <div className="focus-strip-tile sharing relative flex h-[clamp(76px,12vh,120px)] w-[clamp(120px,18vw,220px)] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-[#d4785a] bg-[#111214]">
           <div className="strip-label absolute bottom-2 left-2 max-w-[calc(100%-16px)] truncate rounded-[3px] bg-black/50 px-1.5 py-1 text-[10px] leading-none text-white">
             {sharerName}
           </div>
@@ -141,7 +141,7 @@ export function FocusStreamView({
         <div className="cluster flex items-center gap-2.5">
           <button
             className={cn(
-              "ctrl-btn flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors",
+              "ctrl-btn flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors",
               isMuted
                 ? "bg-[var(--call-bg-danger)] text-[var(--call-text-danger)]"
                 : "hover:opacity-90",
@@ -154,7 +154,7 @@ export function FocusStreamView({
 
           <button
             className={cn(
-              "ctrl-btn ctrl-btn--active flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-text-accent)] p-0 text-white transition-colors hover:opacity-90 disabled:pointer-events-none disabled:opacity-60",
+              "ctrl-btn ctrl-btn--active flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-text-accent)] p-0 text-white transition-colors hover:opacity-90 disabled:pointer-events-none disabled:opacity-60",
               !isScreenSharing && "bg-[var(--call-text-accent)]",
             )}
             onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
@@ -171,7 +171,7 @@ export function FocusStreamView({
           </button>
 
           <button
-            className="ctrl-btn ctrl-btn--danger flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] hover:opacity-90"
+            className="ctrl-btn ctrl-btn--danger flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-fill-danger)] bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] hover:opacity-90"
             onClick={onHangUp}
             aria-label="Hang Up"
           >
@@ -182,14 +182,14 @@ export function FocusStreamView({
         <div className="cluster flex items-center gap-2.5">
           <button
             type="button"
-            className="icon-only flex h-[30px] w-[30px] items-center justify-center rounded-lg border-0 bg-transparent p-0 text-[var(--call-text-secondary)] hover:bg-transparent hover:opacity-90"
+            className="icon-only flex h-10 w-10 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-0 text-[var(--call-text-secondary)] hover:opacity-90"
             aria-label="Stream volume"
           >
             <Volume2 className="h-4 w-4" />
           </button>
           <button
             type="button"
-            className="icon-only flex h-[30px] w-[30px] items-center justify-center rounded-lg border-0 bg-transparent p-0 text-[var(--call-text-secondary)] hover:bg-transparent hover:opacity-90"
+            className="icon-only flex h-10 w-10 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-0 text-[var(--call-text-secondary)] hover:opacity-90"
             aria-label="Pop out stream"
           >
             <Maximize2 className="h-4 w-4" />

@@ -70,13 +70,29 @@ describe("ActiveCallDock", () => {
       "h-[clamp(220px,37vh,396px)]",
       "max-w-[705px]",
     );
-    expect(screen.getAllByTestId("active-call-participant-tile")[0]).not.toHaveClass("border");
+    expect(screen.getAllByTestId("active-call-participant-tile")[0]).toHaveClass(
+      "rounded-[4px]",
+      "border",
+      "bg-[var(--call-surface-2)]",
+    );
     expect(screen.getAllByTestId("participant-avatar-name")[0]).toHaveTextContent("You");
     expect(screen.queryByTestId("active-call-screen-share-tile")).not.toBeInTheDocument();
     expect(screen.getByTestId("active-call-dock-controls")).toHaveClass("call-controls", "h-[50px]");
+    expect(screen.getByRole("button", { name: "Mute" })).toHaveClass(
+      "h-12",
+      "w-12",
+      "rounded-[4px]",
+      "border",
+    );
+    expect(screen.getByRole("button", { name: "Mute" })).not.toHaveClass("rounded-full");
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share screen" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hang Up" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hang Up" })).toHaveClass(
+      "ctrl-btn--danger",
+      "h-12",
+      "w-12",
+      "rounded-[4px]",
+    );
   });
 
   it("renders a remote screen share as an idle participant tile without auto-expanding", () => {
@@ -89,8 +105,9 @@ describe("ActiveCallDock", () => {
     expect(tile).toHaveAttribute("data-variant", "screenShare");
     expect(tile).toHaveAttribute("data-state", "idle");
     expect(tile).toHaveClass("participant-tile", "participant-tile--screen");
-    expect(tile).toHaveClass("h-[clamp(180px,30vh,320px)]", "max-w-[520px]");
+    expect(tile).toHaveClass("h-[clamp(180px,30vh,320px)]", "max-w-[520px]", "rounded-[4px]", "border");
     expect(screen.getByRole("button", { name: "Watch stream" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Watch stream" })).toHaveClass("rounded-[4px]", "border");
     expect(screen.queryByRole("button", { name: "Expand Alice's screen" })).not.toBeInTheDocument();
     expect(screen.getByTestId("participant-screen-name")).toHaveTextContent("Alice");
     expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
@@ -131,7 +148,13 @@ describe("ActiveCallDock", () => {
     expect(screen.getByText("LIVE")).toBeInTheDocument();
     expect(screen.getByText("720p")).toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-stage")).toBeInTheDocument();
-    expect(screen.getByTestId("focus-stream-stage")).toHaveClass("focus-stage", "flex-1", "min-h-[180px]");
+    expect(screen.getByTestId("focus-stream-stage")).toHaveClass(
+      "focus-stage",
+      "flex-1",
+      "min-h-[180px]",
+      "rounded-[4px]",
+      "border",
+    );
     expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
     expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("Alice");
     expect(screen.getByTestId("focus-participant-strip")).toHaveClass("focus-strip");
@@ -140,6 +163,8 @@ describe("ActiveCallDock", () => {
     ).toHaveLength(2);
     expect(screen.getByTestId("focus-control-bar")).toBeInTheDocument();
     expect(screen.getByTestId("focus-control-bar")).toHaveClass("focus-controls", "h-[50px]");
+    expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("h-12", "w-12", "rounded-[4px]");
+    expect(screen.getByRole("button", { name: "Mute" })).not.toHaveClass("rounded-full");
     expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
   });
 
