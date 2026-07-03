@@ -189,7 +189,7 @@ function ScreenShareParticipantTile({
         </>
       ) : (
         <div className="absolute inset-0 flex items-center justify-center bg-[#111214] text-white">
-          {stream ? (
+          {stream && !isLocalSharer ? (
             <button
               type="button"
               className="watch-btn flex items-center gap-2 rounded-[4px] border border-white/35 bg-black/55 px-4 py-2 text-sm text-white hover:bg-black/70"
@@ -198,6 +198,11 @@ function ScreenShareParticipantTile({
               <Play className="h-4 w-4 fill-current" />
               Watch stream
             </button>
+          ) : stream && isLocalSharer ? (
+            <div className="flex items-center gap-2 rounded-[4px] border border-white/25 bg-black/45 px-4 py-2 text-sm text-white">
+              <ScreenShare className="h-4 w-4" />
+              Sharing screen
+            </div>
           ) : (
             <span className="px-4 text-center text-sm text-zinc-500">Waiting for shared screen...</span>
           )}

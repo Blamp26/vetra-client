@@ -127,38 +127,28 @@ describe("ActiveCallDock", () => {
     expect(screen.queryByTestId("active-call-dock-controls")).toBeInTheDocument();
   });
 
-  it("switches the same screen-share tile to watchingInline when Watch stream is clicked", () => {
+  it("opens a remote screen share in the in-dock stage when Watch stream is clicked", () => {
     const stream = makeStream("remote-screen");
     renderDock({ remoteScreenStream: stream });
 
-    const tileBefore = screen.getByTestId("active-call-screen-share-tile");
     fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    const tileAfter = screen.getByTestId("active-call-screen-share-tile");
 
-    expect(tileAfter).toBe(tileBefore);
-    expect(tileAfter).toHaveAttribute("data-state", "watchingInline");
-    expect(tileAfter).toHaveClass("participant-tile--watching");
-    expect(tileAfter).toHaveClass(
-      "h-[clamp(140px,14vw,190px)]",
-      "max-h-[190px]",
-      "w-[clamp(220px,24vw,330px)]",
-      "max-w-[330px]",
-    );
-    expect(tileAfter).not.toHaveClass("max-w-[920px]");
-    expect(tileAfter.className).not.toContain("flex-[");
-    expect(screen.getByTestId("call-grid-view")).toHaveAttribute("data-layout", "screen-share-stage");
-    expect(screen.getByTestId("participant-screen-video")).toHaveProperty("srcObject", stream);
-    expect(screen.getByTestId("participant-screen-live-badge")).toHaveTextContent("720p · LIVE");
-    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
+    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
+    expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();
+    expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
+    expect(screen.getByTestId("focus-stream-video")).toHaveClass("object-contain");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
+    expect(screen.getByTestId("focus-participant-strip")).not.toHaveTextContent("Alice");
+    expect(
+      screen.getByTestId("focus-participant-strip").querySelectorAll(".focus-strip-tile"),
+    ).toHaveLength(1);
   });
 
-  it("opens FocusStreamView only from an explicit expand action after inline watch", () => {
+  it("opens fullscreen stream view from the in-dock pop out action", () => {
     const stream = makeStream("remote-screen");
     renderDock({ remoteScreenStream: stream });
 
-    expect(screen.queryByRole("button", { name: "Expand Alice's screen" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
 
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-view")).toHaveClass("focus-stream-view", "h-full", "w-full");
@@ -176,46 +166,57 @@ describe("ActiveCallDock", () => {
       "border",
     );
     expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
-    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("Alice");
+    expect(screen.getByTestId("focus-participant-strip")).not.toHaveTextContent("Alice");
     expect(screen.getByTestId("focus-participant-strip")).toHaveClass("focus-strip");
     expect(
       screen.getByTestId("focus-participant-strip").querySelectorAll(".focus-strip-tile"),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
     expect(screen.getByTestId("focus-control-bar")).toBeInTheDocument();
     expect(screen.getByTestId("focus-control-bar")).toHaveClass("focus-controls", "h-[50px]");
     expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("h-12", "w-12", "rounded-[4px]");
     expect(screen.getByRole("button", { name: "Mute" })).not.toHaveClass("rounded-full");
     expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
+    expect(screen.getByTestId("focus-stream-video")).toHaveClass("object-contain");
+
+    fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
+
+    expect(screen.getByTestId("fullscreen-stream-view")).toBeInTheDocument();
+    expect(screen.getByTestId("fullscreen-stream-video")).toHaveProperty("srcObject", stream);
+    expect(screen.getByTestId("fullscreen-stream-video")).toHaveClass("object-contain");
+    expect(screen.getByTestId("fullscreen-control-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("fullscreen-participant-avatar-tile")).toHaveTextContent("You");
+    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen stream" }));
+    expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
+    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
   });
 
-  it("exits focus back to the grid while preserving watchingInline state", () => {
+  it("exits remote watch mode back to the idle grid", () => {
     renderDock({ remoteScreenStream: makeStream("remote-screen") });
 
     fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
     fireEvent.click(screen.getByRole("button", { name: "Exit focus view" }));
 
     expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute(
       "data-state",
-      "watchingInline",
+      "idle",
     );
   });
 
-  it("shows local sharing as an idle screen-share tile without tile controls", () => {
+  it("opens local sharing directly without a Watch stream action", () => {
     const onStopScreenShare = vi.fn();
+    const stream = makeStream("local-screen");
     renderDock({
-      localScreenStream: makeStream("local-screen"),
+      localScreenStream: stream,
       isScreenSharing: true,
       onStopScreenShare,
     });
 
     expect(screen.getByTestId("active-call-dock")).toHaveClass("active-call-dock", "h-[clamp(300px,48vh,523px)]");
-    expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute(
-      "data-state",
-      "idle",
-    );
-    expect(screen.getByTestId("participant-screen-name")).toHaveTextContent("You");
+    expect(screen.queryByRole("button", { name: "Watch stream" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
+    expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
+    expect(screen.getByTestId("focus-stream-video")).toHaveClass("object-contain");
 
     expect(screen.getAllByRole("button", { name: "Stop sharing" })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Stop sharing" }));
@@ -227,7 +228,6 @@ describe("ActiveCallDock", () => {
     const { rerender, props } = renderDock({ remoteScreenStream: makeStream("remote-screen") });
 
     fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
 
     rerender(

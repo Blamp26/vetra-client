@@ -5,7 +5,7 @@ import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
 import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import { CallGridView, type CallGridParticipant, type CallGridScreenShare } from "./CallGridView";
-import { FocusStreamView } from "./FocusStreamView";
+import { FocusStreamView, FullscreenStreamView } from "./FocusStreamView";
 
 interface ActiveCallDockProps {
   remoteUsername: string;
@@ -44,6 +44,7 @@ export function ActiveCallDock({
 }: ActiveCallDockProps) {
   const [watchingInlineIds, setWatchingInlineIds] = useState<Set<string>>(() => new Set());
   const [focusedStreamId, setFocusedStreamId] = useState<string | null>(null);
+  const [fullscreenStreamId, setFullscreenStreamId] = useState<string | null>(null);
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
   const displayIssue = normalizeCallIssue(callIssue);
@@ -70,10 +71,17 @@ export function ActiveCallDock({
     });
 
     if (!focusedStreamId || activeIds.has(focusedStreamId)) {
+      if (fullscreenStreamId && !activeIds.has(fullscreenStreamId)) {
+        setFullscreenStreamId(null);
+      }
       return;
     }
     setFocusedStreamId(null);
+    if (fullscreenStreamId && !activeIds.has(fullscreenStreamId)) {
+      setFullscreenStreamId(null);
+    }
   }, [
+    fullscreenStreamId,
     focusedStreamId,
     isRemoteScreenLoading,
     isScreenSharing,
@@ -84,9 +92,15 @@ export function ActiveCallDock({
   useEffect(() => {
     if (callStatus !== "active") {
       setFocusedStreamId(null);
+      setFullscreenStreamId(null);
       setWatchingInlineIds(new Set());
     }
   }, [callStatus]);
+
+  useEffect(() => {
+    if (!localScreenStream) return;
+    setFocusedStreamId((current) => current ?? "local-screen");
+  }, [localScreenStream]);
 
   const participants: CallGridParticipant[] = useMemo(
     () => [
@@ -121,7 +135,7 @@ export function ActiveCallDock({
         id: "local-screen",
         sharerName: "You",
         stream: localScreenStream,
-        state: watchingInlineIds.has("local-screen") ? "watchingInline" : "idle",
+        state: localScreenStream || watchingInlineIds.has("local-screen") ? "watchingInline" : "idle",
         isLocalSharer: true,
       });
     }
@@ -136,6 +150,7 @@ export function ActiveCallDock({
   ]);
 
   const focusedShare = screenShares.find((share) => share.id === focusedStreamId && share.stream);
+  const fullscreenShare = screenShares.find((share) => share.id === fullscreenStreamId && share.stream);
   const callKindLabel = hasScreenSharePresence ? "Screen sharing" : "Voice call";
   const callStatusRight =
     hasScreenSharePresence && !isScreenShareUpdating
@@ -162,11 +177,24 @@ export function ActiveCallDock({
       next.add(id);
       return next;
     });
+    setFocusedStreamId(id);
   };
 
   const handleExpandStream = (id: string) => {
-    if (!watchingInlineIds.has(id)) return;
-    setFocusedStreamId(id);
+    const share = screenShares.find((item) => item.id === id);
+    if (!share?.stream || share.state !== "watchingInline") return;
+    setFullscreenStreamId(id);
+  };
+
+  const handleExitFocus = () => {
+    const currentId = focusedStreamId;
+    setFocusedStreamId(null);
+    if (!currentId) return;
+    setWatchingInlineIds((current) => {
+      const next = new Set(current);
+      next.delete(currentId);
+      return next;
+    });
   };
 
   return (
@@ -179,17 +207,19 @@ export function ActiveCallDock({
       {focusedShare?.stream ? (
         <FocusStreamView
           stream={focusedShare.stream}
+          streamId={focusedShare.id}
           sharerName={focusedShare.sharerName}
           isLocalSharer={focusedShare.isLocalSharer}
           participants={participants}
           isMuted={isMuted}
           isScreenSharing={isScreenSharing}
           isScreenShareUpdating={isScreenShareUpdating}
-          onExitFocus={() => setFocusedStreamId(null)}
+          onExitFocus={handleExitFocus}
           onMuteToggle={onMuteToggle}
           onStartScreenShare={onStartScreenShare}
           onStopScreenShare={onStopScreenShare}
           onHangUp={onHangUp}
+          onEnterFullscreen={setFullscreenStreamId}
         />
       ) : (
         <div className="call-dock-inner flex h-full w-full min-w-0 flex-col" data-testid="call-dock-inner">
@@ -297,6 +327,24 @@ export function ActiveCallDock({
             </div>
           </div>
         </div>
+      )}
+      {fullscreenShare?.stream && (
+        <FullscreenStreamView
+          stream={fullscreenShare.stream}
+          streamId={fullscreenShare.id}
+          sharerName={fullscreenShare.sharerName}
+          isLocalSharer={fullscreenShare.isLocalSharer}
+          participants={participants}
+          isMuted={isMuted}
+          isScreenSharing={isScreenSharing}
+          isScreenShareUpdating={isScreenShareUpdating}
+          onExitFocus={handleExitFocus}
+          onExitFullscreen={() => setFullscreenStreamId(null)}
+          onMuteToggle={onMuteToggle}
+          onStartScreenShare={onStartScreenShare}
+          onStopScreenShare={onStopScreenShare}
+          onHangUp={onHangUp}
+        />
       )}
     </section>
   );
