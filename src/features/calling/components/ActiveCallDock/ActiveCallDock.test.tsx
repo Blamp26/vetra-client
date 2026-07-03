@@ -62,14 +62,19 @@ describe("ActiveCallDock", () => {
       "call-grid",
       "h-full",
       "w-full",
-      "gap-[clamp(20px,3vw,50px)]",
+      "gap-[clamp(24px,2vw,32px)]",
     );
     expect(screen.getAllByTestId("active-call-participant-tile")).toHaveLength(2);
     expect(screen.getAllByTestId("active-call-participant-tile")[0]).toHaveClass("participant-tile", "participant-tile--avatar");
     expect(screen.getAllByTestId("active-call-participant-tile")[0]).toHaveClass(
-      "h-[clamp(220px,37vh,396px)]",
-      "max-w-[705px]",
+      "h-[clamp(140px,14vw,190px)]",
+      "max-h-[190px]",
+      "w-[clamp(220px,24vw,330px)]",
+      "max-w-[330px]",
+      "shrink-0",
     );
+    expect(screen.getAllByTestId("active-call-participant-tile")[0].className).not.toContain("flex-[");
+    expect(screen.getAllByTestId("active-call-participant-tile")[0]).not.toHaveClass("max-w-[705px]");
     expect(screen.getAllByTestId("active-call-participant-tile")[0]).toHaveClass(
       "rounded-[4px]",
       "border",
@@ -105,7 +110,15 @@ describe("ActiveCallDock", () => {
     expect(tile).toHaveAttribute("data-variant", "screenShare");
     expect(tile).toHaveAttribute("data-state", "idle");
     expect(tile).toHaveClass("participant-tile", "participant-tile--screen");
-    expect(tile).toHaveClass("h-[clamp(180px,30vh,320px)]", "max-w-[520px]", "rounded-[4px]", "border");
+    expect(tile).toHaveClass(
+      "h-[clamp(140px,14vw,190px)]",
+      "max-h-[190px]",
+      "w-[clamp(220px,24vw,330px)]",
+      "max-w-[330px]",
+      "rounded-[4px]",
+      "border",
+    );
+    expect(tile.className).not.toContain("flex-[");
     expect(screen.getByRole("button", { name: "Watch stream" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Watch stream" })).toHaveClass("rounded-[4px]", "border");
     expect(screen.queryByRole("button", { name: "Expand Alice's screen" })).not.toBeInTheDocument();
@@ -125,7 +138,14 @@ describe("ActiveCallDock", () => {
     expect(tileAfter).toBe(tileBefore);
     expect(tileAfter).toHaveAttribute("data-state", "watchingInline");
     expect(tileAfter).toHaveClass("participant-tile--watching");
-    expect(tileAfter).toHaveClass("h-[clamp(220px,34vh,360px)]", "max-w-[920px]");
+    expect(tileAfter).toHaveClass(
+      "h-[clamp(140px,14vw,190px)]",
+      "max-h-[190px]",
+      "w-[clamp(220px,24vw,330px)]",
+      "max-w-[330px]",
+    );
+    expect(tileAfter).not.toHaveClass("max-w-[920px]");
+    expect(tileAfter.className).not.toContain("flex-[");
     expect(screen.getByTestId("call-grid-view")).toHaveAttribute("data-layout", "screen-share-stage");
     expect(screen.getByTestId("participant-screen-video")).toHaveProperty("srcObject", stream);
     expect(screen.getByTestId("participant-screen-live-badge")).toHaveTextContent("720p · LIVE");

@@ -36,16 +36,11 @@ export function CallGridView({
 }: CallGridViewProps) {
   const tileCount = participants.length + screenShares.length;
   const hasPrimaryScreenShare = screenShares.some((share) => share.state === "watchingInline");
-  const participantTileSizeClass = hasPrimaryScreenShare
-    ? "h-[clamp(96px,18vh,180px)] min-w-[180px] flex-[1_1_180px] max-w-[260px]"
-    : getTileSizeClass(tileCount);
-  const screenShareTileSizeClass = hasPrimaryScreenShare
-    ? "h-[clamp(220px,34vh,360px)] w-full max-w-[920px] flex-[1_1_100%]"
-    : getTileSizeClass(tileCount);
+  const tileSizeClass = "h-[clamp(140px,14vw,190px)] max-h-[190px] w-[clamp(220px,24vw,330px)] max-w-[330px] shrink-0";
 
   return (
     <div
-      className="call-grid flex h-full w-full flex-wrap content-center items-center justify-center gap-[clamp(20px,3vw,50px)]"
+      className="call-grid flex h-full w-full flex-wrap content-center items-center justify-center gap-[clamp(24px,2vw,32px)]"
       data-testid="call-grid-view"
       data-tile-count={tileCount}
       data-layout={hasPrimaryScreenShare ? "screen-share-stage" : "tiles"}
@@ -63,7 +58,7 @@ export function CallGridView({
           onExpand={() => onExpandStream(share.id)}
           onStopScreenShare={share.isLocalSharer ? onStopScreenShare : undefined}
           isScreenShareUpdating={isScreenShareUpdating}
-          className={screenShareTileSizeClass}
+          className={tileSizeClass}
           data-testid="active-call-screen-share-tile"
         />
       ))}
@@ -76,20 +71,10 @@ export function CallGridView({
           variant="avatar"
           isMuted={participant.isMuted}
           compact={compactParticipants || hasPrimaryScreenShare}
-          className={participantTileSizeClass}
+          className={tileSizeClass}
           data-testid="active-call-participant-tile"
         />
       ))}
     </div>
   );
-}
-
-function getTileSizeClass(tileCount: number): string {
-  if (tileCount <= 2) {
-    return "h-[clamp(220px,37vh,396px)] min-w-[320px] flex-[1_1_320px] max-w-[705px]";
-  }
-  if (tileCount <= 4) {
-    return "h-[clamp(180px,30vh,320px)] min-w-[260px] flex-[1_1_260px] max-w-[520px]";
-  }
-  return "h-[clamp(140px,24vh,260px)] min-w-[220px] flex-[1_1_220px] max-w-[380px]";
 }
