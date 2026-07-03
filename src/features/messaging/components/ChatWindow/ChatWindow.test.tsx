@@ -438,7 +438,7 @@ describe("ChatWindow presence rendering", () => {
     const dock = screen.getByTestId("active-call-dock");
     const messageRegion = screen.getByTestId("message-list-region");
 
-    expect(dock).toHaveClass("active-call-dock", "min-h-[208px]");
+    expect(dock).toHaveClass("active-call-dock", "px-5", "py-3");
     expect(screen.getByTestId("active-call-dock-surface")).toHaveClass("call-surface");
     expect(screen.getByTestId("call-grid-view")).toBeInTheDocument();
     expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute(

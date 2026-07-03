@@ -39,7 +39,7 @@ export function CallGridView({
 
   return (
     <div
-      className="call-grid flex w-full max-w-[680px] flex-wrap items-center justify-center gap-[10px]"
+      className="call-grid flex flex-wrap content-center justify-center gap-[10px]"
       data-testid="call-grid-view"
       data-tile-count={tileCount}
     >
@@ -79,7 +79,7 @@ export function CallGridView({
 
 function getTileSizeClass(tileCount: number): string {
   if (tileCount <= 4) {
-    return "h-[104px] w-[min(150px,calc((100vw-5rem)/2))]";
+    return "h-[104px] w-[150px]";
   }
-  return "h-[88px] w-[min(126px,calc((100vw-5rem)/2))]";
+  return "h-[88px] w-[126px]";
 }

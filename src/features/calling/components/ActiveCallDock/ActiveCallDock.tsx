@@ -136,19 +136,24 @@ export function ActiveCallDock({
   ]);
 
   const focusedShare = screenShares.find((share) => share.id === focusedStreamId && share.stream);
-  const dockHeight = focusedShare ? "h-[min(56vh,520px)]" : "min-h-[208px]";
+  const callKindLabel = hasScreenSharePresence ? "Screen sharing" : "Voice call";
+  const callStatusRight =
+    hasScreenSharePresence && !isScreenShareUpdating
+      ? formatCallTime(seconds)
+      : `${callStateLabel} · ${formatCallTime(seconds)}`;
   const callSurfaceStyle = {
-    "--call-surface-0": "var(--surface-0, var(--background))",
-    "--call-surface-1": "var(--surface-1, var(--muted))",
-    "--call-surface-2": "var(--surface-2, var(--card))",
-    "--call-border": "var(--border)",
-    "--call-text-primary": "var(--text-primary, var(--foreground))",
-    "--call-text-secondary": "var(--text-secondary, var(--muted-foreground))",
-    "--call-fill-control": "var(--fill-control, var(--background))",
-    "--call-fill-danger": "var(--fill-danger, var(--destructive))",
-    "--call-on-danger": "var(--on-danger, var(--destructive-foreground))",
-    "--call-bg-danger": "var(--bg-danger, var(--error-bg, var(--destructive)))",
-    "--call-text-danger": "var(--text-danger, var(--error-text, var(--destructive)))",
+    "--call-surface-0": "var(--surface-0, #ececea)",
+    "--call-surface-1": "var(--surface-1, #f6f5f3)",
+    "--call-surface-2": "var(--surface-2, #ffffff)",
+    "--call-border": "var(--border, rgba(20, 20, 18, 0.12))",
+    "--call-text-primary": "var(--text-primary, #1c1c1a)",
+    "--call-text-secondary": "var(--text-secondary, #6f6e69)",
+    "--call-fill-control": "var(--fill-control, #dedcd6)",
+    "--call-fill-danger": "var(--fill-danger, #e5484d)",
+    "--call-on-danger": "var(--on-danger, #ffffff)",
+    "--call-bg-danger": "var(--bg-danger, #ffe2e2)",
+    "--call-text-danger": "var(--text-danger, #c22b2b)",
+    "--call-text-accent": "var(--text-accent, #2952cc)",
   } as CSSProperties;
 
   const handleWatchStream = (id: string) => {
@@ -166,11 +171,7 @@ export function ActiveCallDock({
 
   return (
     <section
-      className={cn(
-        "active-call-dock flex shrink-0 flex-col border-b border-[var(--call-border)] bg-[var(--call-surface-0)] text-[var(--call-text-primary)]",
-        focusedShare ? "overflow-hidden" : "overflow-visible",
-        dockHeight,
-      )}
+      className="active-call-dock flex shrink-0 flex-col border-b border-[var(--call-border)] bg-[var(--call-surface-1)] px-5 py-3 text-[var(--call-text-primary)]"
       style={callSurfaceStyle}
       data-testid="active-call-dock"
       aria-label="Active call dock"
@@ -192,18 +193,17 @@ export function ActiveCallDock({
         />
       ) : (
         <>
-        <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase text-[var(--call-text-secondary)]">
-              Voice call
-            </p>
-            <h2 className="truncate text-sm font-normal text-[var(--call-text-primary)]">
+        <div className="call-status-row mb-2.5 flex shrink-0 items-baseline justify-between gap-3">
+          <div className="call-status-left flex min-w-0 items-baseline gap-2">
+            <span className="call-status-kind shrink-0 text-[10px] font-bold uppercase text-[var(--call-text-secondary)]">
+              {callKindLabel}
+            </span>
+            <h2 className="call-status-name truncate text-[13px] font-semibold text-[var(--call-text-primary)]">
               {remoteUsername}
             </h2>
           </div>
-          <div className="flex shrink-0 items-center gap-2 text-xs uppercase text-[var(--call-text-secondary)]">
-            <span data-testid="active-call-dock-status">{callStateLabel}</span>
-            <span>{formatCallTime(seconds)}</span>
+          <div className="call-status-right shrink-0 text-[11px] text-[var(--call-text-secondary)]">
+            <span data-testid="active-call-dock-status">{callStatusRight}</span>
           </div>
         </div>
 
@@ -222,11 +222,11 @@ export function ActiveCallDock({
         )}
 
         <div
-          className="call-surface mx-4 mb-3 flex min-h-[150px] shrink-0 flex-col overflow-hidden rounded-md border border-[var(--call-border)] bg-[var(--call-surface-1)]"
+          className="call-surface flex shrink-0 flex-col gap-3 rounded-[12px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-[14px]"
           data-testid="active-call-dock-surface"
         >
           <div
-            className="flex min-h-[112px] flex-1 items-center justify-center px-3 py-3"
+            className="contents"
             data-testid="active-call-dock-stage"
           >
             <CallGridView
@@ -253,15 +253,15 @@ export function ActiveCallDock({
           )}
 
           <div
-            className="call-controls flex shrink-0 items-center justify-center gap-2 border-t border-[var(--call-border)] bg-[var(--call-surface-2)] px-3 py-2"
+            className="call-controls flex shrink-0 items-center justify-center gap-2.5 border-t border-[var(--call-border)] pt-3"
             data-testid="active-call-dock-controls"
           >
             <button
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-full border border-[var(--call-border)] p-0 transition-colors",
+                "ctrl-btn flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors",
                 isMuted
                   ? "bg-[var(--call-bg-danger)] text-[var(--call-text-danger)]"
-                  : "bg-[var(--call-fill-control)] text-[var(--call-text-primary)] hover:bg-accent",
+                  : "hover:opacity-90",
               )}
               onClick={onMuteToggle}
               aria-label={isMuted ? "Unmute" : "Mute"}
@@ -271,8 +271,8 @@ export function ActiveCallDock({
 
             <button
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-full border border-[var(--call-border)] bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60",
-                isScreenSharing && "bg-accent",
+                "ctrl-btn flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors hover:opacity-90 disabled:pointer-events-none disabled:opacity-60",
+                hasScreenSharePresence && "ctrl-btn--active bg-[var(--call-text-accent)] text-white",
               )}
               onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
               aria-label={
@@ -288,7 +288,7 @@ export function ActiveCallDock({
             </button>
 
             <button
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-transparent bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] transition-colors hover:opacity-90"
+              className="ctrl-btn ctrl-btn--danger flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] transition-colors hover:opacity-90"
               onClick={onHangUp}
               aria-label="Hang Up"
             >
