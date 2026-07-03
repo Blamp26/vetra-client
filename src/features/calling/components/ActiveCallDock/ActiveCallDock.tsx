@@ -136,13 +136,19 @@ export function ActiveCallDock({
   ]);
 
   const focusedShare = screenShares.find((share) => share.id === focusedStreamId && share.stream);
-  const dockHeight = focusedShare ? "h-[min(50vh,420px)]" : "min-h-[240px]";
+  const dockHeight = focusedShare ? "h-[min(56vh,520px)]" : "min-h-[208px]";
   const callSurfaceStyle = {
-    "--call-surface-bg": "var(--surface-1, var(--muted))",
-    "--call-tile-bg": "var(--surface-2, var(--card))",
-    "--call-controls-bg": "var(--surface-2, var(--card))",
+    "--call-surface-0": "var(--surface-0, var(--background))",
+    "--call-surface-1": "var(--surface-1, var(--muted))",
+    "--call-surface-2": "var(--surface-2, var(--card))",
+    "--call-border": "var(--border)",
     "--call-text-primary": "var(--text-primary, var(--foreground))",
-    "--call-text-muted": "var(--text-secondary, var(--muted-foreground))",
+    "--call-text-secondary": "var(--text-secondary, var(--muted-foreground))",
+    "--call-fill-control": "var(--fill-control, var(--background))",
+    "--call-fill-danger": "var(--fill-danger, var(--destructive))",
+    "--call-on-danger": "var(--on-danger, var(--destructive-foreground))",
+    "--call-bg-danger": "var(--bg-danger, var(--error-bg, var(--destructive)))",
+    "--call-text-danger": "var(--text-danger, var(--error-text, var(--destructive)))",
   } as CSSProperties;
 
   const handleWatchStream = (id: string) => {
@@ -161,7 +167,7 @@ export function ActiveCallDock({
   return (
     <section
       className={cn(
-        "flex shrink-0 flex-col border-b border-border bg-[var(--call-surface-bg)] text-[var(--call-text-primary)]",
+        "active-call-dock flex shrink-0 flex-col border-b border-[var(--call-border)] bg-[var(--call-surface-0)] text-[var(--call-text-primary)]",
         focusedShare ? "overflow-hidden" : "overflow-visible",
         dockHeight,
       )}
@@ -186,16 +192,16 @@ export function ActiveCallDock({
         />
       ) : (
         <>
-        <div className="flex shrink-0 items-start justify-between gap-3 px-4 py-2">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-wide text-[var(--call-text-muted)]">
+            <p className="text-[10px] uppercase text-[var(--call-text-secondary)]">
               Voice call
             </p>
             <h2 className="truncate text-sm font-normal text-[var(--call-text-primary)]">
               {remoteUsername}
             </h2>
           </div>
-          <div className="flex items-center gap-2 text-xs uppercase text-[var(--call-text-muted)]">
+          <div className="flex shrink-0 items-center gap-2 text-xs uppercase text-[var(--call-text-secondary)]">
             <span data-testid="active-call-dock-status">{callStateLabel}</span>
             <span>{formatCallTime(seconds)}</span>
           </div>
@@ -216,83 +222,79 @@ export function ActiveCallDock({
         )}
 
         <div
-          className="flex min-h-[120px] shrink-0 items-center justify-center px-4 py-2"
-          data-testid="active-call-dock-stage"
+          className="call-surface mx-4 mb-3 flex min-h-[150px] shrink-0 flex-col overflow-hidden rounded-md border border-[var(--call-border)] bg-[var(--call-surface-1)]"
+          data-testid="active-call-dock-surface"
         >
-          <CallGridView
-            participants={participants}
-            screenShares={screenShares}
-            compactParticipants={compactParticipantCards || hasScreenSharePresence}
-            isScreenShareUpdating={isScreenShareUpdating}
-            onWatchStream={handleWatchStream}
-            onExpandStream={handleExpandStream}
-            onStopScreenShare={onStopScreenShare}
-          />
-        </div>
-
-        {shouldShowDiagnostics && (
           <div
-            className="mx-4 mb-2 hidden shrink-0 rounded-md border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground lg:block"
-            data-testid="webrtc-diagnostics"
+            className="flex min-h-[112px] flex-1 items-center justify-center px-3 py-3"
+            data-testid="active-call-dock-stage"
           >
-            <span className="mr-3 text-foreground">WebRTC Debug</span>
-            <span>connection {diagnostics.connectionState}</span>
-            <span className="ml-3">ice {diagnostics.iceConnectionState}</span>
-            <span className="ml-3">candidate {diagnostics.selectedLocalCandidateType}</span>
+            <CallGridView
+              participants={participants}
+              screenShares={screenShares}
+              compactParticipants={compactParticipantCards || hasScreenSharePresence}
+              isScreenShareUpdating={isScreenShareUpdating}
+              onWatchStream={handleWatchStream}
+              onExpandStream={handleExpandStream}
+              onStopScreenShare={onStopScreenShare}
+            />
           </div>
-        )}
 
-        <div
-          className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-[var(--call-controls-bg)] px-3 py-2"
-          data-testid="active-call-dock-controls"
-        >
-          <button
-            className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-md border border-border transition-colors",
-              isMuted
-                ? "bg-destructive text-destructive-foreground"
-                : "bg-background text-foreground hover:bg-accent",
-            )}
-            onClick={onMuteToggle}
-            aria-label={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-          </button>
+          {shouldShowDiagnostics && (
+            <div
+              className="mx-3 mb-2 hidden shrink-0 rounded-md border border-[var(--call-border)] bg-[var(--call-surface-2)] px-3 py-2 text-[11px] text-[var(--call-text-secondary)] lg:block"
+              data-testid="webrtc-diagnostics"
+            >
+              <span className="mr-3 text-[var(--call-text-primary)]">WebRTC Debug</span>
+              <span>connection {diagnostics.connectionState}</span>
+              <span className="ml-3">ice {diagnostics.iceConnectionState}</span>
+              <span className="ml-3">candidate {diagnostics.selectedLocalCandidateType}</span>
+            </div>
+          )}
 
-          <button
-            className={cn(
-              "inline-flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm transition-colors disabled:pointer-events-none disabled:opacity-60",
-              isScreenSharing
-                ? "bg-accent text-foreground"
-                : "bg-background text-foreground hover:bg-accent",
-            )}
-            onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
-            aria-label={
-              isScreenShareUpdating
-                ? "Updating screen share"
-                : isScreenSharing
-                  ? "Stop sharing"
-                  : "Share screen"
-            }
-            disabled={isScreenShareUpdating}
+          <div
+            className="call-controls flex shrink-0 items-center justify-center gap-2 border-t border-[var(--call-border)] bg-[var(--call-surface-2)] px-3 py-2"
+            data-testid="active-call-dock-controls"
           >
-            {isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}
-            <span>
-              {isScreenShareUpdating
-                ? "Updating..."
-                : isScreenSharing
-                  ? "Stop sharing"
-                  : "Share screen"}
-            </span>
-          </button>
+            <button
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full border border-[var(--call-border)] p-0 transition-colors",
+                isMuted
+                  ? "bg-[var(--call-bg-danger)] text-[var(--call-text-danger)]"
+                  : "bg-[var(--call-fill-control)] text-[var(--call-text-primary)] hover:bg-accent",
+              )}
+              onClick={onMuteToggle}
+              aria-label={isMuted ? "Unmute" : "Mute"}
+            >
+              {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </button>
 
-          <button
-            className="flex h-10 w-10 items-center justify-center rounded-md border border-destructive/40 bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90"
-            onClick={onHangUp}
-            aria-label="Hang Up"
-          >
-            <PhoneOff className="h-5 w-5" />
-          </button>
+            <button
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full border border-[var(--call-border)] bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60",
+                isScreenSharing && "bg-accent",
+              )}
+              onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
+              aria-label={
+                isScreenShareUpdating
+                  ? "Updating screen share"
+                  : isScreenSharing
+                    ? "Stop sharing"
+                    : "Share screen"
+              }
+              disabled={isScreenShareUpdating}
+            >
+              {isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}
+            </button>
+
+            <button
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-transparent bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] transition-colors hover:opacity-90"
+              onClick={onHangUp}
+              aria-label="Hang Up"
+            >
+              <PhoneOff className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         </>
       )}

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Maximize2,
-  MonitorUp,
   MonitorX,
+  ScreenShare,
   Volume2,
 } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
@@ -64,7 +64,7 @@ export function ParticipantTile({
   return (
     <div
       className={cn(
-        "relative flex min-h-0 items-center justify-center overflow-hidden rounded-md bg-[var(--call-tile-bg)]",
+        "participant-tile participant-tile--avatar relative flex min-h-0 items-center justify-center overflow-hidden rounded-md bg-[var(--call-surface-2)]",
         className,
       )}
       data-testid={testId}
@@ -73,13 +73,13 @@ export function ParticipantTile({
       <div
         className={cn(
           "flex items-center justify-center rounded-full bg-primary text-primary-foreground",
-          compact ? "h-12 w-12 text-lg" : "h-14 w-14 text-xl",
+          compact ? "h-11 w-11 text-base" : "h-12 w-12 text-lg",
         )}
       >
         {name.charAt(0).toUpperCase()}
       </div>
       <p
-        className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-sm bg-black/55 px-2 py-1 text-xs leading-none text-white"
+        className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)] truncate rounded-full bg-black/55 px-2 py-1 text-[11px] leading-none text-white"
         data-testid="participant-avatar-name"
       >
         {name}
@@ -137,7 +137,8 @@ function ScreenShareParticipantTile({
   return (
     <div
       className={cn(
-        "relative min-h-0 overflow-hidden rounded-md bg-zinc-950 text-white",
+        "participant-tile participant-tile--screen relative min-h-0 overflow-hidden rounded-md bg-zinc-950 text-white",
+        isWatchingInline && "participant-tile--watching",
         className,
       )}
       data-testid={testId}
@@ -165,7 +166,7 @@ function ScreenShareParticipantTile({
             </div>
           )}
           <span
-            className="absolute left-2 top-2 rounded-sm bg-red-600 px-2 py-1 text-[10px] leading-none text-white"
+            className="absolute left-2 top-2 rounded-full bg-red-600 px-2 py-1 text-[10px] leading-none text-white"
             data-testid="participant-screen-live-badge"
           >
             720p · LIVE
@@ -176,7 +177,7 @@ function ScreenShareParticipantTile({
           />
           <button
             type="button"
-            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-md bg-black/70 text-white hover:bg-black"
+            className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border-0 bg-black/70 p-0 text-white hover:bg-black"
             onClick={onExpand}
             aria-label={`Expand ${name}'s screen`}
           >
@@ -184,18 +185,18 @@ function ScreenShareParticipantTile({
           </button>
         </>
       ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950 text-zinc-300">
-          <MonitorUp className="h-8 w-8 text-zinc-500" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-zinc-950 text-zinc-300">
+          <ScreenShare className="h-6 w-6 text-zinc-500" />
           {stream ? (
             <button
               type="button"
-              className="rounded-md bg-white px-4 py-2 text-sm text-zinc-950 hover:bg-zinc-200"
+              className="rounded-full border-0 bg-white px-4 py-1.5 text-xs text-zinc-950 hover:bg-zinc-200"
               onClick={onWatch}
             >
               Watch stream
             </button>
           ) : (
-            <span className="text-sm text-zinc-500">Waiting for shared screen...</span>
+            <span className="px-3 text-center text-xs text-zinc-500">Waiting for shared screen...</span>
           )}
         </div>
       )}
@@ -204,8 +205,8 @@ function ScreenShareParticipantTile({
         <button
           type="button"
           className={cn(
-            "absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-md bg-black/70 text-white hover:bg-black disabled:opacity-60",
-            isWatchingInline && "right-12",
+            "absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border-0 bg-black/70 p-0 text-white hover:bg-black disabled:opacity-60",
+            isWatchingInline && "right-11",
           )}
           onClick={onStopScreenShare}
           disabled={isScreenShareUpdating}
@@ -215,8 +216,8 @@ function ScreenShareParticipantTile({
         </button>
       )}
 
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 to-transparent px-3 pb-2 pt-8">
-        <p className="truncate text-sm text-white" data-testid="participant-screen-name">
+      <div className="pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-1rem)] rounded-full bg-black/55 px-2 py-1">
+        <p className="truncate text-[11px] leading-none text-white" data-testid="participant-screen-name">
           {name}
         </p>
       </div>
