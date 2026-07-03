@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Vetra — ActiveCallDock layout reference</title>
+<style>
+  :root {
+    /* requested Vetra theme tokens */
+    --surface-0: #ececea;
+    --surface-1: #f6f5f3;
+    --surface-2: #ffffff;
+    --border: rgba(20, 20, 18, 0.12);
+    --text-primary: #1c1c1a;
+    --text-secondary: #6f6e69;
+    --fill-control: #dedcd6;
+    --fill-danger: #e5484d;
+    --on-danger: #ffffff;
+    --bg-danger: #ffe2e2;
+    --text-danger: #c22b2b;
+
+    /* two additions not in the requested list, needed only for the
+       Telegram-style own/incoming message bubbles — not part of the
+       call dock itself */
+    --bg-accent: #e7edfd;
+    --text-accent: #2952cc;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 40px;
+    background: #d8d6d0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+    align-items: center;
+  }
+
+  .page-title {
+    align-self: flex-start;
+    font-size: 13px;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+  }
+
+  .demo-label {
+    align-self: flex-start;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+
+  .demo-block { display: flex; flex-direction: column; }
+
+  /* ===== App shell ===== */
+
+  .app-shell {
+    width: 1360px;
+    max-width: 100%;
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface-2);
+  }
+
+  .sidebar {
+    width: 455px;
+    flex-shrink: 0;
+    background: var(--surface-1);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px 12px;
+  }
+  .sidebar-header h1 { font-size: 18px; font-weight: 600; margin: 0; }
+  .sidebar-header button {
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+
+  .sidebar-search {
+    margin: 0 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  .sidebar-section-label {
+    padding: 0 20px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+  }
+
+  .conv-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+  }
+  .conv-item.active { background: var(--surface-2); }
+  .conv-avatar {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--text-primary); color: var(--surface-2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; flex-shrink: 0;
+  }
+  .conv-meta { flex: 1; min-width: 0; }
+  .conv-name { font-size: 13px; font-weight: 500; }
+  .conv-sub { font-size: 12px; color: var(--text-secondary); }
+  .conv-date { font-size: 11px; color: var(--text-secondary); }
+
+  .sidebar-spacer { flex: 1; }
+
+  .sidebar-callbar {
+    margin: 10px 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .sidebar-callbar strong { display: block; font-size: 12px; color: var(--text-primary); font-weight: 600; }
+  .sidebar-callbar .hangup-mini {
+    width: 26px; height: 26px; border-radius: 6px;
+    background: var(--fill-danger); color: var(--on-danger);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .sidebar-profile {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .sidebar-profile .conv-avatar { background: var(--fill-control); color: var(--text-primary); }
+  .sidebar-profile .profile-meta { flex: 1; }
+  .sidebar-profile .profile-name { font-size: 12px; font-weight: 600; }
+  .sidebar-profile .profile-status { font-size: 11px; color: var(--text-secondary); }
+  .sidebar-profile .profile-actions { display: flex; gap: 6px; }
+  .icon-btn-sm {
+    width: 26px; height: 26px; border-radius: 6px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; color: var(--text-secondary);
+  }
+
+  /* ===== Main column ===== */
+
+  .main-column {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-2);
+  }
+
+  .chat-header {
+    height: 56px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .chat-header-identity { display: flex; align-items: center; gap: 10px; }
+  .chat-header-identity .conv-avatar { width: 32px; height: 32px; border-radius: 8px; font-size: 12px; }
+  .chat-header-name { font-size: 14px; font-weight: 600; }
+  .chat-header-status { font-size: 12px; color: #1a9e5c; }
+  .chat-header-actions { display: flex; align-items: center; gap: 8px; }
+  .chat-header-actions .icon-btn-sm { width: 32px; height: 32px; }
+
+  /* ===== ActiveCallDock ===== */
+
+  .active-call-dock {
+    flex-shrink: 0;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+  }
+
+  .call-status-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .call-status-left { display: flex; align-items: baseline; gap: 8px; }
+  .call-status-kind {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+    color: var(--text-secondary); text-transform: uppercase;
+  }
+  .call-status-name { font-size: 13px; font-weight: 600; }
+  .call-status-right { font-size: 11px; color: var(--text-secondary); letter-spacing: 0.02em; }
+
+  /* The call-surface is the one bounded card that owns both the tile
+     grid AND the controls, so they read as one panel instead of two
+     detached pieces. */
+  .call-surface {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .call-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: center;
+    gap: 10px;
+  }
+
+  .participant-tile {
+    position: relative;
+    width: 150px;
+    height: 104px;
+    border-radius: 10px;
+    background: var(--surface-1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .participant-tile--avatar { background: var(--surface-1); }
+  .avatar-circle {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: var(--fill-control); color: var(--text-primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 600;
+  }
+
+  .tile-label {
+    position: absolute; bottom: 6px; left: 6px;
+    background: rgba(0, 0, 0, 0.55); color: #fff;
+    font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    display: flex; align-items: center; gap: 4px;
+    max-width: calc(100% - 12px);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* Screen-share content is intentionally dark — this is the video
+     framebuffer, not app chrome. */
+  .participant-tile--screen { background: #111214; }
+  .participant-tile--screen .tile-label svg { color: #fff; }
+
+  .watch-btn {
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #fff;
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .participant-tile--watching { background: #0d0e10; }
+  .tile-preview-lines path { stroke: #3b3d43; }
+  .badge-live {
+    position: absolute; top: 6px; left: 6px;
+    background: var(--fill-danger); color: var(--on-danger);
+    font-size: 9px; font-weight: 700; letter-spacing: 0.02em;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .tile-speaker {
+    position: absolute; bottom: 6px; right: 6px; color: #fff; opacity: 0.9;
+  }
+  .tile-expand {
+    position: absolute; top: 6px; right: 6px;
+    width: 20px; height: 20px; border-radius: 5px;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+  }
+
+  .call-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .ctrl-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--fill-control);
+    border: none;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-primary);
+  }
+  .ctrl-btn--danger { background: var(--fill-danger); color: var(--on-danger); }
+  .ctrl-btn--active { background: var(--text-accent); color: #fff; }
+
+  /* ===== FocusStreamView ===== */
+
+  .focus-stream-view {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .focus-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .focus-header .title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .focus-header .meta { font-size: 11px; color: var(--text-secondary); }
+  .focus-header .spacer { flex: 1; }
+  .focus-close {
+    width: 26px; height: 26px; border-radius: 6px;
+    background: var(--surface-1); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-secondary);
+  }
+
+  .focus-stage {
+    position: relative;
+    height: 216px;
+    max-height: 40vh;
+    border-radius: 10px;
+    background: #0b0c0d;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .focus-stage svg.tile-preview-lines path { stroke: #3a3c42; }
+
+  .focus-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+  }
+  .focus-strip-tile {
+    position: relative;
+    flex-shrink: 0;
+    width: 68px; height: 46px;
+    border-radius: 6px;
+    background: var(--surface-1);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .focus-strip-tile.sharing { background: #111214; border: 1.5px solid #d4785a; }
+  .focus-strip-tile .avatar-circle { width: 24px; height: 24px; font-size: 10px; }
+  .focus-strip-tile .strip-label {
+    position: absolute; bottom: 3px; left: 3px;
+    font-size: 8px; color: #fff; background: rgba(0, 0, 0, 0.5);
+    padding: 1px 4px; border-radius: 3px;
+  }
+
+  .focus-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface-1);
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+  .focus-controls .cluster { display: flex; align-items: center; gap: 10px; }
+  .focus-controls .ctrl-btn { width: 34px; height: 34px; }
+  .focus-controls .icon-only {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: transparent; border: none; color: var(--text-secondary);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ===== Messages + composer ===== */
+
+  .message-list {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .message-date {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin: 4px 0 10px;
+  }
+  .msg {
+    max-width: 55%;
+    padding: 8px 12px 6px;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .msg .msg-time { font-size: 10px; color: var(--text-secondary); margin-top: 2px; display: block; }
+  .msg--in { align-self: flex-start; background: var(--surface-1); color: var(--text-primary); border-bottom-left-radius: 4px; }
+  .msg--out {
+    align-self: flex-end; background: var(--bg-accent); color: var(--text-accent);
+    border-bottom-right-radius: 4px;
+  }
+  .msg--out .msg-time { color: var(--text-accent); opacity: 0.7; }
+
+  .composer {
+    flex-shrink: 0;
+    height: 56px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+  }
+  .composer .icon-btn-sm { width: 32px; height: 32px; }
+  .composer-input {
+    flex: 1; height: 34px; border-radius: 8px;
+    background: var(--surface-1); border: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 12px;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .composer-send {
+    font-size: 12px; font-weight: 600; color: var(--text-secondary);
+    background: var(--surface-1); border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 8px;
+  }
+
+  svg.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v3"/><path d="M8 21h8"/></symbol>
+    <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a7.97 7.97 0 0 0 0-6M4.6 9a7.97 7.97 0 0 0 0 6M15 19.4a7.97 7.97 0 0 1-6 0M9 4.6a7.97 7.97 0 0 1 6 0"/></symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 21v-4"/><path d="M9.5 10.5 12 8l2.5 2.5"/><path d="M12 8v4"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M22 8.5 16 12l6 3.5v-7z"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+  </defs>
+</svg>
+
+<div class="page-title">Vetra — ActiveCallDock layout reference · 4 states</div>
+
+<!-- ============ Reusable fragments (duplicated per state, static file) ============ -->
+
+<!-- STATE 1: audio-only grid -->
+<div class="demo-block">
+  <div class="demo-label">1 · Audio-only grid</div>
+  <div class="app-shell" style="height:620px;">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>Messages</h1><button>New</button></div>
+      <div class="sidebar-search"><svg class="icon"><use href="#i-search"/></svg>Search…</div>
+      <div class="sidebar-section-label">SERVERS</div>
+      <div class="conv-item"><div class="conv-avatar">S</div><div class="conv-meta"><div class="conv-name">servertest</div></div></div>
+      <div class="conv-item active"><div class="conv-avatar">U</div><div class="conv-meta"><div class="conv-name">UserTest</div><div class="conv-sub">2</div></div><div class="conv-date">Jul 1</div></div>
+      <div class="conv-item"><div class="conv-avatar">T</div><div class="conv-meta"><div class="conv-name">test2</div><div class="conv-sub">1</div></div><div class="conv-date">Jul 1</div></div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-callbar"><div><strong>Connected</strong>UserTest · 00:02</div><div class="hangup-mini"><svg class="icon" style="width:14px;height:14px;stroke:#fff;"><use href="#i-phone"/></svg></div></div>
+      <div class="sidebar-profile">
+        <div class="conv-avatar">B</div>
+        <div class="profile-meta"><div class="profile-name">Blamp26</div><div class="profile-status">Online</div></div>
+        <div class="profile-actions"><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-mic"/></svg></div><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-headphones"/></svg></div><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-settings"/></svg></div></div>
+      </div>
+    </div>
+    <div class="main-column">
+      <div class="chat-header">
+        <div class="chat-header-identity"><div class="conv-avatar">U</div><div><div class="chat-header-name">UserTest</div><div class="chat-header-status">Online</div></div></div>
+        <div class="chat-header-actions"><div class="icon-btn-sm"><svg class="icon"><use href="#i-phone"/></svg></div></div>
+      </div>
+
+      <div class="active-call-dock">
+        <div class="call-status-row">
+          <div class="call-status-left"><span class="call-status-kind">Voice call</span><span class="call-status-name">UserTest</span></div>
+          <div class="call-status-right">Connected · 00:02</div>
+        </div>
+        <div class="call-surface">
+          <div class="call-grid">
+            <div class="participant-tile participant-tile--avatar"><div class="avatar-circle">Y</div><div class="tile-label">You</div></div>
+            <div class="participant-tile participant-tile--avatar"><div class="avatar-circle">U</div><div class="tile-label">UserTest</div></div>
+          </div>
+          <div class="call-controls">
+            <div class="ctrl-btn"><svg class="icon"><use href="#i-mic"/></svg></div>
+            <div class="ctrl-btn"><svg class="icon"><use href="#i-screen"/></svg></div>
+            <div class="ctrl-btn ctrl-btn--danger" style="transform:rotate(135deg);"><svg class="icon" style="stroke:#fff;transform:rotate(-135deg);"><use href="#i-phone"/></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="message-list">
+        <div class="message-date">7/1/2026</div>
+        <div class="msg msg--in">123<span class="msg-time">13:13</span></div>
+        <div class="msg msg--out">1<span class="msg-time">13:13</span></div>
+      </div>
+      <div class="composer">
+        <div class="icon-btn-sm"><svg class="icon"><use href="#i-file"/></svg></div>
+        <div class="composer-input">Message…</div>
+        <div class="composer-send">Send</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATE 2: screen share idle grid -->
+<div class="demo-block">
+  <div class="demo-label">2 · Screen share — idle tile</div>
+  <div class="app-shell" style="height:640px;">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>Messages</h1><button>New</button></div>
+      <div class="sidebar-search"><svg class="icon"><use href="#i-search"/></svg>Search…</div>
+      <div class="sidebar-section-label">SERVERS</div>
+      <div class="conv-item"><div class="conv-avatar">S</div><div class="conv-meta"><div class="conv-name">servertest</div></div></div>
+      <div class="conv-item active"><div class="conv-avatar">U</div><div class="conv-meta"><div class="conv-name">UserTest</div><div class="conv-sub">2</div></div><div class="conv-date">Jul 1</div></div>
+      <div class="conv-item"><div class="conv-avatar">T</div><div class="conv-meta"><div class="conv-name">test2</div><div class="conv-sub">1</div></div><div class="conv-date">Jul 1</div></div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-callbar"><div><strong>Screen sharing</strong>UserTest · 00:17</div><div class="hangup-mini"><svg class="icon" style="width:14px;height:14px;stroke:#fff;"><use href="#i-phone"/></svg></div></div>
+      <div class="sidebar-profile">
+        <div class="conv-avatar">B</div>
+        <div class="profile-meta"><div class="profile-name">Blamp26</div><div class="profile-status">Online</div></div>
+        <div class="profile-actions"><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-mic"/></svg></div><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-headphones"/></svg></div><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-settings"/></svg></div></div>
+      </div>
+    </div>
+    <div class="main-column">
+      <div class="chat-header">
+        <div class="chat-header-identity"><div class="conv-avatar">U</div><div><div class="chat-header-name">UserTest</div><div class="chat-header-status">Online</div></div></div>
+        <div class="chat-header-actions"><div class="icon-btn-sm"><svg class="icon"><use href="#i-phone"/></svg></div></div>
+      </div>
+
+      <div class="active-call-dock">
+        <div class="call-status-row">
+          <div class="call-status-left"><span class="call-status-kind">Screen sharing</span><span class="call-status-name">UserTest</span></div>
+          <div class="call-status-right">00:17</div>
+        </div>
+        <div class="call-surface">
+          <div class="call-grid">
+            <div class="participant-tile participant-tile--avatar"><div class="avatar-circle">Y</div><div class="tile-label">You</div></div>
+            <div class="participant-tile participant-tile--avatar"><div class="avatar-circle">U</div><div class="tile-label">UserTest</div></div>
+            <div class="participant-tile participant-tile--screen">
+              <button class="watch-btn"><svg class="icon" style="width:13px;height:13px;stroke:#fff;"><use href="#i-play"/></svg>Watch stream</button>
+              <div class="tile-label"><svg class="icon" style="width:10px;height:10px;stroke:#fff;"><use href="#i-screen"/></svg>UserTest</div>
+            </div>
+          </div>
+          <div class="call-controls">
+            <div class="ctrl-btn"><svg class="icon"><use href="#i-mic"/></svg></div>
+            <div class="ctrl-btn ctrl-btn--active"><svg class="icon" style="stroke:#fff;"><use href="#i-screen"/></svg></div>
+            <div class="ctrl-btn ctrl-btn--danger"><svg class="icon" style="stroke:#fff;transform:rotate(135deg);"><use href="#i-phone"/></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="message-list">
+        <div class="message-date">7/1/2026</div>
+        <div class="msg msg--in">123<span class="msg-time">13:13</span></div>
+        <div class="msg msg--out">1<span class="msg-time">13:13</span></div>
+      </div>
+      <div class="composer">
+        <div class="icon-btn-sm"><svg class="icon"><use href="#i-file"/></svg></div>
+        <div class="composer-input">Message…</div>
+        <div class="composer-send">Send</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATE 3: screen share watching inline -->
+<div class="demo-block">
+  <div class="demo-label">3 · Screen share — watching inline</div>
+  <div class="app-shell" style="height:640px;">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>Messages</h1><button>New</button></div>
+      <div class="sidebar-search"><svg class="icon"><use href="#i-search"/></svg>Search…</div>
+      <div class="sidebar-section-label">SERVERS</div>
+      <div class="conv-item"><div class="conv-avatar">S</div><div class="conv-meta"><div class="conv-name">servertest</div></div></div>
+      <div class="conv-item active"><div class="conv-avatar">U</div><div class="conv-meta"><div class="conv-name">UserTest</div><div class="conv-sub">2</div></div><div class="conv-date">Jul 1</div></div>
+      <div class="conv-item"><div class="conv-avatar">T</div><div class="conv-meta"><div class="conv-name">test2</div><div class="conv-sub">1</div></div><div class="conv-date">Jul 1</div></div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-callbar"><div><strong>Screen sharing</strong>UserTest · 00:22</div><div class="hangup-mini"><svg class="icon" style="width:14px;height:14px;stroke:#fff;"><use href="#i-phone"/></svg></div></div>
+      <div class="sidebar-profile">
+        <div class="conv-avatar">B</div>
+        <div class="profile-meta"><div class="profile-name">Blamp26</div><div class="profile-status">Online</div></div>
+        <div class="profile-actions"><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-mic"/></svg></div><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-headphones"/></svg></div><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-settings"/></svg></div></div>
+      </div>
+    </div>
+    <div class="main-column">
+      <div class="chat-header">
+        <div class="chat-header-identity"><div class="conv-avatar">U</div><div><div class="chat-header-name">UserTest</div><div class="chat-header-status">Online</div></div></div>
+        <div class="chat-header-actions"><div class="icon-btn-sm"><svg class="icon"><use href="#i-phone"/></svg></div></div>
+      </div>
+
+      <div class="active-call-dock">
+        <div class="call-status-row">
+          <div class="call-status-left"><span class="call-status-kind">Screen sharing</span><span class="call-status-name">UserTest</span></div>
+          <div class="call-status-right">00:22</div>
+        </div>
+        <div class="call-surface">
+          <div class="call-grid">
+            <div class="participant-tile participant-tile--avatar"><div class="avatar-circle">Y</div><div class="tile-label">You</div></div>
+            <div class="participant-tile participant-tile--avatar"><div class="avatar-circle">U</div><div class="tile-label">UserTest</div></div>
+            <div class="participant-tile participant-tile--screen participant-tile--watching">
+              <svg class="tile-preview-lines" viewBox="0 0 150 104" width="150" height="104" fill="none" stroke-width="6" stroke-linecap="round">
+                <path d="M20 70 Q20 30 55 30 Q90 30 90 55 Q90 80 60 80 Q35 80 35 60"/>
+              </svg>
+              <div class="badge-live">720p · LIVE</div>
+              <div class="tile-expand"><svg class="icon" style="width:12px;height:12px;stroke:#fff;"><use href="#i-expand"/></svg></div>
+              <div class="tile-speaker"><svg class="icon" style="width:13px;height:13px;stroke:#fff;"><use href="#i-volume"/></svg></div>
+              <div class="tile-label"><svg class="icon" style="width:10px;height:10px;stroke:#fff;"><use href="#i-screen"/></svg>UserTest</div>
+            </div>
+          </div>
+          <div class="call-controls">
+            <div class="ctrl-btn"><svg class="icon"><use href="#i-mic"/></svg></div>
+            <div class="ctrl-btn ctrl-btn--active"><svg class="icon" style="stroke:#fff;"><use href="#i-screen"/></svg></div>
+            <div class="ctrl-btn ctrl-btn--danger"><svg class="icon" style="stroke:#fff;transform:rotate(135deg);"><use href="#i-phone"/></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="message-list">
+        <div class="message-date">7/1/2026</div>
+        <div class="msg msg--in">123<span class="msg-time">13:13</span></div>
+        <div class="msg msg--out">1<span class="msg-time">13:13</span></div>
+      </div>
+      <div class="composer">
+        <div class="icon-btn-sm"><svg class="icon"><use href="#i-file"/></svg></div>
+        <div class="composer-input">Message…</div>
+        <div class="composer-send">Send</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATE 4: focus view -->
+<div class="demo-block">
+  <div class="demo-label">4 · Focus view (bounded)</div>
+  <div class="app-shell" style="height:840px;">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>Messages</h1><button>New</button></div>
+      <div class="sidebar-search"><svg class="icon"><use href="#i-search"/></svg>Search…</div>
+      <div class="sidebar-section-label">SERVERS</div>
+      <div class="conv-item"><div class="conv-avatar">S</div><div class="conv-meta"><div class="conv-name">servertest</div></div></div>
+      <div class="conv-item active"><div class="conv-avatar">U</div><div class="conv-meta"><div class="conv-name">UserTest</div><div class="conv-sub">2</div></div><div class="conv-date">Jul 1</div></div>
+      <div class="conv-item"><div class="conv-avatar">T</div><div class="conv-meta"><div class="conv-name">test2</div><div class="conv-sub">1</div></div><div class="conv-date">Jul 1</div></div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-callbar"><div><strong>Screen sharing</strong>UserTest · 00:29</div><div class="hangup-mini"><svg class="icon" style="width:14px;height:14px;stroke:#fff;"><use href="#i-phone"/></svg></div></div>
+      <div class="sidebar-profile">
+        <div class="conv-avatar">B</div>
+        <div class="profile-meta"><div class="profile-name">Blamp26</div><div class="profile-status">Online</div></div>
+        <div class="profile-actions"><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-mic"/></svg></div><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-headphones"/></svg></div><div class="icon-btn-sm"><svg class="icon" style="width:14px;height:14px;"><use href="#i-settings"/></svg></div></div>
+      </div>
+    </div>
+    <div class="main-column">
+      <div class="chat-header">
+        <div class="chat-header-identity"><div class="conv-avatar">U</div><div><div class="chat-header-name">UserTest</div><div class="chat-header-status">Online</div></div></div>
+        <div class="chat-header-actions"><div class="icon-btn-sm"><svg class="icon"><use href="#i-phone"/></svg></div></div>
+      </div>
+
+      <div class="active-call-dock">
+        <div class="focus-stream-view">
+          <div class="focus-header">
+            <svg class="icon" style="width:14px;height:14px;color:var(--text-secondary);"><use href="#i-screen"/></svg>
+            <span class="title">UserTest's screen</span>
+            <span class="badge-live" style="position:static;">LIVE</span>
+            <span class="meta">720p</span>
+            <div class="spacer"></div>
+            <div class="focus-close"><svg class="icon" style="width:13px;height:13px;"><use href="#i-close"/></svg></div>
+          </div>
+
+          <div class="focus-stage">
+            <svg class="tile-preview-lines" viewBox="0 0 300 200" width="60%" height="80%" fill="none" stroke-width="10" stroke-linecap="round">
+              <path d="M40 150 Q40 60 110 60 Q180 60 180 110 Q180 160 120 160 Q70 160 70 120"/>
+              <path d="M200 40 Q260 40 260 90 Q260 130 220 130" stroke-width="7" opacity="0.6"/>
+            </svg>
+          </div>
+
+          <div class="focus-strip">
+            <div class="focus-strip-tile"><div class="avatar-circle">Y</div><div class="strip-label">You</div></div>
+            <div class="focus-strip-tile sharing"><div class="strip-label">UserTest</div></div>
+          </div>
+
+          <div class="focus-controls">
+            <div class="cluster">
+              <div class="ctrl-btn"><svg class="icon"><use href="#i-mic"/></svg></div>
+              <div class="ctrl-btn ctrl-btn--active"><svg class="icon" style="stroke:#fff;"><use href="#i-screen"/></svg></div>
+              <div class="ctrl-btn ctrl-btn--danger"><svg class="icon" style="stroke:#fff;transform:rotate(135deg);"><use href="#i-phone"/></svg></div>
+            </div>
+            <div class="cluster">
+              <div class="icon-only"><svg class="icon"><use href="#i-volume"/></svg></div>
+              <div class="icon-only"><svg class="icon"><use href="#i-expand"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="message-list">
+        <div class="message-date">7/1/2026</div>
+        <div class="msg msg--in">123<span class="msg-time">13:13</span></div>
+        <div class="msg msg--out">1<span class="msg-time">13:13</span></div>
+        <div class="msg msg--in">can you see it?<span class="msg-time">13:38</span></div>
+      </div>
+      <div class="composer">
+        <div class="icon-btn-sm"><svg class="icon"><use href="#i-file"/></svg></div>
+        <div class="composer-input">Message…</div>
+        <div class="composer-send">Send</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
