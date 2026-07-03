@@ -202,7 +202,7 @@ function ScreenShareParticipantTile({
         </div>
       )}
 
-      {isLocalSharer && onStopScreenShare && (
+      {isWatchingInline && isLocalSharer && onStopScreenShare && (
         <button
           type="button"
           className={cn(

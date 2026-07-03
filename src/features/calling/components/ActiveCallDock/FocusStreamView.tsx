@@ -63,7 +63,7 @@ export function FocusStreamView({
 
   return (
     <div
-      className="focus-stream-view flex flex-col gap-2.5 rounded-[12px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-3 text-[var(--call-text-primary)]"
+      className="focus-stream-view mx-auto flex w-full max-w-[1040px] flex-col gap-2.5 rounded-[12px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-3 text-[var(--call-text-primary)]"
       data-testid="focus-stream-view"
     >
       <div className="focus-header flex shrink-0 items-center gap-2">
