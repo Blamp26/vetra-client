@@ -400,7 +400,7 @@ describe("ChatWindow presence rendering", () => {
     ).toBeTruthy();
   });
 
-  it("keeps messages and composer visible below compact screen-share call presence", async () => {
+  it("keeps messages and composer visible below large screen-share call presence", async () => {
     const state = makeState();
     useAppStoreMock.mockImplementation(
       (selector: (value: ReturnType<typeof makeState>) => unknown) =>
@@ -438,7 +438,7 @@ describe("ChatWindow presence rendering", () => {
     const dock = screen.getByTestId("active-call-dock");
     const messageRegion = screen.getByTestId("message-list-region");
 
-    expect(dock).toHaveClass("active-call-dock", "px-5", "py-3");
+    expect(dock).toHaveClass("active-call-dock", "h-[clamp(300px,48vh,523px)]");
     expect(screen.getByTestId("active-call-dock-surface")).toHaveClass("call-surface");
     expect(screen.getByTestId("call-grid-view")).toBeInTheDocument();
     expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute(

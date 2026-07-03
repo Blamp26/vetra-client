@@ -171,7 +171,7 @@ export function ActiveCallDock({
 
   return (
     <section
-      className="active-call-dock flex shrink-0 flex-col border-b border-[var(--call-border)] bg-[var(--call-surface-1)] px-5 py-3 text-[var(--call-text-primary)]"
+      className="active-call-dock flex h-[clamp(300px,48vh,523px)] shrink-0 flex-col border-b border-[var(--call-border)] bg-[var(--call-surface-1)] px-[clamp(16px,3.2vw,50px)] py-[clamp(10px,2.8vh,31px)] text-[var(--call-text-primary)]"
       style={callSurfaceStyle}
       data-testid="active-call-dock"
       aria-label="Active call dock"
@@ -192,8 +192,8 @@ export function ActiveCallDock({
           onHangUp={onHangUp}
         />
       ) : (
-        <div className="call-dock-inner mx-auto w-full max-w-[980px]" data-testid="call-dock-inner">
-          <div className="call-status-row mb-2.5 flex shrink-0 items-baseline justify-between gap-3">
+        <div className="call-dock-inner flex h-full w-full min-w-0 flex-col" data-testid="call-dock-inner">
+          <div className="call-status-row mb-2 flex shrink-0 items-baseline justify-between gap-3">
             <div className="call-status-left flex min-w-0 items-baseline gap-2">
               <span className="call-status-kind shrink-0 text-[10px] font-bold uppercase text-[var(--call-text-secondary)]">
                 {callKindLabel}
@@ -222,11 +222,11 @@ export function ActiveCallDock({
           )}
 
           <div
-            className="call-surface flex shrink-0 flex-col gap-3 rounded-[12px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-[14px]"
+            className="call-surface flex min-h-0 flex-1 flex-col justify-between gap-[clamp(14px,2.8vh,31px)] bg-[var(--call-surface-1)]"
             data-testid="active-call-dock-surface"
           >
             <div
-              className="contents"
+              className="active-call-stage flex min-h-0 flex-1 items-center justify-center"
               data-testid="active-call-dock-stage"
             >
               <CallGridView
@@ -253,7 +253,7 @@ export function ActiveCallDock({
             )}
 
             <div
-              className="call-controls flex shrink-0 items-center justify-center gap-2.5 border-t border-[var(--call-border)] pt-3"
+              className="call-controls flex h-[50px] shrink-0 items-center justify-center gap-[clamp(16px,2.2vw,42px)]"
               data-testid="active-call-dock-controls"
             >
               <button

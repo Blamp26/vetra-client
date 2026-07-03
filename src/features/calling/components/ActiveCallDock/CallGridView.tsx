@@ -35,27 +35,21 @@ export function CallGridView({
   onStopScreenShare,
 }: CallGridViewProps) {
   const tileCount = participants.length + screenShares.length;
-  const tileSizeClass = getTileSizeClass(tileCount);
+  const hasPrimaryScreenShare = screenShares.some((share) => share.state === "watchingInline");
+  const participantTileSizeClass = hasPrimaryScreenShare
+    ? "h-[clamp(96px,18vh,180px)] min-w-[180px] flex-[1_1_180px] max-w-[260px]"
+    : getTileSizeClass(tileCount);
+  const screenShareTileSizeClass = hasPrimaryScreenShare
+    ? "h-[clamp(220px,34vh,360px)] w-full max-w-[920px] flex-[1_1_100%]"
+    : getTileSizeClass(tileCount);
 
   return (
     <div
-      className="call-grid flex flex-wrap content-center justify-center gap-[10px]"
+      className="call-grid flex h-full w-full flex-wrap content-center items-center justify-center gap-[clamp(20px,3vw,50px)]"
       data-testid="call-grid-view"
       data-tile-count={tileCount}
+      data-layout={hasPrimaryScreenShare ? "screen-share-stage" : "tiles"}
     >
-      {participants.map((participant) => (
-        <ParticipantTile
-          key={participant.id}
-          name={participant.name}
-          label={participant.label}
-          variant="avatar"
-          isMuted={participant.isMuted}
-          compact={compactParticipants}
-          className={tileSizeClass}
-          data-testid="active-call-participant-tile"
-        />
-      ))}
-
       {screenShares.map((share) => (
         <ParticipantTile
           key={share.id}
@@ -69,8 +63,21 @@ export function CallGridView({
           onExpand={() => onExpandStream(share.id)}
           onStopScreenShare={share.isLocalSharer ? onStopScreenShare : undefined}
           isScreenShareUpdating={isScreenShareUpdating}
-          className={tileSizeClass}
+          className={screenShareTileSizeClass}
           data-testid="active-call-screen-share-tile"
+        />
+      ))}
+
+      {participants.map((participant) => (
+        <ParticipantTile
+          key={participant.id}
+          name={participant.name}
+          label={participant.label}
+          variant="avatar"
+          isMuted={participant.isMuted}
+          compact={compactParticipants || hasPrimaryScreenShare}
+          className={participantTileSizeClass}
+          data-testid="active-call-participant-tile"
         />
       ))}
     </div>
@@ -78,8 +85,11 @@ export function CallGridView({
 }
 
 function getTileSizeClass(tileCount: number): string {
-  if (tileCount <= 4) {
-    return "h-[104px] w-[150px]";
+  if (tileCount <= 2) {
+    return "h-[clamp(220px,37vh,396px)] min-w-[320px] flex-[1_1_320px] max-w-[705px]";
   }
-  return "h-[88px] w-[126px]";
+  if (tileCount <= 4) {
+    return "h-[clamp(180px,30vh,320px)] min-w-[260px] flex-[1_1_260px] max-w-[520px]";
+  }
+  return "h-[clamp(140px,24vh,260px)] min-w-[220px] flex-[1_1_220px] max-w-[380px]";
 }

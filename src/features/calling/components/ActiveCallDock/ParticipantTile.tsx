@@ -74,13 +74,15 @@ export function ParticipantTile({
       <div
         className={cn(
           "avatar-circle flex items-center justify-center rounded-full bg-[var(--call-fill-control)] text-[var(--call-text-primary)]",
-          compact ? "h-[42px] w-[42px] text-[15px] font-semibold" : "h-[42px] w-[42px] text-[15px] font-semibold",
+          compact
+            ? "h-[clamp(42px,7vh,72px)] w-[clamp(42px,7vh,72px)] text-[clamp(15px,2.3vh,24px)] font-semibold"
+            : "h-[clamp(64px,10vh,112px)] w-[clamp(64px,10vh,112px)] text-[clamp(24px,4vh,40px)] font-semibold",
         )}
       >
         {name.charAt(0).toUpperCase()}
       </div>
       <p
-        className="tile-label absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded bg-black/55 px-1.5 py-0.5 text-[10px] leading-none text-white"
+        className="tile-label absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded bg-black/55 px-2 py-1 text-[12px] leading-none text-white"
         data-testid="participant-avatar-name"
       >
         {name}
@@ -167,22 +169,22 @@ function ScreenShareParticipantTile({
             </div>
           )}
           <span
-            className="badge-live absolute left-1.5 top-1.5 rounded bg-[var(--call-fill-danger)] px-1.5 py-0.5 text-[9px] font-bold leading-none text-[var(--call-on-danger)]"
+            className="badge-live absolute left-3 top-3 rounded bg-[var(--call-fill-danger)] px-2 py-1 text-[10px] font-bold leading-none text-[var(--call-on-danger)]"
             data-testid="participant-screen-live-badge"
           >
             720p · LIVE
           </span>
           <Volume2
-            className="tile-speaker absolute bottom-1.5 right-1.5 h-[13px] w-[13px] text-white opacity-90"
+            className="tile-speaker absolute bottom-3 right-3 h-4 w-4 text-white opacity-90"
             aria-label="Stream volume"
           />
           <button
             type="button"
-            className="tile-expand absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-[5px] border-0 bg-black/50 p-0 text-white hover:bg-black/70"
+            className="tile-expand absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-[5px] border-0 bg-black/50 p-0 text-white hover:bg-black/70"
             onClick={onExpand}
             aria-label={`Expand ${name}'s screen`}
           >
-            <Maximize2 className="h-3 w-3" />
+            <Maximize2 className="h-4 w-4" />
           </button>
         </>
       ) : (
@@ -190,14 +192,14 @@ function ScreenShareParticipantTile({
           {stream ? (
             <button
               type="button"
-              className="watch-btn flex items-center gap-1.5 rounded-2xl border border-white/35 bg-black/55 px-3.5 py-1.5 text-[11px] text-white hover:bg-black/70"
+              className="watch-btn flex items-center gap-2 rounded-2xl border border-white/35 bg-black/55 px-4 py-2 text-sm text-white hover:bg-black/70"
               onClick={onWatch}
             >
-              <Play className="h-[13px] w-[13px] fill-current" />
+              <Play className="h-4 w-4 fill-current" />
               Watch stream
             </button>
           ) : (
-            <span className="px-3 text-center text-xs text-zinc-500">Waiting for shared screen...</span>
+            <span className="px-4 text-center text-sm text-zinc-500">Waiting for shared screen...</span>
           )}
         </div>
       )}
@@ -206,8 +208,8 @@ function ScreenShareParticipantTile({
         <button
           type="button"
           className={cn(
-            "absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-[5px] border-0 bg-black/50 p-0 text-white hover:bg-black/70 disabled:opacity-60",
-            isWatchingInline && "right-8",
+            "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-[5px] border-0 bg-black/50 p-0 text-white hover:bg-black/70 disabled:opacity-60",
+            isWatchingInline && "right-12",
           )}
           onClick={onStopScreenShare}
           disabled={isScreenShareUpdating}
@@ -217,9 +219,9 @@ function ScreenShareParticipantTile({
         </button>
       )}
 
-      <div className="tile-label pointer-events-none absolute bottom-1.5 left-1.5 flex max-w-[calc(100%-12px)] items-center gap-1 rounded bg-black/55 px-1.5 py-0.5">
-        <ScreenShare className="h-2.5 w-2.5 shrink-0 text-white" />
-        <p className="truncate text-[10px] leading-none text-white" data-testid="participant-screen-name">
+      <div className="tile-label pointer-events-none absolute bottom-3 left-3 flex max-w-[calc(100%-24px)] items-center gap-1.5 rounded bg-black/55 px-2 py-1">
+        <ScreenShare className="h-3.5 w-3.5 shrink-0 text-white" />
+        <p className="truncate text-[12px] leading-none text-white" data-testid="participant-screen-name">
           {name}
         </p>
       </div>

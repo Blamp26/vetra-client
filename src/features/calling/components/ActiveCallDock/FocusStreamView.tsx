@@ -63,7 +63,7 @@ export function FocusStreamView({
 
   return (
     <div
-      className="focus-stream-view mx-auto flex w-full max-w-[1040px] flex-col gap-2.5 rounded-[12px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-3 text-[var(--call-text-primary)]"
+      className="focus-stream-view flex h-full w-full min-w-0 flex-col gap-[clamp(10px,2vh,20px)] bg-[var(--call-surface-1)] text-[var(--call-text-primary)]"
       data-testid="focus-stream-view"
     >
       <div className="focus-header flex shrink-0 items-center gap-2">
@@ -87,7 +87,7 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="focus-stage relative flex h-[216px] max-h-[40vh] shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-[#0b0c0d]"
+        className="focus-stage relative flex min-h-[180px] flex-1 items-center justify-center overflow-hidden rounded-[10px] bg-[#0b0c0d]"
         data-testid="focus-stream-stage"
       >
         <video
@@ -111,37 +111,37 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="focus-strip flex shrink-0 gap-2 overflow-x-auto"
+        className="focus-strip flex shrink-0 justify-center gap-[clamp(12px,2vw,24px)] overflow-x-auto"
         data-testid="focus-participant-strip"
       >
         {stripParticipants.map((participant) => (
           <div
             key={participant.id}
-            className="focus-strip-tile relative flex h-[46px] w-[68px] shrink-0 items-center justify-center rounded-md bg-[var(--call-surface-1)]"
+            className="focus-strip-tile relative flex h-[clamp(76px,12vh,120px)] w-[clamp(120px,18vw,220px)] shrink-0 items-center justify-center rounded-md bg-[var(--call-surface-2)]"
           >
-            <div className="avatar-circle flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--call-fill-control)] text-[10px] text-[var(--call-text-primary)]">
+            <div className="avatar-circle flex h-[clamp(34px,6vh,56px)] w-[clamp(34px,6vh,56px)] shrink-0 items-center justify-center rounded-full bg-[var(--call-fill-control)] text-[clamp(13px,2vh,20px)] text-[var(--call-text-primary)]">
               {participant.name.charAt(0).toUpperCase()}
             </div>
-            <div className="strip-label absolute bottom-[3px] left-[3px] max-w-[calc(100%-6px)] truncate rounded-[3px] bg-black/50 px-1 py-px text-[8px] leading-none text-white">
+            <div className="strip-label absolute bottom-2 left-2 max-w-[calc(100%-16px)] truncate rounded-[3px] bg-black/50 px-1.5 py-1 text-[10px] leading-none text-white">
               {participant.name}
             </div>
           </div>
         ))}
-        <div className="focus-strip-tile sharing relative flex h-[46px] w-[68px] shrink-0 items-center justify-center rounded-md border-[1.5px] border-[#d4785a] bg-[#111214]">
-          <div className="strip-label absolute bottom-[3px] left-[3px] max-w-[calc(100%-6px)] truncate rounded-[3px] bg-black/50 px-1 py-px text-[8px] leading-none text-white">
+        <div className="focus-strip-tile sharing relative flex h-[clamp(76px,12vh,120px)] w-[clamp(120px,18vw,220px)] shrink-0 items-center justify-center rounded-md border-[1.5px] border-[#d4785a] bg-[#111214]">
+          <div className="strip-label absolute bottom-2 left-2 max-w-[calc(100%-16px)] truncate rounded-[3px] bg-black/50 px-1.5 py-1 text-[10px] leading-none text-white">
             {sharerName}
           </div>
         </div>
       </div>
 
       <div
-        className="focus-controls flex shrink-0 items-center justify-between rounded-lg bg-[var(--call-surface-1)] px-3 py-2"
+        className="focus-controls flex h-[50px] shrink-0 items-center justify-center gap-[clamp(16px,2.2vw,42px)]"
         data-testid="focus-control-bar"
       >
         <div className="cluster flex items-center gap-2.5">
           <button
             className={cn(
-              "ctrl-btn flex h-[34px] w-[34px] items-center justify-center rounded-full border-0 bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors",
+              "ctrl-btn flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors",
               isMuted
                 ? "bg-[var(--call-bg-danger)] text-[var(--call-text-danger)]"
                 : "hover:opacity-90",
@@ -154,7 +154,7 @@ export function FocusStreamView({
 
           <button
             className={cn(
-              "ctrl-btn ctrl-btn--active flex h-[34px] w-[34px] items-center justify-center rounded-full border-0 bg-[var(--call-text-accent)] p-0 text-white transition-colors hover:opacity-90 disabled:pointer-events-none disabled:opacity-60",
+              "ctrl-btn ctrl-btn--active flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-text-accent)] p-0 text-white transition-colors hover:opacity-90 disabled:pointer-events-none disabled:opacity-60",
               !isScreenSharing && "bg-[var(--call-text-accent)]",
             )}
             onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
@@ -171,7 +171,7 @@ export function FocusStreamView({
           </button>
 
           <button
-            className="ctrl-btn ctrl-btn--danger flex h-[34px] w-[34px] items-center justify-center rounded-full border-0 bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] hover:opacity-90"
+            className="ctrl-btn ctrl-btn--danger flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] hover:opacity-90"
             onClick={onHangUp}
             aria-label="Hang Up"
           >
