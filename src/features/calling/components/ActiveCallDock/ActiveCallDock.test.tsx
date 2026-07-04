@@ -195,6 +195,14 @@ describe("ActiveCallDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
 
     expect(screen.getByTestId("fullscreen-stream-view")).toBeInTheDocument();
+    expect(screen.getByTestId("fullscreen-stream-view")).toHaveClass("items-center", "justify-center", "bg-[#050506]");
+    expect(screen.getByTestId("fullscreen-content")).toHaveClass("fullscreen-content", "flex", "flex-col", "items-center");
+    expect(screen.getByTestId("fullscreen-stream-stage")).toHaveClass(
+      "aspect-video",
+      "w-[min(1354px,70.6vw,calc(100vw-96px))]",
+      "max-w-[1354px]",
+    );
+    expect(screen.getByTestId("fullscreen-stream-stage")).not.toHaveClass("flex-1");
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveProperty("srcObject", stream);
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveClass("object-contain");
     expect(screen.getByTestId("fullscreen-control-bar")).toHaveClass(
@@ -203,12 +211,14 @@ describe("ActiveCallDock", () => {
       "pointer-events-none",
       "group-hover:opacity-100",
     );
+    expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("absolute", "bottom-5", "-translate-x-1/2");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass(
       "fullscreen-ui",
       "opacity-0",
       "pointer-events-none",
       "group-hover:opacity-100",
     );
+    expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("absolute", "bottom-24", "-translate-x-1/2");
     expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")).toHaveLength(2);
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("You");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("Alice");

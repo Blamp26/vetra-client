@@ -239,7 +239,7 @@ export function FullscreenStreamView({
 
   return (
     <div
-      className="fullscreen-stream-view group fixed inset-0 z-50 flex flex-col bg-[#050506] text-white"
+      className="fullscreen-stream-view group fixed inset-0 z-50 flex items-center justify-center bg-[#050506] p-8 text-white"
       data-testid="fullscreen-stream-view"
     >
       <button
@@ -252,101 +252,106 @@ export function FullscreenStreamView({
       </button>
 
       <div
-        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#050506]"
-        data-testid="fullscreen-stream-stage"
+        className="fullscreen-content flex w-full flex-col items-center justify-center gap-4"
+        data-testid="fullscreen-content"
       >
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocalSharer}
-          onLoadedData={() => setIsVideoReady(true)}
-          onCanPlay={() => setIsVideoReady(true)}
-          className="h-full w-full bg-black object-contain"
-          data-testid="fullscreen-stream-video"
-        />
-        {!isVideoReady && (
-          <div
-            className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400"
-            data-testid="fullscreen-stream-loading"
-          >
-            Loading shared screen...
-          </div>
-        )}
-      </div>
-
-      <div
-        className="fullscreen-ui absolute bottom-24 left-1/2 flex max-w-[calc(100vw-48px)] -translate-x-1/2 items-center justify-center gap-3 overflow-x-auto rounded-[4px] border border-white/15 bg-black/55 p-3 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
-        data-testid="fullscreen-participant-strip"
-      >
-        <div className="relative flex h-[74px] w-[132px] shrink-0 items-center justify-center rounded-[4px] border-2 border-white bg-[#111214]">
-          <ScreenShare className="h-6 w-6 text-white/90" />
-          <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
-            {sharerName}
-          </div>
-        </div>
-        {stripParticipants.map((participant) => (
-          <div
-            key={participant.id}
-            className="relative flex h-[74px] w-[132px] shrink-0 items-center justify-center rounded-[4px] border border-white/20 bg-zinc-900"
-            data-testid="fullscreen-participant-avatar-tile"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700 text-sm font-semibold text-white">
-              {participant.name.charAt(0).toUpperCase()}
+        <div
+          className="relative aspect-video w-[min(1354px,70.6vw,calc(100vw-96px))] max-w-[1354px] overflow-hidden bg-black"
+          data-testid="fullscreen-stream-stage"
+        >
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={isLocalSharer}
+            onLoadedData={() => setIsVideoReady(true)}
+            onCanPlay={() => setIsVideoReady(true)}
+            className="h-full w-full bg-black object-contain"
+            data-testid="fullscreen-stream-video"
+          />
+          {!isVideoReady && (
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-zinc-400"
+              data-testid="fullscreen-stream-loading"
+            >
+              Loading shared screen...
             </div>
-            <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
-              {participant.name}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div
-        className="fullscreen-ui absolute bottom-5 left-1/2 flex h-[52px] -translate-x-1/2 items-center justify-center gap-3 rounded-[4px] border border-white/15 bg-black/60 px-4 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
-        data-testid="fullscreen-control-bar"
-      >
-        <button
-          className={cn(
-            "ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white transition-colors",
-            isMuted ? "bg-red-950 text-red-200" : "hover:bg-zinc-700",
           )}
-          onClick={onMuteToggle}
-          aria-label={isMuted ? "Unmute" : "Mute"}
+        </div>
+
+        <div
+          className="fullscreen-ui flex max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-3 overflow-x-auto rounded-[4px] border border-white/15 bg-black/55 p-3 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          data-testid="fullscreen-participant-strip"
         >
-          {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-        </button>
-        <button
-          className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-blue-700 p-0 text-white transition-colors hover:bg-blue-600 disabled:pointer-events-none disabled:opacity-60"
-          onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
-          aria-label={
-            isScreenShareUpdating
-              ? "Updating screen share"
-              : isScreenSharing
-                ? "Stop sharing"
-                : "Share screen"
-          }
-          disabled={isScreenShareUpdating}
+          <div className="relative flex h-[74px] w-[132px] shrink-0 items-center justify-center rounded-[4px] border-2 border-white bg-[#111214]">
+            <ScreenShare className="h-6 w-6 text-white/90" />
+            <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
+              {sharerName}
+            </div>
+          </div>
+          {stripParticipants.map((participant) => (
+            <div
+              key={participant.id}
+              className="relative flex h-[74px] w-[132px] shrink-0 items-center justify-center rounded-[4px] border border-white/20 bg-zinc-900"
+              data-testid="fullscreen-participant-avatar-tile"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700 text-sm font-semibold text-white">
+                {participant.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
+                {participant.name}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div
+          className="fullscreen-ui flex h-[52px] items-center justify-center gap-3 rounded-[4px] border border-white/15 bg-black/60 px-4 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          data-testid="fullscreen-control-bar"
         >
-          {isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}
-        </button>
-        <button
-          className="ctrl-btn ctrl-btn--danger flex h-10 w-10 items-center justify-center rounded-[4px] border border-red-500 bg-red-600 p-0 text-white hover:bg-red-500"
-          onClick={onHangUp}
-          aria-label="Hang Up"
-        >
-          <PhoneOff className="h-5 w-5" />
-        </button>
-        <button
-          type="button"
-          className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white hover:bg-zinc-700"
-          onClick={() => {
-            onExitFullscreen();
-            onExitFocus();
-          }}
-          aria-label="Close stream"
-        >
-          <X className="h-5 w-5" />
-        </button>
+          <button
+            className={cn(
+              "ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white transition-colors",
+              isMuted ? "bg-red-950 text-red-200" : "hover:bg-zinc-700",
+            )}
+            onClick={onMuteToggle}
+            aria-label={isMuted ? "Unmute" : "Mute"}
+          >
+            {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+          </button>
+          <button
+            className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-blue-700 p-0 text-white transition-colors hover:bg-blue-600 disabled:pointer-events-none disabled:opacity-60"
+            onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
+            aria-label={
+              isScreenShareUpdating
+                ? "Updating screen share"
+                : isScreenSharing
+                  ? "Stop sharing"
+                  : "Share screen"
+            }
+            disabled={isScreenShareUpdating}
+          >
+            {isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}
+          </button>
+          <button
+            className="ctrl-btn ctrl-btn--danger flex h-10 w-10 items-center justify-center rounded-[4px] border border-red-500 bg-red-600 p-0 text-white hover:bg-red-500"
+            onClick={onHangUp}
+            aria-label="Hang Up"
+          >
+            <PhoneOff className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white hover:bg-zinc-700"
+            onClick={() => {
+              onExitFullscreen();
+              onExitFocus();
+            }}
+            aria-label="Close stream"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
       </div>
     </div>
   );
