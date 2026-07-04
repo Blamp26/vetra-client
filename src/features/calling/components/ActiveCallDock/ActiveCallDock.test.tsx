@@ -226,15 +226,15 @@ describe("ActiveCallDock", () => {
       "flex-col",
       "items-center",
       "justify-start",
-      "gap-3",
-      "pb-6",
-      "pt-[clamp(24px,5vh,72px)]",
+      "pb-4",
+      "pt-[clamp(24px,7.4vh,80px)]",
     );
+    expect(screen.getByTestId("fullscreen-content")).not.toHaveClass("justify-center", "gap-3");
     expect(screen.getByTestId("fullscreen-stream-stage")).toHaveClass(
       "aspect-video",
-      "w-[min(1354px,70.6vw,calc(100vw-96px))]",
-      "max-w-[1354px]",
-      "max-h-[calc(100dvh-190px)]",
+      "w-[min(1420px,calc(100vw-500px),calc((100dvh-281px)*16/9))]",
+      "max-w-[1420px]",
+      "max-h-[calc(100dvh-281px)]",
     );
     expect(screen.getByTestId("fullscreen-stream-stage")).not.toHaveClass("flex-1");
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveProperty("srcObject", stream);
@@ -245,15 +245,19 @@ describe("ActiveCallDock", () => {
       "pointer-events-none",
       "group-hover:opacity-100",
     );
+    expect(screen.getByTestId("fullscreen-control-bar")).toHaveClass("mt-[15px]", "h-[50px]", "w-[445px]");
     expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("absolute", "bottom-5", "-translate-x-1/2");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass(
       "fullscreen-ui",
+      "mt-2.5",
+      "h-[111px]",
       "opacity-0",
       "pointer-events-none",
       "group-hover:opacity-100",
     );
     expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("absolute", "bottom-24", "-translate-x-1/2");
     expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")).toHaveLength(2);
+    expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")[0]).toHaveClass("h-[108px]", "w-[188px]");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("You");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("Alice");
     await waitFor(() => {

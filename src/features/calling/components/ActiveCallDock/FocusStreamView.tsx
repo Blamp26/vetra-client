@@ -298,11 +298,11 @@ export function FullscreenStreamView({
       </button>
 
       <div
-        className="fullscreen-content flex min-h-[100dvh] w-full flex-col items-center justify-start gap-3 pb-6 pt-[clamp(24px,5vh,72px)]"
+        className="fullscreen-content flex min-h-[100dvh] w-full flex-col items-center justify-start pb-4 pt-[clamp(24px,7.4vh,80px)]"
         data-testid="fullscreen-content"
       >
         <div
-          className="relative aspect-video max-h-[calc(100dvh-190px)] w-[min(1354px,70.6vw,calc(100vw-96px))] max-w-[1354px] overflow-hidden bg-black"
+          className="relative aspect-video max-h-[calc(100dvh-281px)] w-[min(1420px,calc(100vw-500px),calc((100dvh-281px)*16/9))] max-w-[1420px] overflow-hidden bg-black"
           data-testid="fullscreen-stream-stage"
         >
           <video
@@ -326,10 +326,10 @@ export function FullscreenStreamView({
         </div>
 
         <div
-          className="fullscreen-ui flex max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-3 overflow-x-auto rounded-[4px] border border-white/15 bg-black/55 p-3 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className="fullscreen-ui mt-2.5 flex h-[111px] max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-[15px] overflow-x-auto rounded-[4px] border border-white/15 bg-black/55 px-3 py-0 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           data-testid="fullscreen-participant-strip"
         >
-          <div className="relative flex h-[74px] w-[132px] shrink-0 items-center justify-center rounded-[4px] border-2 border-white bg-[#111214]">
+          <div className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] border-2 border-white bg-[#111214]">
             <ScreenShare className="h-6 w-6 text-white/90" />
             <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
               {sharerName}
@@ -338,7 +338,7 @@ export function FullscreenStreamView({
           {stripParticipants.map((participant) => (
             <div
               key={participant.id}
-              className="relative flex h-[74px] w-[132px] shrink-0 items-center justify-center rounded-[4px] border border-white/20 bg-zinc-900"
+              className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] border border-white/20 bg-zinc-900"
               data-testid="fullscreen-participant-avatar-tile"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700 text-sm font-semibold text-white">
@@ -352,7 +352,7 @@ export function FullscreenStreamView({
         </div>
 
         <div
-          className="fullscreen-ui flex h-[52px] items-center justify-center gap-3 rounded-[4px] border border-white/15 bg-black/60 px-4 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className="fullscreen-ui mt-[15px] flex h-[50px] w-[445px] max-w-[calc(100vw-96px)] items-center justify-center gap-3 rounded-[4px] border border-white/15 bg-black/60 px-4 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           data-testid="fullscreen-control-bar"
         >
           <button
@@ -386,12 +386,12 @@ export function FullscreenStreamView({
           >
             <PhoneOff className="h-5 w-5" />
           </button>
-        <button
-          type="button"
-          className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white hover:bg-zinc-700"
-          onClick={handleExitFullscreen}
-          aria-label="Close stream"
-        >
+          <button
+            type="button"
+            className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white hover:bg-zinc-700"
+            onClick={handleExitFullscreen}
+            aria-label="Close stream"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
