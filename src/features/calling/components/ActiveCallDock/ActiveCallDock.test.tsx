@@ -153,6 +153,8 @@ describe("ActiveCallDock", () => {
 
   it("opens partial fullscreen from the grid tile, then true fullscreen from pop out", async () => {
     const stream = makeStream("remote-screen");
+    document.documentElement.style.overflow = "";
+    document.body.style.overflow = "";
     let fullscreenElement: Element | null = null;
     const requestFullscreen = vi.fn(function requestFullscreenMock(this: Element) {
       fullscreenElement = this;
@@ -218,23 +220,32 @@ describe("ActiveCallDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
 
     expect(screen.getByTestId("fullscreen-stream-view")).toBeInTheDocument();
-    expect(screen.getByTestId("fullscreen-stream-view")).toHaveClass("fixed", "inset-0", "overflow-y-auto", "bg-[#050506]");
+    expect(screen.getByTestId("fullscreen-stream-view")).toHaveClass(
+      "fixed",
+      "inset-0",
+      "h-[100dvh]",
+      "max-h-[100dvh]",
+      "overflow-hidden",
+      "bg-[#050506]",
+    );
+    expect(screen.getByTestId("fullscreen-stream-view")).not.toHaveClass("overflow-y-auto");
     expect(screen.getByTestId("fullscreen-content")).toHaveClass(
       "fullscreen-content",
-      "min-h-[100dvh]",
+      "h-[100dvh]",
+      "max-h-[100dvh]",
       "flex",
       "flex-col",
       "items-center",
       "justify-start",
-      "pb-4",
-      "pt-[clamp(24px,7.4vh,80px)]",
+      "pb-3",
+      "pt-[clamp(24px,6.7vh,72px)]",
     );
     expect(screen.getByTestId("fullscreen-content")).not.toHaveClass("justify-center", "gap-3");
     expect(screen.getByTestId("fullscreen-stream-stage")).toHaveClass(
       "aspect-video",
-      "w-[min(1420px,calc(100vw-500px),calc((100dvh-281px)*16/9))]",
+      "w-[min(1420px,calc(100vw-500px),calc((100dvh-264px)*16/9))]",
       "max-w-[1420px]",
-      "max-h-[calc(100dvh-281px)]",
+      "max-h-[calc(100dvh-264px)]",
     );
     expect(screen.getByTestId("fullscreen-stream-stage")).not.toHaveClass("flex-1");
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveProperty("srcObject", stream);
@@ -245,21 +256,26 @@ describe("ActiveCallDock", () => {
       "pointer-events-none",
       "group-hover:opacity-100",
     );
-    expect(screen.getByTestId("fullscreen-control-bar")).toHaveClass("mt-[15px]", "h-[50px]", "w-[445px]");
+    expect(screen.getByTestId("fullscreen-control-bar")).toHaveClass("mt-3", "h-[50px]", "w-[445px]");
+    expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("border", "border-white/15");
     expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("absolute", "bottom-5", "-translate-x-1/2");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass(
       "fullscreen-ui",
       "mt-2.5",
-      "h-[111px]",
+      "h-[108px]",
       "opacity-0",
       "pointer-events-none",
       "group-hover:opacity-100",
     );
+    expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("border", "border-white/15");
     expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("absolute", "bottom-24", "-translate-x-1/2");
     expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")).toHaveLength(2);
     expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")[0]).toHaveClass("h-[108px]", "w-[188px]");
+    expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")[0]).not.toHaveClass("border", "border-white/20");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("You");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("Alice");
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    expect(document.body.style.overflow).toBe("hidden");
     await waitFor(() => {
       expect(requestFullscreen).toHaveBeenCalledTimes(1);
     });
@@ -269,6 +285,10 @@ describe("ActiveCallDock", () => {
     });
     expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.documentElement.style.overflow).toBe("");
+      expect(document.body.style.overflow).toBe("");
+    });
   });
 
   it("exits partial fullscreen back to the watched grid tile", () => {

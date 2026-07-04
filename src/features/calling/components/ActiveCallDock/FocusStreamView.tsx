@@ -222,8 +222,18 @@ export function FullscreenStreamView({
   const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const browserFullscreenActiveRef = useRef(false);
+  const previousDocumentOverflowRef = useRef("");
+  const previousBodyOverflowRef = useRef("");
   const [isVideoReady, setIsVideoReady] = useState(false);
   const stripParticipants = participants;
+
+  const restoreDocumentOverflow = () => {
+    document.documentElement.style.overflow =
+      previousDocumentOverflowRef.current === "hidden" ? "" : previousDocumentOverflowRef.current;
+    document.body.style.overflow =
+      previousBodyOverflowRef.current === "hidden" ? "" : previousBodyOverflowRef.current;
+    delete document.documentElement.dataset.vetraFullscreenOverflowLock;
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -239,6 +249,21 @@ export function FullscreenStreamView({
   }, [stream]);
 
   useEffect(() => {
+    if (document.documentElement.dataset.vetraFullscreenOverflowLock !== "true") {
+      previousDocumentOverflowRef.current = document.documentElement.style.overflow;
+      previousBodyOverflowRef.current = document.body.style.overflow;
+      document.documentElement.dataset.vetraFullscreenOverflowLock = "true";
+    }
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      restoreDocumentOverflow();
+    };
+  }, []);
+
+  useEffect(() => {
     const root = rootRef.current;
 
     const handleFullscreenChange = () => {
@@ -249,6 +274,7 @@ export function FullscreenStreamView({
 
       if (browserFullscreenActiveRef.current) {
         browserFullscreenActiveRef.current = false;
+        restoreDocumentOverflow();
         onExitFullscreen();
       }
     };
@@ -274,18 +300,20 @@ export function FullscreenStreamView({
   const handleExitFullscreen = () => {
     if (document.fullscreenElement && document.exitFullscreen) {
       void document.exitFullscreen().catch(() => {
+        restoreDocumentOverflow();
         onExitFullscreen();
       });
       return;
     }
 
+    restoreDocumentOverflow();
     onExitFullscreen();
   };
 
   return (
     <div
       ref={rootRef}
-      className="fullscreen-stream-view group fixed inset-0 z-50 overflow-y-auto bg-[#050506] px-8 text-white"
+      className="fullscreen-stream-view group fixed inset-0 z-50 h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#050506] px-8 text-white"
       data-testid="fullscreen-stream-view"
     >
       <button
@@ -298,11 +326,11 @@ export function FullscreenStreamView({
       </button>
 
       <div
-        className="fullscreen-content flex min-h-[100dvh] w-full flex-col items-center justify-start pb-4 pt-[clamp(24px,7.4vh,80px)]"
+        className="fullscreen-content flex h-[100dvh] max-h-[100dvh] w-full flex-col items-center justify-start pb-3 pt-[clamp(24px,6.7vh,72px)]"
         data-testid="fullscreen-content"
       >
         <div
-          className="relative aspect-video max-h-[calc(100dvh-281px)] w-[min(1420px,calc(100vw-500px),calc((100dvh-281px)*16/9))] max-w-[1420px] overflow-hidden bg-black"
+          className="relative aspect-video max-h-[calc(100dvh-264px)] w-[min(1420px,calc(100vw-500px),calc((100dvh-264px)*16/9))] max-w-[1420px] overflow-hidden bg-black"
           data-testid="fullscreen-stream-stage"
         >
           <video
@@ -326,10 +354,10 @@ export function FullscreenStreamView({
         </div>
 
         <div
-          className="fullscreen-ui mt-2.5 flex h-[111px] max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-[15px] overflow-x-auto rounded-[4px] border border-white/15 bg-black/55 px-3 py-0 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className="fullscreen-ui mt-2.5 flex h-[108px] max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-[15px] overflow-x-auto rounded-[4px] bg-black/55 px-3 py-0 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           data-testid="fullscreen-participant-strip"
         >
-          <div className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] border-2 border-white bg-[#111214]">
+          <div className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] ring-2 ring-white/80 bg-[#111214]">
             <ScreenShare className="h-6 w-6 text-white/90" />
             <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
               {sharerName}
@@ -338,7 +366,7 @@ export function FullscreenStreamView({
           {stripParticipants.map((participant) => (
             <div
               key={participant.id}
-              className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] border border-white/20 bg-zinc-900"
+              className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] bg-zinc-900"
               data-testid="fullscreen-participant-avatar-tile"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700 text-sm font-semibold text-white">
@@ -352,7 +380,7 @@ export function FullscreenStreamView({
         </div>
 
         <div
-          className="fullscreen-ui mt-[15px] flex h-[50px] w-[445px] max-w-[calc(100vw-96px)] items-center justify-center gap-3 rounded-[4px] border border-white/15 bg-black/60 px-4 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className="fullscreen-ui mt-3 flex h-[50px] w-[445px] max-w-[calc(100vw-96px)] items-center justify-center gap-3 rounded-[4px] bg-black/60 px-4 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           data-testid="fullscreen-control-bar"
         >
           <button
