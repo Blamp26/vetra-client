@@ -284,9 +284,6 @@ export function FullscreenStreamView({
     if (root?.requestFullscreen) {
       root
         .requestFullscreen()
-        .then(() => {
-          browserFullscreenActiveRef.current = true;
-        })
         .catch(() => {
           browserFullscreenActiveRef.current = false;
         });
@@ -357,7 +354,10 @@ export function FullscreenStreamView({
           className="fullscreen-ui mt-2.5 flex h-[108px] max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-[15px] overflow-x-auto rounded-[4px] bg-black/55 px-3 py-0 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           data-testid="fullscreen-participant-strip"
         >
-          <div className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] ring-2 ring-white/80 bg-[#111214]">
+          <div
+            className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] bg-[#15171a]"
+            data-testid="fullscreen-screen-share-tile"
+          >
             <ScreenShare className="h-6 w-6 text-white/90" />
             <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
               {sharerName}

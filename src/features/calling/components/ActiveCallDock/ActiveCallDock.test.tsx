@@ -269,6 +269,8 @@ describe("ActiveCallDock", () => {
     );
     expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("border", "border-white/15");
     expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("absolute", "bottom-24", "-translate-x-1/2");
+    expect(screen.getByTestId("fullscreen-screen-share-tile")).toHaveClass("h-[108px]", "w-[188px]");
+    expect(screen.getByTestId("fullscreen-screen-share-tile").className).not.toMatch(/(?:^|\s)(?:ring|ring-2|ring-white\/80|border|outline)(?:\s|$)/);
     expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")).toHaveLength(2);
     expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")[0]).toHaveClass("h-[108px]", "w-[188px]");
     expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")[0]).not.toHaveClass("border", "border-white/20");
@@ -289,6 +291,53 @@ describe("ActiveCallDock", () => {
       expect(document.documentElement.style.overflow).toBe("");
       expect(document.body.style.overflow).toBe("");
     });
+  });
+
+  it("uses document.exitFullscreen from the fullscreen close button and returns to partial fullscreen", async () => {
+    const stream = makeStream("remote-screen");
+    document.documentElement.style.overflow = "";
+    document.body.style.overflow = "";
+    let fullscreenElement: Element | null = null;
+    const requestFullscreen = vi.fn(function requestFullscreenMock(this: Element) {
+      fullscreenElement = this;
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    const exitFullscreen = vi.fn(() => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: requestFullscreen,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: exitFullscreen,
+    });
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
+
+    renderDock({ remoteScreenStream: stream });
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
+
+    await waitFor(() => {
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen stream" }));
+
+    await waitFor(() => {
+      expect(exitFullscreen).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
   });
 
   it("exits partial fullscreen back to the watched grid tile", () => {
