@@ -97,11 +97,6 @@ export function ActiveCallDock({
     }
   }, [callStatus]);
 
-  useEffect(() => {
-    if (!localScreenStream) return;
-    setFocusedStreamId((current) => current ?? "local-screen");
-  }, [localScreenStream]);
-
   const participants: CallGridParticipant[] = useMemo(
     () => [
       {
@@ -177,24 +172,16 @@ export function ActiveCallDock({
       next.add(id);
       return next;
     });
-    setFocusedStreamId(id);
   };
 
   const handleExpandStream = (id: string) => {
     const share = screenShares.find((item) => item.id === id);
     if (!share?.stream || share.state !== "watchingInline") return;
-    setFullscreenStreamId(id);
+    setFocusedStreamId(id);
   };
 
   const handleExitFocus = () => {
-    const currentId = focusedStreamId;
     setFocusedStreamId(null);
-    if (!currentId) return;
-    setWatchingInlineIds((current) => {
-      const next = new Set(current);
-      next.delete(currentId);
-      return next;
-    });
   };
 
   return (
