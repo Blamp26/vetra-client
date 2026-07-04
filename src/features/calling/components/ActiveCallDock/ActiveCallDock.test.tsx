@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -151,8 +151,31 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("active-call-dock-controls")).not.toHaveClass("watch-stage-ui", "opacity-20");
   });
 
-  it("opens partial fullscreen from the grid tile, then true fullscreen from pop out", () => {
+  it("opens partial fullscreen from the grid tile, then true fullscreen from pop out", async () => {
     const stream = makeStream("remote-screen");
+    let fullscreenElement: Element | null = null;
+    const requestFullscreen = vi.fn(function requestFullscreenMock(this: Element) {
+      fullscreenElement = this;
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    const exitFullscreen = vi.fn(() => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+      return Promise.resolve();
+    });
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: requestFullscreen,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: exitFullscreen,
+    });
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
     renderDock({ remoteScreenStream: stream });
 
     fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
@@ -195,12 +218,23 @@ describe("ActiveCallDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
 
     expect(screen.getByTestId("fullscreen-stream-view")).toBeInTheDocument();
-    expect(screen.getByTestId("fullscreen-stream-view")).toHaveClass("items-center", "justify-center", "bg-[#050506]");
-    expect(screen.getByTestId("fullscreen-content")).toHaveClass("fullscreen-content", "flex", "flex-col", "items-center");
+    expect(screen.getByTestId("fullscreen-stream-view")).toHaveClass("fixed", "inset-0", "overflow-y-auto", "bg-[#050506]");
+    expect(screen.getByTestId("fullscreen-content")).toHaveClass(
+      "fullscreen-content",
+      "min-h-[100dvh]",
+      "flex",
+      "flex-col",
+      "items-center",
+      "justify-start",
+      "gap-3",
+      "pb-6",
+      "pt-[clamp(24px,5vh,72px)]",
+    );
     expect(screen.getByTestId("fullscreen-stream-stage")).toHaveClass(
       "aspect-video",
       "w-[min(1354px,70.6vw,calc(100vw-96px))]",
       "max-w-[1354px]",
+      "max-h-[calc(100dvh-190px)]",
     );
     expect(screen.getByTestId("fullscreen-stream-stage")).not.toHaveClass("flex-1");
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveProperty("srcObject", stream);
@@ -222,7 +256,13 @@ describe("ActiveCallDock", () => {
     expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")).toHaveLength(2);
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("You");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("Alice");
-    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen stream" }));
+    await waitFor(() => {
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
     expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
   });

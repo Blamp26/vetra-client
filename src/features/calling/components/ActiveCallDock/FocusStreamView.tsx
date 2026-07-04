@@ -213,14 +213,15 @@ export function FullscreenStreamView({
   isMuted,
   isScreenSharing,
   isScreenShareUpdating,
-  onExitFocus,
   onExitFullscreen,
   onMuteToggle,
   onStartScreenShare,
   onStopScreenShare,
   onHangUp,
 }: FullscreenStreamViewProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const browserFullscreenActiveRef = useRef(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const stripParticipants = participants;
 
@@ -237,26 +238,71 @@ export function FullscreenStreamView({
     };
   }, [stream]);
 
+  useEffect(() => {
+    const root = rootRef.current;
+
+    const handleFullscreenChange = () => {
+      if (document.fullscreenElement === root) {
+        browserFullscreenActiveRef.current = true;
+        return;
+      }
+
+      if (browserFullscreenActiveRef.current) {
+        browserFullscreenActiveRef.current = false;
+        onExitFullscreen();
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    if (root?.requestFullscreen) {
+      root
+        .requestFullscreen()
+        .then(() => {
+          browserFullscreenActiveRef.current = true;
+        })
+        .catch(() => {
+          browserFullscreenActiveRef.current = false;
+        });
+    }
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, [onExitFullscreen]);
+
+  const handleExitFullscreen = () => {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      void document.exitFullscreen().catch(() => {
+        onExitFullscreen();
+      });
+      return;
+    }
+
+    onExitFullscreen();
+  };
+
   return (
     <div
-      className="fullscreen-stream-view group fixed inset-0 z-50 flex items-center justify-center bg-[#050506] p-8 text-white"
+      ref={rootRef}
+      className="fullscreen-stream-view group fixed inset-0 z-50 overflow-y-auto bg-[#050506] px-8 text-white"
       data-testid="fullscreen-stream-view"
     >
       <button
         type="button"
         className="absolute right-5 top-5 z-10 flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/20 bg-black/60 p-0 text-white hover:bg-black/80"
-        onClick={onExitFullscreen}
+        onClick={handleExitFullscreen}
         aria-label="Exit fullscreen stream"
       >
         <X className="h-5 w-5" />
       </button>
 
       <div
-        className="fullscreen-content flex w-full flex-col items-center justify-center gap-4"
+        className="fullscreen-content flex min-h-[100dvh] w-full flex-col items-center justify-start gap-3 pb-6 pt-[clamp(24px,5vh,72px)]"
         data-testid="fullscreen-content"
       >
         <div
-          className="relative aspect-video w-[min(1354px,70.6vw,calc(100vw-96px))] max-w-[1354px] overflow-hidden bg-black"
+          className="relative aspect-video max-h-[calc(100dvh-190px)] w-[min(1354px,70.6vw,calc(100vw-96px))] max-w-[1354px] overflow-hidden bg-black"
           data-testid="fullscreen-stream-stage"
         >
           <video
@@ -340,15 +386,12 @@ export function FullscreenStreamView({
           >
             <PhoneOff className="h-5 w-5" />
           </button>
-          <button
-            type="button"
-            className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white hover:bg-zinc-700"
-            onClick={() => {
-              onExitFullscreen();
-              onExitFocus();
-            }}
-            aria-label="Close stream"
-          >
+        <button
+          type="button"
+          className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white hover:bg-zinc-700"
+          onClick={handleExitFullscreen}
+          aria-label="Close stream"
+        >
             <X className="h-5 w-5" />
           </button>
         </div>
