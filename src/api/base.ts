@@ -1,6 +1,10 @@
 import { storage, STORAGE_KEYS } from "@/shared/utils/storage";
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api/v1";
+export function getDefaultApiBaseUrl(location: Pick<Location, "origin"> = window.location): string {
+  return `${location.origin}/api/v1`;
+}
+
+export const API_BASE_URL = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
 
 export class ApiError extends Error {
   constructor(

@@ -77,7 +77,21 @@ vi.mock("@/features/calling/services/callSignalingService", () => ({
   },
 }));
 
-import { connectSocket } from "./socket";
+import { connectSocket, getDefaultSocketUrl } from "./socket";
+
+describe("getDefaultSocketUrl", () => {
+  it("uses ws for same-origin HTTP deployments", () => {
+    expect(getDefaultSocketUrl({ protocol: "http:", host: "146.120.249.160" })).toBe(
+      "ws://146.120.249.160/socket",
+    );
+  });
+
+  it("uses wss for same-origin HTTPS deployments", () => {
+    expect(getDefaultSocketUrl({ protocol: "https:", host: "146.120.249.160" })).toBe(
+      "wss://146.120.249.160/socket",
+    );
+  });
+});
 
 describe("connectSocket", () => {
   beforeEach(() => {

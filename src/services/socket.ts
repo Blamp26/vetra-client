@@ -13,8 +13,15 @@ import type {
 } from "@/shared/types";
 import { callSignalingService } from "@/features/calling/services/callSignalingService";
 
+export function getDefaultSocketUrl(
+  location: Pick<Location, "protocol" | "host"> = window.location,
+): string {
+  const socketProtocol = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${socketProtocol}//${location.host}/socket`;
+}
+
 const SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL || "ws://localhost:4000/socket";
+  import.meta.env.VITE_SOCKET_URL || getDefaultSocketUrl();
 
 // ── Public handler types ──────────────────────────────────────────────────────
 
