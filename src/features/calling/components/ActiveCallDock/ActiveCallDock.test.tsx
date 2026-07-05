@@ -39,6 +39,55 @@ function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = 
   };
 }
 
+const hoverHiddenClasses = [
+  "opacity-0",
+  "opacity-20",
+  "pointer-events-none",
+  "group-hover:opacity-100",
+];
+
+function expectNoHoverHiddenClasses(element: HTMLElement) {
+  for (const className of hoverHiddenClasses) {
+    expect(element).not.toHaveClass(className);
+  }
+}
+
+function mockFullscreenApi() {
+  let fullscreenElement: Element | null = null;
+  const requestFullscreen = vi.fn(function requestFullscreenMock(this: Element) {
+    fullscreenElement = this;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+  const exitFullscreen = vi.fn(() => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event("fullscreenchange"));
+    return Promise.resolve();
+  });
+
+  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exitFullscreen,
+  });
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreenElement,
+  });
+
+  return {
+    requestFullscreen,
+    exitFullscreen,
+    exitViaBrowserEsc: () => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    },
+  };
+}
+
 describe("ActiveCallDock", () => {
   beforeEach(() => {
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
@@ -149,35 +198,15 @@ describe("ActiveCallDock", () => {
     expect(screen.getByRole("button", { name: "Expand Alice's screen" })).toBeInTheDocument();
     expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("active-call-dock-controls")).not.toHaveClass("watch-stage-ui", "opacity-20");
+    expectNoHoverHiddenClasses(screen.getByTestId("active-call-dock-controls"));
+    expectNoHoverHiddenClasses(tileAfter);
   });
 
   it("opens partial fullscreen from the grid tile, then true fullscreen from pop out", async () => {
     const stream = makeStream("remote-screen");
     document.documentElement.style.overflow = "";
     document.body.style.overflow = "";
-    let fullscreenElement: Element | null = null;
-    const requestFullscreen = vi.fn(function requestFullscreenMock(this: Element) {
-      fullscreenElement = this;
-      document.dispatchEvent(new Event("fullscreenchange"));
-      return Promise.resolve();
-    });
-    const exitFullscreen = vi.fn(() => {
-      fullscreenElement = null;
-      document.dispatchEvent(new Event("fullscreenchange"));
-      return Promise.resolve();
-    });
-    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
-      configurable: true,
-      value: requestFullscreen,
-    });
-    Object.defineProperty(document, "exitFullscreen", {
-      configurable: true,
-      value: exitFullscreen,
-    });
-    Object.defineProperty(document, "fullscreenElement", {
-      configurable: true,
-      get: () => fullscreenElement,
-    });
+    const { requestFullscreen, exitViaBrowserEsc } = mockFullscreenApi();
     renderDock({ remoteScreenStream: stream });
 
     fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
@@ -252,21 +281,19 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveClass("object-contain");
     expect(screen.getByTestId("fullscreen-control-bar")).toHaveClass(
       "fullscreen-ui",
-      "opacity-0",
-      "pointer-events-none",
-      "group-hover:opacity-100",
+      "mt-3",
+      "h-[50px]",
+      "w-[445px]",
     );
-    expect(screen.getByTestId("fullscreen-control-bar")).toHaveClass("mt-3", "h-[50px]", "w-[445px]");
+    expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-control-bar"));
     expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("border", "border-white/15");
     expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("absolute", "bottom-5", "-translate-x-1/2");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass(
       "fullscreen-ui",
       "mt-2.5",
       "h-[108px]",
-      "opacity-0",
-      "pointer-events-none",
-      "group-hover:opacity-100",
     );
+    expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-participant-strip"));
     expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("border", "border-white/15");
     expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("absolute", "bottom-24", "-translate-x-1/2");
     expect(screen.getByTestId("fullscreen-screen-share-tile")).toHaveClass("h-[108px]", "w-[188px]");
@@ -282,11 +309,12 @@ describe("ActiveCallDock", () => {
       expect(requestFullscreen).toHaveBeenCalledTimes(1);
     });
     await act(async () => {
-      fullscreenElement = null;
-      document.dispatchEvent(new Event("fullscreenchange"));
+      exitViaBrowserEsc();
     });
     expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
+    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("watch-stage-ui", "opacity-20");
+    expect(screen.getByTestId("focus-control-bar")).toHaveClass("watch-stage-ui", "opacity-20");
     await waitFor(() => {
       expect(document.documentElement.style.overflow).toBe("");
       expect(document.body.style.overflow).toBe("");
@@ -297,29 +325,7 @@ describe("ActiveCallDock", () => {
     const stream = makeStream("remote-screen");
     document.documentElement.style.overflow = "";
     document.body.style.overflow = "";
-    let fullscreenElement: Element | null = null;
-    const requestFullscreen = vi.fn(function requestFullscreenMock(this: Element) {
-      fullscreenElement = this;
-      document.dispatchEvent(new Event("fullscreenchange"));
-      return Promise.resolve();
-    });
-    const exitFullscreen = vi.fn(() => {
-      fullscreenElement = null;
-      document.dispatchEvent(new Event("fullscreenchange"));
-      return Promise.resolve();
-    });
-    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
-      configurable: true,
-      value: requestFullscreen,
-    });
-    Object.defineProperty(document, "exitFullscreen", {
-      configurable: true,
-      value: exitFullscreen,
-    });
-    Object.defineProperty(document, "fullscreenElement", {
-      configurable: true,
-      get: () => fullscreenElement,
-    });
+    const { requestFullscreen, exitFullscreen } = mockFullscreenApi();
 
     renderDock({ remoteScreenStream: stream });
 
@@ -338,6 +344,38 @@ describe("ActiveCallDock", () => {
       expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
     });
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
+  });
+
+  it("keeps hover/fade UI only in partial expanded screen-share mode", async () => {
+    const stream = makeStream("remote-screen");
+    const { requestFullscreen } = mockFullscreenApi();
+    renderDock({ remoteScreenStream: stream });
+
+    expectNoHoverHiddenClasses(screen.getByTestId("active-call-dock-controls"));
+    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
+    expectNoHoverHiddenClasses(screen.getByTestId("active-call-dock-controls"));
+    expectNoHoverHiddenClasses(screen.getByTestId("active-call-screen-share-tile"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
+
+    expect(screen.getByTestId("focus-participant-strip")).toHaveClass(
+      "watch-stage-ui",
+      "opacity-20",
+      "group-hover:opacity-100",
+    );
+    expect(screen.getByTestId("focus-control-bar")).toHaveClass(
+      "watch-stage-ui",
+      "opacity-20",
+      "group-hover:opacity-100",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
+
+    await waitFor(() => {
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    });
+    expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-participant-strip"));
+    expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-control-bar"));
   });
 
   it("exits partial fullscreen back to the watched grid tile", () => {

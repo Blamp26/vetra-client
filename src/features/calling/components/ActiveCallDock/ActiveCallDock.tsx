@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
@@ -166,23 +166,33 @@ export function ActiveCallDock({
     "--call-text-accent": "var(--text-accent, #2952cc)",
   } as CSSProperties;
 
-  const handleWatchStream = (id: string) => {
+  const handleWatchStream = useCallback((id: string) => {
     setWatchingInlineIds((current) => {
       const next = new Set(current);
       next.add(id);
       return next;
     });
-  };
+  }, []);
 
-  const handleExpandStream = (id: string) => {
+  const handleExpandStream = useCallback((id: string) => {
     const share = screenShares.find((item) => item.id === id);
     if (!share?.stream || share.state !== "watchingInline") return;
     setFocusedStreamId(id);
-  };
+  }, [screenShares]);
 
-  const handleExitFocus = () => {
+  const handleExitFocus = useCallback(() => {
+    setFullscreenStreamId(null);
     setFocusedStreamId(null);
-  };
+  }, []);
+
+  const handleEnterTrueFullscreen = useCallback((id: string) => {
+    setFocusedStreamId(id);
+    setFullscreenStreamId(id);
+  }, []);
+
+  const handleExitTrueFullscreen = useCallback(() => {
+    setFullscreenStreamId(null);
+  }, []);
 
   return (
     <section
@@ -206,7 +216,7 @@ export function ActiveCallDock({
           onStartScreenShare={onStartScreenShare}
           onStopScreenShare={onStopScreenShare}
           onHangUp={onHangUp}
-          onEnterFullscreen={setFullscreenStreamId}
+          onEnterFullscreen={handleEnterTrueFullscreen}
         />
       ) : (
         <div className="call-dock-inner flex h-full w-full min-w-0 flex-col" data-testid="call-dock-inner">
@@ -326,7 +336,7 @@ export function ActiveCallDock({
           isScreenSharing={isScreenSharing}
           isScreenShareUpdating={isScreenShareUpdating}
           onExitFocus={handleExitFocus}
-          onExitFullscreen={() => setFullscreenStreamId(null)}
+          onExitTrueFullscreen={handleExitTrueFullscreen}
           onMuteToggle={onMuteToggle}
           onStartScreenShare={onStartScreenShare}
           onStopScreenShare={onStopScreenShare}

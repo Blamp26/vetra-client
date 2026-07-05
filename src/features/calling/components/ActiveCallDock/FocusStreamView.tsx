@@ -202,7 +202,7 @@ export function FocusStreamView({
 }
 
 interface FullscreenStreamViewProps extends Omit<FocusStreamViewProps, "onEnterFullscreen"> {
-  onExitFullscreen: () => void;
+  onExitTrueFullscreen: () => void;
 }
 
 export function FullscreenStreamView({
@@ -213,7 +213,7 @@ export function FullscreenStreamView({
   isMuted,
   isScreenSharing,
   isScreenShareUpdating,
-  onExitFullscreen,
+  onExitTrueFullscreen,
   onMuteToggle,
   onStartScreenShare,
   onStopScreenShare,
@@ -275,7 +275,7 @@ export function FullscreenStreamView({
       if (browserFullscreenActiveRef.current) {
         browserFullscreenActiveRef.current = false;
         restoreDocumentOverflow();
-        onExitFullscreen();
+        onExitTrueFullscreen();
       }
     };
 
@@ -286,25 +286,27 @@ export function FullscreenStreamView({
         .requestFullscreen()
         .catch(() => {
           browserFullscreenActiveRef.current = false;
+          restoreDocumentOverflow();
+          onExitTrueFullscreen();
         });
     }
 
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
-  }, [onExitFullscreen]);
+  }, [onExitTrueFullscreen]);
 
   const handleExitFullscreen = () => {
     if (document.fullscreenElement && document.exitFullscreen) {
       void document.exitFullscreen().catch(() => {
         restoreDocumentOverflow();
-        onExitFullscreen();
+        onExitTrueFullscreen();
       });
       return;
     }
 
     restoreDocumentOverflow();
-    onExitFullscreen();
+    onExitTrueFullscreen();
   };
 
   return (
@@ -351,7 +353,7 @@ export function FullscreenStreamView({
         </div>
 
         <div
-          className="fullscreen-ui mt-2.5 flex h-[108px] max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-[15px] overflow-x-auto rounded-[4px] bg-black/55 px-3 py-0 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className="fullscreen-ui mt-2.5 flex h-[108px] max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-[15px] overflow-x-auto rounded-[4px] bg-black/55 px-3 py-0"
           data-testid="fullscreen-participant-strip"
         >
           <div
@@ -380,7 +382,7 @@ export function FullscreenStreamView({
         </div>
 
         <div
-          className="fullscreen-ui mt-3 flex h-[50px] w-[445px] max-w-[calc(100vw-96px)] items-center justify-center gap-3 rounded-[4px] bg-black/60 px-4 opacity-0 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className="fullscreen-ui mt-3 flex h-[50px] w-[445px] max-w-[calc(100vw-96px)] items-center justify-center gap-3 rounded-[4px] bg-black/60 px-4"
           data-testid="fullscreen-control-bar"
         >
           <button
