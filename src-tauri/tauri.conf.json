@@ -4,19 +4,20 @@
   "version": "0.1.0",
   "identifier": "com.vetra.dev",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev:desktop-web",
+    "beforeBuildCommand": "npm run build:desktop-web",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Vetra",
-        "width": 1100,
-        "height": 720,
-        "minWidth": 800,
-        "minHeight": 500,
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
         "resizable": true,
         "fullscreen": false
       }
@@ -30,7 +31,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["deb"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
