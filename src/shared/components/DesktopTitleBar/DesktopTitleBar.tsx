@@ -64,7 +64,7 @@ export function DesktopTitleBar() {
 
   return (
     <div
-      className="flex h-10 shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-3 text-zinc-100"
+      className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-sidebar px-3 text-foreground"
       data-tauri-drag-region
       data-testid="desktop-title-bar"
       onDoubleClick={() => {
@@ -79,7 +79,7 @@ export function DesktopTitleBar() {
         <button
           type="button"
           aria-label="Minimize window"
-          className="flex h-8 w-10 items-center justify-center border-0 bg-transparent p-0 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+          className="flex h-8 w-10 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => {
             void handleMinimize();
           }}
@@ -89,7 +89,7 @@ export function DesktopTitleBar() {
         <button
           type="button"
           aria-label={isMaximized ? "Restore window" : "Maximize window"}
-          className="flex h-8 w-10 items-center justify-center border-0 bg-transparent p-0 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+          className="flex h-8 w-10 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => {
             void handleToggleMaximize();
           }}
@@ -99,7 +99,7 @@ export function DesktopTitleBar() {
         <button
           type="button"
           aria-label="Close window"
-          className="flex h-8 w-10 items-center justify-center border-0 bg-transparent p-0 text-zinc-300 hover:bg-red-600 hover:text-white"
+          className="flex h-8 w-10 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground hover:bg-red-100 hover:text-red-700"
           onClick={() => {
             void handleClose();
           }}

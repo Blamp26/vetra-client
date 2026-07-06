@@ -9,7 +9,22 @@ vi.mock("emoji-picker-react", () => ({
   EmojiStyle: { APPLE: "apple" },
 }));
 
-import { MessageContextMenu } from "./MessageContextMenu";
+import { MessageContextMenu, calculateContextMenuPosition, type Rect } from "./MessageContextMenu";
+
+function menuRect(position: { left: number; top: number }, width = 256, height = 240): Rect {
+  return {
+    left: position.left,
+    top: position.top,
+    right: position.left + width,
+    bottom: position.top + height,
+    width,
+    height,
+  };
+}
+
+function intersects(a: Rect, b: Rect): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
 
 describe("MessageContextMenu", () => {
   const originalInnerWidth = window.innerWidth;
@@ -91,22 +106,102 @@ describe("MessageContextMenu", () => {
     });
   });
 
-  it("flips left when opened near the right edge", () => {
-    renderMenu({ x: 980, y: 140 });
-
-    expect(screen.getByTestId("message-context-menu")).toHaveStyle({
-      left: "724px",
-      top: "140px",
+  it("keeps the outgoing message menu off the message text while staying near the bubble", () => {
+    const contentRect = {
+      left: 720,
+      top: 140,
+      right: 900,
+      bottom: 220,
+      width: 180,
+      height: 80,
+    };
+    const position = calculateContextMenuPosition({
+      x: 900,
+      y: 160,
+      menuWidth: 256,
+      menuHeight: 240,
+      viewportWidth: 1000,
+      viewportHeight: 800,
+      contentRect,
+      isOwn: true,
     });
+
+    expect(position.left).toBe(464);
+    expect(intersects(menuRect(position), contentRect)).toBe(false);
   });
 
-  it("flips upward when opened near the bottom edge", () => {
-    renderMenu({ x: 120, y: 780 });
-
-    expect(screen.getByTestId("message-context-menu")).toHaveStyle({
-      left: "120px",
-      top: "540px",
+  it("keeps the incoming message menu off the message text while staying near the bubble", () => {
+    const contentRect = {
+      left: 100,
+      top: 180,
+      right: 320,
+      bottom: 260,
+      width: 220,
+      height: 80,
+    };
+    const position = calculateContextMenuPosition({
+      x: 120,
+      y: 200,
+      menuWidth: 256,
+      menuHeight: 240,
+      viewportWidth: 1000,
+      viewportHeight: 800,
+      contentRect,
+      isOwn: false,
     });
+
+    expect(position.left).toBe(320);
+    expect(intersects(menuRect(position), contentRect)).toBe(false);
+  });
+
+  it("keeps the reaction row and full menu inside the viewport near the bottom edge", () => {
+    const position = calculateContextMenuPosition({
+      x: 980,
+      y: 780,
+      menuWidth: 256,
+      menuHeight: 240,
+      viewportWidth: 1000,
+      viewportHeight: 800,
+      contentRect: {
+        left: 760,
+        top: 720,
+        right: 940,
+        bottom: 780,
+        width: 180,
+        height: 60,
+      },
+      isOwn: true,
+    });
+
+    expect(position.left).toBeGreaterThanOrEqual(8);
+    expect(position.top).toBeGreaterThanOrEqual(8);
+    expect(position.left + 256).toBeLessThanOrEqual(992);
+    expect(position.top + 240).toBeLessThanOrEqual(792);
+  });
+
+  it("still clamps inside the viewport when the preferred side would overflow", () => {
+    const position = calculateContextMenuPosition({
+      x: 990,
+      y: 790,
+      menuWidth: 256,
+      menuHeight: 240,
+      viewportWidth: 1000,
+      viewportHeight: 800,
+      contentRect: {
+        left: 820,
+        top: 730,
+        right: 980,
+        bottom: 790,
+        width: 160,
+        height: 60,
+      },
+      isOwn: false,
+    });
+
+    expect(position.left).toBeGreaterThanOrEqual(8);
+    expect(position.top).toBeGreaterThanOrEqual(8);
+    expect(position.left + 256).toBeLessThanOrEqual(992);
+    expect(position.top + 240).toBeLessThanOrEqual(792);
   });
 
   it("disables forwarding for attachment messages", () => {

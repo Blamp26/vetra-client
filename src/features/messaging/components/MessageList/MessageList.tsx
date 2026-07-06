@@ -38,6 +38,60 @@ interface ContextMenu {
   hasText:  boolean;
   hasAttachment: boolean;
   author:   string;
+  bubbleRect: {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+  };
+  contentRect: {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+  };
+}
+
+function toRect(rect: DOMRect | DOMRectReadOnly) {
+  return {
+    left: rect.left,
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+function getSafeContentRect(bubble: HTMLDivElement) {
+  const contentEl = bubble.querySelector<HTMLElement>("[data-message-content-rect]");
+  if (contentEl) {
+    return toRect(contentEl.getBoundingClientRect());
+  }
+
+  const bubbleRect = bubble.getBoundingClientRect();
+  const style = window.getComputedStyle(bubble);
+  const paddingLeft = Number.parseFloat(style.paddingLeft || "0");
+  const paddingRight = Number.parseFloat(style.paddingRight || "0");
+  const paddingTop = Number.parseFloat(style.paddingTop || "0");
+  const paddingBottom = Number.parseFloat(style.paddingBottom || "0");
+  const left = bubbleRect.left + paddingLeft;
+  const right = Math.max(left, bubbleRect.right - paddingRight);
+  const top = bubbleRect.top + paddingTop;
+  const bottom = Math.max(top, bubbleRect.bottom - paddingBottom);
+
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
+  };
 }
 
 export function MessageList({
@@ -158,8 +212,9 @@ export function MessageList({
   }, [contextMenu]);
 
   const handleContextMenu = useCallback(
-    (e: React.MouseEvent, msg: Message) => {
+    (e: React.MouseEvent<HTMLDivElement>, msg: Message) => {
       e.preventDefault();
+      const bubble = e.currentTarget;
       const author = msg.sender_display_name || msg.sender_username || `User #${msg.sender_id}`;
       setContextMenu({
         msgId: msg.id,
@@ -170,6 +225,8 @@ export function MessageList({
         hasText: (msg.content ?? "").trim().length > 0,
         hasAttachment: getMessageAttachment(msg) != null,
         author,
+        bubbleRect: toRect(bubble.getBoundingClientRect()),
+        contentRect: getSafeContentRect(bubble),
       });
     },
     [currentUserId],

@@ -11,6 +11,8 @@ interface ContextMenuData {
   isOwn:    boolean;
   hasText:  boolean;
   author:   string;
+  bubbleRect?: Rect;
+  contentRect?: Rect;
 }
 
 interface MessageContextMenuProps {
@@ -32,6 +34,25 @@ interface MessageContextMenuProps {
 const EMOJIS = ["👍","❤️","😂","🎉","😮","😢","🔥"];
 const VIEWPORT_MARGIN = 8;
 
+export interface Rect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+function intersects(a: Rect, b: Rect): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function intersectionArea(a: Rect, b: Rect): number {
+  const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+  const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+  return width * height;
+}
+
 export function calculateContextMenuPosition({
   x,
   y,
@@ -39,6 +60,9 @@ export function calculateContextMenuPosition({
   menuHeight,
   viewportWidth,
   viewportHeight,
+  bubbleRect,
+  contentRect,
+  isOwn,
 }: {
   x: number;
   y: number;
@@ -46,22 +70,84 @@ export function calculateContextMenuPosition({
   menuHeight: number;
   viewportWidth: number;
   viewportHeight: number;
+  bubbleRect?: Rect;
+  contentRect?: Rect;
+  isOwn: boolean;
 }) {
-  let left = x;
-  let top = y;
+  if (!bubbleRect && !contentRect) {
+    let left = x;
+    let top = y;
 
-  if (left + menuWidth > viewportWidth - VIEWPORT_MARGIN) {
-    left = x - menuWidth;
+    if (left + menuWidth > viewportWidth - VIEWPORT_MARGIN) {
+      left = x - menuWidth;
+    }
+
+    if (top + menuHeight > viewportHeight - VIEWPORT_MARGIN) {
+      top = y - menuHeight;
+    }
+
+    left = Math.min(Math.max(VIEWPORT_MARGIN, left), Math.max(VIEWPORT_MARGIN, viewportWidth - menuWidth - VIEWPORT_MARGIN));
+    top = Math.min(Math.max(VIEWPORT_MARGIN, top), Math.max(VIEWPORT_MARGIN, viewportHeight - menuHeight - VIEWPORT_MARGIN));
+
+    return { left, top };
   }
 
-  if (top + menuHeight > viewportHeight - VIEWPORT_MARGIN) {
-    top = y - menuHeight;
-  }
+  const anchorRect = contentRect ?? bubbleRect ?? {
+    left: x,
+    top: y,
+    right: x,
+    bottom: y,
+    width: 0,
+    height: 0,
+  };
+  const contentAreaRect = contentRect ?? anchorRect;
+  const minLeft = VIEWPORT_MARGIN;
+  const maxLeft = Math.max(VIEWPORT_MARGIN, viewportWidth - menuWidth - VIEWPORT_MARGIN);
+  const minTop = VIEWPORT_MARGIN;
+  const maxTop = Math.max(VIEWPORT_MARGIN, viewportHeight - menuHeight - VIEWPORT_MARGIN);
+  const preferredTop = anchorRect.top + menuHeight <= viewportHeight - VIEWPORT_MARGIN
+    ? anchorRect.top
+    : anchorRect.bottom - menuHeight;
+  const top = Math.min(Math.max(minTop, preferredTop), maxTop);
+  const preferredSide = isOwn ? "left" : "right";
+  const sideOrder = preferredSide === "left" ? ["left", "right"] : ["right", "left"];
 
-  left = Math.min(Math.max(VIEWPORT_MARGIN, left), Math.max(VIEWPORT_MARGIN, viewportWidth - menuWidth - VIEWPORT_MARGIN));
-  top = Math.min(Math.max(VIEWPORT_MARGIN, top), Math.max(VIEWPORT_MARGIN, viewportHeight - menuHeight - VIEWPORT_MARGIN));
+  const candidates = sideOrder.map((side) => {
+    const baseLeft = side === "left" ? anchorRect.left - menuWidth : anchorRect.right;
+    const left = Math.min(Math.max(minLeft, baseLeft), maxLeft);
+    const rect = {
+      left,
+      top,
+      right: left + menuWidth,
+      bottom: top + menuHeight,
+      width: menuWidth,
+      height: menuHeight,
+    };
 
-  return { left, top };
+    return {
+      side,
+      left,
+      top,
+      intersectsText: intersects(rect, contentAreaRect),
+      overlapArea: intersectionArea(rect, contentAreaRect),
+      clampDelta: Math.abs(left - baseLeft),
+    };
+  });
+
+  candidates.sort((a, b) => {
+    if (a.intersectsText !== b.intersectsText) {
+      return Number(a.intersectsText) - Number(b.intersectsText);
+    }
+    if (a.overlapArea !== b.overlapArea) {
+      return a.overlapArea - b.overlapArea;
+    }
+    if (a.side !== b.side) {
+      return a.side === preferredSide ? -1 : 1;
+    }
+    return a.clampDelta - b.clampDelta;
+  });
+
+  return { left: candidates[0].left, top: candidates[0].top };
 }
 
 export function MessageContextMenu({
@@ -96,9 +182,12 @@ export function MessageContextMenu({
         menuHeight: height,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
+        bubbleRect: data.bubbleRect,
+        contentRect: data.contentRect,
+        isOwn: data.isOwn,
       }),
     );
-  }, [data.x, data.y, isPickerExpanded, data.isOwn, data.hasText, canEdit, canForward]);
+  }, [data.x, data.y, data.bubbleRect, data.contentRect, isPickerExpanded, data.isOwn, data.hasText, canEdit, canForward]);
 
   useEffect(() => {
     if (!isPickerExpanded || !pickerRef.current) return;

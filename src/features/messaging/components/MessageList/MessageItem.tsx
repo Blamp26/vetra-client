@@ -27,7 +27,7 @@ interface MessageItemProps {
   isRoom: boolean;
   messageReactions: MessageReactionGroup[];
   currentUserId: number;
-  onContextMenu: (e: React.MouseEvent, msg: Message) => void;
+  onContextMenu: (e: React.MouseEvent<HTMLDivElement>, msg: Message) => void;
   onToggleSelection: (id: number) => void;
   onToggleReaction: (msgId: number, emoji: string) => void;
   onLightbox: (data: { src: string; author: string; time: string }) => void;
@@ -223,8 +223,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             {authorName}
           </div>
         )}
-        {renderReplyPreview(msg, isOwn)}
-        {renderContent()}
+        <div data-message-content-rect>
+          {renderReplyPreview(msg, isOwn)}
+          {renderContent()}
+        </div>
 
         <div className="mt-1.5 flex items-center justify-end gap-1 text-[10px] leading-none opacity-70">
           <span>{formatTime(msg.inserted_at)}</span>
