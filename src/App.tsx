@@ -15,6 +15,7 @@ import {
 } from "@/shared/utils/chatRoutes";
 import { IncomingCallModal } from "./features/calling/components/IncomingCallModal";
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
+import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
 import { CallProvider, useCallContext } from "@/features/calling/context";
 import { debugCall } from "@/features/calling/utils/callDebug";
 import type { ActiveChat } from "@/shared/types";
@@ -378,64 +379,68 @@ function AppShell() {
   }, [activeChat]);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-      <div className="flex h-full w-[455px] flex-shrink-0 flex-col border-r border-border bg-sidebar" data-testid="app-sidebar-shell">
-        <div className="flex flex-1 overflow-hidden">
-          <Sidebar isServerMode={showChannelPanel} />
+    <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-background text-foreground">
+      <DesktopTitleBar />
 
-          {showChannelPanel && persistedServerId !== null && (
-            <div className="w-[320px] border-l border-border">
-              <ChannelPanel serverId={persistedServerId} />
-            </div>
-          )}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex h-full w-[455px] flex-shrink-0 flex-col border-r border-border bg-sidebar" data-testid="app-sidebar-shell">
+          <div className="flex flex-1 overflow-hidden">
+            <Sidebar isServerMode={showChannelPanel} />
+
+            {showChannelPanel && persistedServerId !== null && (
+              <div className="w-[320px] border-l border-border">
+                <ChannelPanel serverId={persistedServerId} />
+              </div>
+            )}
+          </div>
+
+          <SidebarFooter
+            callStatus={status}
+            remoteUsername={remoteUsername}
+            callSeconds={seconds}
+            isMuted={isMuted}
+            isScreenSharing={isScreenSharing}
+            isScreenShareUpdating={isScreenShareUpdating}
+            callIssue={callIssue}
+            isIncomingActionPending={isIncomingActionPending}
+            onMuteToggle={toggleMute}
+            onHangUp={hangUp}
+            onAcceptCall={acceptCall}
+            onRejectCall={rejectCall}
+            onOpenSettings={() => navigateToHash("#/settings")}
+            onReturnToCall={handleReturnToActiveCall}
+          />
         </div>
 
-        <SidebarFooter
-          callStatus={status}
-          remoteUsername={remoteUsername}
-          callSeconds={seconds}
-          isMuted={isMuted}
-          isScreenSharing={isScreenSharing}
-          isScreenShareUpdating={isScreenShareUpdating}
-          callIssue={callIssue}
-          isIncomingActionPending={isIncomingActionPending}
-          onMuteToggle={toggleMute}
-          onHangUp={hangUp}
-          onAcceptCall={acceptCall}
-          onRejectCall={rejectCall}
-          onOpenSettings={() => navigateToHash("#/settings")}
-          onReturnToCall={handleReturnToActiveCall}
-        />
-      </div>
+        <div className="flex min-w-0 flex-1 overflow-hidden">
+          {!isSettingsRoute && chatTarget ? (
+            <ChatWindow
+              activeChat={chatTarget}
+              call={call}
+            />
+          ) : !isSettingsRoute && activeChat?.type === "server" ? (
+            <EmptyState
+              eyebrow="Workspace"
+              title="Choose a channel"
+              description="Open any channel to start messaging."
+              mode="channel"
+            />
+          ) : !isSettingsRoute ? (
+            <EmptyState
+              eyebrow="Inbox"
+              title="Pick a conversation"
+              description="Select a chat or start a new one."
+              actionLabel="Start a new conversation"
+              onAction={() => openModal("CREATE_PICKER")}
+              mode="conversation"
+            />
+          ) : null}
+        </div>
 
-      <div className="flex min-w-0 flex-1 overflow-hidden">
-        {!isSettingsRoute && chatTarget ? (
-          <ChatWindow
-            activeChat={chatTarget}
-            call={call}
-          />
-        ) : !isSettingsRoute && activeChat?.type === "server" ? (
-          <EmptyState
-            eyebrow="Workspace"
-            title="Choose a channel"
-            description="Open any channel to start messaging."
-            mode="channel"
-          />
-        ) : !isSettingsRoute ? (
-          <EmptyState
-            eyebrow="Inbox"
-            title="Pick a conversation"
-            description="Select a chat or start a new one."
-            actionLabel="Start a new conversation"
-            onAction={() => openModal("CREATE_PICKER")}
-            mode="conversation"
-          />
-        ) : null}
+        {isSettingsRoute && (
+          <SettingsPage onClose={() => navigateToHash(activeChatHash || "#")} />
+        )}
       </div>
-
-      {isSettingsRoute && (
-        <SettingsPage onClose={() => navigateToHash(activeChatHash || "#")} />
-      )}
 
       {status === "ringing" && (
         <IncomingCallModal

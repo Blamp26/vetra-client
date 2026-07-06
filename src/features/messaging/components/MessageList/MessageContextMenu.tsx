@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Reply, Copy, Forward, CheckSquare, Edit2, Trash2 } from "lucide-react";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
@@ -30,6 +30,39 @@ interface MessageContextMenuProps {
 }
 
 const EMOJIS = ["👍","❤️","😂","🎉","😮","😢","🔥"];
+const VIEWPORT_MARGIN = 8;
+
+export function calculateContextMenuPosition({
+  x,
+  y,
+  menuWidth,
+  menuHeight,
+  viewportWidth,
+  viewportHeight,
+}: {
+  x: number;
+  y: number;
+  menuWidth: number;
+  menuHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}) {
+  let left = x;
+  let top = y;
+
+  if (left + menuWidth > viewportWidth - VIEWPORT_MARGIN) {
+    left = x - menuWidth;
+  }
+
+  if (top + menuHeight > viewportHeight - VIEWPORT_MARGIN) {
+    top = y - menuHeight;
+  }
+
+  left = Math.min(Math.max(VIEWPORT_MARGIN, left), Math.max(VIEWPORT_MARGIN, viewportWidth - menuWidth - VIEWPORT_MARGIN));
+  top = Math.min(Math.max(VIEWPORT_MARGIN, top), Math.max(VIEWPORT_MARGIN, viewportHeight - menuHeight - VIEWPORT_MARGIN));
+
+  return { left, top };
+}
 
 export function MessageContextMenu({
   data,
@@ -46,7 +79,26 @@ export function MessageContextMenu({
   canForward,
   onClose
 }: MessageContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: data.x, top: data.y });
+
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+
+    const { width, height } = menu.getBoundingClientRect();
+    setPosition(
+      calculateContextMenuPosition({
+        x: data.x,
+        y: data.y,
+        menuWidth: width,
+        menuHeight: height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      }),
+    );
+  }, [data.x, data.y, isPickerExpanded, data.isOwn, data.hasText, canEdit, canForward]);
 
   useEffect(() => {
     if (!isPickerExpanded || !pickerRef.current) return;
@@ -67,8 +119,10 @@ export function MessageContextMenu({
 
   return (
     <div
+      ref={menuRef}
+      data-testid="message-context-menu"
       className="fixed z-floating bg-popover border border-border flex flex-col w-64"
-      style={{ top: data.y, left: data.x }}
+      style={{ top: position.top, left: position.left }}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Reactions bar */}
