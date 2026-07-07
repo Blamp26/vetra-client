@@ -209,46 +209,31 @@ describe("MessageList bubble layout", () => {
     expect(within(bubble).getByTestId("message-metadata")).not.toHaveClass("rounded-full", "bg-black/[0.20]");
   });
 
-  it("renders a grouped photo message as one collage bubble with one metadata display", () => {
+  it("renders a nine-photo grouped message as one Telegram-like album bubble", () => {
     renderMessageList([
       makeMessage({
         id: 1,
         content: null,
         sender_id: 1,
-        media_file_ids: ["photo-1", "photo-2", "photo-3"],
-        media_mime_types: ["image/jpeg", "image/png", "image/png"],
-        attachments: [
-          {
-            id: "photo-1",
-            url: "/api/v1/media/photo-1",
-            mime_type: "image/jpeg",
-            original_name: "photo-1.jpg",
-            file_size: 1024,
-            kind: "photo",
-          },
-          {
-            id: "photo-2",
-            url: "/api/v1/media/photo-2",
-            mime_type: "image/png",
-            original_name: "photo-2.png",
-            file_size: 2048,
-            kind: "photo",
-          },
-          {
-            id: "photo-3",
-            url: "/api/v1/media/photo-3",
-            mime_type: "image/png",
-            original_name: "photo-3.png",
-            file_size: 4096,
-            kind: "photo",
-          },
-        ],
+        media_file_ids: Array.from({ length: 9 }, (_, index) => `photo-${index + 1}`),
+        media_mime_types: Array.from({ length: 9 }, () => "image/jpeg"),
+        attachments: Array.from({ length: 9 }, (_, index) => ({
+          id: `photo-${index + 1}`,
+          url: `/api/v1/media/photo-${index + 1}`,
+          mime_type: "image/jpeg",
+          original_name: `photo-${index + 1}.jpg`,
+          file_size: 1024 + index,
+          kind: "photo" as const,
+        })),
       }),
     ]);
 
+    const album = screen.getByTestId("message-photo-collage");
     expect(screen.getAllByTestId("message-bubble-row")).toHaveLength(1);
-    expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
-    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(3);
+    expect(album).toBeInTheDocument();
+    expect(album).toHaveClass("w-[min(480px,calc(100vw-6rem))]");
+    expect(album).toHaveStyle({ aspectRatio: "480 / 384" });
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(9);
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
 

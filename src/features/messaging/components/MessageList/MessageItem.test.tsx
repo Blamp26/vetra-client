@@ -275,37 +275,19 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
   });
 
-  it("renders grouped photo messages as one collage bubble with one metadata display", () => {
+  it("renders a nine-photo grouped message with Telegram-like album geometry", () => {
     renderMessageItem(
       {
-        attachments: [
-          {
-            id: "photo-1",
-            url: "/api/v1/media/photo-1",
-            mime_type: "image/jpeg",
-            original_name: "photo-1.jpg",
-            file_size: 2048,
-            kind: "photo",
-          },
-          {
-            id: "photo-2",
-            url: "/api/v1/media/photo-2",
-            mime_type: "image/png",
-            original_name: "photo-2.png",
-            file_size: 4096,
-            kind: "photo",
-          },
-          {
-            id: "photo-3",
-            url: "/api/v1/media/photo-3",
-            mime_type: "image/png",
-            original_name: "photo-3.png",
-            file_size: 8192,
-            kind: "photo",
-          },
-        ],
-        media_file_ids: ["photo-1", "photo-2", "photo-3"],
-        media_mime_types: ["image/jpeg", "image/png", "image/png"],
+        attachments: Array.from({ length: 9 }, (_, index) => ({
+          id: `photo-${index + 1}`,
+          url: `/api/v1/media/photo-${index + 1}`,
+          mime_type: "image/jpeg",
+          original_name: `photo-${index + 1}.jpg`,
+          file_size: 2048 + index,
+          kind: "photo" as const,
+        })),
+        media_file_ids: Array.from({ length: 9 }, (_, index) => `photo-${index + 1}`),
+        media_mime_types: Array.from({ length: 9 }, () => "image/jpeg"),
         sender_id: 1,
         sender_username: "tester",
         sender_display_name: "Tester",
@@ -314,11 +296,36 @@ describe("MessageItem bubble layout", () => {
       { isOwn: true },
     );
 
-    expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
-    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(3);
+    const album = screen.getByTestId("message-photo-collage");
+    const tile0 = screen.getByTestId("message-photo-collage-tile-0");
+    const tile4 = screen.getByTestId("message-photo-collage-tile-4");
+    const tile7 = screen.getByTestId("message-photo-collage-tile-7");
+
+    expect(album).toBeInTheDocument();
+    expect(album).toHaveClass("w-[min(480px,calc(100vw-6rem))]");
+    expect(album).toHaveStyle({ aspectRatio: "480 / 384" });
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(9);
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
     expect(screen.getByTestId("message-media-only-overlay")).toBeInTheDocument();
-    expect(screen.queryAllByTestId("authenticated-image")).toHaveLength(3);
+    expect(screen.queryAllByTestId("authenticated-image")).toHaveLength(9);
+    expect(tile0).toHaveStyle({
+      left: "0.0000%",
+      top: "0.0000%",
+      width: "39.5833%",
+      height: "37.2396%",
+    });
+    expect(tile4).toHaveStyle({
+      left: "30.2083%",
+      top: "37.7604%",
+      width: "39.5833%",
+      height: "37.2396%",
+    });
+    expect(tile7).toHaveStyle({
+      left: "20.0000%",
+      top: "75.5208%",
+      width: "53.7500%",
+      height: "24.4792%",
+    });
   });
 
   it("renders incoming media-only messages with overlay timestamp and no outgoing status", () => {

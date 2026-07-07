@@ -18,34 +18,7 @@ import {
   downloadAttachmentWithAuth,
   openAttachmentWithAuth,
 } from "../../utils/attachmentDownloads";
-
-function getPhotoCollageGridClassName(photoCount: number) {
-  if (photoCount === 2) return "grid-cols-2 auto-rows-[10rem]";
-  if (photoCount === 3) return "grid-cols-2 auto-rows-[6.375rem]";
-  if (photoCount === 4) return "grid-cols-2 auto-rows-[7rem]";
-  if (photoCount === 5) return "grid-cols-6 auto-rows-[4.75rem]";
-  if (photoCount === 6) return "grid-cols-3 auto-rows-[5rem]";
-  if (photoCount === 7 || photoCount === 8) return "grid-cols-3 auto-rows-[4.75rem]";
-  return "grid-cols-3 auto-rows-[4.5rem]";
-}
-
-function getPhotoCollageTileClassName(photoCount: number, index: number) {
-  if (photoCount === 3) {
-    return index === 0 ? "row-span-2" : "";
-  }
-
-  if (photoCount === 5) {
-    if (index <= 1) return "col-span-3";
-    return "col-span-2";
-  }
-
-  if (photoCount === 7 || photoCount === 8) {
-    if (index === 0) return "col-span-2 row-span-2";
-    return "";
-  }
-
-  return "";
-}
+import { getPhotoAlbumLayout } from "./photoAlbumLayout";
 
 interface MessageItemProps {
   msg: Message;
@@ -91,6 +64,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const hasText = !!(msg.content && msg.content.trim().length > 0);
   const isPhotoAttachment = attachments.length > 0 && attachments.every((currentAttachment) => currentAttachment.kind === "photo");
   const photoAttachments = isPhotoAttachment ? attachments : [];
+  const isPhotoAlbum = photoAttachments.length > 1;
   const isDocumentAttachment = attachments.length > 0 && !isPhotoAttachment;
   const isPhotoOnly =
     isPhotoAttachment &&
@@ -187,37 +161,51 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
   const renderPhotoMedia = () => {
     if (photoAttachments.length > 1) {
+      const layout = getPhotoAlbumLayout(photoAttachments.length);
+
       return (
         <div
-          className={cn(
-            "relative grid max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[16px] bg-[#111] gap-[2px]",
-            getPhotoCollageGridClassName(photoAttachments.length),
-          )}
+          className="relative w-[min(480px,calc(100vw-6rem))] max-w-full overflow-hidden rounded-t-[15px] rounded-bl-[6px] rounded-br-[6px] bg-[#111] shadow-[0_1px_2px_rgba(16,16,16,0.61)]"
+          style={{ aspectRatio: `${layout.width} / ${layout.height}` }}
           data-testid="message-photo-collage"
         >
-          {photoAttachments.map((photoAttachment, index) => (
-            <button
-              key={photoAttachment.id}
-              type="button"
-              className={cn(
-                "relative min-h-[4.5rem] overflow-hidden bg-[#111]",
-                getPhotoCollageTileClassName(photoAttachments.length, index),
-              )}
-              data-testid="message-photo-collage-tile"
-              onClick={() => onLightbox({
-                src: photoAttachment.url,
-                author: authorName,
-                time: msg.inserted_at,
-              })}
-            >
-              <AuthenticatedImage
-                className="block h-full w-full object-cover"
-                src={photoAttachment.url}
-                alt={getAttachmentDisplayName(photoAttachment)}
-                crossOrigin="anonymous"
-              />
-            </button>
-          ))}
+          <div className="relative h-full w-full" data-testid="message-photo-collage-inner">
+            {photoAttachments.map((photoAttachment, index) => {
+              const tile = layout.tiles[index];
+
+              return (
+                <div
+                  key={photoAttachment.id}
+                  className="absolute"
+                  data-testid={`message-photo-collage-tile-${index}`}
+                  style={{
+                    left: tile.left,
+                    top: tile.top,
+                    width: tile.width,
+                    height: tile.height,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="relative flex h-full w-full overflow-hidden bg-[#111]"
+                    data-testid="message-photo-collage-tile"
+                    onClick={() => onLightbox({
+                      src: photoAttachment.url,
+                      author: authorName,
+                      time: msg.inserted_at,
+                    })}
+                  >
+                    <AuthenticatedImage
+                      className="block h-full w-full object-cover object-center"
+                      src={photoAttachment.url}
+                      alt={getAttachmentDisplayName(photoAttachment)}
+                      crossOrigin="anonymous"
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       );
     }
@@ -414,9 +402,22 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         className={cn(
           "relative w-fit text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
           isPhotoOnly
-            ? "min-w-0 max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[18px] border border-black/10 bg-transparent p-0"
+            ? cn(
+                "min-w-0 overflow-hidden border border-black/10 bg-transparent p-0",
+                isPhotoAlbum
+                  ? "rounded-t-[15px] rounded-bl-[6px] rounded-br-[6px]"
+                  : "rounded-[18px]",
+                isPhotoAlbum
+                  ? "max-w-[min(480px,calc(100vw-6rem))]"
+                  : "max-w-[min(28rem,calc(100vw-6rem))]",
+              )
             : isPhotoAttachment
-              ? "min-w-[11rem] max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[18px] border border-border/85 px-1.5 pb-2.5 pt-1.5"
+              ? cn(
+                  "min-w-[11rem] overflow-hidden rounded-[18px] border border-border/85 px-1.5 pb-2.5 pt-1.5",
+                  isPhotoAlbum
+                    ? "max-w-[min(480px,calc(100vw-6rem))]"
+                    : "max-w-[min(28rem,calc(100vw-6rem))]",
+                )
               : isDocumentAttachment
                 ? "min-w-[13rem] max-w-[min(22rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-2.5"
                 : "min-w-[3.75rem] max-w-[min(30rem,calc(100vw-6rem))] border border-border/85 px-2 pt-[5px] pb-[6px]",
