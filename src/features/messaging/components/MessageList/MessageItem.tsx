@@ -65,20 +65,24 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     isPhotoAttachment &&
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id;
+  const isTextOnly = hasText && !hasMedia;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
   const showSenderName = isRoom && !isOwn && !isConsecutive;
-  const renderInlineMetadata = hasText && !hasMedia;
   const metadataClassName = isOwn
-    ? "text-[color:var(--bubble-outgoing-meta)]"
+    ? "text-white/60"
     : "text-[color:var(--bubble-incoming-meta)]";
   const overlayMetadataClassName = "h-[18px] rounded-[10px] bg-black/[0.20] py-0 pl-[6px] pr-[5px] text-white";
-  const inlineMetadataSpacingClass = isOwn
-    ? msg.edited_at
-      ? "min-h-6 pr-[7.7rem]"
-      : "min-h-6 pr-[5.9rem]"
-    : msg.edited_at
-      ? "min-h-6 pr-[6.25rem]"
-      : "min-h-6 pr-[3.85rem]";
+  const textGroupRadiusClassName = isOwn
+    ? cn(
+        "rounded-[15px]",
+        isConsecutive && "rounded-tr-[8px]",
+        isGroupedWithNext ? "rounded-br-[8px]" : "rounded-br-[4px]",
+      )
+    : cn(
+        "rounded-[15px]",
+        isConsecutive && "rounded-tl-[8px]",
+        isGroupedWithNext ? "rounded-bl-[8px]" : "rounded-bl-[4px]",
+      );
 
   const handleAttachmentAction = async (action: "download" | "open") => {
     if (!attachment || isAttachmentActionPending) return;
@@ -106,7 +110,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         "inline-flex max-w-full items-center whitespace-nowrap",
         variant === "overlay"
           ? overlayMetadataClassName
-          : cn("text-[11px] leading-none", metadataClassName, "gap-1"),
+          : cn("gap-0 text-[12px] leading-[16.2px]", metadataClassName),
       )}
       data-testid="message-metadata"
     >
@@ -114,7 +118,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         className={cn(
           variant === "overlay"
             ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
-            : "",
+            : "mr-[4px] text-[12px] leading-[16.2px] font-normal text-current",
         )}
       >
         {formatTime(msg.inserted_at)}
@@ -124,7 +128,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           className={cn(
             variant === "overlay"
               ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
-              : "",
+              : "mr-[4px] text-[12px] leading-[16.2px] font-normal text-current",
           )}
         >
           (ed.)
@@ -139,7 +143,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
           </span>
         ) : (
-          <StatusIcon status={msg.status} className="ml-0 translate-y-[0.5px] text-current" />
+          <span
+            className="ml-[-3px] flex h-[19px] w-[19px] items-center justify-center text-white"
+            data-testid="message-inline-status"
+          >
+            <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
+          </span>
         )
       )}
     </div>
@@ -267,11 +276,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         {hasText && !isDocumentAttachment && (
           <div
             className={cn(
-              "whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45]",
+              "whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]",
               isPhotoAttachment && "px-2.5 pt-2",
-              renderInlineMetadata && inlineMetadataSpacingClass,
               isPhotoAttachment &&
-                !renderInlineMetadata &&
+                !isTextOnly &&
                 (isOwn
                   ? msg.edited_at
                     ? "pr-[7.7rem]"
@@ -322,7 +330,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     <div
       ref={ref}
       className={cn(
-        "flex w-full",
+        "flex w-full items-end",
         isOwn ? "justify-end" : "justify-start",
       )}
       data-testid="message-bubble-row"
@@ -344,17 +352,19 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               ? "min-w-[11rem] max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[18px] border border-border/85 px-1.5 pb-2.5 pt-1.5"
               : isDocumentAttachment
                 ? "min-w-[13rem] max-w-[min(22rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-2.5"
-                : "min-w-[4.75rem] max-w-[min(66%,42rem)] rounded-[18px] border border-border/85 px-3.5 py-2.5",
+                : "min-w-[3.75rem] max-w-[min(30rem,calc(100vw-6rem))] border border-border/85 px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
-          isOwn
-            ? cn(
-                isConsecutive && "rounded-tr-[12px]",
-                isGroupedWithNext && "rounded-br-[12px]",
-              )
-            : cn(
-                isConsecutive && "rounded-tl-[12px]",
-                isGroupedWithNext && "rounded-bl-[12px]",
-              ),
+          isTextOnly
+            ? textGroupRadiusClassName
+            : isOwn
+              ? cn(
+                  isConsecutive && "rounded-tr-[12px]",
+                  isGroupedWithNext && "rounded-br-[12px]",
+                )
+              : cn(
+                  isConsecutive && "rounded-tl-[12px]",
+                  isGroupedWithNext && "rounded-bl-[12px]",
+                ),
           isPhotoOnly
             ? "text-white"
             : isPhotoAttachment
@@ -374,10 +384,30 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             {authorName}
           </div>
         )}
-        <div data-message-content-rect className="relative">
-          {renderReplyPreview(msg, isOwn)}
-          {renderContent()}
-        </div>
+        {isTextOnly ? (
+          <>
+            {renderReplyPreview(msg, isOwn)}
+            <div className="relative text-[16px] leading-[21px]" data-testid="message-text-flow">
+              <span
+                data-message-content-rect
+                className="relative whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]"
+              >
+                <EmojiText text={msg.content || ""} />
+              </span>
+              <span
+                className="pointer-events-none relative float-right mb-[-6px] ml-[7px] mr-[-6px] mt-0 inline-flex items-center px-[4px] pt-0 top-[6px]"
+                data-testid="message-text-inline-metadata"
+              >
+                {renderMetadata()}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div data-message-content-rect className="relative">
+            {renderReplyPreview(msg, isOwn)}
+            {renderContent()}
+          </div>
+        )}
 
         {isPhotoOnly && (
           <div
@@ -388,19 +418,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {renderInlineMetadata && (
-          <div className="pointer-events-none absolute bottom-2.5 right-3.5">
-            {renderMetadata()}
-          </div>
-        )}
-
         {isPhotoAttachment && hasText && (
           <div className="pointer-events-none absolute bottom-2.5 right-3.5">
             {renderMetadata()}
           </div>
         )}
 
-        {!renderInlineMetadata && !isPhotoOnly && !isPhotoAttachment && !isDocumentAttachment && (
+        {!isTextOnly && !isPhotoOnly && !isPhotoAttachment && !isDocumentAttachment && (
           <div className="mt-1.5 flex justify-end">
             {renderMetadata()}
           </div>

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import { within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MessageList } from "./MessageList";
 
@@ -159,7 +160,41 @@ describe("MessageList bubble layout", () => {
 
     const rows = screen.getAllByTestId("message-row-spacing");
     expect(rows[1]).toHaveAttribute("data-attachment-run", "false");
-    expect(rows[1]).toHaveClass("mt-1");
+    expect(rows[1]).toHaveAttribute("data-grouped-with-previous", "true");
+    expect(rows[0]).toHaveAttribute("data-grouped-with-next", "true");
+    expect(rows[1]).toHaveClass("mt-0.5");
+  });
+
+  it("applies mirrored group corners to consecutive incoming text bubbles", () => {
+    renderMessageList([
+      makeMessage({ id: 1, sender_id: 2, content: "First incoming" }),
+      makeMessage({ id: 2, sender_id: 2, content: "Second incoming" }),
+    ]);
+
+    const bubbles = screen.getAllByTestId("message-bubble");
+    expect(bubbles[0]).toHaveClass("rounded-bl-[8px]");
+    expect(bubbles[1]).toHaveClass("rounded-tl-[8px]", "rounded-bl-[4px]");
+  });
+
+  it("applies outgoing group corners to consecutive own text bubbles", () => {
+    renderMessageList([
+      makeMessage({ id: 1, sender_id: 1, content: "One" }),
+      makeMessage({ id: 2, sender_id: 1, content: "Two" }),
+    ]);
+
+    const bubbles = screen.getAllByTestId("message-bubble");
+    expect(bubbles[0]).toHaveClass("rounded-br-[8px]");
+    expect(bubbles[1]).toHaveClass("rounded-tr-[8px]", "rounded-br-[4px]");
+  });
+
+  it("keeps inline text metadata inside the bubble without turning it into a footer capsule", () => {
+    renderMessageList([makeMessage({ sender_id: 1, content: "Ok" })]);
+
+    const bubble = screen.getByTestId("message-bubble");
+    const inlineMeta = within(bubble).getByTestId("message-text-inline-metadata");
+
+    expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
+    expect(within(bubble).getByTestId("message-metadata")).not.toHaveClass("rounded-full", "bg-black/[0.20]");
   });
 
   it("keeps a dedicated bottom spacer so the last message clears the composer", () => {

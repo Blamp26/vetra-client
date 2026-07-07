@@ -90,19 +90,25 @@ describe("MessageItem bubble layout", () => {
 
     const row = screen.getByTestId("message-bubble-row");
     const bubble = screen.getByTestId("message-bubble");
+    const inlineMeta = screen.getByTestId("message-text-inline-metadata");
 
     expect(row).toHaveAttribute("data-own-message", "false");
     expect(row).toHaveClass("justify-start");
     expect(row).not.toHaveClass("justify-end");
     expect(bubble).toHaveClass("w-fit");
-    expect(bubble).toHaveClass("max-w-[min(66%,42rem)]");
-    expect(bubble).toHaveClass("rounded-[18px]");
+    expect(bubble).toHaveClass("max-w-[min(30rem,calc(100vw-6rem))]");
+    expect(bubble).toHaveClass("rounded-[15px]");
+    expect(bubble).toHaveClass("rounded-bl-[4px]");
+    expect(bubble).toHaveClass("px-2");
+    expect(bubble).toHaveClass("pt-[5px]");
+    expect(bubble).toHaveClass("pb-[6px]");
     expect(bubble).toHaveClass("bg-bubble-incoming");
     expect(bubble).not.toHaveClass("flex-1");
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
+    expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
   });
 
@@ -120,18 +126,22 @@ describe("MessageItem bubble layout", () => {
 
     const row = screen.getByTestId("message-bubble-row");
     const bubble = screen.getByTestId("message-bubble");
+    const inlineMeta = screen.getByTestId("message-text-inline-metadata");
 
     expect(row).toHaveAttribute("data-own-message", "true");
     expect(row).toHaveClass("justify-end");
     expect(row).not.toHaveClass("justify-start");
     expect(bubble).toHaveClass("w-fit");
-    expect(bubble).toHaveClass("min-w-[4.75rem]");
-    expect(bubble).toHaveClass("max-w-[min(66%,42rem)]");
+    expect(bubble).toHaveClass("min-w-[3.75rem]");
+    expect(bubble).toHaveClass("max-w-[min(30rem,calc(100vw-6rem))]");
     expect(bubble).toHaveClass("bg-bubble-outgoing");
+    expect(bubble).toHaveClass("rounded-br-[4px]");
     expect(bubble).not.toHaveClass("flex-1");
     expect(screen.queryByText("Tester")).not.toBeInTheDocument();
     expect(screen.getByText("23")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
+    expect(screen.getByTestId("message-inline-status")).toHaveClass("ml-[-3px]", "h-[19px]", "w-[19px]");
     expect(screen.getByLabelText("Sent")).toBeInTheDocument();
   });
 
@@ -185,6 +195,46 @@ describe("MessageItem bubble layout", () => {
 
     expect(contentRect).not.toBeNull();
     expect(contentRect).not.toContain(metadata);
+  });
+
+  it("applies Telegram-like grouped corner geometry to outgoing text bubbles", () => {
+    renderMessageItem(
+      {
+        content: "Grouped",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "delivered",
+      },
+      { isOwn: true, isConsecutive: true, isGroupedWithNext: true },
+    );
+
+    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[8px]", "rounded-br-[8px]");
+  });
+
+  it("uses a reduced tail-side corner on the last outgoing text bubble in a group", () => {
+    renderMessageItem(
+      {
+        content: "Last",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "read",
+      },
+      { isOwn: true, isConsecutive: true, isGroupedWithNext: false },
+    );
+
+    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[8px]", "rounded-br-[4px]");
+  });
+
+  it("applies mirrored grouped corner geometry to incoming text bubbles", () => {
+    renderMessageItem(
+      { content: "Incoming grouped" },
+      { isConsecutive: true, isGroupedWithNext: true },
+    );
+
+    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tl-[8px]", "rounded-bl-[8px]");
+    expect(screen.queryByTestId("message-inline-status")).not.toBeInTheDocument();
   });
 
   it("renders outgoing media-only messages as media-sized bubbles with overlay metadata", () => {
@@ -417,6 +467,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Read")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
+    expect(screen.getByTestId("message-text-inline-metadata")).toBeInTheDocument();
     expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
   });
 

@@ -453,14 +453,16 @@ export function MessageList({
                   key={msg.id}
                   data-testid="message-row-spacing"
                   data-attachment-run={isAttachmentRun ? "true" : "false"}
+                  data-grouped-with-previous={isConsecutive ? "true" : "false"}
+                  data-grouped-with-next={isGroupedWithNext ? "true" : "false"}
                   className={cn(
                     idx === 0
                       ? "mt-0"
                       : isAttachmentRun
                         ? "mt-0.5"
                         : isConsecutive
-                          ? "mt-1"
-                          : "mt-3.5",
+                          ? "mt-0.5"
+                          : "mt-2.5",
                   )}
                 >
                   <MessageItem
