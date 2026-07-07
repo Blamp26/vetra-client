@@ -17,6 +17,13 @@ export class ApiError extends Error {
   }
 }
 
+type ErrorPayload = {
+  error?: string;
+  message?: string;
+  details?: Record<string, string[]>;
+  errors?: Record<string, string[] | string> | string[] | string;
+};
+
 /**
  * Возвращает текущий authToken из хранилища.
  * Используется внутри request() для автоматической подстановки заголовка.
@@ -43,7 +50,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
   });
 
-  const data = await response.json();
+  const rawText = await response.text();
+  let data: unknown = null;
+
+  if (rawText.trim()) {
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = rawText;
+    }
+  }
 
   if (!response.ok) {
     // 401 — токен истёк или невалиден; очищаем хранилище
@@ -52,11 +68,41 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       storage.remove(STORAGE_KEYS.USER);
       // Перезагрузка бросает ApiError, которую поймает useAuth
     }
-    const message = data?.error || data?.message || `Request failed: ${response.status}`;
-    throw new ApiError(message, response.status, data?.details);
+    const payload = typeof data === "object" && data !== null ? (data as ErrorPayload) : null;
+    const details =
+      payload?.details && typeof payload.details === "object"
+        ? payload.details
+        : undefined;
+    const validationErrors =
+      payload?.errors && typeof payload.errors === "object" && !Array.isArray(payload.errors)
+        ? Object.fromEntries(
+            Object.entries(payload.errors).map(([field, value]) => [
+              field,
+              Array.isArray(value) ? value : [String(value)],
+            ]),
+          )
+        : undefined;
+    const fallbackErrors =
+      Array.isArray(payload?.errors) && payload.errors.length > 0
+        ? payload.errors.join(", ")
+        : typeof payload?.errors === "string"
+          ? payload.errors
+          : null;
+    const message =
+      payload?.error ||
+      payload?.message ||
+      fallbackErrors ||
+      (typeof data === "string" && data.trim() ? data : null) ||
+      `Request failed: ${response.status}`;
+
+    throw new ApiError(message, response.status, details ?? validationErrors);
   }
 
-  return (data?.data !== undefined ? data.data : data) as T;
+  if (typeof data === "object" && data !== null && "data" in data) {
+    return (data as { data: T }).data;
+  }
+
+  return data as T;
 }
 
 export function get<T>(path: string): Promise<T> {

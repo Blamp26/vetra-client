@@ -27,7 +27,7 @@ export function useAuth() {
       if (err instanceof ApiError) {
         setError({ message: err.message, details: err.details });
       } else {
-        setError({ message: "Registration failed. Please try again." });
+        setError({ message: "Registration failed." });
       }
       return null;
     } finally {
@@ -44,9 +44,9 @@ export function useAuth() {
       return user;
     } catch (err) {
       if (err instanceof ApiError) {
-        setError({ message: err.message });
+        setError({ message: err.message, details: err.details });
       } else {
-        setError({ message: "Login failed. Please try again." });
+        setError({ message: "Login failed." });
       }
       return null;
     } finally {

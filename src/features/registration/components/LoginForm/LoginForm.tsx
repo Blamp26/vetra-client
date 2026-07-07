@@ -46,7 +46,13 @@ export function LoginForm({ onSwitchToRegister }: Props) {
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {error && (
           <div className="rounded-[var(--radius-md)] border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {error.message}
+            <span>{error.message}</span>
+            {error.details &&
+              Object.entries(error.details).map(([field, msgs]: [string, string[]]) => (
+                <div key={field} className="mt-1">
+                  <strong>{field}:</strong> {msgs.join(", ")}
+                </div>
+              ))}
           </div>
         )}
         
@@ -56,7 +62,7 @@ export function LoginForm({ onSwitchToRegister }: Props) {
           </label>
           <input
             className="vt-input"
-            id="login-username" name="username" type="text" placeholder="Username"
+            id="login-username" name="username" type="text" placeholder="Username" autoComplete="username"
             value={username} 
             onChange={(e) => { clearError(); setUsername(e.target.value); }}
             onBlur={(e) => validateUsername(e.target.value)}
@@ -72,7 +78,7 @@ export function LoginForm({ onSwitchToRegister }: Props) {
           <div className="relative">
             <input
               className="vt-input pr-10"
-              id="login-password" name="password" type={showPassword ? "text" : "password"} placeholder="Password"
+              id="login-password" name="password" type={showPassword ? "text" : "password"} placeholder="Password" autoComplete="current-password"
               value={password} 
               onChange={(e) => { clearError(); setPassword(e.target.value); }}
               onBlur={(e) => validatePassword(e.target.value)}
@@ -100,7 +106,7 @@ export function LoginForm({ onSwitchToRegister }: Props) {
       </form>
       <p className="mt-5 text-center text-xs text-muted-foreground">
         No account?{" "}
-        <button className="font-semibold text-primary hover:underline" onClick={onSwitchToRegister}>Register</button>
+        <button type="button" className="font-semibold text-primary hover:underline" onClick={onSwitchToRegister}>Register</button>
       </p>
     </div>
   );

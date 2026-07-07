@@ -63,7 +63,7 @@ export function RegisterForm({ onSwitchToLogin }: Props) {
           </label>
           <input
             className="vt-input"
-            id="reg-username" name="username" type="text" placeholder="Username (2–32 chars)"
+            id="reg-username" name="username" type="text" placeholder="Username (2–32 chars)" autoComplete="username"
             value={username} 
             onChange={(e) => { clearError(); setUsername(e.target.value); }}
             onBlur={(e) => validateUsername(e.target.value)}
@@ -79,7 +79,7 @@ export function RegisterForm({ onSwitchToLogin }: Props) {
           <div className="relative">
             <input
               className="vt-input pr-10"
-              id="reg-password" name="password" type={showPassword ? "text" : "password"} placeholder="Password (min 6 chars)"
+              id="reg-password" name="password" type={showPassword ? "text" : "password"} placeholder="Password (min 6 chars)" autoComplete="new-password"
               value={password} 
               onChange={(e) => { clearError(); setPassword(e.target.value); }}
               onBlur={(e) => validatePassword(e.target.value)}
@@ -107,7 +107,7 @@ export function RegisterForm({ onSwitchToLogin }: Props) {
       </form>
       <p className="mt-5 text-center text-xs text-muted-foreground">
         Already have an account?{" "}
-        <button className="font-semibold text-primary hover:underline" onClick={onSwitchToLogin}>Login</button>
+        <button type="button" className="font-semibold text-primary hover:underline" onClick={onSwitchToLogin}>Login</button>
       </p>
     </div>
   );
