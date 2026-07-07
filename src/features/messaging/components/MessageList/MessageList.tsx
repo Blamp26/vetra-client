@@ -445,11 +445,22 @@ export function MessageList({
               const nextMsg = dayMessages[idx + 1];
               const isConsecutive = prevMsg?.sender_id === msg.sender_id;
               const isGroupedWithNext = nextMsg?.sender_id === msg.sender_id;
+              const hasAttachment = getMessageAttachment(msg) != null;
+              const prevHasAttachment = prevMsg ? getMessageAttachment(prevMsg) != null : false;
+              const isAttachmentRun = isConsecutive && hasAttachment && prevHasAttachment;
               return (
                 <div
                   key={msg.id}
+                  data-testid="message-row-spacing"
+                  data-attachment-run={isAttachmentRun ? "true" : "false"}
                   className={cn(
-                    idx === 0 ? "mt-0" : isConsecutive ? "mt-1" : "mt-3.5",
+                    idx === 0
+                      ? "mt-0"
+                      : isAttachmentRun
+                        ? "mt-0.5"
+                        : isConsecutive
+                          ? "mt-1"
+                          : "mt-3.5",
                   )}
                 >
                   <MessageItem
@@ -475,11 +486,15 @@ export function MessageList({
             })}
           </div>
         ))}
-        <div ref={bottomRef} />
+        <div ref={bottomRef} className="h-3" data-testid="message-list-bottom-spacer" />
       </div>
 
       {showScrollBottom && (
-        <button onClick={scrollToBottom} className="vt-button vt-button--primary absolute bottom-20 right-5 min-h-11 rounded-full px-4 shadow-[var(--overlay-shadow)]">
+        <button
+          onClick={scrollToBottom}
+          aria-label="Scroll to latest messages"
+          className="vt-button vt-button--primary absolute bottom-24 right-6 z-10 min-h-10 rounded-full px-4 shadow-[var(--overlay-shadow)] ring-1 ring-black/10"
+        >
           Down
         </button>
       )}

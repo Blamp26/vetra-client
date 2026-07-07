@@ -147,16 +147,21 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     const attachmentKindLabel = attachment
       ? getAttachmentKindLabel(attachment.kind)
       : "Attachment";
+    const canOpenInline = attachment?.mime_type === "application/pdf";
+    const actionButtonClassName = cn(
+      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-current transition-colors disabled:opacity-50",
+      isOwn ? "hover:bg-white/16" : "hover:bg-accent",
+    );
 
     return (
       <>
-        <div className="flex min-w-0 items-start gap-3" data-testid="message-file-row">
+        <div className="flex min-w-0 items-center gap-2.5" data-testid="message-file-row">
           <div
             className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border",
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px]",
               isOwn
-                ? "border-primary/20 bg-bubble-outgoing/18 text-[color:var(--primary)]"
-                : "border-border bg-card/60 text-muted-foreground",
+                ? "bg-white/16 text-current"
+                : "bg-foreground/8 text-muted-foreground",
             )}
           >
             {attachment?.kind === "video" ? (
@@ -167,51 +172,56 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
           <div className="min-w-0 flex-1">
             <div
-              className="truncate text-sm font-medium text-current"
+              className="truncate text-sm font-medium leading-[1.2] text-current"
               data-testid="message-file-name"
             >
               {attachmentName}
             </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div
+              className={cn(
+                "mt-0.5 truncate text-[11.5px] leading-tight",
+                isOwn ? "text-[color:var(--bubble-outgoing-meta)]" : "text-muted-foreground",
+              )}
+            >
               {[attachmentTypeLabel || attachmentKindLabel, formatAttachmentSize(attachment?.file_size)].join(" · ")}
             </div>
           </div>
-        </div>
-
-        {hasText && (
-          <div className="mt-2 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
-            <EmojiText text={msg.content || ""} />
-          </div>
-        )}
-
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {attachment?.mime_type === "application/pdf" && (
+          <div className="flex shrink-0 items-center gap-0.5" data-testid="message-file-actions">
+            {canOpenInline && (
               <button
                 type="button"
+                aria-label="Open"
+                title="Open"
                 onClick={() => handleAttachmentAction("open")}
                 disabled={isAttachmentActionPending}
-                className="inline-flex h-7 items-center gap-1 rounded-md border border-border/70 bg-card/60 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-card disabled:opacity-60"
+                className={actionButtonClassName}
               >
-                <ExternalLink className="h-3.5 w-3.5" />
-                Open
+                <ExternalLink className="h-4 w-4" />
               </button>
             )}
             <button
               type="button"
+              aria-label="Download"
+              title="Download"
               onClick={() => handleAttachmentAction("download")}
               disabled={isAttachmentActionPending}
-              className="inline-flex h-7 items-center gap-1 rounded-md border border-border/70 bg-card/60 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-card disabled:opacity-60"
+              className={actionButtonClassName}
             >
-              <Download className="h-3.5 w-3.5" />
-              Download
+              <Download className="h-4 w-4" />
             </button>
           </div>
-          <div className="shrink-0">{renderMetadata()}</div>
         </div>
 
+        {hasText && (
+          <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
+            <EmojiText text={msg.content || ""} />
+          </div>
+        )}
+
+        <div className="mt-1 flex justify-end">{renderMetadata()}</div>
+
         {attachmentActionError && (
-          <div className="mt-2 text-[10px] text-destructive">
+          <div className="mt-1.5 text-[10px] text-destructive">
             {attachmentActionError}
           </div>
         )}
@@ -306,7 +316,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             : isPhotoAttachment
               ? "min-w-[11rem] max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[18px] border border-border/85 px-1.5 pb-2.5 pt-1.5"
               : isDocumentAttachment
-                ? "min-w-[16rem] max-w-[min(24rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-3"
+                ? "min-w-[13rem] max-w-[min(22rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-2.5"
                 : "min-w-[4.75rem] max-w-[min(66%,42rem)] rounded-[18px] border border-border/85 px-3.5 py-2.5",
           isSelected && "ring-1 ring-primary",
           isOwn
@@ -325,8 +335,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               : isDocumentAttachment
                 ? (
                     isOwn
-                      ? "border-primary/15 bg-bubble-outgoing/12 text-foreground"
-                      : "border-border bg-bubble-incoming text-foreground"
+                      ? "border-transparent bg-bubble-outgoing text-bubble-outgoing-text"
+                      : "border-border bg-bubble-incoming text-bubble-incoming-text"
                   )
                 : (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text"),
         )}

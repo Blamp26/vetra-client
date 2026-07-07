@@ -111,4 +111,61 @@ describe("MessageList bubble layout", () => {
     expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
   });
+
+  it("uses tighter spacing between consecutive media/document messages from the same sender", () => {
+    renderMessageList([
+      makeMessage({
+        id: 1,
+        content: null,
+        sender_id: 2,
+        media_file_id: "file-1",
+        media_mime_type: "application/pdf",
+        attachment: {
+          id: "file-1",
+          url: "/api/v1/media/file-1",
+          mime_type: "application/pdf",
+          original_name: "agenda.pdf",
+          file_size: 1024,
+          kind: "file",
+        },
+      }),
+      makeMessage({
+        id: 2,
+        content: null,
+        sender_id: 2,
+        media_file_id: "file-2",
+        media_mime_type: "application/pdf",
+        attachment: {
+          id: "file-2",
+          url: "/api/v1/media/file-2",
+          mime_type: "application/pdf",
+          original_name: "notes.pdf",
+          file_size: 2048,
+          kind: "file",
+        },
+      }),
+    ]);
+
+    const rows = screen.getAllByTestId("message-row-spacing");
+    expect(rows[1]).toHaveAttribute("data-attachment-run", "true");
+    expect(rows[1]).toHaveClass("mt-0.5");
+  });
+
+  it("uses the normal grouped spacing when a consecutive message has no attachment", () => {
+    renderMessageList([
+      makeMessage({ id: 1, sender_id: 2, content: "First" }),
+      makeMessage({ id: 2, sender_id: 2, content: "Second" }),
+    ]);
+
+    const rows = screen.getAllByTestId("message-row-spacing");
+    expect(rows[1]).toHaveAttribute("data-attachment-run", "false");
+    expect(rows[1]).toHaveClass("mt-1");
+  });
+
+  it("keeps a dedicated bottom spacer so the last message clears the composer", () => {
+    renderMessageList([makeMessage({ content: "Last message" })]);
+
+    expect(screen.getByTestId("message-list-bottom-spacer")).toBeInTheDocument();
+    expect(screen.getByTestId("message-list-bottom-spacer")).toHaveClass("h-3");
+  });
 });

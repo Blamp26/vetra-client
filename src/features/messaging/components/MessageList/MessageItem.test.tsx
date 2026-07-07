@@ -297,6 +297,57 @@ describe("MessageItem bubble layout", () => {
     expect(bubble).toContainElement(screen.getByTestId("message-metadata"));
   });
 
+  it("renders outgoing document bubbles with the same solid color as text bubbles, not a pale tint", () => {
+    renderMessageItem(
+      {
+        media_file_id: "media-file-outgoing",
+        media_mime_type: "application/pdf",
+        attachment: {
+          id: "media-file-outgoing",
+          url: "/api/v1/media/media-file-outgoing",
+          mime_type: "application/pdf",
+          original_name: "invoice.pdf",
+          file_size: 4096,
+          kind: "file",
+        },
+        sender_id: 1,
+        status: "sent",
+      },
+      { isOwn: true },
+    );
+
+    const bubble = screen.getByTestId("message-bubble");
+    expect(bubble).toHaveClass("bg-bubble-outgoing");
+    expect(bubble).toHaveClass("text-bubble-outgoing-text");
+    expect(bubble).not.toHaveClass("bg-bubble-outgoing/12");
+  });
+
+  it("renders compact icon-only file actions with accessible names instead of labeled buttons", () => {
+    renderMessageItem({
+      media_file_id: "media-file-compact",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "media-file-compact",
+        url: "/api/v1/media/media-file-compact",
+        mime_type: "application/pdf",
+        original_name: "contract.pdf",
+        file_size: 8192,
+        kind: "file",
+      },
+    });
+
+    const openButton = screen.getByRole("button", { name: "Open" });
+    const downloadButton = screen.getByRole("button", { name: "Download" });
+
+    expect(screen.getByTestId("message-file-actions")).toBeInTheDocument();
+    expect(openButton).toHaveClass("rounded-full");
+    expect(downloadButton).toHaveClass("rounded-full");
+    // Compact actions carry no separate visible text label; the accessible
+    // name comes entirely from aria-label so the icon can stay minimal.
+    expect(openButton.textContent).toBe("");
+    expect(downloadButton.textContent).toBe("");
+  });
+
   it("renders legacy photo attachments without an attachment object", () => {
     renderMessageItem({
       media_file_id: "legacy-photo-1",
