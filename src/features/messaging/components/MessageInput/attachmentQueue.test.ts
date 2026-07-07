@@ -33,6 +33,21 @@ describe("attachmentQueue helpers", () => {
     expect(units[0].attachments).toHaveLength(2);
   });
 
+  it("builds exactly one photo album unit for four photos", () => {
+    const units = buildAttachmentSendUnits(
+      Array.from({ length: 4 }, (_, index) => makeAttachment(`photo-${index + 1}`, "photo")),
+    );
+
+    expect(units).toHaveLength(1);
+    expect(units[0].kind).toBe("photo");
+    expect(units[0].attachments.map((attachment) => attachment.id)).toEqual([
+      "photo-1",
+      "photo-2",
+      "photo-3",
+      "photo-4",
+    ]);
+  });
+
   it("builds exactly one photo album unit for nine photos", () => {
     const units = buildAttachmentSendUnits(
       Array.from({ length: 9 }, (_, index) => makeAttachment(`photo-${index + 1}`, "photo")),

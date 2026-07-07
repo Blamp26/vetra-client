@@ -12,14 +12,29 @@ import {
 import { AttachmentReviewModal } from "./AttachmentReviewModal";
 import {
   buildAttachmentSendUnits,
+  getAttachmentSendUnitType,
   type PendingAttachment,
 } from "./attachmentQueue";
+import {
+  createAttachmentBatchId,
+  createAttachmentSendUnitId,
+  isAttachmentDebugEnabled,
+  logAttachmentDebug,
+  summarizeAttachmentLike,
+  summarizeUnknownShape,
+  type AttachmentDebugMeta,
+} from "../../utils/attachmentDebug";
  
 interface ReplyTarget { id: number; content: string; author: string; } 
  
 interface Props { 
   onSend: (
-    payload: { content?: string | null; mediaFileId?: string | null; mediaFileIds?: string[] | null },
+    payload: {
+      content?: string | null;
+      mediaFileId?: string | null;
+      mediaFileIds?: string[] | null;
+      __attachmentDebug?: AttachmentDebugMeta | null;
+    },
     replyToId?: number,
   ) => Promise<void>; 
    onTypingStart?: () => void; 
@@ -50,6 +65,7 @@ interface Props {
   const attachmentIdRef = useRef(0);
   const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
   const sendLockRef = useRef(false);
+  const attachmentBatchIdRef = useRef<string | null>(null);
  
    const editingMessage = useAppStore((s: RootState) => s.editingMessage); 
    const cancelEditing = useAppStore((s: RootState) => s.cancelEditing); 
@@ -92,6 +108,18 @@ interface Props {
   }, [pendingAttachments]);
 
   useEffect(() => {
+    logAttachmentDebug("modal.state", {
+      isOpen: pendingAttachments.length > 0,
+      itemCount: pendingAttachments.length,
+      photoCount: pendingAttachments.filter((attachment) => attachment.kind === "photo").length,
+      documentCount: pendingAttachments.filter((attachment) => attachment.kind !== "photo").length,
+    }, {
+      batchId: attachmentBatchIdRef.current,
+      table: pendingAttachments.map((attachment) => summarizeAttachmentLike(attachment)),
+    });
+  }, [pendingAttachments]);
+
+  useEffect(() => {
     return () => {
       pendingAttachmentsRef.current.forEach((attachment) => {
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
@@ -129,8 +157,16 @@ interface Props {
   };
 
   const clearPendingAttachments = (attachments = pendingAttachmentsRef.current) => {
+    logAttachmentDebug("queue.clear", {
+      itemCount: attachments.length,
+      localAttachmentIds: attachments.map((attachment) => attachment.id),
+    }, {
+      batchId: attachmentBatchIdRef.current,
+      table: attachments.map((attachment) => summarizeAttachmentLike(attachment)),
+    });
     attachments.forEach(revokeAttachmentPreview);
     pendingAttachmentsRef.current = [];
+    attachmentBatchIdRef.current = null;
     setPendingAttachments([]);
     resetUploadState();
   };
@@ -146,6 +182,14 @@ interface Props {
         next.push(attachment);
       }
       pendingAttachmentsRef.current = next;
+      logAttachmentDebug("queue.remove", {
+        removedLocalAttachmentId: id,
+        itemCount: next.length,
+        localAttachmentIds: next.map((attachment) => attachment.id),
+      }, {
+        batchId: attachmentBatchIdRef.current,
+        table: next.map((attachment) => summarizeAttachmentLike(attachment)),
+      });
       return next;
     });
   };
@@ -154,24 +198,48 @@ interface Props {
     if (files.length === 0) return;
 
     const validAttachments: PendingAttachment[] = [];
+    const selectedFileSummaries: Array<Record<string, unknown>> = [];
     let firstValidationError: string | null = null;
+    const selectedFilesBatchId =
+      attachmentBatchIdRef.current ??
+      (pendingAttachmentsRef.current.length === 0 ? createAttachmentBatchId() : null);
+
+    if (selectedFilesBatchId && !attachmentBatchIdRef.current) {
+      attachmentBatchIdRef.current = selectedFilesBatchId;
+    }
 
     for (const file of files) {
       const validationError = validateAttachmentFile(file);
       if (validationError) {
+        selectedFileSummaries.push({
+          name: file.name,
+          type: file.type || null,
+          size: file.size,
+          kind: null,
+          localAttachmentId: null,
+          validationError,
+        });
         firstValidationError ??= validationError;
         continue;
       }
 
       const classification = classifyPendingAttachment(file);
       if (!classification) {
+        selectedFileSummaries.push({
+          name: file.name,
+          type: file.type || null,
+          size: file.size,
+          kind: null,
+          localAttachmentId: null,
+          validationError: "Unsupported file type",
+        });
         firstValidationError ??=
           "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, WEBM, OGG.";
         continue;
       }
 
       const { kind, mimeType } = classification;
-      validAttachments.push({
+      const pendingAttachment: PendingAttachment = {
         id: `pending-attachment-${attachmentIdRef.current++}`,
         file,
         name: file.name,
@@ -179,13 +247,36 @@ interface Props {
         size: file.size,
         kind,
         previewUrl: kind === "photo" ? URL.createObjectURL(file) : null,
+      };
+
+      validAttachments.push(pendingAttachment);
+      selectedFileSummaries.push({
+        ...summarizeAttachmentLike(pendingAttachment),
+        type: file.type || null,
       });
     }
+
+    logAttachmentDebug("files.selected", {
+      selectedCount: files.length,
+      acceptedCount: validAttachments.length,
+      rejectedCount: files.length - validAttachments.length,
+      validationError: firstValidationError,
+    }, {
+      batchId: attachmentBatchIdRef.current,
+      table: selectedFileSummaries,
+    });
 
     if (validAttachments.length > 0) {
       setPendingAttachments((current) => {
         const next = [...current, ...validAttachments];
         pendingAttachmentsRef.current = next;
+        logAttachmentDebug("queue.append", {
+          itemCount: next.length,
+          localAttachmentIds: next.map((attachment) => attachment.id),
+        }, {
+          batchId: attachmentBatchIdRef.current,
+          table: next.map((attachment) => summarizeAttachmentLike(attachment)),
+        });
         return next;
       });
     }
@@ -213,8 +304,42 @@ interface Props {
         next.push(attachment);
       }
       pendingAttachmentsRef.current = next;
+      logAttachmentDebug("queue.remove.sent", {
+        removedLocalAttachmentIds: attachmentIds,
+        remainingCount: next.length,
+        remainingLocalAttachmentIds: next.map((attachment) => attachment.id),
+      }, {
+        batchId: attachmentBatchIdRef.current,
+        table: next.map((attachment) => summarizeAttachmentLike(attachment)),
+      });
+      if (next.length === 0) {
+        attachmentBatchIdRef.current = null;
+      }
       return next;
     });
+  };
+
+  const buildAttachmentMessagePayload = (
+    uploadedMediaFileIds: string[],
+    messageContent: string | null,
+    debugMeta?: AttachmentDebugMeta | null,
+  ) => {
+    const payload: {
+      content?: string | null;
+      mediaFileId?: string | null;
+      mediaFileIds?: string[] | null;
+      __attachmentDebug?: AttachmentDebugMeta | null;
+    } = {
+      content: messageContent,
+      mediaFileId: uploadedMediaFileIds[0] ?? null,
+      mediaFileIds: uploadedMediaFileIds.length > 1 ? uploadedMediaFileIds : null,
+    };
+
+    if (debugMeta && isAttachmentDebugEnabled()) {
+      payload.__attachmentDebug = debugMeta;
+    }
+
+    return payload;
   };
 
   const handleSend = async () => { 
@@ -253,22 +378,76 @@ interface Props {
         setContent(""); 
         resetUploadState();
        } else {
+        // Freeze the current queue at send start so UI updates do not drop later units.
         const attachmentsToSend = pendingAttachmentsRef.current.map((attachment) => ({ ...attachment }));
-        const sendUnits = buildAttachmentSendUnits(attachmentsToSend);
+        const batchId = attachmentBatchIdRef.current ?? createAttachmentBatchId();
+        attachmentBatchIdRef.current = batchId;
+        const sendUnits = buildAttachmentSendUnits(attachmentsToSend).map((unit) => ({
+          ...unit,
+          attachments: [...unit.attachments],
+        }));
         const photoSelectionCount = attachmentsToSend.filter((attachment) => attachment.kind === "photo").length;
         const reserveContentForPhotoUnit = photoSelectionCount > 1;
         let contentConsumed = false;
         let uploadPosition = 0;
         const totalUploads = attachmentsToSend.length;
 
-        for (const unit of sendUnits) {
+        logAttachmentDebug("send.click", {
+          queueCount: attachmentsToSend.length,
+          photoSelectionCount,
+          documentSelectionCount: attachmentsToSend.length - photoSelectionCount,
+          classification: reserveContentForPhotoUnit ? "album-capable" : "single-or-mixed",
+        }, {
+          batchId,
+          table: attachmentsToSend.map((attachment) => summarizeAttachmentLike(attachment)),
+        });
+
+        for (const [unitIndex, unit] of sendUnits.entries()) {
           const uploadedMediaFileIds: string[] = [];
+          const sendUnitId = createAttachmentSendUnitId(batchId, unitIndex);
+          const debugMeta: AttachmentDebugMeta = {
+            batchId,
+            sendUnitId,
+            localAttachmentIds: unit.attachments.map((attachment) => attachment.id),
+            unitIndex,
+            selectedAttachmentCount: attachmentsToSend.length,
+          };
+
+          logAttachmentDebug("send.unit", {
+            unitIndex,
+            unitType: getAttachmentSendUnitType(unit),
+            fileCount: unit.attachments.length,
+            localAttachmentIds: debugMeta.localAttachmentIds,
+            expectedMediaFileIdsCount: unit.attachments.length,
+          }, {
+            batchId,
+            sendUnitId,
+            table: unit.attachments.map((attachment) => summarizeAttachmentLike(attachment)),
+          });
 
           for (const attachment of unit.attachments) {
             uploadPosition += 1;
-            const mediaFileId = await performUpload(attachment.file, uploadPosition, totalUploads);
+            const mediaFileId = await performUpload(
+              attachment,
+              uploadPosition,
+              totalUploads,
+              batchId,
+              sendUnitId,
+            );
             if (!mediaFileId) return;
             uploadedMediaFileIds.push(mediaFileId);
+          }
+
+          if (unit.kind === "photo" && unit.attachments.length > 1 && uploadedMediaFileIds.length === 1) {
+            logAttachmentDebug("warning.album-collapsed-before-send", {
+              selectedPhotoCount: unit.attachments.length,
+              uploadedMediaFileIds,
+              localAttachmentIds: debugMeta.localAttachmentIds,
+            }, {
+              batchId,
+              sendUnitId,
+              level: "warn",
+            });
           }
 
           const shouldUseContent =
@@ -285,14 +464,38 @@ interface Props {
               ? "Album send failed"
               : "Message send failed";
 
+          const outgoingPayload = buildAttachmentMessagePayload(
+            uploadedMediaFileIds,
+            shouldUseContent ? trimmed : null,
+            debugMeta,
+          );
+
+          logAttachmentDebug("send.payload", {
+            contentPresent: Boolean(outgoingPayload.content),
+            mediaFileId: outgoingPayload.mediaFileId ?? null,
+            mediaFileIds: outgoingPayload.mediaFileIds ?? null,
+            media_file_id: outgoingPayload.mediaFileId ?? null,
+            media_file_ids: outgoingPayload.mediaFileIds ?? null,
+            attachmentCount: unit.attachments.length,
+            finalPayloadKeys: Object.keys(outgoingPayload).sort(),
+          }, {
+            batchId,
+            sendUnitId,
+          });
+
           await onSend(
-            {
-              content: shouldUseContent ? trimmed : null,
-              mediaFileId: uploadedMediaFileIds[0] ?? null,
-              mediaFileIds: uploadedMediaFileIds.length > 1 ? uploadedMediaFileIds : null,
-            },
+            outgoingPayload,
             !contentConsumed && shouldUseContent ? replyTo?.id : undefined,
           );
+
+          logAttachmentDebug("send.result", {
+            status: "resolved",
+            fileCount: unit.attachments.length,
+            localAttachmentIds: debugMeta.localAttachmentIds,
+          }, {
+            batchId,
+            sendUnitId,
+          });
 
           removeQueuedAttachments(unit.attachments.map((attachment) => attachment.id));
 
@@ -317,9 +520,15 @@ interface Props {
        sendLockRef.current = false;
        setIsSending(false); 
      } 
-   }; 
+  }; 
 
-  const performUpload = (file: File, position = 1, total = 1): Promise<string | null> => {
+  const performUpload = (
+    attachment: PendingAttachment,
+    position = 1,
+    total = 1,
+    batchId?: string | null,
+    sendUnitId?: string | null,
+  ): Promise<string | null> => {
     return new Promise((resolve) => {
       if (!currentUser || !authToken) {
         setUploadStatus("error");
@@ -329,10 +538,19 @@ interface Props {
         return;
       }
 
+      logAttachmentDebug("upload.start", {
+        position,
+        total,
+        ...summarizeAttachmentLike(attachment),
+      }, {
+        batchId,
+        sendUnitId,
+      });
+
       setUploadStatus("uploading");
       setUploadProgress(0);
       setUploadError(null);
-      setUploadLabel(total > 1 ? `${file.name} (${position}/${total})` : file.name);
+      setUploadLabel(total > 1 ? `${attachment.file.name} (${position}/${total})` : attachment.file.name);
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${API_BASE_URL}/media`);
@@ -349,24 +567,50 @@ interface Props {
         if (xhr.status < 200 || xhr.status >= 300) {
           setUploadStatus("error");
           setUploadError("Upload failed");
-          setUploadLabel(file.name);
+          setUploadLabel(attachment.file.name);
+          logAttachmentDebug("upload.failure", {
+            statusCode: xhr.status,
+            ...summarizeAttachmentLike(attachment),
+            response: summarizeUnknownShape(xhr.response),
+          }, {
+            batchId,
+            sendUnitId,
+            level: "warn",
+          });
           resolve(null);
           return;
         }
         const response = xhr.response ?? {};
         const mediaFileId = response?.data?.media_file_id ?? response?.media_file_id;
+        logAttachmentDebug("upload.success", {
+          mediaFileId: mediaFileId ?? null,
+          ...summarizeAttachmentLike(attachment),
+          response: summarizeUnknownShape(response),
+        }, {
+          batchId,
+          sendUnitId,
+        });
         resolve(mediaFileId || null);
       };
 
       xhr.onerror = () => {
         setUploadStatus("error");
         setUploadError("Upload failed");
-        setUploadLabel(file.name);
+        setUploadLabel(attachment.file.name);
+        logAttachmentDebug("upload.failure", {
+          statusCode: xhr.status || null,
+          ...summarizeAttachmentLike(attachment),
+          response: summarizeUnknownShape(xhr.response),
+        }, {
+          batchId,
+          sendUnitId,
+          level: "warn",
+        });
         resolve(null);
       };
 
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", attachment.file);
       xhr.send(formData);
     });
   };
@@ -414,6 +658,7 @@ interface Props {
      <>
      {pendingAttachments.length > 0 && (
        <AttachmentReviewModal
+         batchId={attachmentBatchIdRef.current}
          attachments={pendingAttachments}
          content={content}
          isSending={isSending}

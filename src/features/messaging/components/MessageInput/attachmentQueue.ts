@@ -15,6 +15,14 @@ export interface AttachmentSendUnit {
   attachments: PendingAttachment[];
 }
 
+export function getAttachmentSendUnitType(unit: AttachmentSendUnit) {
+  if (unit.kind === "photo") {
+    return unit.attachments.length > 1 ? "photo_album" : "single_photo";
+  }
+
+  return "document";
+}
+
 export function buildAttachmentSendUnits(
   attachments: PendingAttachment[],
 ): AttachmentSendUnit[] {

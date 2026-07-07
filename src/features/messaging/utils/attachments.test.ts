@@ -229,6 +229,109 @@ describe("attachments utils", () => {
     expect(attachments.every((attachment) => attachment.kind === "photo")).toBe(true);
   });
 
+  it("treats camelCase grouped media ids as authoritative for album normalization", () => {
+    const attachments = getMessageAttachments({
+      mediaFileId: "photo-1",
+      mediaFileIds: ["photo-1", "photo-2"],
+      mediaMimeType: "image/jpeg",
+    });
+
+    expect(attachments.map((attachment) => attachment.id)).toEqual([
+      "photo-1",
+      "photo-2",
+    ]);
+    expect(attachments.every((attachment) => attachment.kind === "photo")).toBe(true);
+  });
+
+  it("buildPreviewMessage keeps grouped albums intact from camelCase transport payloads", () => {
+    const preview = buildPreviewMessage({
+      id: 44,
+      content: null,
+      sender_id: 7,
+      recipient_id: 8,
+      room_id: null,
+      status: "sent",
+      inserted_at: "2026-07-01T10:06:00Z",
+      mediaFileId: "photo-1",
+      mediaFileIds: ["photo-1", "photo-2"],
+      mediaMimeType: "image/jpeg",
+      mediaMimeTypes: ["image/jpeg", "image/png"],
+    });
+
+    expect(preview.preview).toBe("Photos");
+    expect(preview.media_file_id).toBe("photo-1");
+    expect(preview.media_file_ids).toEqual(["photo-1", "photo-2"]);
+    expect(preview.attachments).toHaveLength(2);
+  });
+
+  it("preserves four-photo albums when raw messages contain grouped ids in both key styles", () => {
+    const attachments = getMessageAttachments({
+      media_file_ids: ["photo-1", "photo-2", "photo-3", "photo-4"],
+      mediaFileIds: ["photo-1", "photo-2", "photo-3", "photo-4"],
+      media_mime_types: ["image/jpeg", "image/jpeg", "image/png", "image/webp"],
+      attachments: [
+        {
+          id: "photo-1",
+          url: "/api/v1/media/photo-1",
+          mime_type: "image/jpeg",
+          original_name: "photo-1.jpg",
+          file_size: 1111,
+          kind: "photo",
+        },
+        {
+          id: "photo-2",
+          url: "/api/v1/media/photo-2",
+          mime_type: "image/jpeg",
+          original_name: "photo-2.jpg",
+          file_size: 2222,
+          kind: "photo",
+        },
+        {
+          id: "photo-3",
+          url: "/api/v1/media/photo-3",
+          mime_type: "image/png",
+          original_name: "photo-3.png",
+          file_size: 3333,
+          kind: "photo",
+        },
+        {
+          id: "photo-4",
+          url: "/api/v1/media/photo-4",
+          mime_type: "image/webp",
+          original_name: "photo-4.webp",
+          file_size: 4444,
+          kind: "photo",
+        },
+      ],
+    });
+
+    expect(attachments).toHaveLength(4);
+    expect(attachments.map((attachment) => attachment.id)).toEqual([
+      "photo-1",
+      "photo-2",
+      "photo-3",
+      "photo-4",
+    ]);
+
+    const preview = buildPreviewMessage({
+      id: 45,
+      content: null,
+      sender_id: 7,
+      recipient_id: 8,
+      room_id: null,
+      status: "sent",
+      inserted_at: "2026-07-01T10:07:00Z",
+      media_file_ids: ["photo-1", "photo-2", "photo-3", "photo-4"],
+      mediaFileIds: ["photo-1", "photo-2", "photo-3", "photo-4"],
+      media_mime_types: ["image/jpeg", "image/jpeg", "image/png", "image/webp"],
+      attachments,
+    });
+
+    expect(preview.media_file_ids).toEqual(["photo-1", "photo-2", "photo-3", "photo-4"]);
+    expect(preview.attachments).toHaveLength(4);
+    expect(preview.preview).toBe("Photos");
+  });
+
   it("classifies empty-mime image files by extension fallback", () => {
     const file = new File([new Uint8Array(32)], "album-cover.heic", { type: "" });
 

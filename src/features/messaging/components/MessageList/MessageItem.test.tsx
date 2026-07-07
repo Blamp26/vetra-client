@@ -366,6 +366,20 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
 
+  it("renders four attachments for a four-photo album message", () => {
+    renderMessageItem(
+      {
+        media_file_ids: ["photo-1", "photo-2", "photo-3", "photo-4"],
+        media_mime_types: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(4);
+    expect(screen.getAllByTestId("authenticated-image")).toHaveLength(4);
+  });
+
   it("renders incoming media-only messages with overlay timestamp and no outgoing status", () => {
     renderMessageItem({
       media_file_id: "media-photo-2",

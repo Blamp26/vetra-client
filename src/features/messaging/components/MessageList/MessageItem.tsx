@@ -15,6 +15,11 @@ import {
   getMessageAttachments,
 } from "../../utils/attachments";
 import {
+  logAttachmentDebug,
+  summarizeAttachmentLike,
+  summarizeMessageMedia,
+} from "../../utils/attachmentDebug";
+import {
   downloadAttachmentWithAuth,
   openAttachmentWithAuth,
 } from "../../utils/attachmentDownloads";
@@ -88,6 +93,20 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         isConsecutive && "rounded-tl-[8px]",
         isGroupedWithNext ? "rounded-bl-[8px]" : "rounded-bl-[4px]",
       );
+
+  React.useEffect(() => {
+    if (!hasMedia) return;
+
+    logAttachmentDebug("message.render", {
+      ...summarizeMessageMedia(msg as Record<string, unknown>),
+      renderAttachmentCount: attachments.length,
+      treatedAsAlbum: isPhotoAlbum,
+      isPhotoAttachment,
+      isDocumentAttachment,
+    }, {
+      table: attachments.map((currentAttachment) => summarizeAttachmentLike(currentAttachment)),
+    });
+  }, [attachments, hasMedia, isDocumentAttachment, isPhotoAlbum, isPhotoAttachment, msg]);
 
   const handleAttachmentAction = async (action: "download" | "open") => {
     if (!attachment || isAttachmentActionPending) return;

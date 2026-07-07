@@ -77,7 +77,11 @@ vi.mock("@/features/calling/services/callSignalingService", () => ({
   },
 }));
 
-import { connectSocket, getDefaultSocketUrl } from "./socket";
+import {
+  buildSocketMessagePayload,
+  connectSocket,
+  getDefaultSocketUrl,
+} from "./socket";
 
 describe("getDefaultSocketUrl", () => {
   it("uses ws for same-origin HTTP deployments", () => {
@@ -156,6 +160,80 @@ describe("connectSocket", () => {
       expect((socketInstances[0].opts.params as () => unknown)()).toEqual({
         socket_ticket: "ticket-refreshed",
       });
+    });
+  });
+});
+
+describe("buildSocketMessagePayload", () => {
+  it("includes both legacy and grouped media keys for a four-photo album payload", () => {
+    expect(
+      buildSocketMessagePayload(
+        {
+          content: null,
+          mediaFileId: "media-photo-1",
+          mediaFileIds: [
+            "media-photo-1",
+            "media-photo-2",
+            "media-photo-3",
+            "media-photo-4",
+          ],
+        },
+      ),
+    ).toEqual({
+      content: null,
+      mediaFileId: "media-photo-1",
+      mediaFileIds: [
+        "media-photo-1",
+        "media-photo-2",
+        "media-photo-3",
+        "media-photo-4",
+      ],
+      media_file_id: "media-photo-1",
+      media_file_ids: [
+        "media-photo-1",
+        "media-photo-2",
+        "media-photo-3",
+        "media-photo-4",
+      ],
+      reply_to_id: null,
+    });
+  });
+
+  it("includes grouped media ids in both camelCase and snake_case forms", () => {
+    expect(
+      buildSocketMessagePayload(
+        {
+          content: "caption",
+          mediaFileId: "media-photo-1",
+          mediaFileIds: ["media-photo-1", "media-photo-2"],
+          replyToId: 55,
+        },
+        { recipient_id: "user-public-id" },
+      ),
+    ).toEqual({
+      recipient_id: "user-public-id",
+      content: "caption",
+      mediaFileId: "media-photo-1",
+      mediaFileIds: ["media-photo-1", "media-photo-2"],
+      media_file_id: "media-photo-1",
+      media_file_ids: ["media-photo-1", "media-photo-2"],
+      reply_to_id: 55,
+    });
+  });
+
+  it("keeps single-photo payloads on the legacy single-media path while preserving the first id", () => {
+    expect(
+      buildSocketMessagePayload({
+        content: null,
+        mediaFileIds: ["media-photo-10"],
+      }),
+    ).toEqual({
+      content: null,
+      mediaFileId: "media-photo-10",
+      mediaFileIds: null,
+      media_file_id: "media-photo-10",
+      media_file_ids: null,
+      reply_to_id: null,
     });
   });
 });

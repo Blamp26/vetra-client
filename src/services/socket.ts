@@ -12,6 +12,10 @@ import type {
   ResourceRef,
 } from "@/shared/types";
 import { callSignalingService } from "@/features/calling/services/callSignalingService";
+import {
+  logAttachmentDebug,
+  summarizeMessageMedia,
+} from "@/features/messaging/utils/attachmentDebug";
 
 export function getDefaultSocketUrl(
   location: Pick<Location, "protocol" | "host"> = window.location,
@@ -101,7 +105,32 @@ export type OutgoingMessagePayload = {
   mediaFileId?: string | null;
   mediaFileIds?: string[] | null;
   replyToId?: number | null;
+  __attachmentDebug?: {
+    batchId: string;
+    sendUnitId?: string | null;
+    localAttachmentIds?: string[];
+  } | null;
 };
+
+export function buildSocketMessagePayload(
+  payload: OutgoingMessagePayload,
+  extra: Record<string, unknown> = {},
+) {
+  const mediaFileIds =
+    payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
+  const primaryMediaFileId = payload.mediaFileId ?? mediaFileIds[0] ?? null;
+  const groupedMediaFileIds = mediaFileIds.length > 1 ? mediaFileIds : null;
+
+  return {
+    ...extra,
+    content: payload.content ?? null,
+    mediaFileId: primaryMediaFileId,
+    mediaFileIds: groupedMediaFileIds,
+    media_file_id: primaryMediaFileId,
+    media_file_ids: groupedMediaFileIds,
+    reply_to_id: payload.replyToId ?? null,
+  };
+}
 
 export interface SocketManager {
   socket: Socket;
@@ -605,16 +634,27 @@ export async function connectSocket(
           reject(new Error(`Not joined room ${roomId}`));
           return;
         }
-        const mediaFileIds =
-          payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
-        const primaryMediaFileId = payload.mediaFileId ?? mediaFileIds[0] ?? null;
-        ch.push("send_message", {
-          content: payload.content ?? null,
-          media_file_id: primaryMediaFileId,
-          media_file_ids: mediaFileIds.length > 1 ? mediaFileIds : null,
-          reply_to_id: payload.replyToId ?? null,
-        })
-          .receive("ok", (p: Message) => resolve(p))
+        const debugMeta = payload.__attachmentDebug ?? null;
+        const socketPayload = buildSocketMessagePayload(payload);
+        logAttachmentDebug("socket.send.room", {
+          roomId,
+          payloadKeys: Object.keys(socketPayload).sort(),
+          ...summarizeMessageMedia(socketPayload as Record<string, unknown>),
+        }, {
+          batchId: debugMeta?.batchId,
+          sendUnitId: debugMeta?.sendUnitId,
+        });
+        ch.push("send_message", socketPayload)
+          .receive("ok", (p: Message) => {
+            logAttachmentDebug("socket.send.room.ok", {
+              roomId,
+              ...summarizeMessageMedia(p as Record<string, unknown>),
+            }, {
+              batchId: debugMeta?.batchId,
+              sendUnitId: debugMeta?.sendUnitId,
+            });
+            resolve(p);
+          })
           .receive("error", (resp) =>
             reject(
               new Error(
@@ -712,18 +752,30 @@ export function sendMessageViaChannel(
   payload: OutgoingMessagePayload,
 ): Promise<Message> {
   return new Promise((resolve, reject) => {
-    const mediaFileIds =
-      payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
-    const primaryMediaFileId = payload.mediaFileId ?? mediaFileIds[0] ?? null;
+    const debugMeta = payload.__attachmentDebug ?? null;
+    const socketPayload = buildSocketMessagePayload(payload, {
+      recipient_id: recipientRef,
+    });
+    logAttachmentDebug("socket.send.direct", {
+      recipientRef,
+      payloadKeys: Object.keys(socketPayload).sort(),
+      ...summarizeMessageMedia(socketPayload as Record<string, unknown>),
+    }, {
+      batchId: debugMeta?.batchId,
+      sendUnitId: debugMeta?.sendUnitId,
+    });
     channel
-      .push("send_message", {
-        recipient_id: recipientRef,
-        content: payload.content ?? null,
-        media_file_id: primaryMediaFileId,
-        media_file_ids: mediaFileIds.length > 1 ? mediaFileIds : null,
-        reply_to_id: payload.replyToId ?? null,
+      .push("send_message", socketPayload)
+      .receive("ok", (payload: Message) => {
+        logAttachmentDebug("socket.send.direct.ok", {
+          recipientRef,
+          ...summarizeMessageMedia(payload as Record<string, unknown>),
+        }, {
+          batchId: debugMeta?.batchId,
+          sendUnitId: debugMeta?.sendUnitId,
+        });
+        resolve(payload);
       })
-      .receive("ok", (payload: Message) => resolve(payload))
       .receive("error", (resp) =>
         reject(
           new Error(resp?.errors?.content?.[0] ?? "Failed to send message"),

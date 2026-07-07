@@ -11,8 +11,13 @@ import {
   getAttachmentReviewTitle,
   type PendingAttachment,
 } from "./attachmentQueue";
+import {
+  logAttachmentDebug,
+  summarizeAttachmentLike,
+} from "../../utils/attachmentDebug";
 
 interface AttachmentReviewModalProps {
+  batchId?: string | null;
   attachments: PendingAttachment[];
   content: string;
   isSending: boolean;
@@ -29,6 +34,7 @@ interface AttachmentReviewModalProps {
 }
 
 export function AttachmentReviewModal({
+  batchId = null,
   attachments,
   content,
   isSending,
@@ -60,6 +66,18 @@ export function AttachmentReviewModal({
     return () => window.removeEventListener("keydown", handleEscape);
   }, [isBusy, onClose]);
 
+  useEffect(() => {
+    logAttachmentDebug("modal.render", {
+      isBusy,
+      itemCount: attachments.length,
+      title,
+      hasCaption: content.trim().length > 0,
+    }, {
+      batchId,
+      table: attachments.map((attachment) => summarizeAttachmentLike(attachment)),
+    });
+  }, [attachments, batchId, content, isBusy, title]);
+
   return (
     <div
       className="fixed inset-0 z-[1800] flex items-center justify-center p-4"
@@ -73,10 +91,10 @@ export function AttachmentReviewModal({
     >
       <div className="vt-modal-backdrop" />
       <div
-        className="vt-modal-panel relative z-10 flex h-[min(86vh,820px)] w-full max-w-4xl flex-col overflow-hidden"
+        className="vt-modal-panel relative z-10 flex h-[min(86vh,820px)] w-full max-w-4xl min-h-0 flex-col overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="shrink-0 flex items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0">
             <span className="vt-kicker">Attachment Review</span>
             <h3 id="attachment-review-title" className="mt-1 truncate text-xl font-semibold tracking-tight">
@@ -104,7 +122,7 @@ export function AttachmentReviewModal({
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden px-5 py-5">
+        <div className="min-h-0 flex-1 overflow-hidden px-5 py-5">
           <div
             className="h-full overflow-y-auto pr-1"
             data-testid="attachment-review-scroll"
@@ -157,7 +175,7 @@ export function AttachmentReviewModal({
           </div>
         </div>
 
-        <div className="border-t border-border px-5 py-4">
+        <div className="shrink-0 border-t border-border px-5 py-4">
           {uploadStatus !== "idle" && (
             <div className="mb-3 text-[11px]">
               {uploadStatus === "uploading" ? (

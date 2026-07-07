@@ -6,6 +6,11 @@ import type {
   PreviewMessage,
   RoomMessageSummary,
 } from "@/shared/types";
+import {
+  logAttachmentDebug,
+  summarizeAttachmentLike,
+  summarizeMessageMedia,
+} from "./attachmentDebug";
 
 export const MAX_ATTACHMENT_SIZE_BYTES = 15_000_000;
 
@@ -39,6 +44,10 @@ type AttachmentLike = {
   media_file_ids?: string[] | null;
   media_mime_type?: string | null;
   media_mime_types?: string[] | null;
+  mediaFileId?: string | null;
+  mediaFileIds?: string[] | null;
+  mediaMimeType?: string | null;
+  mediaMimeTypes?: string[] | null;
 };
 
 type PreviewLike = AttachmentLike & {
@@ -53,6 +62,26 @@ function normalizeMimeType(mimeType?: string | null) {
   const normalized = mimeType?.toLowerCase().trim() || null;
   if (!normalized) return null;
   return MIME_TYPE_ALIASES[normalized] ?? normalized;
+}
+
+function getPrimaryMediaFileId(source: AttachmentLike) {
+  return source.media_file_id ?? source.mediaFileId ?? null;
+}
+
+function getGroupedMediaFileIds(source: AttachmentLike) {
+  return (source.media_file_ids ?? source.mediaFileIds ?? []).filter(
+    (mediaFileId): mediaFileId is string => Boolean(mediaFileId),
+  );
+}
+
+function getPrimaryMediaMimeType(source: AttachmentLike) {
+  return source.media_mime_type ?? source.mediaMimeType ?? null;
+}
+
+function getGroupedMediaMimeTypes(source: AttachmentLike) {
+  return (source.media_mime_types ?? source.mediaMimeTypes ?? []).filter(
+    (mimeType): mimeType is string => Boolean(mimeType),
+  );
 }
 
 function getFileExtension(fileName?: string | null) {
@@ -103,6 +132,47 @@ function normalizeAttachment(attachment: Attachment | null | undefined): Attachm
     ...attachment,
     url,
   };
+}
+
+function getAttachmentSourceId(source: AttachmentLike) {
+  const maybeSource = source as AttachmentLike & { id?: string | number | null };
+  if (typeof maybeSource.id === "string" || typeof maybeSource.id === "number") {
+    return maybeSource.id;
+  }
+
+  return null;
+}
+
+function finalizeMessageAttachments(
+  source: AttachmentLike,
+  attachments: Attachment[],
+  stage: string,
+) {
+  const rawSummary = summarizeMessageMedia(source as AttachmentLike & Record<string, unknown>);
+  const normalizedMediaIds = attachments.map((attachment) => attachment.id);
+  const isAlbum = normalizedMediaIds.length > 1;
+
+  logAttachmentDebug(`normalize.${stage}`, {
+    sourceId: getAttachmentSourceId(source),
+    ...rawSummary,
+    normalizedMediaIds,
+    normalizedAttachmentsLength: attachments.length,
+    isAlbum,
+  }, {
+    table: attachments.map((attachment) => summarizeAttachmentLike(attachment)),
+  });
+
+  if (rawSummary.normalizedMediaIds.length > 1 && attachments.length <= 1) {
+    logAttachmentDebug("warning.normalize-collapsed-album", {
+      sourceId: getAttachmentSourceId(source),
+      rawMediaIds: rawSummary.normalizedMediaIds,
+      normalizedAttachmentsLength: attachments.length,
+    }, {
+      level: "warn",
+    });
+  }
+
+  return attachments;
 }
 
 function fallbackAttachmentName(kind: AttachmentKind) {
@@ -156,8 +226,8 @@ export function getMessageAttachments(source: AttachmentLike): Attachment[] {
     ?.map((attachment) => normalizeAttachment(attachment))
     .filter((attachment): attachment is Attachment => attachment !== null) ?? [];
   const singleAttachment = normalizeAttachment(source.attachment);
-  const groupedMediaFileIds =
-    source.media_file_ids?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
+  const groupedMediaFileIds = getGroupedMediaFileIds(source);
+  const groupedMediaMimeTypes = getGroupedMediaMimeTypes(source);
 
   if (groupedMediaFileIds.length > 1) {
     const attachmentsById = new Map<string, Attachment>();
@@ -172,20 +242,20 @@ export function getMessageAttachments(source: AttachmentLike): Attachment[] {
 
     const fallbackMimeType =
       resolveAttachmentMimeType(
-        source.media_mime_type ??
+        getPrimaryMediaMimeType(source) ??
           normalizedAttachments[0]?.mime_type ??
           singleAttachment?.mime_type,
       ) ??
       "image/jpeg";
 
-    return groupedMediaFileIds.map((mediaFileId, index) => {
+    return finalizeMessageAttachments(source, groupedMediaFileIds.map((mediaFileId, index) => {
       const existingAttachment = attachmentsById.get(mediaFileId);
       if (existingAttachment) return existingAttachment;
 
       const mimeType =
         resolveAttachmentMimeType(
-          source.media_mime_types?.[index] ??
-            source.media_mime_type ??
+          groupedMediaMimeTypes[index] ??
+            getPrimaryMediaMimeType(source) ??
             singleAttachment?.mime_type ??
             normalizedAttachments[index]?.mime_type ??
             fallbackMimeType,
@@ -199,43 +269,44 @@ export function getMessageAttachments(source: AttachmentLike): Attachment[] {
         file_size: null,
         kind: inferAttachmentKind(mimeType),
       };
-    });
+    }), "grouped");
   }
 
   if (normalizedAttachments.length > 0) {
-    return normalizedAttachments;
+    return finalizeMessageAttachments(source, normalizedAttachments, "attachments-array");
   }
 
-  if (singleAttachment) return [singleAttachment];
+  if (singleAttachment) return finalizeMessageAttachments(source, [singleAttachment], "single-attachment");
 
   if (groupedMediaFileIds.length === 1) {
     const mimeType =
-      resolveAttachmentMimeType(source.media_mime_types?.[0] ?? source.media_mime_type) ||
+      resolveAttachmentMimeType(groupedMediaMimeTypes[0] ?? getPrimaryMediaMimeType(source)) ||
       "application/octet-stream";
 
-    return [{
+    return finalizeMessageAttachments(source, [{
       id: groupedMediaFileIds[0],
       url: `${API_BASE_URL}/media/${groupedMediaFileIds[0]}`,
       mime_type: mimeType,
       original_name: null,
       file_size: null,
       kind: inferAttachmentKind(mimeType),
-    }];
+    }], "single-grouped-id");
   }
 
-  if (!source.media_file_id) return [];
+  const primaryMediaFileId = getPrimaryMediaFileId(source);
+  if (!primaryMediaFileId) return [];
 
   const mimeType =
-    resolveAttachmentMimeType(source.media_mime_type) || "application/octet-stream";
+    resolveAttachmentMimeType(getPrimaryMediaMimeType(source)) || "application/octet-stream";
 
-  return [{
-    id: source.media_file_id,
-    url: `${API_BASE_URL}/media/${source.media_file_id}`,
+  return finalizeMessageAttachments(source, [{
+    id: primaryMediaFileId,
+    url: `${API_BASE_URL}/media/${primaryMediaFileId}`,
     mime_type: mimeType,
     original_name: null,
     file_size: null,
     kind: inferAttachmentKind(mimeType),
-  }];
+  }], "legacy-single");
 }
 
 export function getMessageAttachment(source: AttachmentLike): Attachment | null {
@@ -290,13 +361,20 @@ function attachmentOnlyPreview(source: PreviewLike): string | null {
   }
 
   const attachment = attachments[0] ?? null;
-  const kind = attachment?.kind ?? source.attachment_kind ?? inferAttachmentKind(source.attachment_mime_type ?? source.media_mime_type);
+  const kind =
+    attachment?.kind ??
+    source.attachment_kind ??
+    inferAttachmentKind(source.attachment_mime_type ?? getPrimaryMediaMimeType(source));
   const name = attachment?.original_name ?? source.attachment_name ?? null;
 
   if (kind === "photo") return "Photo";
   if (kind === "video") return "Video";
   if (name) return `File: ${name}`;
-  return attachment || source.attachment_kind || source.media_file_id || source.attachment_mime_type || source.media_mime_type
+  return attachment ||
+    source.attachment_kind ||
+    getPrimaryMediaFileId(source) ||
+    source.attachment_mime_type ||
+    getPrimaryMediaMimeType(source)
     ? "File"
     : null;
 }
@@ -321,8 +399,10 @@ export function buildPreviewMessage(
 ): PreviewMessage {
   const attachments = getMessageAttachments(message);
   const attachment = attachments[0] ?? null;
+  const groupedMediaFileIds = getGroupedMediaFileIds(message);
+  const groupedMediaMimeTypes = getGroupedMediaMimeTypes(message);
 
-  return {
+  const preview = {
     id: message.id,
     content: message.content,
     preview: getPreviewText(message, "Attachment"),
@@ -330,10 +410,14 @@ export function buildPreviewMessage(
     sender_id: message.sender_id,
     sender_public_id: message.sender_public_id,
     status: message.status,
-    media_file_id: message.media_file_id ?? null,
-    media_file_ids: message.media_file_ids ?? (attachments.length > 1 ? attachments.map((item) => item.id) : null),
-    media_mime_type: message.media_mime_type ?? null,
-    media_mime_types: message.media_mime_types ?? (attachments.length > 1 ? attachments.map((item) => item.mime_type) : null),
+    media_file_id: getPrimaryMediaFileId(message),
+    media_file_ids: groupedMediaFileIds.length > 0
+      ? groupedMediaFileIds
+      : (attachments.length > 1 ? attachments.map((item) => item.id) : null),
+    media_mime_type: getPrimaryMediaMimeType(message),
+    media_mime_types: groupedMediaMimeTypes.length > 0
+      ? groupedMediaMimeTypes
+      : (attachments.length > 1 ? attachments.map((item) => item.mime_type) : null),
     attachment,
     attachments: attachments.length > 0 ? attachments : null,
     attachment_kind: attachment?.kind ?? null,
@@ -341,6 +425,16 @@ export function buildPreviewMessage(
     attachment_size: attachment?.file_size ?? null,
     attachment_mime_type: attachment?.mime_type ?? message.media_mime_type ?? null,
   };
+
+  logAttachmentDebug("preview.build", {
+    ...summarizeMessageMedia(message as Record<string, unknown>),
+    normalizedAttachmentsLength: attachments.length,
+    previewId: preview.id,
+  }, {
+    table: attachments.map((currentAttachment) => summarizeAttachmentLike(currentAttachment)),
+  });
+
+  return preview;
 }
 
 export function buildPreviewMessageFromSummary(
