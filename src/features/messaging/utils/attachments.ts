@@ -13,11 +13,20 @@ const ALLOWED_ATTACHMENT_TYPES = {
   "image/png": [".png"],
   "image/jpeg": [".jpg", ".jpeg"],
   "image/gif": [".gif"],
+  "image/webp": [".webp"],
+  "image/avif": [".avif"],
+  "image/heic": [".heic"],
+  "image/heif": [".heif"],
   "application/pdf": [".pdf"],
   "video/mp4": [".mp4"],
   "video/webm": [".webm"],
   "video/ogg": [".ogv", ".ogg"],
 } as const;
+
+const MIME_TYPE_ALIASES: Record<string, keyof typeof ALLOWED_ATTACHMENT_TYPES> = {
+  "image/jpg": "image/jpeg",
+  "image/pjpeg": "image/jpeg",
+};
 
 export const MESSAGE_ATTACHMENT_ACCEPT = Object.keys(
   ALLOWED_ATTACHMENT_TYPES,
@@ -41,7 +50,47 @@ type PreviewLike = AttachmentLike & {
 };
 
 function normalizeMimeType(mimeType?: string | null) {
-  return mimeType?.toLowerCase().trim() || null;
+  const normalized = mimeType?.toLowerCase().trim() || null;
+  if (!normalized) return null;
+  return MIME_TYPE_ALIASES[normalized] ?? normalized;
+}
+
+function getFileExtension(fileName?: string | null) {
+  const match = fileName?.trim().toLowerCase().match(/(\.[a-z0-9]+)$/i);
+  return match?.[1] ?? null;
+}
+
+function getMimeTypeFromExtension(extension?: string | null) {
+  if (!extension) return null;
+
+  for (const [mimeType, extensions] of Object.entries(ALLOWED_ATTACHMENT_TYPES)) {
+    if (extensions.includes(extension as never)) {
+      return mimeType as keyof typeof ALLOWED_ATTACHMENT_TYPES;
+    }
+  }
+
+  return null;
+}
+
+export function resolveAttachmentMimeType(
+  mimeType?: string | null,
+  fileName?: string | null,
+) {
+  const normalizedMimeType = normalizeMimeType(mimeType);
+  const extensionMimeType = getMimeTypeFromExtension(getFileExtension(fileName));
+
+  if (
+    normalizedMimeType &&
+    normalizedMimeType in ALLOWED_ATTACHMENT_TYPES
+  ) {
+    return normalizedMimeType as keyof typeof ALLOWED_ATTACHMENT_TYPES;
+  }
+
+  if (extensionMimeType) {
+    return extensionMimeType;
+  }
+
+  return null;
 }
 
 function normalizeAttachment(attachment: Attachment | null | undefined): Attachment | null {
@@ -64,11 +113,25 @@ function fallbackAttachmentName(kind: AttachmentKind) {
 
 export function inferAttachmentKind(
   mimeType?: string | null,
+  fileName?: string | null,
 ): AttachmentKind {
-  const normalized = normalizeMimeType(mimeType);
+  const normalized = resolveAttachmentMimeType(mimeType, fileName);
   if (normalized?.startsWith("image/")) return "photo";
   if (normalized?.startsWith("video/")) return "video";
   return "file";
+}
+
+export function classifyPendingAttachment(file: File): {
+  kind: AttachmentKind;
+  mimeType: string;
+} | null {
+  const mimeType = resolveAttachmentMimeType(file.type, file.name);
+  if (!mimeType) return null;
+
+  return {
+    kind: inferAttachmentKind(mimeType, file.name),
+    mimeType,
+  };
 }
 
 export function resolveAttachmentUrl(url?: string | null): string | null {
@@ -89,20 +152,44 @@ export function resolveAttachmentUrl(url?: string | null): string | null {
 }
 
 export function getMessageAttachments(source: AttachmentLike): Attachment[] {
-  if (source.attachments && source.attachments.length > 0) {
-    return source.attachments
-      .map((attachment) => normalizeAttachment(attachment))
-      .filter((attachment): attachment is Attachment => attachment !== null);
-  }
-
+  const normalizedAttachments = source.attachments
+    ?.map((attachment) => normalizeAttachment(attachment))
+    .filter((attachment): attachment is Attachment => attachment !== null) ?? [];
   const singleAttachment = normalizeAttachment(source.attachment);
-  if (singleAttachment) return [singleAttachment];
+  const groupedMediaFileIds =
+    source.media_file_ids?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
 
-  if (source.media_file_ids && source.media_file_ids.length > 0) {
-    return source.media_file_ids.map((mediaFileId, index) => {
+  if (groupedMediaFileIds.length > 1) {
+    const attachmentsById = new Map<string, Attachment>();
+
+    normalizedAttachments.forEach((attachment) => {
+      attachmentsById.set(attachment.id, attachment);
+    });
+
+    if (singleAttachment && !attachmentsById.has(singleAttachment.id)) {
+      attachmentsById.set(singleAttachment.id, singleAttachment);
+    }
+
+    const fallbackMimeType =
+      resolveAttachmentMimeType(
+        source.media_mime_type ??
+          normalizedAttachments[0]?.mime_type ??
+          singleAttachment?.mime_type,
+      ) ??
+      "image/jpeg";
+
+    return groupedMediaFileIds.map((mediaFileId, index) => {
+      const existingAttachment = attachmentsById.get(mediaFileId);
+      if (existingAttachment) return existingAttachment;
+
       const mimeType =
-        normalizeMimeType(source.media_mime_types?.[index] ?? source.media_mime_type) ||
-        "application/octet-stream";
+        resolveAttachmentMimeType(
+          source.media_mime_types?.[index] ??
+            source.media_mime_type ??
+            singleAttachment?.mime_type ??
+            normalizedAttachments[index]?.mime_type ??
+            fallbackMimeType,
+        ) ?? fallbackMimeType;
 
       return {
         id: mediaFileId,
@@ -115,16 +202,39 @@ export function getMessageAttachments(source: AttachmentLike): Attachment[] {
     });
   }
 
+  if (normalizedAttachments.length > 0) {
+    return normalizedAttachments;
+  }
+
+  if (singleAttachment) return [singleAttachment];
+
+  if (groupedMediaFileIds.length === 1) {
+    const mimeType =
+      resolveAttachmentMimeType(source.media_mime_types?.[0] ?? source.media_mime_type) ||
+      "application/octet-stream";
+
+    return [{
+      id: groupedMediaFileIds[0],
+      url: `${API_BASE_URL}/media/${groupedMediaFileIds[0]}`,
+      mime_type: mimeType,
+      original_name: null,
+      file_size: null,
+      kind: inferAttachmentKind(mimeType),
+    }];
+  }
+
   if (!source.media_file_id) return [];
+
+  const mimeType =
+    resolveAttachmentMimeType(source.media_mime_type) || "application/octet-stream";
 
   return [{
     id: source.media_file_id,
     url: `${API_BASE_URL}/media/${source.media_file_id}`,
-    mime_type:
-      normalizeMimeType(source.media_mime_type) || "application/octet-stream",
+    mime_type: mimeType,
     original_name: null,
     file_size: null,
-    kind: inferAttachmentKind(source.media_mime_type),
+    kind: inferAttachmentKind(mimeType),
   }];
 }
 
@@ -258,14 +368,19 @@ export function buildPreviewMessageFromSummary(
 }
 
 export function validateAttachmentFile(file: File): string | null {
-  const mimeType = normalizeMimeType(file.type);
-  const extension = `.${file.name.split(".").pop()?.toLowerCase() ?? ""}`;
+  const rawMimeType = normalizeMimeType(file.type);
+  const extension = getFileExtension(file.name);
+  const mimeType = resolveAttachmentMimeType(file.type, file.name);
 
-  if (!mimeType || !(mimeType in ALLOWED_ATTACHMENT_TYPES)) {
-    return "Unsupported file type. Allowed: PNG, JPG, GIF, PDF, MP4, WEBM, OGG.";
+  if (!mimeType || !extension) {
+    return "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, WEBM, OGG.";
   }
 
-  if (!ALLOWED_ATTACHMENT_TYPES[mimeType as keyof typeof ALLOWED_ATTACHMENT_TYPES].includes(extension as never)) {
+  if (
+    rawMimeType &&
+    rawMimeType in ALLOWED_ATTACHMENT_TYPES &&
+    !ALLOWED_ATTACHMENT_TYPES[rawMimeType as keyof typeof ALLOWED_ATTACHMENT_TYPES].includes(extension as never)
+  ) {
     return "File extension does not match the selected file type.";
   }
 

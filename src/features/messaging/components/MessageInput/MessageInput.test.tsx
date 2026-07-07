@@ -82,7 +82,7 @@ describe("MessageInput attachments", () => {
 
     expect(input).toHaveAttribute(
       "accept",
-      "image/png,image/jpeg,image/gif,application/pdf,video/mp4,video/webm,video/ogg",
+      "image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,application/pdf,video/mp4,video/webm,video/ogg",
     );
     expect(input).toHaveAttribute("multiple");
 
@@ -214,6 +214,29 @@ describe("MessageInput attachments", () => {
       undefined,
     );
     expect(screen.queryAllByTestId("attachment-queue-item")).toHaveLength(0);
+  });
+
+  it("groups image files with empty MIME types by their extensions", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const first = new File([new Uint8Array(512)], "photo-1.jpg", { type: "" });
+    const second = new File([new Uint8Array(512)], "photo-2.png", { type: "" });
+    const third = new File([new Uint8Array(512)], "photo-3.webp", { type: "" });
+
+    fireEvent.change(input, { target: { files: [first, second, third] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+
+    expect(onSend).toHaveBeenCalledWith(
+      {
+        content: null,
+        mediaFileId: "media-photo-1.jpg",
+        mediaFileIds: ["media-photo-1.jpg", "media-photo-2.png", "media-photo-3.webp"],
+      },
+      undefined,
+    );
   });
 
   it("splits more than nine selected photos into multiple grouped messages in order", async () => {
@@ -414,7 +437,7 @@ describe("MessageInput attachments", () => {
 
     expect(
       screen.getByText(
-        "Unsupported file type. Allowed: PNG, JPG, GIF, PDF, MP4, WEBM, OGG.",
+        "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, WEBM, OGG.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("notes.txt")).not.toBeInTheDocument();

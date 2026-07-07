@@ -237,6 +237,31 @@ describe("MessageList bubble layout", () => {
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
 
+  it("keeps grouped albums intact when history reload returns media_file_id plus media_file_ids", () => {
+    renderMessageList([
+      makeMessage({
+        id: 1,
+        content: null,
+        sender_id: 1,
+        media_file_id: "photo-1",
+        media_file_ids: ["photo-1", "photo-2"],
+        media_mime_type: "image/jpeg",
+        attachment: {
+          id: "photo-1",
+          url: "/api/v1/media/photo-1",
+          mime_type: "image/jpeg",
+          original_name: "photo-1.jpg",
+          file_size: 1024,
+          kind: "photo" as const,
+        },
+      }),
+    ]);
+
+    expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(2);
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+  });
+
   it("keeps a dedicated bottom spacer so the last message clears the composer", () => {
     renderMessageList([makeMessage({ content: "Last message" })]);
 

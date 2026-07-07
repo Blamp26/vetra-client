@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPreviewMessage,
+  classifyPendingAttachment,
   getMessageAttachment,
   getMessageAttachments,
   getPreviewText,
@@ -202,5 +203,38 @@ describe("attachments utils", () => {
     expect(preview.attachment_kind).toBe("photo");
     expect(preview.attachments).toHaveLength(2);
     expect(preview.media_file_ids).toEqual(["photo-1", "photo-2"]);
+  });
+
+  it("normalizes grouped albums from compatibility payloads that include only the first attachment object", () => {
+    const attachments = getMessageAttachments({
+      media_file_id: "photo-1",
+      media_file_ids: ["photo-1", "photo-2", "photo-3"],
+      media_mime_type: "image/jpeg",
+      attachment: {
+        id: "photo-1",
+        url: "/api/v1/media/photo-1",
+        mime_type: "image/jpeg",
+        original_name: "photo-1.jpg",
+        file_size: 1024,
+        kind: "photo",
+      },
+    });
+
+    expect(attachments).toHaveLength(3);
+    expect(attachments.map((attachment) => attachment.id)).toEqual([
+      "photo-1",
+      "photo-2",
+      "photo-3",
+    ]);
+    expect(attachments.every((attachment) => attachment.kind === "photo")).toBe(true);
+  });
+
+  it("classifies empty-mime image files by extension fallback", () => {
+    const file = new File([new Uint8Array(32)], "album-cover.heic", { type: "" });
+
+    expect(classifyPendingAttachment(file)).toEqual({
+      kind: "photo",
+      mimeType: "image/heic",
+    });
   });
 });

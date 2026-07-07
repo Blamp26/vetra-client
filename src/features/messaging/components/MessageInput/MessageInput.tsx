@@ -5,6 +5,7 @@ import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
+  classifyPendingAttachment,
   MESSAGE_ATTACHMENT_ACCEPT,
   formatAttachmentSize,
   getAttachmentKindLabel,
@@ -169,12 +170,19 @@ interface Props {
         continue;
       }
 
-      const kind = inferAttachmentKind(file.type);
+      const classification = classifyPendingAttachment(file);
+      if (!classification) {
+        firstValidationError ??=
+          "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, WEBM, OGG.";
+        continue;
+      }
+
+      const { kind, mimeType } = classification;
       validAttachments.push({
         id: `pending-attachment-${attachmentIdRef.current++}`,
         file,
         name: file.name,
-        mimeType: file.type,
+        mimeType,
         size: file.size,
         kind,
         previewUrl: kind === "photo" ? URL.createObjectURL(file) : null,
