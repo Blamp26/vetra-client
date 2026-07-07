@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useAppStoreMock } = vi.hoisted(() => ({
+const { useAppStoreMock, uploadSendMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
+  uploadSendMock: vi.fn(),
 }));
 
 vi.mock("@/store", () => ({
@@ -12,6 +13,23 @@ vi.mock("@/store", () => ({
 }));
 
 import { MessageInput } from "./MessageInput";
+
+class MockXMLHttpRequest {
+  static DONE = 4;
+  upload = { onprogress: null as ((event: ProgressEvent<EventTarget>) => void) | null };
+  responseType = "";
+  response: unknown = null;
+  status = 0;
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  open = vi.fn();
+  setRequestHeader = vi.fn();
+
+  send(formData: FormData) {
+    uploadSendMock({ formData, xhr: this });
+  }
+}
 
 function makeState() {
   return {
@@ -28,6 +46,7 @@ function makeState() {
 describe("MessageInput attachments", () => {
   beforeEach(() => {
     useAppStoreMock.mockReset();
+    uploadSendMock.mockReset();
     useAppStoreMock.mockImplementation(
       (selector: (state: ReturnType<typeof makeState>) => unknown) =>
         selector(makeState()),
@@ -35,22 +54,45 @@ describe("MessageInput attachments", () => {
 
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    global.XMLHttpRequest = MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+    uploadSendMock.mockImplementation(
+      ({ formData, xhr }: { formData: FormData; xhr: MockXMLHttpRequest }) => {
+        const file = formData.get("file") as File;
+        xhr.upload.onprogress?.({
+          lengthComputable: true,
+          loaded: file.size || 1,
+          total: file.size || 1,
+        } as ProgressEvent<EventTarget>);
+        xhr.status = 200;
+        xhr.response = {
+          data: {
+            media_file_id: `media-${file.name}`,
+          },
+        };
+        xhr.onload?.();
+      },
+    );
   });
 
-  it("accepts PDFs and shows the pending file card", () => {
+  it("accepts multiple files and shows queued file cards", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    const pdf = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    const image = new File([new Uint8Array(1024)], "photo.png", { type: "image/png" });
 
     expect(input).toHaveAttribute(
       "accept",
       "image/png,image/jpeg,image/gif,application/pdf,video/mp4,video/webm,video/ogg",
     );
+    expect(input).toHaveAttribute("multiple");
 
-    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.change(input, { target: { files: [pdf, image] } });
 
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.getByText("File · 3 B")).toBeInTheDocument();
+    expect(screen.getByText("photo.png")).toBeInTheDocument();
+    expect(screen.getByText("Photo · 1.0 KB")).toBeInTheDocument();
+    expect(screen.getAllByTestId("attachment-queue-item")).toHaveLength(2);
   });
 
   it("keeps composer controls aligned with simple button and input styling", () => {
@@ -85,6 +127,153 @@ describe("MessageInput attachments", () => {
     expect(screen.getByText("photo.png")).toBeInTheDocument();
     expect(screen.getByText("Photo · 1.0 KB")).toBeInTheDocument();
     expect(screen.getByAltText("preview")).toBeInTheDocument();
+  });
+
+  it("appends additional file selections to the existing queue", () => {
+    const { container } = render(<MessageInput onSend={vi.fn()} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
+
+    fireEvent.change(input, { target: { files: [first] } });
+    fireEvent.change(input, { target: { files: [second] } });
+
+    expect(screen.getAllByTestId("attachment-queue-item")).toHaveLength(2);
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    expect(screen.getByText("photo.png")).toBeInTheDocument();
+  });
+
+  it("removes one queued file without clearing the others", () => {
+    const { container } = render(<MessageInput onSend={vi.fn()} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
+
+    fireEvent.change(input, { target: { files: [first, second] } });
+    fireEvent.click(screen.getByRole("button", { name: "Remove report.pdf" }));
+
+    expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
+    expect(screen.getByText("photo.png")).toBeInTheDocument();
+    expect(screen.getAllByTestId("attachment-queue-item")).toHaveLength(1);
+  });
+
+  it("sends a single attachment with the existing upload and send flow", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledWith(
+        { content: null, mediaFileId: "media-report.pdf" },
+        undefined,
+      );
+    });
+    expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
+  });
+
+  it("sends multiple attachments sequentially in selected order and keeps text on the first message only", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
+    const third = new File(["data"], "clip.webm", { type: "video/webm" });
+
+    fireEvent.change(screen.getByPlaceholderText("Message..."), {
+      target: { value: "Hello team" },
+    });
+    fireEvent.change(input, { target: { files: [first, second, third] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(3));
+
+    expect(uploadSendMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ formData: expect.any(FormData), xhr: expect.any(MockXMLHttpRequest) }),
+    );
+    expect(uploadSendMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ formData: expect.any(FormData), xhr: expect.any(MockXMLHttpRequest) }),
+    );
+    expect(uploadSendMock).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ formData: expect.any(FormData), xhr: expect.any(MockXMLHttpRequest) }),
+    );
+    expect(onSend.mock.calls).toEqual([
+      [{ content: "Hello team", mediaFileId: "media-report.pdf" }, undefined],
+      [{ content: null, mediaFileId: "media-photo.png" }, undefined],
+      [{ content: null, mediaFileId: "media-clip.webm" }, undefined],
+    ]);
+    expect(screen.queryAllByTestId("attachment-queue-item")).toHaveLength(0);
+  });
+
+  it("prevents duplicate multi-send while pending", async () => {
+    let releaseFirstSend!: () => void;
+    const onSend = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirstSend = resolve;
+        }),
+    );
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
+
+    fireEvent.change(input, { target: { files: [first, second] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sending..." }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(uploadSendMock).toHaveBeenCalledTimes(1);
+
+    releaseFirstSend();
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
+  });
+
+  it("keeps unsent files queued when a later upload fails", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    let uploadCount = 0;
+    uploadSendMock.mockImplementation(
+      ({ formData, xhr }: { formData: FormData; xhr: MockXMLHttpRequest }) => {
+        const file = formData.get("file") as File;
+        uploadCount += 1;
+        if (uploadCount === 2) {
+          xhr.status = 500;
+          xhr.onload?.();
+          return;
+        }
+
+        xhr.status = 200;
+        xhr.response = {
+          data: {
+            media_file_id: `media-${file.name}`,
+          },
+        };
+        xhr.onload?.();
+      },
+    );
+
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
+    const third = new File(["data"], "clip.webm", { type: "video/webm" });
+
+    fireEvent.change(input, { target: { files: [first, second, third] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("Upload failed")).toBeInTheDocument());
+
+    expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
+    expect(screen.getByText("photo.png")).toBeInTheDocument();
+    expect(screen.getByText("clip.webm")).toBeInTheDocument();
+    expect(screen.getAllByTestId("attachment-queue-item")).toHaveLength(2);
   });
 
   it("rejects unsupported file types before upload", () => {

@@ -13,6 +13,15 @@ import {
 } from "../../utils/attachments";
  
 interface ReplyTarget { id: number; content: string; author: string; } 
+interface PendingAttachment {
+  id: string;
+  file: File;
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: ReturnType<typeof inferAttachmentKind>;
+  previewUrl: string | null;
+}
  
 interface Props { 
   onSend: (payload: { content?: string | null; mediaFileId?: string | null }, replyToId?: number) => Promise<void>; 
@@ -36,11 +45,14 @@ interface Props {
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "error">("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploadLabel, setUploadLabel] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
  
    const textareaRef = useRef<HTMLTextAreaElement>(null); 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentIdRef = useRef(0);
+  const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
+  const sendLockRef = useRef(false);
  
    const editingMessage = useAppStore((s: RootState) => s.editingMessage); 
    const cancelEditing = useAppStore((s: RootState) => s.cancelEditing); 
@@ -79,10 +91,16 @@ interface Props {
   }, [activeChat, editingMessage, cancelEditing]); 
 
   useEffect(() => {
+    pendingAttachmentsRef.current = pendingAttachments;
+  }, [pendingAttachments]);
+
+  useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      pendingAttachmentsRef.current.forEach((attachment) => {
+        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      });
     };
-  }, [previewUrl]);
+  }, []);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -102,53 +120,93 @@ interface Props {
     } 
    }; 
 
-  const cancelPreview = () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
-    setPendingFile(null);
+  const resetUploadState = () => {
     setUploadStatus("idle");
     setUploadProgress(0);
     setUploadError(null);
+    setUploadLabel(null);
   };
 
-  const setPendingAttachment = (file: File) => {
-    const validationError = validateAttachmentFile(file);
-    if (validationError) {
-      cancelPreview();
+  const revokeAttachmentPreview = (attachment: PendingAttachment) => {
+    if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+  };
+
+  const clearPendingAttachments = (attachments = pendingAttachmentsRef.current) => {
+    attachments.forEach(revokeAttachmentPreview);
+    pendingAttachmentsRef.current = [];
+    setPendingAttachments([]);
+    resetUploadState();
+  };
+
+  const removePendingAttachment = (id: string) => {
+    setPendingAttachments((current) => {
+      const next: PendingAttachment[] = [];
+      for (const attachment of current) {
+        if (attachment.id === id) {
+          revokeAttachmentPreview(attachment);
+          continue;
+        }
+        next.push(attachment);
+      }
+      pendingAttachmentsRef.current = next;
+      return next;
+    });
+  };
+
+  const appendPendingAttachments = (files: File[]) => {
+    if (files.length === 0) return;
+
+    const validAttachments: PendingAttachment[] = [];
+    let firstValidationError: string | null = null;
+
+    for (const file of files) {
+      const validationError = validateAttachmentFile(file);
+      if (validationError) {
+        firstValidationError ??= validationError;
+        continue;
+      }
+
+      const kind = inferAttachmentKind(file.type);
+      validAttachments.push({
+        id: `pending-attachment-${attachmentIdRef.current++}`,
+        file,
+        name: file.name,
+        mimeType: file.type,
+        size: file.size,
+        kind,
+        previewUrl: kind === "photo" ? URL.createObjectURL(file) : null,
+      });
+    }
+
+    if (validAttachments.length > 0) {
+      setPendingAttachments((current) => {
+        const next = [...current, ...validAttachments];
+        pendingAttachmentsRef.current = next;
+        return next;
+      });
+    }
+
+    if (firstValidationError) {
       setUploadStatus("error");
-      setUploadError(validationError);
+      setUploadError(firstValidationError);
+      setUploadProgress(0);
+      setUploadLabel(null);
       return;
     }
 
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-
-    const nextPreviewUrl =
-      inferAttachmentKind(file.type) === "photo"
-        ? URL.createObjectURL(file)
-        : null;
-
-    setPreviewUrl(nextPreviewUrl);
-    setPendingFile(file);
-    setUploadStatus("idle");
-    setUploadProgress(0);
-    setUploadError(null);
+    resetUploadState();
   };
  
   const handleSend = async () => { 
-    if ((!content.trim() && !pendingFile) || isSending || isUploading) return; 
+    if ((!content.trim() && pendingAttachments.length === 0) || isSending || isUploading || sendLockRef.current) return; 
  
      stopTyping(); 
+     sendLockRef.current = true;
      setIsSending(true); 
  
      try { 
-       let mediaFileId = null;
-       if (pendingFile) {
-         mediaFileId = await performUpload(pendingFile);
-         if (!mediaFileId) return;
-       }
-
        const trimmed = content.trim();
-       if (isEditing && editingMessage && socketManager) { 
+       if (pendingAttachments.length === 0 && isEditing && editingMessage && socketManager) { 
          const { id, chatType, targetId } = editingMessage; 
  
          if (chatType === 'direct') { 
@@ -167,24 +225,54 @@ interface Props {
            await socketManager.editRoomMessage(targetId, id, trimmed); 
          } 
          cancelEditing(); 
-       } else { 
-        await onSend({ content: trimmed || null, mediaFileId }, replyTo?.id); 
+         setContent("");
+         resetUploadState();
+       } else if (pendingAttachments.length === 0) { 
+        await onSend({ content: trimmed || null, mediaFileId: null }, replyTo?.id); 
+        setContent(""); 
+        resetUploadState();
+       } else {
+        const attachmentsToSend = [...pendingAttachmentsRef.current];
+        const totalAttachments = attachmentsToSend.length;
+
+        for (let index = 0; index < attachmentsToSend.length; index += 1) {
+          const attachment = attachmentsToSend[index];
+          const mediaFileId = await performUpload(attachment.file, index + 1, totalAttachments);
+          if (!mediaFileId) return;
+
+          await onSend(
+            {
+              content: index === 0 ? trimmed || null : null,
+              mediaFileId,
+            },
+            index === 0 ? replyTo?.id : undefined,
+          );
+
+          removePendingAttachment(attachment.id);
+          if (index === 0) {
+            setContent("");
+          }
+        }
+
+        resetUploadState();
        } 
- 
-       setContent(""); 
-       cancelPreview();
      } catch (err) { 
        console.error("Failed to send/edit:", err); 
+       setUploadStatus("error");
+       setUploadError("Send failed");
+       setUploadLabel(null);
      } finally { 
+       sendLockRef.current = false;
        setIsSending(false); 
      } 
    }; 
 
-  const performUpload = (file: File): Promise<string | null> => {
+  const performUpload = (file: File, position = 1, total = 1): Promise<string | null> => {
     return new Promise((resolve) => {
       if (!currentUser || !authToken) {
         setUploadStatus("error");
         setUploadError("Login required");
+        setUploadLabel(null);
         resolve(null);
         return;
       }
@@ -192,6 +280,7 @@ interface Props {
       setUploadStatus("uploading");
       setUploadProgress(0);
       setUploadError(null);
+      setUploadLabel(total > 1 ? `${file.name} (${position}/${total})` : file.name);
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${API_BASE_URL}/media`);
@@ -208,6 +297,7 @@ interface Props {
         if (xhr.status < 200 || xhr.status >= 300) {
           setUploadStatus("error");
           setUploadError("Upload failed");
+          setUploadLabel(file.name);
           resolve(null);
           return;
         }
@@ -219,6 +309,7 @@ interface Props {
       xhr.onerror = () => {
         setUploadStatus("error");
         setUploadError("Upload failed");
+        setUploadLabel(file.name);
         resolve(null);
       };
 
@@ -229,23 +320,20 @@ interface Props {
   };
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
+    const files = Array.from(event.target.files ?? []);
     event.currentTarget.value = "";
-    if (!file) return;
-
-    setPendingAttachment(file);
+    appendPendingAttachments(files);
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = Array.from(e.clipboardData.items);
-    const imageItem = items.find(i => i.type.startsWith("image/"));
-    if (!imageItem) return;
+    const files = Array.from(e.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    if (files.length === 0) return;
     
     e.preventDefault();
-    const file = imageItem.getAsFile();
-    if (!file) return;
-
-    setPendingAttachment(file);
+    appendPendingAttachments(files);
   };
 
   const handleAttachClick = () => {
@@ -260,13 +348,10 @@ interface Props {
      } 
      if (e.key === "Escape") { 
        if (isEditing) cancelEditing(); 
-       if (previewUrl) cancelPreview();
+       if (pendingAttachments.length > 0) clearPendingAttachments();
      } 
    }; 
  
-  const pendingKind = pendingFile ? inferAttachmentKind(pendingFile.type) : null;
-  const pendingKindLabel = pendingKind ? getAttachmentKindLabel(pendingKind) : null;
-
    return ( 
      <div className="flex flex-col border-t border-border bg-card"> 
        {isEditing && ( 
@@ -293,26 +378,39 @@ interface Props {
         </div>
        )}
 
-       {pendingFile && (
-         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-           <div className="relative shrink-0 rounded-[14px] border border-border bg-card p-1.5">
-             {previewUrl ? (
-               <img src={previewUrl} className="h-14 w-14 rounded-[10px] object-cover" alt="preview" />
-             ) : (
-               <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-muted text-[10px] font-medium">
-                 {pendingKindLabel}
+       {pendingAttachments.length > 0 && (
+         <div className="border-b border-border px-4 py-3">
+           <div className="space-y-2" data-testid="attachment-queue">
+             {pendingAttachments.map((attachment) => (
+               <div
+                 key={attachment.id}
+                 className="flex items-center gap-3"
+                 data-testid="attachment-queue-item"
+               >
+                 <div className="relative shrink-0 rounded-[14px] border border-border bg-card p-1.5">
+                   {attachment.previewUrl ? (
+                     <img src={attachment.previewUrl} className="h-14 w-14 rounded-[10px] object-cover" alt="preview" />
+                   ) : (
+                     <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-muted text-[10px] font-medium">
+                       {getAttachmentKindLabel(attachment.kind)}
+                     </div>
+                   )}
+                   <button
+                     type="button"
+                     onClick={() => removePendingAttachment(attachment.id)}
+                     disabled={disabled || isSending || isUploading}
+                     className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-[10px]"
+                     aria-label={`Remove ${attachment.name}`}
+                   >X</button>
+                 </div>
+                 <div className="min-w-0 flex-1">
+                   <div className="truncate text-sm font-medium">{attachment.name}</div>
+                   <div className="pt-0.5 text-[11px] text-muted-foreground">
+                     {getAttachmentKindLabel(attachment.kind)} · {formatAttachmentSize(attachment.size)}
+                   </div>
+                 </div>
                </div>
-             )}
-             <button 
-               onClick={cancelPreview}
-               className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-[10px]"
-             >X</button>
-           </div>
-           <div className="min-w-0 flex-1">
-             <div className="truncate text-sm font-medium">{pendingFile.name}</div>
-             <div className="pt-0.5 text-[11px] text-muted-foreground">
-               {pendingKindLabel} · {formatAttachmentSize(pendingFile.size)}
-             </div>
+             ))}
            </div>
          </div>
        )}
@@ -322,7 +420,9 @@ interface Props {
           {uploadStatus === "uploading" ? (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-3">
-                <span className="font-medium">Uploading attachment</span>
+                <span className="font-medium">
+                  {uploadLabel ? `Uploading ${uploadLabel}` : "Uploading attachment"}
+                </span>
                 <span className="text-muted-foreground">{uploadProgress}%</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -346,6 +446,7 @@ interface Props {
             ref={fileInputRef} 
             className="hidden" 
             accept={MESSAGE_ATTACHMENT_ACCEPT}
+            multiple
             onChange={handleFileChange} 
           />
 
@@ -363,10 +464,10 @@ interface Props {
 
           <button 
             onClick={handleSend}
-            disabled={(!content.trim() && !pendingFile) || disabled || isSending || isUploading}
+            disabled={(!content.trim() && pendingAttachments.length === 0) || disabled || isSending || isUploading}
             className={cn(
               "vt-button min-h-11 shrink-0 px-4 disabled:pointer-events-none disabled:opacity-60",
-              (content.trim() || pendingFile)
+              (content.trim() || pendingAttachments.length > 0)
                 ? "vt-button--primary"
                 : "border-border bg-muted text-muted-foreground",
             )}
