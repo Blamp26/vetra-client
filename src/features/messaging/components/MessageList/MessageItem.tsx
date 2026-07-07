@@ -59,8 +59,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const attachment = getMessageAttachment(msg);
   const hasMedia = !!attachment;
   const hasText = !!(msg.content && msg.content.trim().length > 0);
+  const isPhotoAttachment = attachment?.kind === "photo";
+  const isDocumentAttachment = Boolean(attachment && attachment.kind !== "photo");
   const isPhotoOnly =
-    attachment?.kind === "photo" &&
+    isPhotoAttachment &&
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
@@ -69,6 +71,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const metadataClassName = isOwn
     ? "text-[color:var(--bubble-outgoing-meta)]"
     : "text-[color:var(--bubble-incoming-meta)]";
+  const overlayMetadataClassName = "bg-black/60 text-white shadow-[0_2px_10px_rgba(0,0,0,0.24)] backdrop-blur-[2px]";
   const inlineMetadataSpacingClass = isOwn
     ? msg.edited_at
       ? "min-h-6 pr-[7.7rem]"
@@ -97,101 +100,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     }
   };
 
-  const renderContent = () => {
-    const attachmentTypeLabel = getAttachmentTypeLabel(attachment);
-    const attachmentName = getAttachmentDisplayName(attachment);
-    const attachmentKindLabel = attachment
-      ? getAttachmentKindLabel(attachment.kind)
-      : "Attachment";
-
-    return (
-      <>
-        {hasMedia && (
-            <div className={cn(!isPhotoOnly && hasText && "mb-2")}>
-              {attachment?.kind === "photo" ? (
-                <div
-                  className="w-[min(100%,25rem)] overflow-hidden rounded-[16px] border border-border/80 bg-card/50"
-                  onClick={() => onLightbox({
-                    src: attachment.url,
-                    author: authorName,
-                    time: msg.inserted_at
-                  })}
-                >
-                  <AuthenticatedImage 
-                    className="max-h-[340px] w-full max-w-full object-cover"
-                    src={attachment.url} 
-                    alt={attachmentName} 
-                    crossOrigin="anonymous"
-                  />
-                </div>
-              ) : (
-                <div className="w-[min(100%,24rem)] rounded-[16px] border border-border bg-card/70 p-3.5 text-foreground">
-                  <div className="flex items-start gap-3">
-                    <div className="shrink-0 rounded-[12px] border border-border bg-muted p-2.5">
-                      {attachment?.kind === "video" ? (
-                        <Film className="h-5 w-5" />
-                      ) : (
-                        <FileText className="h-5 w-5" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm">{attachmentName}</div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {[attachmentTypeLabel || attachmentKindLabel, formatAttachmentSize(attachment?.file_size)].join(" · ")}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    {attachment?.mime_type === "application/pdf" && (
-                      <button
-                        type="button"
-                        onClick={() => handleAttachmentAction("open")}
-                        disabled={isAttachmentActionPending}
-                        className="vt-button h-9 min-h-9 px-3 py-0 text-xs"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Open
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleAttachmentAction("download")}
-                      disabled={isAttachmentActionPending}
-                      className="vt-button h-9 min-h-9 px-3 py-0 text-xs"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Download
-                    </button>
-                  </div>
-                  {attachmentActionError && (
-                    <div className="mt-2 text-[10px] text-destructive">
-                      {attachmentActionError}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-        )}
-        {hasText && (
-          <div
-            className={cn(
-              "whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45]",
-              renderInlineMetadata && inlineMetadataSpacingClass,
-            )}
-            data-testid="message-text-content"
-          >
-            <EmojiText text={msg.content || ""} />
-          </div>
-        )}
-      </>
-    );
-  };
-
-  const renderMetadata = () => (
+  const renderMetadata = (variant: "inline" | "overlay" = "inline") => (
     <div
       className={cn(
         "inline-flex max-w-full items-center gap-1 whitespace-nowrap text-[11px] leading-none",
-        metadataClassName,
+        variant === "overlay"
+          ? overlayMetadataClassName
+          : metadataClassName,
       )}
       data-testid="message-metadata"
     >
@@ -202,6 +117,140 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       )}
     </div>
   );
+
+  const renderPhotoMedia = () => {
+    const attachmentName = getAttachmentDisplayName(attachment);
+
+    return (
+      <div
+        className="relative inline-block max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[16px] bg-[#111]"
+        data-testid="message-media-shell"
+        onClick={() => onLightbox({
+          src: attachment!.url,
+          author: authorName,
+          time: msg.inserted_at,
+        })}
+      >
+        <AuthenticatedImage
+          className="block h-auto max-h-[32rem] w-auto max-w-full object-contain"
+          src={attachment!.url}
+          alt={attachmentName}
+          crossOrigin="anonymous"
+        />
+      </div>
+    );
+  };
+
+  const renderDocumentAttachment = () => {
+    const attachmentTypeLabel = getAttachmentTypeLabel(attachment);
+    const attachmentName = getAttachmentDisplayName(attachment);
+    const attachmentKindLabel = attachment
+      ? getAttachmentKindLabel(attachment.kind)
+      : "Attachment";
+
+    return (
+      <>
+        <div className="flex min-w-0 items-start gap-3" data-testid="message-file-row">
+          <div
+            className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border",
+              isOwn
+                ? "border-primary/20 bg-bubble-outgoing/18 text-[color:var(--primary)]"
+                : "border-border bg-card/60 text-muted-foreground",
+            )}
+          >
+            {attachment?.kind === "video" ? (
+              <Film className="h-5 w-5" />
+            ) : (
+              <FileText className="h-5 w-5" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div
+              className="truncate text-sm font-medium text-current"
+              data-testid="message-file-name"
+            >
+              {attachmentName}
+            </div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              {[attachmentTypeLabel || attachmentKindLabel, formatAttachmentSize(attachment?.file_size)].join(" · ")}
+            </div>
+          </div>
+        </div>
+
+        {hasText && (
+          <div className="mt-2 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
+            <EmojiText text={msg.content || ""} />
+          </div>
+        )}
+
+        <div className="mt-2 flex items-end justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {attachment?.mime_type === "application/pdf" && (
+              <button
+                type="button"
+                onClick={() => handleAttachmentAction("open")}
+                disabled={isAttachmentActionPending}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-border/70 bg-card/60 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-card disabled:opacity-60"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => handleAttachmentAction("download")}
+              disabled={isAttachmentActionPending}
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-border/70 bg-card/60 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-card disabled:opacity-60"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download
+            </button>
+          </div>
+          <div className="shrink-0">{renderMetadata()}</div>
+        </div>
+
+        {attachmentActionError && (
+          <div className="mt-2 text-[10px] text-destructive">
+            {attachmentActionError}
+          </div>
+        )}
+      </>
+    );
+  };
+
+  const renderContent = () => {
+    return (
+      <>
+        {hasMedia && (
+          <>
+            {isPhotoAttachment ? renderPhotoMedia() : renderDocumentAttachment()}
+          </>
+        )}
+        {hasText && !isDocumentAttachment && (
+          <div
+            className={cn(
+              "whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45]",
+              isPhotoAttachment && "px-2.5 pt-2",
+              renderInlineMetadata && inlineMetadataSpacingClass,
+              isPhotoAttachment &&
+                !renderInlineMetadata &&
+                (isOwn
+                  ? msg.edited_at
+                    ? "pr-[7.7rem]"
+                    : "pr-[5.9rem]"
+                  : msg.edited_at
+                    ? "pr-[6.25rem]"
+                    : "pr-[3.85rem]"),
+            )}
+            data-testid="message-text-content"
+          >
+            <EmojiText text={msg.content || ""} />
+          </div>
+        )}
+      </>
+    );
+  };
 
   const renderReactions = () => {
     if (!messageReactions || messageReactions.length === 0) return null;
@@ -251,7 +300,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "relative w-fit min-w-[4.75rem] max-w-[min(66%,42rem)] rounded-[18px] border border-border/85 px-3.5 py-2.5 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
+          "relative w-fit text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
+          isPhotoOnly
+            ? "min-w-0 max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[18px] border border-black/10 bg-transparent p-0"
+            : isPhotoAttachment
+              ? "min-w-[11rem] max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[18px] border border-border/85 px-1.5 pb-2.5 pt-1.5"
+              : isDocumentAttachment
+                ? "min-w-[16rem] max-w-[min(24rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-3"
+                : "min-w-[4.75rem] max-w-[min(66%,42rem)] rounded-[18px] border border-border/85 px-3.5 py-2.5",
           isSelected && "ring-1 ring-primary",
           isOwn
             ? cn(
@@ -262,7 +318,17 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 isConsecutive && "rounded-tl-[12px]",
                 isGroupedWithNext && "rounded-bl-[12px]",
               ),
-          isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text",
+          isPhotoOnly
+            ? "text-white"
+            : isPhotoAttachment
+              ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
+              : isDocumentAttachment
+                ? (
+                    isOwn
+                      ? "border-primary/15 bg-bubble-outgoing/12 text-foreground"
+                      : "border-border bg-bubble-incoming text-foreground"
+                  )
+                : (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text"),
         )}
         data-testid="message-bubble"
       >
@@ -276,13 +342,27 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           {renderContent()}
         </div>
 
+        {isPhotoOnly && (
+          <div className="pointer-events-none absolute bottom-2 right-2">
+            <div className="rounded-full px-2 py-1">
+              {renderMetadata("overlay")}
+            </div>
+          </div>
+        )}
+
         {renderInlineMetadata && (
           <div className="pointer-events-none absolute bottom-2.5 right-3.5">
             {renderMetadata()}
           </div>
         )}
 
-        {!renderInlineMetadata && (
+        {isPhotoAttachment && hasText && (
+          <div className="pointer-events-none absolute bottom-2.5 right-3.5">
+            {renderMetadata()}
+          </div>
+        )}
+
+        {!renderInlineMetadata && !isPhotoOnly && !isPhotoAttachment && !isDocumentAttachment && (
           <div className="mt-1.5 flex justify-end">
             {renderMetadata()}
           </div>

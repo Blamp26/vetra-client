@@ -187,28 +187,90 @@ describe("MessageItem bubble layout", () => {
     expect(contentRect).not.toContain(metadata);
   });
 
-  it("renders photo attachments through AuthenticatedImage", () => {
+  it("renders outgoing media-only messages as media-sized bubbles with overlay metadata", () => {
+    renderMessageItem(
+      {
+        media_file_id: "media-photo-1",
+        media_mime_type: "image/jpeg",
+        attachment: {
+          id: "media-photo-1",
+          url: "/api/v1/media/media-photo-1",
+          mime_type: "image/jpeg",
+          original_name: "photo.jpg",
+          file_size: 2048,
+          kind: "photo",
+        },
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "read",
+      },
+      { isOwn: true },
+    );
+
+    const bubble = screen.getByTestId("message-bubble");
+
+    expect(bubble).not.toHaveClass("bg-bubble-outgoing");
+    expect(screen.getByTestId("message-media-shell")).toHaveClass("max-w-[min(28rem,calc(100vw-6rem))]");
+    expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(screen.getByLabelText("Read")).toBeInTheDocument();
+    expect(screen.queryByText("Download")).not.toBeInTheDocument();
+  });
+
+  it("renders incoming media-only messages with overlay timestamp and no outgoing status", () => {
     renderMessageItem({
-      media_file_id: "media-photo-1",
+      media_file_id: "media-photo-2",
       media_mime_type: "image/jpeg",
       attachment: {
-        id: "media-photo-1",
-        url: "/api/v1/media/media-photo-1",
+        id: "media-photo-2",
+        url: "/api/v1/media/media-photo-2",
         mime_type: "image/jpeg",
-        original_name: "photo.jpg",
-        file_size: 2048,
+        original_name: "portrait.jpg",
+        file_size: 3200,
         kind: "photo",
       },
     });
 
-    expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain(
-      "/api/v1/media/media-photo-1",
-    );
-    expect(screen.queryByText("Download")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-media-shell")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
   });
 
-  it("renders PDF attachments as a file card with actions", () => {
+  it("renders image captions below media while keeping metadata visible", () => {
+    renderMessageItem(
+      {
+        content: "A short caption",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "delivered",
+        media_file_id: "media-photo-caption",
+        media_mime_type: "image/jpeg",
+        attachment: {
+          id: "media-photo-caption",
+          url: "/api/v1/media/media-photo-caption",
+          mime_type: "image/jpeg",
+          original_name: "captioned.jpg",
+          file_size: 9999,
+          kind: "photo",
+        },
+      },
+      { isOwn: true },
+    );
+
+    const contentRect = screen.getByTestId("message-bubble").querySelector("[data-message-content-rect]");
+    const mediaShell = screen.getByTestId("message-media-shell");
+    const textContent = screen.getByTestId("message-text-content");
+
+    expect(contentRect).toContain(mediaShell);
+    expect(contentRect).toContain(textContent);
+    expect(screen.getByText("A short caption")).toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(screen.getByLabelText("Delivered")).toBeInTheDocument();
+  });
+
+  it("renders PDF attachments as a compact file row with in-bubble metadata", () => {
     renderMessageItem({
       media_file_id: "media-file-1",
       media_mime_type: "application/pdf",
@@ -222,6 +284,9 @@ describe("MessageItem bubble layout", () => {
       },
     });
 
+    const bubble = screen.getByTestId("message-bubble");
+
+    expect(screen.getByTestId("message-file-row")).toBeInTheDocument();
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.getByText("PDF · 5.5 KB")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
@@ -229,6 +294,7 @@ describe("MessageItem bubble layout", () => {
       screen.getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(bubble).toContainElement(screen.getByTestId("message-metadata"));
   });
 
   it("renders legacy photo attachments without an attachment object", () => {
@@ -258,6 +324,23 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument();
   });
 
+  it("keeps long document filenames truncated instead of expanding the bubble", () => {
+    renderMessageItem({
+      media_file_id: "media-file-long",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "media-file-long",
+        url: "/api/v1/media/media-file-long",
+        mime_type: "application/pdf",
+        original_name: "very-long-quarterly-financial-report-final-final-approved-version-2026.pdf",
+        file_size: 12000000,
+        kind: "file",
+      },
+    });
+
+    expect(screen.getByTestId("message-file-name")).toHaveClass("truncate");
+  });
+
   it("keeps timestamp and status visible for long outgoing text messages", () => {
     renderMessageItem(
       {
@@ -273,26 +356,6 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Read")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
-  });
-
-  it("keeps metadata visible for image messages with captions", () => {
-    renderMessageItem({
-      content: "A short caption",
-      media_file_id: "media-photo-caption",
-      media_mime_type: "image/jpeg",
-      attachment: {
-        id: "media-photo-caption",
-        url: "/api/v1/media/media-photo-caption",
-        mime_type: "image/jpeg",
-        original_name: "captioned.jpg",
-        file_size: 9999,
-        kind: "photo",
-      },
-    });
-
-    expect(screen.getByTestId("authenticated-image")).toBeInTheDocument();
-    expect(screen.getByText("A short caption")).toBeInTheDocument();
-    expect(screen.getByText("12:00")).toBeInTheDocument();
   });
 
   it.each([
