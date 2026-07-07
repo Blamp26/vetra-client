@@ -250,6 +250,7 @@ interface Props {
      stopTyping(); 
      sendLockRef.current = true;
      setIsSending(true); 
+     let sendFailureMessage = "Message send failed";
  
      try { 
        const trimmed = content.trim();
@@ -306,10 +307,15 @@ interface Props {
                 : true
             );
 
+          sendFailureMessage =
+            unit.kind === "photo" && uploadedMediaFileIds.length > 1
+              ? "Album send failed"
+              : "Message send failed";
+
           await onSend(
             {
               content: shouldUseContent ? trimmed : null,
-              mediaFileId: uploadedMediaFileIds.length === 1 ? uploadedMediaFileIds[0] : null,
+              mediaFileId: uploadedMediaFileIds[0] ?? null,
               mediaFileIds: uploadedMediaFileIds.length > 1 ? uploadedMediaFileIds : null,
             },
             !contentConsumed && shouldUseContent ? replyTo?.id : undefined,
@@ -332,7 +338,7 @@ interface Props {
      } catch (err) { 
        console.error("Failed to send/edit:", err); 
        setUploadStatus("error");
-       setUploadError("Send failed");
+       setUploadError(sendFailureMessage);
        setUploadLabel(null);
      } finally { 
        sendLockRef.current = false;

@@ -607,9 +607,10 @@ export async function connectSocket(
         }
         const mediaFileIds =
           payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
+        const primaryMediaFileId = payload.mediaFileId ?? mediaFileIds[0] ?? null;
         ch.push("send_message", {
           content: payload.content ?? null,
-          media_file_id: payload.mediaFileId ?? (mediaFileIds.length === 1 ? mediaFileIds[0] : null),
+          media_file_id: primaryMediaFileId,
           media_file_ids: mediaFileIds.length > 1 ? mediaFileIds : null,
           reply_to_id: payload.replyToId ?? null,
         })
@@ -713,11 +714,12 @@ export function sendMessageViaChannel(
   return new Promise((resolve, reject) => {
     const mediaFileIds =
       payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
+    const primaryMediaFileId = payload.mediaFileId ?? mediaFileIds[0] ?? null;
     channel
       .push("send_message", {
         recipient_id: recipientRef,
         content: payload.content ?? null,
-        media_file_id: payload.mediaFileId ?? (mediaFileIds.length === 1 ? mediaFileIds[0] : null),
+        media_file_id: primaryMediaFileId,
         media_file_ids: mediaFileIds.length > 1 ? mediaFileIds : null,
         reply_to_id: payload.replyToId ?? null,
       })

@@ -394,6 +394,7 @@ describe("useUnifiedMessages", () => {
     expect(state.socketManager.sendRoomMessageViaChannel).toHaveBeenCalledWith(
       9,
       expect.objectContaining({
+        mediaFileId: "media-photo-1",
         mediaFileIds: ["media-photo-1", "media-photo-2"],
       }),
     );

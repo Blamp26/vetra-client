@@ -278,7 +278,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
       const trimmed = payload.content?.trim() ?? "";
       const content = trimmed.length > 0 ? trimmed : null;
       const mediaFileIds = payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
-      const primaryMediaFileId = payload.mediaFileId ?? (mediaFileIds.length === 1 ? mediaFileIds[0] : null);
+      const primaryMediaFileId = payload.mediaFileId ?? mediaFileIds[0] ?? null;
       if (!content && !primaryMediaFileId && mediaFileIds.length === 0) return;
 
       if (contextType === "room" && roomId !== null) {

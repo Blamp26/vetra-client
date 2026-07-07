@@ -175,6 +175,23 @@ describe("MessageInput attachments", () => {
     expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
   });
 
+  it("sends a single photo with the existing single-media behavior", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([new Uint8Array(1024)], "photo.png", { type: "image/png" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledWith(
+        { content: null, mediaFileId: "media-photo.png", mediaFileIds: null },
+        undefined,
+      );
+    });
+  });
+
   it("sends up to nine selected photos as one grouped photo message", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
@@ -191,7 +208,7 @@ describe("MessageInput attachments", () => {
     expect(onSend).toHaveBeenCalledWith(
       {
         content: null,
-        mediaFileId: null,
+        mediaFileId: "media-photo-1.png",
         mediaFileIds: ["media-photo-1.png", "media-photo-2.png", "media-photo-3.png"],
       },
       undefined,
@@ -215,7 +232,7 @@ describe("MessageInput attachments", () => {
     expect(onSend.mock.calls).toEqual([
       [{
         content: null,
-        mediaFileId: null,
+        mediaFileId: "media-photo-1.png",
         mediaFileIds: [
           "media-photo-1.png",
           "media-photo-2.png",
@@ -257,7 +274,7 @@ describe("MessageInput attachments", () => {
     expect(onSend.mock.calls).toEqual([
       [{
         content: "Album caption",
-        mediaFileId: null,
+        mediaFileId: "media-photo-1.png",
         mediaFileIds: ["media-photo-1.png", "media-photo-2.png"],
       }, undefined],
       [{
@@ -267,7 +284,7 @@ describe("MessageInput attachments", () => {
       }, undefined],
       [{
         content: null,
-        mediaFileId: null,
+        mediaFileId: "media-photo-3.png",
         mediaFileIds: ["media-photo-3.png", "media-photo-4.png"],
       }, undefined],
     ]);
@@ -297,7 +314,7 @@ describe("MessageInput attachments", () => {
       }, undefined],
       [{
         content: "Album caption",
-        mediaFileId: null,
+        mediaFileId: "media-photo-1.png",
         mediaFileIds: ["media-photo-1.png", "media-photo-2.png"],
       }, undefined],
     ]);
@@ -367,6 +384,25 @@ describe("MessageInput attachments", () => {
     expect(screen.getByText("photo-2.png")).toBeInTheDocument();
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.getAllByTestId("attachment-queue-item")).toHaveLength(3);
+  });
+
+  it("shows a send-specific error when grouped send rejects after uploads succeed", async () => {
+    const onSend = vi.fn().mockRejectedValue(new Error("album payload rejected"));
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
+    const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
+
+    fireEvent.change(input, { target: { files: [first, second] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("Album send failed")).toBeInTheDocument());
+
+    expect(screen.queryByText("Upload failed")).not.toBeInTheDocument();
+    expect(screen.getByText("photo-1.png")).toBeInTheDocument();
+    expect(screen.getByText("photo-2.png")).toBeInTheDocument();
+    expect(screen.getAllByTestId("attachment-queue-item")).toHaveLength(2);
   });
 
   it("rejects unsupported file types before upload", () => {
