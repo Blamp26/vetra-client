@@ -71,7 +71,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const metadataClassName = isOwn
     ? "text-[color:var(--bubble-outgoing-meta)]"
     : "text-[color:var(--bubble-incoming-meta)]";
-  const overlayMetadataClassName = "bg-black/60 text-white shadow-[0_2px_10px_rgba(0,0,0,0.24)] backdrop-blur-[2px]";
+  const overlayMetadataClassName = "text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.84)]";
   const inlineMetadataSpacingClass = isOwn
     ? msg.edited_at
       ? "min-h-6 pr-[7.7rem]"
@@ -103,10 +103,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const renderMetadata = (variant: "inline" | "overlay" = "inline") => (
     <div
       className={cn(
-        "inline-flex max-w-full items-center gap-1 whitespace-nowrap text-[11px] leading-none",
+        "inline-flex max-w-full items-center whitespace-nowrap text-[11px] leading-none",
         variant === "overlay"
           ? overlayMetadataClassName
           : metadataClassName,
+        variant === "overlay" ? "gap-[3px]" : "gap-1",
       )}
       data-testid="message-metadata"
     >
@@ -353,10 +354,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         </div>
 
         {isPhotoOnly && (
-          <div className="pointer-events-none absolute bottom-2 right-2">
-            <div className="rounded-full px-2 py-1">
-              {renderMetadata("overlay")}
-            </div>
+          <div
+            className="pointer-events-none absolute bottom-[6px] right-[7px]"
+            data-testid="message-media-only-overlay"
+          >
+            {renderMetadata("overlay")}
           </div>
         )}
 

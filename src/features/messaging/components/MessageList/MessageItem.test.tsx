@@ -209,10 +209,15 @@ describe("MessageItem bubble layout", () => {
     );
 
     const bubble = screen.getByTestId("message-bubble");
+    const overlay = screen.getByTestId("message-media-only-overlay");
+    const metadata = screen.getByTestId("message-metadata");
 
     expect(bubble).not.toHaveClass("bg-bubble-outgoing");
     expect(screen.getByTestId("message-media-shell")).toHaveClass("max-w-[min(28rem,calc(100vw-6rem))]");
     expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
+    expect(overlay).toHaveClass("absolute", "bottom-[6px]", "right-[7px]");
+    expect(metadata).toHaveClass("gap-[3px]", "text-white");
+    expect(metadata).not.toHaveClass("bg-black/60", "rounded-full", "shadow-[0_2px_10px_rgba(0,0,0,0.24)]", "backdrop-blur-[2px]");
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Read")).toBeInTheDocument();
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
@@ -232,6 +237,7 @@ describe("MessageItem bubble layout", () => {
       },
     });
 
+    expect(screen.getByTestId("message-media-only-overlay")).toBeInTheDocument();
     expect(screen.getByTestId("message-media-shell")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
@@ -265,6 +271,7 @@ describe("MessageItem bubble layout", () => {
 
     expect(contentRect).toContain(mediaShell);
     expect(contentRect).toContain(textContent);
+    expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
     expect(screen.getByText("A short caption")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Delivered")).toBeInTheDocument();
@@ -407,6 +414,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Read")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
   });
 
   it.each([
