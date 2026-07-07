@@ -24,6 +24,14 @@ type ErrorPayload = {
   errors?: Record<string, string[] | string> | string[] | string;
 };
 
+export function unwrapApiResponse<T>(data: unknown): T {
+  if (typeof data === "object" && data !== null && "data" in data) {
+    return (data as { data: T }).data;
+  }
+
+  return data as T;
+}
+
 /**
  * Возвращает текущий authToken из хранилища.
  * Используется внутри request() для автоматической подстановки заголовка.
@@ -98,11 +106,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(message, response.status, details ?? validationErrors);
   }
 
-  if (typeof data === "object" && data !== null && "data" in data) {
-    return (data as { data: T }).data;
-  }
-
-  return data as T;
+  return unwrapApiResponse<T>(data);
 }
 
 export function get<T>(path: string): Promise<T> {

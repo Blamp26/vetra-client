@@ -77,4 +77,42 @@ describe("useAuth", () => {
       });
     });
   });
+
+  it("saves the auth session from a normalized login response", async () => {
+    const user = { id: 1, username: "Blamp26" };
+    loginMock.mockResolvedValue({
+      user,
+      token: "token-123",
+    });
+
+    const { result } = renderHook(() => useAuth());
+
+    await act(async () => {
+      await result.current.login("Blamp26", "secret");
+    });
+
+    await waitFor(() => {
+      expect(setAuthSessionMock).toHaveBeenCalledWith(user, "token-123");
+      expect(result.current.error).toBeNull();
+    });
+  });
+
+  it("saves the auth session from a normalized register response", async () => {
+    const user = { id: 2, username: "NewUser" };
+    registerMock.mockResolvedValue({
+      user,
+      token: "token-456",
+    });
+
+    const { result } = renderHook(() => useAuth());
+
+    await act(async () => {
+      await result.current.register("NewUser", "secret");
+    });
+
+    await waitFor(() => {
+      expect(setAuthSessionMock).toHaveBeenCalledWith(user, "token-456");
+      expect(result.current.error).toBeNull();
+    });
+  });
 });

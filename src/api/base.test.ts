@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getDefaultApiBaseUrl, post } from "./base";
+import { ApiError, getDefaultApiBaseUrl, post, unwrapApiResponse } from "./base";
 
 const { getStringMock, removeMock } = vi.hoisted(() => ({
   getStringMock: vi.fn(),
@@ -71,5 +71,67 @@ describe("request error parsing", () => {
     await expect(post("/users/login", { username: "tester" })).rejects.toEqual(
       new ApiError("Request failed: 500", 500, undefined),
     );
+  });
+
+  it("unwraps Phoenix-style success envelopes for callers", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          data: {
+            user: { id: 1, username: "Blamp26" },
+            token: "token-123",
+          },
+        }),
+      ),
+    });
+
+    await expect(post("/users/login", { username: "Blamp26" })).resolves.toEqual({
+      user: { id: 1, username: "Blamp26" },
+      token: "token-123",
+    });
+  });
+
+  it("keeps supporting raw success responses without a data envelope", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          user: { id: 1, username: "Blamp26" },
+          token: "token-raw",
+        }),
+      ),
+    });
+
+    await expect(post("/users/login", { username: "Blamp26" })).resolves.toEqual({
+      user: { id: 1, username: "Blamp26" },
+      token: "token-raw",
+    });
+  });
+});
+
+describe("unwrapApiResponse", () => {
+  it("returns data from a success envelope", () => {
+    expect(
+      unwrapApiResponse({
+        data: {
+          items: [1, 2, 3],
+        },
+      }),
+    ).toEqual({
+      items: [1, 2, 3],
+    });
+  });
+
+  it("returns raw success payloads unchanged", () => {
+    expect(
+      unwrapApiResponse({
+        items: [1, 2, 3],
+      }),
+    ).toEqual({
+      items: [1, 2, 3],
+    });
   });
 });

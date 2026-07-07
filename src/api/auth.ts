@@ -10,7 +10,8 @@ export interface LoginPayload {
   password: string;
 }
 
-// Сервер теперь возвращает { user, token }
+// The shared request helper unwraps Phoenix-style { data: {...} } responses,
+// so auth callers still receive the normalized { user, token } contract here.
 export interface AuthResponse {
   user: User;
   token: string;
