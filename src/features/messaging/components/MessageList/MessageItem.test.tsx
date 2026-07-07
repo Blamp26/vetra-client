@@ -351,6 +351,21 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
 
+  it("renders a grouped photo album from socket-style media_file_ids without attachment objects", () => {
+    renderMessageItem(
+      {
+        media_file_ids: ["photo-1", "photo-2"],
+        media_mime_types: ["image/jpeg", "image/png"],
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(2);
+    expect(screen.getAllByTestId("authenticated-image")[0].getAttribute("src")).toContain("/api/v1/media/photo-1");
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+  });
+
   it("renders incoming media-only messages with overlay timestamp and no outgoing status", () => {
     renderMessageItem({
       media_file_id: "media-photo-2",

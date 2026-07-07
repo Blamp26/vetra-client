@@ -7,22 +7,15 @@ import { withFallbackRef } from "@/shared/utils/refs";
 import {
   classifyPendingAttachment,
   MESSAGE_ATTACHMENT_ACCEPT,
-  formatAttachmentSize,
-  getAttachmentKindLabel,
-  inferAttachmentKind,
   validateAttachmentFile,
 } from "../../utils/attachments";
+import { AttachmentReviewModal } from "./AttachmentReviewModal";
+import {
+  buildAttachmentSendUnits,
+  type PendingAttachment,
+} from "./attachmentQueue";
  
 interface ReplyTarget { id: number; content: string; author: string; } 
-interface PendingAttachment {
-  id: string;
-  file: File;
-  name: string;
-  mimeType: string;
-  size: number;
-  kind: ReturnType<typeof inferAttachmentKind>;
-  previewUrl: string | null;
-}
  
 interface Props { 
   onSend: (
@@ -224,34 +217,6 @@ interface Props {
     });
   };
 
-  const buildSendUnits = (attachments: PendingAttachment[]) => {
-    const units: Array<{ kind: "photo" | "file"; attachments: PendingAttachment[] }> = [];
-
-    for (let index = 0; index < attachments.length; ) {
-      const current = attachments[index];
-      if (current.kind !== "photo") {
-        units.push({ kind: "file", attachments: [current] });
-        index += 1;
-        continue;
-      }
-
-      const photoRun: PendingAttachment[] = [];
-      while (index < attachments.length && attachments[index].kind === "photo") {
-        photoRun.push(attachments[index]);
-        index += 1;
-      }
-
-      for (let chunkStart = 0; chunkStart < photoRun.length; chunkStart += 9) {
-        units.push({
-          kind: "photo",
-          attachments: photoRun.slice(chunkStart, chunkStart + 9),
-        });
-      }
-    }
-
-    return units;
-  };
- 
   const handleSend = async () => { 
     if ((!content.trim() && pendingAttachments.length === 0) || isSending || isUploading || sendLockRef.current) return; 
  
@@ -288,8 +253,8 @@ interface Props {
         setContent(""); 
         resetUploadState();
        } else {
-        const attachmentsToSend = [...pendingAttachmentsRef.current];
-        const sendUnits = buildSendUnits(attachmentsToSend);
+        const attachmentsToSend = pendingAttachmentsRef.current.map((attachment) => ({ ...attachment }));
+        const sendUnits = buildAttachmentSendUnits(attachmentsToSend);
         const photoSelectionCount = attachmentsToSend.filter((attachment) => attachment.kind === "photo").length;
         const reserveContentForPhotoUnit = photoSelectionCount > 1;
         let contentConsumed = false;
@@ -427,19 +392,43 @@ interface Props {
     if (disabled || isSending || isEditing || isUploading) return;
     fileInputRef.current?.click();
   };
+
+  const handleCloseAttachmentReview = () => {
+    if (isSending || isUploading) return;
+    clearPendingAttachments();
+  };
  
    const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => { 
      if (e.key === "Enter" && !e.shiftKey) { 
        e.preventDefault(); 
+       if (pendingAttachments.length > 0) return;
        handleSend(); 
      } 
      if (e.key === "Escape") { 
        if (isEditing) cancelEditing(); 
-       if (pendingAttachments.length > 0) clearPendingAttachments();
+       if (pendingAttachments.length > 0 && !isSending && !isUploading) clearPendingAttachments();
      } 
    }; 
  
    return ( 
+     <>
+     {pendingAttachments.length > 0 && (
+       <AttachmentReviewModal
+         attachments={pendingAttachments}
+         content={content}
+         isSending={isSending}
+         isUploading={isUploading}
+         uploadStatus={uploadStatus}
+         uploadProgress={uploadProgress}
+         uploadLabel={uploadLabel}
+         uploadError={uploadError}
+         onClose={handleCloseAttachmentReview}
+         onAddAttachments={handleAttachClick}
+         onRemoveAttachment={removePendingAttachment}
+         onContentChange={handleChange}
+         onSend={handleSend}
+       />
+     )}
      <div className="flex flex-col border-t border-border bg-card"> 
        {isEditing && ( 
          <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-3"> 
@@ -465,44 +454,7 @@ interface Props {
         </div>
        )}
 
-       {pendingAttachments.length > 0 && (
-         <div className="border-b border-border px-4 py-3">
-           <div className="space-y-2" data-testid="attachment-queue">
-             {pendingAttachments.map((attachment) => (
-               <div
-                 key={attachment.id}
-                 className="flex items-center gap-3"
-                 data-testid="attachment-queue-item"
-               >
-                 <div className="relative shrink-0 rounded-[14px] border border-border bg-card p-1.5">
-                   {attachment.previewUrl ? (
-                     <img src={attachment.previewUrl} className="h-14 w-14 rounded-[10px] object-cover" alt="preview" />
-                   ) : (
-                     <div className="flex h-14 w-14 items-center justify-center rounded-[10px] bg-muted text-[10px] font-medium">
-                       {getAttachmentKindLabel(attachment.kind)}
-                     </div>
-                   )}
-                   <button
-                     type="button"
-                     onClick={() => removePendingAttachment(attachment.id)}
-                     disabled={disabled || isSending || isUploading}
-                     className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-[10px]"
-                     aria-label={`Remove ${attachment.name}`}
-                   >X</button>
-                 </div>
-                 <div className="min-w-0 flex-1">
-                   <div className="truncate text-sm font-medium">{attachment.name}</div>
-                   <div className="pt-0.5 text-[11px] text-muted-foreground">
-                     {getAttachmentKindLabel(attachment.kind)} · {formatAttachmentSize(attachment.size)}
-                   </div>
-                 </div>
-               </div>
-             ))}
-           </div>
-         </div>
-       )}
-
-       {uploadStatus !== "idle" && (
+       {uploadStatus !== "idle" && pendingAttachments.length === 0 && (
         <div className="border-b border-border px-4 py-2 text-[11px]">
           {uploadStatus === "uploading" ? (
             <div className="space-y-1.5">
@@ -540,26 +492,27 @@ interface Props {
           <textarea
             ref={textareaRef}
             className="vt-textarea min-h-11 max-h-44 flex-1 resize-none bg-card px-4 py-3 text-sm leading-6 disabled:opacity-60"
-            placeholder="Message..."
+            placeholder={pendingAttachments.length > 0 ? "Review attachments in dialog" : "Message..."}
             value={content}
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            disabled={disabled || isSending || isUploading}
+            disabled={disabled || isSending || isUploading || pendingAttachments.length > 0}
             rows={1}
           />
 
           <button 
             onClick={handleSend}
-            disabled={(!content.trim() && pendingAttachments.length === 0) || disabled || isSending || isUploading}
+            disabled={pendingAttachments.length > 0 || (!content.trim() && pendingAttachments.length === 0) || disabled || isSending || isUploading}
             className={cn(
               "vt-button min-h-11 shrink-0 px-4 disabled:pointer-events-none disabled:opacity-60",
-              (content.trim() || pendingAttachments.length > 0)
+              content.trim()
                 ? "vt-button--primary"
                 : "border-border bg-muted text-muted-foreground",
             )}
           >{isSending ? "Sending..." : "Send"}</button>
        </div>
-     </div> 
+     </div>
+     </>
    ); 
  }
