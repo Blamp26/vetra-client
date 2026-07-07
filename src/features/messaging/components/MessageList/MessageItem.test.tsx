@@ -103,6 +103,8 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
+    expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
   });
 
   it("renders own messages as right-aligned bubbles at all widths", () => {
@@ -131,6 +133,24 @@ describe("MessageItem bubble layout", () => {
     expect(bubble).not.toHaveClass("flex-1");
     expect(screen.queryByText("Tester")).not.toBeInTheDocument();
     expect(screen.getByText("My message")).toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+  });
+
+  it("renders outgoing delivery metadata when status data exists", () => {
+    renderMessageItem(
+      {
+        content: "Delivered message",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "delivered",
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(screen.getByLabelText("Delivered")).toBeInTheDocument();
   });
 
   it("does not render Discord-style avatar/meta stream structure", () => {
@@ -196,6 +216,7 @@ describe("MessageItem bubble layout", () => {
     expect(
       screen.getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument();
   });
 
   it("renders legacy photo attachments without an attachment object", () => {
@@ -222,5 +243,22 @@ describe("MessageItem bubble layout", () => {
     expect(
       screen.getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps timestamp and status visible for long outgoing text messages", () => {
+    renderMessageItem(
+      {
+        content: "This is a long message ".repeat(20).trim(),
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "read",
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(screen.getByLabelText("Read")).toBeInTheDocument();
+    expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
   });
 });

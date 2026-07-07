@@ -60,6 +60,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
+  const metadataClassName = isOwn
+    ? "bg-[var(--bubble-outgoing-meta-bg)] text-[color:var(--bubble-outgoing-meta)]"
+    : "bg-[var(--bubble-incoming-meta-bg)] text-[color:var(--bubble-incoming-meta)]";
 
   const handleAttachmentAction = async (action: "download" | "open") => {
     if (!attachment || isAttachmentActionPending) return;
@@ -231,10 +234,20 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           {renderContent()}
         </div>
 
-        <div className="mt-2 flex items-center justify-end gap-1.5 text-[11px] leading-none text-muted-foreground">
-          <span>{formatTime(msg.inserted_at)}</span>
-          {msg.edited_at && <span>(ed.)</span>}
-          {isOwn && !isRoom && <StatusIcon status={msg.status} />}
+        <div className="mt-2 flex justify-end">
+          <div
+            className={cn(
+              "inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium leading-none",
+              metadataClassName,
+            )}
+            data-testid="message-metadata"
+          >
+            <span className="shrink-0 whitespace-nowrap">{formatTime(msg.inserted_at)}</span>
+            {msg.edited_at && <span className="shrink-0 whitespace-nowrap">(ed.)</span>}
+            {isOwn && !isRoom && (
+              <StatusIcon status={msg.status} className="ml-0 text-current" />
+            )}
+          </div>
         </div>
         
         {renderReactions()}

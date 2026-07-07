@@ -148,6 +148,10 @@
   --bubble-incoming-text: #181d1a;
   --bubble-outgoing: #2f6b5b;
   --bubble-outgoing-text: #f8faf8;
+  --bubble-incoming-meta: #55615a;
+  --bubble-incoming-meta-bg: rgba(24, 29, 26, 0.06);
+  --bubble-outgoing-meta: rgba(248, 250, 248, 0.84);
+  --bubble-outgoing-meta-bg: rgba(255, 255, 255, 0.12);
   --mention-bg: #dceae4;
   --mention-text: #1d463b;
   --unread-badge: #2f6b5b;
@@ -228,6 +232,10 @@
   --bubble-incoming-text: #eef2ee;
   --bubble-outgoing: #7db19f;
   --bubble-outgoing-text: #122019;
+  --bubble-incoming-meta: rgba(238, 242, 238, 0.78);
+  --bubble-incoming-meta-bg: rgba(255, 255, 255, 0.08);
+  --bubble-outgoing-meta: rgba(18, 32, 25, 0.76);
+  --bubble-outgoing-meta-bg: rgba(10, 14, 12, 0.1);
   --mention-bg: #2e3c35;
   --mention-text: #d8efe5;
   --unread-badge: #7db19f;
