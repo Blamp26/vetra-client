@@ -484,6 +484,126 @@ body {
     box-shadow: var(--panel-shadow);
   }
 
+  .vt-call-shell {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent 18%),
+      color-mix(in srgb, var(--surface-1) 90%, var(--surface-0) 10%);
+  }
+
+  .vt-call-stage {
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent 18%);
+    border-radius: calc(var(--radius-xl) + 0.125rem);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 26%),
+      color-mix(in srgb, var(--card) 90%, var(--sidebar) 10%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.42),
+      0 12px 28px rgba(18, 24, 20, 0.08);
+  }
+
+  .vt-call-tile {
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent 12%);
+    border-radius: calc(var(--radius-lg) + 0.125rem);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent 24%),
+      color-mix(in srgb, var(--card) 88%, var(--sidebar) 12%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  }
+
+  .vt-call-video-shell {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: calc(var(--radius-lg) + 0.125rem);
+    overflow: hidden;
+    background: #0b0d0c;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .vt-call-floating {
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent 18%);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--card) 88%, var(--sidebar) 12%);
+    box-shadow: var(--panel-shadow);
+    backdrop-filter: blur(10px);
+  }
+
+  .vt-call-overlay-label {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: calc(var(--radius-md) - 0.125rem);
+    background: rgba(10, 13, 12, 0.62);
+    color: white;
+    backdrop-filter: blur(8px);
+  }
+
+  .vt-call-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--muted-foreground);
+    background: color-mix(in srgb, var(--card) 72%, var(--sidebar) 28%);
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent 12%);
+  }
+
+  .vt-call-control {
+    display: inline-flex;
+    min-height: 3rem;
+    min-width: 3rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent 16%);
+    border-radius: calc(var(--radius-md) - 0.125rem);
+    padding: 0.75rem;
+    background: color-mix(in srgb, var(--card) 84%, var(--sidebar) 16%);
+    color: var(--foreground);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  }
+
+  .vt-call-control:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 78%, var(--card) 22%);
+    border-color: color-mix(in srgb, var(--border) 70%, var(--primary) 30%);
+  }
+
+  .vt-call-control--active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--primary-foreground);
+    box-shadow: none;
+  }
+
+  .vt-call-control--active:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--primary) 88%, black 12%);
+    border-color: color-mix(in srgb, var(--primary) 88%, black 12%);
+  }
+
+  .vt-call-control--danger {
+    background: var(--destructive);
+    border-color: var(--destructive);
+    color: var(--destructive-foreground);
+    box-shadow: none;
+  }
+
+  .vt-call-control--danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--destructive) 88%, black 12%);
+    border-color: color-mix(in srgb, var(--destructive) 88%, black 12%);
+  }
+
+  .vt-call-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: calc(var(--radius-lg) + 0.125rem);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 60%),
+      var(--primary);
+    color: var(--primary-foreground);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
   .vt-divider {
     border-color: var(--border);
   }

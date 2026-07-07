@@ -125,27 +125,26 @@ describe("ActiveCallDock", () => {
     expect(screen.getAllByTestId("active-call-participant-tile")[0].className).not.toContain("flex-[");
     expect(screen.getAllByTestId("active-call-participant-tile")[0]).not.toHaveClass("max-w-[705px]");
     expect(screen.getAllByTestId("active-call-participant-tile")[0]).toHaveClass(
-      "rounded-[4px]",
-      "border",
-      "bg-[var(--call-surface-2)]",
+      "vt-call-tile",
+      "overflow-hidden",
     );
     expect(screen.getAllByTestId("participant-avatar-name")[0]).toHaveTextContent("You");
     expect(screen.queryByTestId("active-call-screen-share-tile")).not.toBeInTheDocument();
-    expect(screen.getByTestId("active-call-dock-controls")).toHaveClass("call-controls", "h-[50px]");
+    expect(screen.getByTestId("active-call-dock-controls")).toHaveClass("vt-call-floating", "call-controls", "h-[58px]");
     expect(screen.getByRole("button", { name: "Mute" })).toHaveClass(
+      "vt-call-control",
       "h-12",
       "w-12",
-      "rounded-[4px]",
-      "border",
     );
     expect(screen.getByRole("button", { name: "Mute" })).not.toHaveClass("rounded-full");
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share screen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hang Up" })).toHaveClass(
+      "vt-call-control",
+      "vt-call-control--danger",
       "ctrl-btn--danger",
       "h-12",
       "w-12",
-      "rounded-[4px]",
     );
   });
 
@@ -164,12 +163,11 @@ describe("ActiveCallDock", () => {
       "max-h-[190px]",
       "w-[clamp(220px,24vw,330px)]",
       "max-w-[330px]",
-      "rounded-[4px]",
-      "border",
+      "vt-call-video-shell",
     );
     expect(tile.className).not.toContain("flex-[");
     expect(screen.getByRole("button", { name: "Watch stream" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Watch stream" })).toHaveClass("rounded-[4px]", "border");
+    expect(screen.getByRole("button", { name: "Watch stream" })).toHaveClass("vt-call-floating");
     expect(screen.queryByRole("button", { name: "Expand Alice's screen" })).not.toBeInTheDocument();
     expect(screen.getByTestId("participant-screen-name")).toHaveTextContent("Alice");
     expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
@@ -221,27 +219,27 @@ describe("ActiveCallDock", () => {
     expect(screen.getByText("720p")).toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-stage")).toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-stage")).toHaveClass(
+      "vt-call-video-shell",
       "focus-stage",
       "flex-1",
       "min-h-[180px]",
-      "rounded-[4px]",
-      "border",
     );
     expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
     expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("Alice");
-    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("focus-strip", "watch-stage-ui", "opacity-20");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("focus-strip", "watch-stage-ui");
+    expectNoHoverHiddenClasses(screen.getByTestId("focus-participant-strip"));
     expect(
       screen.getByTestId("focus-participant-strip").querySelectorAll(".focus-strip-tile"),
     ).toHaveLength(2);
     expect(screen.getByTestId("focus-control-bar")).toBeInTheDocument();
     expect(screen.getByTestId("focus-control-bar")).toHaveClass(
+      "vt-call-floating",
       "focus-controls",
-      "h-[50px]",
+      "h-[58px]",
       "watch-stage-ui",
-      "opacity-20",
-      "group-hover:opacity-100",
     );
-    expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("h-12", "w-12", "rounded-[4px]");
+    expectNoHoverHiddenClasses(screen.getByTestId("focus-control-bar"));
+    expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("vt-call-control", "h-12", "w-12");
     expect(screen.getByRole("button", { name: "Mute" })).not.toHaveClass("rounded-full");
     expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
     expect(screen.getByTestId("focus-stream-video")).toHaveClass("object-contain");
@@ -255,7 +253,7 @@ describe("ActiveCallDock", () => {
       "h-[100dvh]",
       "max-h-[100dvh]",
       "overflow-hidden",
-      "bg-[#050506]",
+      "bg-[#070a09]",
     );
     expect(screen.getByTestId("fullscreen-stream-view")).not.toHaveClass("overflow-y-auto");
     expect(screen.getByTestId("fullscreen-content")).toHaveClass(
@@ -280,18 +278,20 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveProperty("srcObject", stream);
     expect(screen.getByTestId("fullscreen-stream-video")).toHaveClass("object-contain");
     expect(screen.getByTestId("fullscreen-control-bar")).toHaveClass(
+      "vt-call-floating",
       "fullscreen-ui",
       "mt-3",
-      "h-[50px]",
+      "h-[58px]",
       "w-[445px]",
     );
     expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-control-bar"));
     expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("border", "border-white/15");
     expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("absolute", "bottom-5", "-translate-x-1/2");
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass(
+      "vt-call-floating",
       "fullscreen-ui",
-      "mt-2.5",
-      "h-[108px]",
+      "mt-3",
+      "min-h-[108px]",
     );
     expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-participant-strip"));
     expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("border", "border-white/15");
@@ -313,8 +313,8 @@ describe("ActiveCallDock", () => {
     });
     expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
-    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("watch-stage-ui", "opacity-20");
-    expect(screen.getByTestId("focus-control-bar")).toHaveClass("watch-stage-ui", "opacity-20");
+    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("watch-stage-ui");
+    expect(screen.getByTestId("focus-control-bar")).toHaveClass("watch-stage-ui");
     await waitFor(() => {
       expect(document.documentElement.style.overflow).toBe("");
       expect(document.body.style.overflow).toBe("");
@@ -346,7 +346,7 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
   });
 
-  it("keeps hover/fade UI only in partial expanded screen-share mode", async () => {
+  it("keeps focus and fullscreen call controls visible", async () => {
     const stream = makeStream("remote-screen");
     const { requestFullscreen } = mockFullscreenApi();
     renderDock({ remoteScreenStream: stream });
@@ -358,16 +358,10 @@ describe("ActiveCallDock", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
 
-    expect(screen.getByTestId("focus-participant-strip")).toHaveClass(
-      "watch-stage-ui",
-      "opacity-20",
-      "group-hover:opacity-100",
-    );
-    expect(screen.getByTestId("focus-control-bar")).toHaveClass(
-      "watch-stage-ui",
-      "opacity-20",
-      "group-hover:opacity-100",
-    );
+    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("watch-stage-ui");
+    expect(screen.getByTestId("focus-control-bar")).toHaveClass("watch-stage-ui");
+    expectNoHoverHiddenClasses(screen.getByTestId("focus-participant-strip"));
+    expectNoHoverHiddenClasses(screen.getByTestId("focus-control-bar"));
 
     fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
 

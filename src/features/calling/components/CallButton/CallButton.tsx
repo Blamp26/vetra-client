@@ -58,7 +58,7 @@ export function CallButton({ targetUserId, targetUsername, status, callServiceSt
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] hover:bg-accent size-9 h-9 w-9 text-muted-foreground hover:text-foreground",
+        "inline-flex h-9 w-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-border/70 bg-card/80 text-sm font-medium text-muted-foreground transition-all outline-none hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
         className
       )}
       onClick={handleClick}

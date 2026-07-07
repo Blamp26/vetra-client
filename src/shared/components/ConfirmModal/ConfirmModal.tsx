@@ -23,20 +23,22 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   return (
     <div 
-      className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-background/50" 
+      className="fixed inset-0 z-[2000] flex items-center justify-center p-4" 
       onClick={onCancel}
       role="dialog"
       aria-modal="true"
     >
+      <div className="vt-modal-backdrop" />
       <div 
-        className="flex flex-col w-full max-w-md gap-4 p-4 bg-card border border-border" 
+        className="vt-modal-panel relative flex w-full max-w-md flex-col gap-5 p-5" 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col gap-2">
-          <h3 className="text-lg font-normal">
+          <span className="vt-kicker">{isDanger ? "Destructive action" : "Confirm action"}</span>
+          <h3 className="text-xl font-semibold tracking-tight">
             {title}
           </h3>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm leading-6 text-muted-foreground">
             {message}
           </p>
         </div>
@@ -44,7 +46,7 @@ export function ConfirmModal({
         <div className="flex justify-end gap-2">
           <button 
             type="button"
-            className="px-4 py-2 text-sm border border-border" 
+            className="vt-button" 
             onClick={onCancel}
             disabled={isLoading}
           >
@@ -53,10 +55,10 @@ export function ConfirmModal({
           <button 
             type="button"
             className={cn(
-              "px-4 py-2 text-sm border border-border",
+              "vt-button",
               isDanger 
-                ? "bg-destructive text-destructive-foreground" 
-                : "bg-primary text-primary-foreground"
+                ? "vt-button--danger" 
+                : "vt-button--primary"
             )}
             onClick={onConfirm}
             disabled={isLoading}

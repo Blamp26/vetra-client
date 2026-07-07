@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
@@ -151,20 +151,6 @@ export function ActiveCallDock({
     hasScreenSharePresence && !isScreenShareUpdating
       ? formatCallTime(seconds)
       : `${callStateLabel} · ${formatCallTime(seconds)}`;
-  const callSurfaceStyle = {
-    "--call-surface-0": "var(--surface-0, #ececea)",
-    "--call-surface-1": "var(--surface-1, #f6f5f3)",
-    "--call-surface-2": "var(--surface-2, #ffffff)",
-    "--call-border": "var(--border, rgba(20, 20, 18, 0.12))",
-    "--call-text-primary": "var(--text-primary, #1c1c1a)",
-    "--call-text-secondary": "var(--text-secondary, #6f6e69)",
-    "--call-fill-control": "var(--fill-control, #dedcd6)",
-    "--call-fill-danger": "var(--fill-danger, #e5484d)",
-    "--call-on-danger": "var(--on-danger, #ffffff)",
-    "--call-bg-danger": "var(--bg-danger, #ffe2e2)",
-    "--call-text-danger": "var(--text-danger, #c22b2b)",
-    "--call-text-accent": "var(--text-accent, #2952cc)",
-  } as CSSProperties;
 
   const handleWatchStream = useCallback((id: string) => {
     setWatchingInlineIds((current) => {
@@ -196,8 +182,7 @@ export function ActiveCallDock({
 
   return (
     <section
-      className="active-call-dock flex h-[clamp(300px,48vh,523px)] shrink-0 flex-col border-b border-[var(--call-border)] bg-[var(--call-surface-1)] px-[clamp(16px,3.2vw,50px)] py-[clamp(10px,2.8vh,31px)] text-[var(--call-text-primary)]"
-      style={callSurfaceStyle}
+      className="vt-call-shell active-call-dock flex h-[clamp(300px,48vh,523px)] shrink-0 flex-col border-b border-border px-[clamp(16px,3.2vw,50px)] py-[clamp(12px,2.8vh,31px)] text-foreground"
       data-testid="active-call-dock"
       aria-label="Active call dock"
     >
@@ -220,16 +205,16 @@ export function ActiveCallDock({
         />
       ) : (
         <div className="call-dock-inner flex h-full w-full min-w-0 flex-col" data-testid="call-dock-inner">
-          <div className="call-status-row mb-2 flex shrink-0 items-baseline justify-between gap-3">
-            <div className="call-status-left flex min-w-0 items-baseline gap-2">
-              <span className="call-status-kind shrink-0 text-[10px] font-bold uppercase text-[var(--call-text-secondary)]">
+          <div className="call-status-row mb-3 flex shrink-0 items-start justify-between gap-3">
+            <div className="call-status-left flex min-w-0 flex-col gap-1.5">
+              <span className="vt-kicker call-status-kind shrink-0">
                 {callKindLabel}
               </span>
-              <h2 className="call-status-name truncate text-[13px] font-semibold text-[var(--call-text-primary)]">
+              <h2 className="call-status-name truncate text-base font-semibold tracking-tight text-foreground">
                 {remoteUsername}
               </h2>
             </div>
-            <div className="call-status-right shrink-0 text-[11px] text-[var(--call-text-secondary)]">
+            <div className="vt-call-badge call-status-right shrink-0">
               <span data-testid="active-call-dock-status">{callStatusRight}</span>
             </div>
           </div>
@@ -237,10 +222,10 @@ export function ActiveCallDock({
           {displayIssue && (
             <div
               className={cn(
-                "mb-2 shrink-0 rounded-md border px-3 py-2 text-sm",
+                "mb-3 shrink-0 rounded-[14px] border px-3 py-2.5 text-sm leading-6",
                 displayIssue.tone === "error"
-                  ? "border-destructive/50 bg-destructive/10 text-foreground"
-                  : "border-border bg-card text-foreground",
+                  ? "border-destructive/35 bg-destructive/10 text-foreground"
+                  : "border-border bg-card/90 text-foreground",
               )}
               data-testid="call-issue-banner"
             >
@@ -249,7 +234,7 @@ export function ActiveCallDock({
           )}
 
           <div
-            className="call-surface flex min-h-0 flex-1 flex-col justify-between gap-[clamp(14px,2.8vh,31px)] bg-[var(--call-surface-1)]"
+            className="vt-call-stage call-surface flex min-h-0 flex-1 flex-col justify-between gap-[clamp(14px,2.8vh,31px)] px-[clamp(14px,2vw,22px)] py-[clamp(14px,2.2vh,22px)]"
             data-testid="active-call-dock-surface"
           >
             <div
@@ -269,10 +254,10 @@ export function ActiveCallDock({
 
             {shouldShowDiagnostics && (
               <div
-                className="mx-3 mb-2 hidden shrink-0 rounded-md border border-[var(--call-border)] bg-[var(--call-surface-2)] px-3 py-2 text-[11px] text-[var(--call-text-secondary)] lg:block"
+                className="mx-1 hidden shrink-0 rounded-[12px] border border-border bg-card/90 px-3 py-2 text-[11px] text-muted-foreground lg:block"
                 data-testid="webrtc-diagnostics"
               >
-                <span className="mr-3 text-[var(--call-text-primary)]">WebRTC Debug</span>
+                <span className="mr-3 font-medium text-foreground">WebRTC Debug</span>
                 <span>connection {diagnostics.connectionState}</span>
                 <span className="ml-3">ice {diagnostics.iceConnectionState}</span>
                 <span className="ml-3">candidate {diagnostics.selectedLocalCandidateType}</span>
@@ -280,15 +265,13 @@ export function ActiveCallDock({
             )}
 
             <div
-              className="call-controls flex h-[50px] shrink-0 items-center justify-center gap-[clamp(16px,2.2vw,42px)]"
+              className="vt-call-floating call-controls flex h-[58px] shrink-0 items-center justify-center gap-[clamp(12px,2vw,20px)] self-center px-3"
               data-testid="active-call-dock-controls"
             >
               <button
                 className={cn(
-                  "ctrl-btn flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors",
-                  isMuted
-                    ? "bg-[var(--call-bg-danger)] text-[var(--call-text-danger)]"
-                    : "hover:opacity-90",
+                  "vt-call-control ctrl-btn h-12 w-12 p-0",
+                  isMuted && "bg-destructive/12 text-destructive hover:bg-destructive/16",
                 )}
                 onClick={onMuteToggle}
                 aria-label={isMuted ? "Unmute" : "Mute"}
@@ -298,8 +281,8 @@ export function ActiveCallDock({
 
               <button
                 className={cn(
-                  "ctrl-btn flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors hover:opacity-90 disabled:pointer-events-none disabled:opacity-60",
-                  hasScreenSharePresence && "ctrl-btn--active bg-[var(--call-text-accent)] text-white",
+                  "vt-call-control ctrl-btn h-12 w-12 p-0 disabled:pointer-events-none disabled:opacity-60",
+                  hasScreenSharePresence && "vt-call-control--active ctrl-btn--active",
                 )}
                 onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
                 aria-label={
@@ -315,7 +298,7 @@ export function ActiveCallDock({
               </button>
 
               <button
-                className="ctrl-btn ctrl-btn--danger flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-fill-danger)] bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] transition-colors hover:opacity-90"
+                className="vt-call-control vt-call-control--danger ctrl-btn ctrl-btn--danger h-12 w-12 p-0"
                 onClick={onHangUp}
                 aria-label="Hang Up"
               >

@@ -65,7 +65,7 @@ export function ParticipantTile({
   return (
     <div
       className={cn(
-        "participant-tile participant-tile--avatar relative flex shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)]",
+        "vt-call-tile participant-tile participant-tile--avatar relative flex shrink-0 items-center justify-center overflow-hidden",
         className,
       )}
       data-testid={testId}
@@ -73,7 +73,7 @@ export function ParticipantTile({
     >
       <div
         className={cn(
-          "avatar-circle flex items-center justify-center rounded-full bg-[var(--call-fill-control)] text-[var(--call-text-primary)]",
+          "vt-call-avatar avatar-circle flex items-center justify-center rounded-full",
           compact
             ? "h-[clamp(42px,7vh,72px)] w-[clamp(42px,7vh,72px)] text-[clamp(15px,2.3vh,24px)] font-semibold"
             : "h-[clamp(64px,10vh,112px)] w-[clamp(64px,10vh,112px)] text-[clamp(24px,4vh,40px)] font-semibold",
@@ -82,7 +82,7 @@ export function ParticipantTile({
         {name.charAt(0).toUpperCase()}
       </div>
       <p
-        className="tile-label absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded bg-black/55 px-2 py-1 text-[12px] leading-none text-white"
+        className="vt-call-overlay-label tile-label absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate px-2.5 py-1.5 text-[12px] leading-none"
         data-testid="participant-avatar-name"
       >
         {name}
@@ -140,7 +140,7 @@ function ScreenShareParticipantTile({
   return (
     <div
       className={cn(
-        "participant-tile participant-tile--screen relative flex shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-[var(--call-border)] bg-[#111214] text-white",
+        "vt-call-video-shell participant-tile participant-tile--screen relative flex shrink-0 items-center justify-center text-white",
         isWatchingInline && "participant-tile--watching bg-[#0d0e10]",
         className,
       )}
@@ -169,7 +169,7 @@ function ScreenShareParticipantTile({
             </div>
           )}
           <span
-            className="badge-live absolute left-3 top-3 rounded bg-[var(--call-fill-danger)] px-2 py-1 text-[10px] font-bold leading-none text-[var(--call-on-danger)]"
+            className="badge-live absolute left-3 top-3 rounded-full bg-destructive px-2.5 py-1 text-[10px] font-bold leading-none text-destructive-foreground shadow-sm"
             data-testid="participant-screen-live-badge"
           >
             720p · LIVE
@@ -180,7 +180,7 @@ function ScreenShareParticipantTile({
           />
           <button
             type="button"
-            className="tile-expand absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-[5px] border-0 bg-black/50 p-0 text-white hover:bg-black/70"
+            className="vt-call-overlay-label tile-expand absolute right-3 top-3 flex h-8 w-8 items-center justify-center border-0 p-0 hover:bg-black/75"
             onClick={onExpand}
             aria-label={`Expand ${name}'s screen`}
           >
@@ -192,14 +192,14 @@ function ScreenShareParticipantTile({
           {stream && !isLocalSharer ? (
             <button
               type="button"
-              className="watch-btn flex items-center gap-2 rounded-[4px] border border-white/35 bg-black/55 px-4 py-2 text-sm text-white hover:bg-black/70"
+              className="vt-call-floating watch-btn flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground hover:bg-card"
               onClick={onWatch}
             >
-              <Play className="h-4 w-4 fill-current" />
+              <Play className="h-4 w-4 fill-current text-primary" />
               Watch stream
             </button>
           ) : stream && isLocalSharer ? (
-            <div className="flex items-center gap-2 rounded-[4px] border border-white/25 bg-black/45 px-4 py-2 text-sm text-white">
+            <div className="vt-call-floating flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground">
               <ScreenShare className="h-4 w-4" />
               Sharing screen
             </div>
@@ -213,7 +213,7 @@ function ScreenShareParticipantTile({
         <button
           type="button"
           className={cn(
-            "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-[5px] border-0 bg-black/50 p-0 text-white hover:bg-black/70 disabled:opacity-60",
+            "vt-call-overlay-label absolute right-3 top-3 flex h-8 w-8 items-center justify-center border-0 p-0 text-white hover:bg-black/75 disabled:opacity-60",
             isWatchingInline && "right-12",
           )}
           onClick={onStopScreenShare}
@@ -224,7 +224,7 @@ function ScreenShareParticipantTile({
         </button>
       )}
 
-      <div className="tile-label pointer-events-none absolute bottom-3 left-3 flex max-w-[calc(100%-24px)] items-center gap-1.5 rounded bg-black/55 px-2 py-1">
+      <div className="vt-call-overlay-label tile-label pointer-events-none absolute bottom-3 left-3 flex max-w-[calc(100%-24px)] items-center gap-1.5 px-2.5 py-1.5">
         <ScreenShare className="h-3.5 w-3.5 shrink-0 text-white" />
         <p className="truncate text-[12px] leading-none text-white" data-testid="participant-screen-name">
           {name}

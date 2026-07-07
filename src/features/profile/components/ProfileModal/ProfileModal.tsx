@@ -75,19 +75,23 @@ export function ProfileModal({ user, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/50 p-4" onClick={onClose}>
-      <div className="relative z-10 bg-card border border-border w-full max-w-md flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="text-lg font-normal">Profile</h3>
-          <button onClick={onClose}><X className="h-5 w-5" /></button>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="vt-modal-backdrop" />
+      <div className="vt-modal-panel relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div>
+            <span className="vt-kicker">Profile</span>
+            <h3 className="mt-1 text-xl font-semibold tracking-tight">Edit account details</h3>
+          </div>
+          <button className="vt-button vt-button--ghost vt-button--icon h-9 w-9 px-0" onClick={onClose}><X className="h-5 w-5" /></button>
         </div>
 
-        <div className="p-4 overflow-y-auto flex flex-col gap-4">
-          <div className="flex flex-col items-center gap-4">
-            <div className="relative w-20 h-20 group">
-              <div className="w-20 h-20 bg-primary text-primary-foreground text-2xl flex items-center justify-center border border-border">
+        <div className="flex flex-col gap-5 overflow-y-auto px-5 py-5">
+          <div className="vt-panel flex flex-col items-center gap-4 bg-sidebar/35 p-5">
+            <div className="group relative h-24 w-24">
+              <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-[18px] border border-border bg-primary text-3xl font-semibold text-primary-foreground">
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                  <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" />
                 ) : (
                   (displayName || username)[0].toUpperCase()
                 )}
@@ -96,7 +100,7 @@ export function ProfileModal({ user, onClose }: Props) {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] uppercase"
+                className="absolute inset-0 flex items-center justify-center rounded-[18px] bg-black/50 text-[10px] font-semibold uppercase tracking-[0.08em] text-white opacity-0 transition-opacity group-hover:opacity-100"
               >
                 Change
               </button>
@@ -110,9 +114,9 @@ export function ProfileModal({ user, onClose }: Props) {
             </div>
 
             <div className="w-full space-y-1">
-              <label className="text-[10px] uppercase text-muted-foreground">Avatar URL</label>
+              <label className="vt-label">Avatar URL</label>
               <input
-                className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
+                className="vt-input"
                 value={avatarUrl}
                 onChange={(e) => setAvatarUrl(e.target.value)}
                 placeholder="https://..."
@@ -121,9 +125,9 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] uppercase text-muted-foreground">Display Name</label>
+            <label className="vt-label">Display Name</label>
             <input
-              className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
+              className="vt-input"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               maxLength={64}
@@ -131,21 +135,21 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] uppercase text-muted-foreground">Username</label>
+            <label className="vt-label">Username</label>
             <input
-              className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
+              className="vt-input"
               value={username}
               onChange={(e) => { setUsernameErr(null); setUsername(e.target.value); }}
               minLength={2}
               maxLength={32}
             />
-            {usernameErr && <p className="text-destructive text-[10px]">{usernameErr}</p>}
+            {usernameErr && <p className="text-[11px] text-destructive">{usernameErr}</p>}
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] uppercase text-muted-foreground">Bio</label>
+            <label className="vt-label">Bio</label>
             <textarea
-              className="w-full px-2 py-2 bg-background border border-border text-sm outline-none resize-none"
+              className="vt-textarea resize-none"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               maxLength={300}
@@ -154,18 +158,18 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] uppercase text-muted-foreground">Status</label>
+            <label className="vt-label">Status</label>
             <div className="grid grid-cols-2 gap-2">
               {(['online', 'away', 'dnd', 'offline'] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => setStatus(s)}
                   className={cn(
-                    "px-3 py-2 text-xs border",
-                    status === s ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border"
+                    "vt-button min-h-10 justify-start px-3 text-xs uppercase tracking-[0.06em]",
+                    status === s ? "vt-button--primary" : ""
                   )}
                 >
-                  {s.toUpperCase()}
+                  {s === "dnd" ? "Do Not Disturb" : s}
                 </button>
               ))}
             </div>
@@ -174,10 +178,10 @@ export function ProfileModal({ user, onClose }: Props) {
           {error && <p className="text-destructive text-xs">{error}</p>}
         </div>
 
-        <div className="p-4 border-t border-border flex gap-2 justify-end">
-          <button className="px-4 py-2 text-sm border border-border" onClick={onClose}>Cancel</button>
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+          <button className="vt-button" onClick={onClose}>Cancel</button>
           <button 
-            className="px-4 py-2 text-sm bg-primary text-primary-foreground border border-primary disabled:opacity-50"
+            className="vt-button vt-button--primary disabled:opacity-50"
             onClick={handleSave} 
             disabled={saving}
           >

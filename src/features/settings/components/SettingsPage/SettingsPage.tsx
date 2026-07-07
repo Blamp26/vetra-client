@@ -94,15 +94,15 @@ function AudioVideoSettings() {
 
   return (
     <div className="max-w-xl">
-      <h3 className="mb-4 text-lg font-normal">Audio & Video</h3>
+      <h3 className="mb-4 text-xl font-semibold tracking-tight">Audio & Video</h3>
       <div className="space-y-4">
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground" htmlFor="settings-audio-input">Input Device</label>
+          <label className="vt-label" htmlFor="settings-audio-input">Input Device</label>
           <select 
             id="settings-audio-input"
             value={selectedInputDeviceId}
             onChange={(e) => setInputDevice(e.target.value)}
-            className="w-full p-2 border border-border bg-background"
+            className="vt-select"
           >
             {availableInputDevices.map(device => (
               <option key={device.deviceId} value={device.deviceId}>{device.label || `Mic (${device.deviceId.slice(0, 5)})`}</option>
@@ -116,12 +116,12 @@ function AudioVideoSettings() {
           </div>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground" htmlFor="settings-audio-output">Output Device</label>
+          <label className="vt-label" htmlFor="settings-audio-output">Output Device</label>
           <select 
             id="settings-audio-output"
             value={selectedOutputDeviceId}
             onChange={(e) => setOutputDevice(e.target.value)}
-            className="w-full p-2 border border-border bg-background"
+            className="vt-select"
           >
             {availableOutputDevices.map(device => (
               <option key={device.deviceId} value={device.deviceId}>{device.label || `Speaker (${device.deviceId.slice(0, 5)})`}</option>
@@ -131,9 +131,9 @@ function AudioVideoSettings() {
             Speaker routing depends on browser support and may fall back to the system default output device.
           </p>
         </div>
-        <div className="space-y-2 border border-border p-3">
+        <div className="vt-panel space-y-2 p-4">
           <div>
-            <div className="text-sm">Microphone processing</div>
+            <div className="text-sm font-medium">Microphone processing</div>
             <p className="text-xs text-muted-foreground">
               These are browser-requested audio improvements. Actual support and behavior can vary by browser and device.
             </p>
@@ -145,6 +145,7 @@ function AudioVideoSettings() {
               type="checkbox"
               checked={noiseSuppression}
               onChange={(e) => setNoiseSuppression(e.target.checked)}
+              className="h-4 w-4 accent-[var(--primary)]"
             />
           </label>
           <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-echo-cancellation">
@@ -154,6 +155,7 @@ function AudioVideoSettings() {
               type="checkbox"
               checked={echoCancellation}
               onChange={(e) => setEchoCancellation(e.target.checked)}
+              className="h-4 w-4 accent-[var(--primary)]"
             />
           </label>
           <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-auto-gain-control">
@@ -163,10 +165,11 @@ function AudioVideoSettings() {
               type="checkbox"
               checked={autoGainControl}
               onChange={(e) => setAutoGainControl(e.target.checked)}
+              className="h-4 w-4 accent-[var(--primary)]"
             />
           </label>
         </div>
-        <button onClick={() => refreshDevices()} className="text-sm border border-border px-2 py-1">Refresh devices</button>
+        <button onClick={() => refreshDevices()} className="vt-button">Refresh devices</button>
       </div>
     </div>
   );
@@ -215,45 +218,51 @@ export function SettingsPage({ onClose }: Props) {
   ];
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-background/50 p-4">
-      <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative z-10 flex w-full max-w-5xl h-[80vh] bg-card border border-border">
-        <div className="w-64 border-r border-border bg-muted/20 flex flex-col p-4">
-          <h2 className="text-lg font-normal mb-4">Settings</h2>
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
+      <div className="vt-modal-backdrop" onClick={onClose} />
+      <div className="vt-modal-panel relative z-10 flex h-[82vh] w-full max-w-5xl overflow-hidden">
+        <div className="flex w-72 flex-col border-r border-border bg-sidebar/60 px-4 py-5">
+          <div className="mb-5">
+            <span className="vt-kicker">Preferences</span>
+            <h2 className="mt-1 text-xl font-semibold tracking-tight">Settings</h2>
+          </div>
           <nav className="flex flex-col gap-1">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={cn("px-2 py-1 text-left text-sm border", tab === t.id ? "bg-primary text-primary-foreground border-primary" : "border-transparent")}
+                className={cn(
+                  "vt-button min-h-10 justify-start px-3 text-left text-sm",
+                  tab === t.id ? "vt-button--primary" : "vt-button--ghost border-transparent",
+                )}
               >{t.label}</button>
             ))}
           </nav>
           <div className="mt-auto flex flex-col gap-2">
-            <button onClick={() => setShowLogoutConfirm(true)} className="text-destructive text-sm text-left px-2">Log Out</button>
-            <button onClick={onClose} className="text-sm text-left px-2">Back</button>
+            <button onClick={() => setShowLogoutConfirm(true)} className="vt-button vt-button--danger justify-start">Log Out</button>
+            <button onClick={onClose} className="vt-button justify-start">Back</button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto px-8 py-7">
           {tab === 'account' && currentUser && (
             <div className="max-w-xl space-y-4">
-              <h3 className="text-lg font-normal">Account</h3>
-              <div className="flex items-center gap-4 border border-border p-4">
-                <div className="w-12 h-12 bg-primary text-primary-foreground flex items-center justify-center">
+              <h3 className="text-xl font-semibold tracking-tight">Account</h3>
+              <div className="vt-panel flex items-center gap-4 p-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-primary text-primary-foreground">
                   {(currentUser.display_name || currentUser.username)[0].toUpperCase()}
                 </div>
                 <div className="flex-1">
-                  <div className="font-normal">{currentUser.display_name || currentUser.username}</div>
+                  <div className="font-medium">{currentUser.display_name || currentUser.username}</div>
                   <div className="text-xs text-muted-foreground">@{currentUser.username}</div>
                 </div>
-                <button onClick={() => setShowEditProfile(true)} className="border border-border px-3 py-1 text-sm">Edit</button>
+                <button onClick={() => setShowEditProfile(true)} className="vt-button">Edit</button>
               </div>
-              <div className="border border-border">
-                <div className="p-2 border-b border-border flex justify-between text-sm">
+              <div className="vt-panel overflow-hidden">
+                <div className="flex justify-between border-b border-border px-4 py-3 text-sm">
                   <span className="text-muted-foreground">Username</span>
                   <span>@{currentUser.username}</span>
                 </div>
-                <div className="p-2 flex justify-between text-sm">
+                <div className="flex justify-between px-4 py-3 text-sm">
                   <span className="text-muted-foreground">Display Name</span>
                   <span>{currentUser.display_name || '—'}</span>
                 </div>
@@ -262,13 +271,13 @@ export function SettingsPage({ onClose }: Props) {
           )}
           {tab === 'appearance' && (
             <div className="max-w-xl space-y-4">
-              <h3 className="text-lg font-normal">Appearance</h3>
+              <h3 className="text-xl font-semibold tracking-tight">Appearance</h3>
               <div className="flex gap-2">
                 {(['light', 'dark'] as Theme[]).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTheme(t)}
-                    className={cn("flex-1 p-2 border text-sm", theme === t ? "bg-primary text-primary-foreground border-primary" : "border-border")}
+                    className={cn("vt-button flex-1", theme === t ? "vt-button--primary" : "")}
                   >{themeLabels[t]}</button>
                 ))}
               </div>
@@ -276,10 +285,10 @@ export function SettingsPage({ onClose }: Props) {
           )}
           {tab === 'notifications' && (
             <div className="max-w-xl space-y-4">
-              <h3 className="text-lg font-normal">Notifications</h3>
-              <div className="space-y-3 border border-border p-4">
+              <h3 className="text-xl font-semibold tracking-tight">Notifications</h3>
+              <div className="vt-panel space-y-3 p-4">
                 <div>
-                  <div className="text-sm">Desktop notifications</div>
+                  <div className="text-sm font-medium">Desktop notifications</div>
                   <p className="text-xs text-muted-foreground">
                     {notificationPermission === 'granted' && 'Desktop notifications are enabled.'}
                     {notificationPermission === 'default' && 'Desktop notifications are off until you enable them here.'}
@@ -291,7 +300,7 @@ export function SettingsPage({ onClose }: Props) {
                 {notificationPermission === 'default' && (
                   <button
                     onClick={() => { void handleNotificationPermissionRequest(); }}
-                    className="border border-border px-3 py-1 text-sm"
+                    className="vt-button"
                   >
                     Enable notifications
                   </button>

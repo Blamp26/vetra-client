@@ -109,19 +109,20 @@ export const ActiveCallWindow = ({
   }, [localScreenStream]);
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-background/50 z-modal">
-      <div className="flex flex-col items-center gap-4 p-8 bg-card border border-border min-w-[280px]">
-
-        <div className="w-20 h-20 bg-primary flex items-center justify-center border border-border">
-          <span className="text-2xl font-normal text-primary-foreground select-none">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-background/50 p-4">
+      <div className="vt-modal-panel flex w-full max-w-3xl flex-col items-center gap-5 p-6">
+        <div className="vt-call-avatar h-20 w-20">
+          <span className="select-none text-2xl font-semibold text-primary-foreground">
             {remoteUsername.charAt(0).toUpperCase()}
           </span>
         </div>
 
-        <div className="text-center space-y-1">
-          <p className="m-0 text-xl font-normal text-foreground">{remoteUsername}</p>
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground uppercase">
+        <div className="space-y-1 text-center">
+          <span className="vt-kicker">Call in progress</span>
+          <p className="m-0 text-2xl font-semibold tracking-tight text-foreground">{remoteUsername}</p>
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <span>{callStateLabel}</span>
+            <span aria-hidden="true">•</span>
             <span>{formatCallTime(seconds)}</span>
           </div>
         </div>
@@ -129,10 +130,10 @@ export const ActiveCallWindow = ({
         {callIssue && (
           <div
             className={cn(
-              "w-full max-w-[520px] border px-3 py-2 text-sm",
+              "w-full max-w-[720px] rounded-[14px] border px-3 py-2.5 text-sm leading-6",
               callIssue.tone === 'error'
-                ? "border-destructive/50 bg-destructive/5 text-foreground"
-                : "border-border bg-background text-foreground",
+                ? "border-destructive/35 bg-destructive/10 text-foreground"
+                : "border-border bg-card text-foreground",
             )}
             data-testid="call-issue-banner"
           >
@@ -142,7 +143,7 @@ export const ActiveCallWindow = ({
 
         {shouldShowDiagnostics && (
           <div
-            className="w-full max-w-[260px] border border-border bg-background/80 px-3 py-2 text-[11px] text-muted-foreground"
+            className="w-full max-w-[320px] rounded-[12px] border border-border bg-card/90 px-3 py-2 text-[11px] text-muted-foreground"
             data-testid="webrtc-diagnostics"
           >
             <div className="mb-1 font-medium uppercase tracking-wide text-foreground">WebRTC Debug</div>
@@ -165,51 +166,62 @@ export const ActiveCallWindow = ({
           </div>
         )}
 
-        {(isRemoteScreenLoading || remoteScreenStream) && (
-          <div className="w-full max-w-[520px] border border-border bg-background p-2">
-            <div className="mb-2 text-[10px] uppercase text-muted-foreground">
-              {remoteScreenStream ? 'Remote Screen' : 'Connecting Screen'}
-            </div>
-            {remoteScreenStream ? (
-              <video
-                ref={remoteScreenRef}
-                autoPlay
-                playsInline
-                className="w-full border border-border bg-muted/20"
-                data-testid="remote-screen-view"
-              />
-            ) : (
-              <div
-                className="flex min-h-48 items-center justify-center border border-border bg-muted/20 text-sm text-muted-foreground"
-                data-testid="remote-screen-loading"
-              >
-                Waiting for shared screen
+        {(isRemoteScreenLoading || remoteScreenStream || localScreenStream) && (
+          <div className="grid w-full max-w-[720px] gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
+            {(isRemoteScreenLoading || remoteScreenStream) && (
+              <div className="vt-call-stage p-3">
+                <div className="mb-2 flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                  <span>
+                    {remoteScreenStream ? 'Remote Screen' : 'Connecting Screen'}
+                  </span>
+                  <span>{remoteUsername}</span>
+                </div>
+                {remoteScreenStream ? (
+                  <div className="vt-call-video-shell">
+                    <video
+                      ref={remoteScreenRef}
+                      autoPlay
+                      playsInline
+                      className="w-full bg-muted/20"
+                      data-testid="remote-screen-view"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="vt-call-video-shell flex min-h-48 items-center justify-center text-sm text-muted-foreground"
+                    data-testid="remote-screen-loading"
+                  >
+                    Waiting for shared screen
+                  </div>
+                )}
+              </div>
+            )}
+
+            {localScreenStream && (
+              <div className="vt-call-stage p-3">
+                <div className="mb-2 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                  Local Preview Only
+                </div>
+                <div className="vt-call-video-shell">
+                  <video
+                    ref={previewRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full bg-muted/20"
+                    data-testid="local-screen-preview"
+                  />
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {localScreenStream && (
-          <div className="w-full max-w-[360px] border border-border bg-background p-2">
-            <div className="mb-2 text-[10px] uppercase text-muted-foreground">
-              Local Preview Only
-            </div>
-            <video
-              ref={previewRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full border border-border bg-muted/20"
-              data-testid="local-screen-preview"
-            />
-          </div>
-        )}
-
-        <div className="flex gap-4 mt-2">
+        <div className="vt-call-floating mt-1 flex h-[58px] items-center gap-3 px-3">
           <button
             className={cn(
-              "w-12 h-12 border border-border flex items-center justify-center",
-              isMuted ? "bg-destructive text-destructive-foreground" : "bg-background text-foreground"
+              "vt-call-control h-12 w-12 p-0",
+              isMuted ? "bg-destructive/12 text-destructive hover:bg-destructive/16" : "",
             )}
             onClick={onMuteToggle}
             aria-label={isMuted ? 'Unmute' : 'Mute'}
@@ -219,8 +231,8 @@ export const ActiveCallWindow = ({
 
           <button
             className={cn(
-              "border border-border px-3 py-2 text-sm disabled:pointer-events-none disabled:opacity-60",
-              isScreenSharing ? "bg-accent text-foreground" : "bg-background text-foreground"
+              "vt-call-control min-w-[148px] px-4 text-sm disabled:pointer-events-none disabled:opacity-60",
+              isScreenSharing && "vt-call-control--active"
             )}
             onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
             aria-label={isScreenShareUpdating ? 'Updating screen share' : isScreenSharing ? 'Stop sharing' : 'Share screen'}
@@ -233,7 +245,7 @@ export const ActiveCallWindow = ({
           </button>
 
           <button
-            className="w-12 h-12 border border-border flex items-center justify-center bg-destructive text-destructive-foreground"
+            className="vt-call-control vt-call-control--danger h-12 w-12 p-0"
             onClick={onHangUp}
             aria-label="Hang Up"
           >

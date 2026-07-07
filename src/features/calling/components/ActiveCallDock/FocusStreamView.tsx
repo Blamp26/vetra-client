@@ -68,22 +68,22 @@ export function FocusStreamView({
 
   return (
     <div
-      className="focus-stream-view group flex h-full w-full min-w-0 flex-col gap-[clamp(10px,2vh,20px)] bg-[var(--call-surface-1)] text-[var(--call-text-primary)]"
+      className="focus-stream-view flex h-full w-full min-w-0 flex-col gap-[clamp(12px,2vh,20px)] text-foreground"
       data-testid="focus-stream-view"
     >
       <div className="focus-header flex shrink-0 items-center gap-2">
-        <Monitor className="h-3.5 w-3.5 shrink-0 text-[var(--call-text-secondary)]" />
-        <h2 className="title truncate text-[13px] font-semibold text-[var(--call-text-primary)]">
+        <Monitor className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <h2 className="title truncate text-sm font-semibold text-foreground">
           {sharerName}'s screen
         </h2>
-        <span className="badge-live rounded bg-[var(--call-fill-danger)] px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-[var(--call-on-danger)]">
+        <span className="badge-live rounded-full bg-destructive px-2 py-1 text-[9px] font-bold uppercase leading-none text-destructive-foreground">
           LIVE
         </span>
-        <span className="meta text-[11px] text-[var(--call-text-secondary)]">720p</span>
+        <span className="vt-call-badge meta border-0 px-2 py-1 text-[10px]">720p</span>
         <div className="spacer flex-1" />
         <button
           type="button"
-          className="focus-close flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-0 text-[var(--call-text-secondary)] hover:opacity-90"
+          className="vt-call-control focus-close h-[34px] w-[34px] shrink-0 p-0 text-muted-foreground"
           onClick={onExitFocus}
           aria-label="Exit focus view"
         >
@@ -92,7 +92,7 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="focus-stage relative flex min-h-[180px] flex-1 items-center justify-center overflow-hidden rounded-[4px] border border-[var(--call-border)] bg-[#0b0c0d]"
+        className="vt-call-video-shell focus-stage relative flex min-h-[180px] flex-1 items-center justify-center bg-[#0b0c0d]"
         data-testid="focus-stream-stage"
       >
         <video
@@ -116,18 +116,18 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="focus-strip watch-stage-ui flex shrink-0 justify-center gap-[clamp(12px,2vw,24px)] overflow-x-auto opacity-20 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+        className="focus-strip watch-stage-ui flex shrink-0 justify-center gap-[clamp(12px,2vw,24px)] overflow-x-auto"
         data-testid="focus-participant-strip"
       >
         {stripParticipants.map((participant) => (
           <div
             key={participant.id}
-            className="focus-strip-tile relative flex h-[clamp(76px,12vh,120px)] w-[clamp(120px,18vw,220px)] shrink-0 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)]"
+            className="vt-call-tile focus-strip-tile relative flex h-[clamp(76px,12vh,120px)] w-[clamp(120px,18vw,220px)] shrink-0 items-center justify-center"
           >
-            <div className="avatar-circle flex h-[clamp(34px,6vh,56px)] w-[clamp(34px,6vh,56px)] shrink-0 items-center justify-center rounded-full bg-[var(--call-fill-control)] text-[clamp(13px,2vh,20px)] text-[var(--call-text-primary)]">
+            <div className="vt-call-avatar avatar-circle flex h-[clamp(34px,6vh,56px)] w-[clamp(34px,6vh,56px)] shrink-0 items-center justify-center rounded-full text-[clamp(13px,2vh,20px)]">
               {participant.name.charAt(0).toUpperCase()}
             </div>
-            <div className="strip-label absolute bottom-2 left-2 max-w-[calc(100%-16px)] truncate rounded-[3px] bg-black/50 px-1.5 py-1 text-[10px] leading-none text-white">
+            <div className="vt-call-overlay-label strip-label absolute bottom-2 left-2 max-w-[calc(100%-16px)] truncate px-1.5 py-1 text-[10px] leading-none text-white">
               {participant.name}
             </div>
           </div>
@@ -135,16 +135,14 @@ export function FocusStreamView({
       </div>
 
       <div
-        className="focus-controls watch-stage-ui flex h-[50px] shrink-0 items-center justify-center gap-[clamp(16px,2.2vw,42px)] opacity-20 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+        className="vt-call-floating focus-controls watch-stage-ui flex h-[58px] shrink-0 items-center justify-center gap-[clamp(12px,2vw,20px)] self-center px-3"
         data-testid="focus-control-bar"
       >
         <div className="cluster flex items-center gap-2.5">
           <button
             className={cn(
-              "ctrl-btn flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-fill-control)] p-0 text-[var(--call-text-primary)] transition-colors",
-              isMuted
-                ? "bg-[var(--call-bg-danger)] text-[var(--call-text-danger)]"
-                : "hover:opacity-90",
+              "vt-call-control ctrl-btn h-12 w-12 p-0",
+              isMuted && "bg-destructive/12 text-destructive hover:bg-destructive/16",
             )}
             onClick={onMuteToggle}
             aria-label={isMuted ? "Unmute" : "Mute"}
@@ -154,8 +152,7 @@ export function FocusStreamView({
 
           <button
             className={cn(
-              "ctrl-btn ctrl-btn--active flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-text-accent)] p-0 text-white transition-colors hover:opacity-90 disabled:pointer-events-none disabled:opacity-60",
-              !isScreenSharing && "bg-[var(--call-text-accent)]",
+              "vt-call-control vt-call-control--active ctrl-btn ctrl-btn--active h-12 w-12 p-0 disabled:pointer-events-none disabled:opacity-60",
             )}
             onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
             aria-label={
@@ -171,7 +168,7 @@ export function FocusStreamView({
           </button>
 
           <button
-            className="ctrl-btn ctrl-btn--danger flex h-12 w-12 items-center justify-center rounded-[4px] border border-[var(--call-fill-danger)] bg-[var(--call-fill-danger)] p-0 text-[var(--call-on-danger)] hover:opacity-90"
+            className="vt-call-control vt-call-control--danger ctrl-btn ctrl-btn--danger h-12 w-12 p-0"
             onClick={onHangUp}
             aria-label="Hang Up"
           >
@@ -182,14 +179,14 @@ export function FocusStreamView({
         <div className="cluster flex items-center gap-2.5">
           <button
             type="button"
-            className="icon-only flex h-10 w-10 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-0 text-[var(--call-text-secondary)] hover:opacity-90"
+            className="vt-call-control icon-only h-10 w-10 p-0 text-muted-foreground"
             aria-label="Stream volume"
           >
             <Volume2 className="h-4 w-4" />
           </button>
           <button
             type="button"
-            className="icon-only flex h-10 w-10 items-center justify-center rounded-[4px] border border-[var(--call-border)] bg-[var(--call-surface-2)] p-0 text-[var(--call-text-secondary)] hover:opacity-90"
+            className="vt-call-control icon-only h-10 w-10 p-0 text-muted-foreground"
             aria-label="Pop out stream"
             onClick={() => onEnterFullscreen(streamId)}
           >
@@ -312,12 +309,12 @@ export function FullscreenStreamView({
   return (
     <div
       ref={rootRef}
-      className="fullscreen-stream-view group fixed inset-0 z-50 h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#050506] px-8 text-white"
+      className="fullscreen-stream-view fixed inset-0 z-50 h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#070a09] px-8 text-white"
       data-testid="fullscreen-stream-view"
     >
       <button
         type="button"
-        className="absolute right-5 top-5 z-10 flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/20 bg-black/60 p-0 text-white hover:bg-black/80"
+        className="vt-call-overlay-label absolute right-5 top-5 z-10 flex h-10 w-10 items-center justify-center p-0 text-white hover:bg-black/80"
         onClick={handleExitFullscreen}
         aria-label="Exit fullscreen stream"
       >
@@ -329,7 +326,7 @@ export function FullscreenStreamView({
         data-testid="fullscreen-content"
       >
         <div
-          className="relative aspect-video max-h-[calc(100dvh-264px)] w-[min(1420px,calc(100vw-500px),calc((100dvh-264px)*16/9))] max-w-[1420px] overflow-hidden bg-black"
+          className="vt-call-video-shell relative aspect-video max-h-[calc(100dvh-264px)] w-[min(1420px,calc(100vw-500px),calc((100dvh-264px)*16/9))] max-w-[1420px] bg-black"
           data-testid="fullscreen-stream-stage"
         >
           <video
@@ -353,28 +350,28 @@ export function FullscreenStreamView({
         </div>
 
         <div
-          className="fullscreen-ui mt-2.5 flex h-[108px] max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-[15px] overflow-x-auto rounded-[4px] bg-black/55 px-3 py-0"
+          className="vt-call-floating fullscreen-ui mt-3 flex min-h-[108px] max-w-[calc(100vw-96px)] flex-wrap items-center justify-center gap-[15px] overflow-x-auto px-3 py-3"
           data-testid="fullscreen-participant-strip"
         >
           <div
-            className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] bg-[#15171a]"
+            className="vt-call-video-shell relative flex h-[108px] w-[188px] shrink-0 items-center justify-center bg-[#15171a]"
             data-testid="fullscreen-screen-share-tile"
           >
             <ScreenShare className="h-6 w-6 text-white/90" />
-            <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
+            <div className="vt-call-overlay-label absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate px-1.5 py-1 text-[10px] leading-none text-white">
               {sharerName}
             </div>
           </div>
           {stripParticipants.map((participant) => (
             <div
               key={participant.id}
-              className="relative flex h-[108px] w-[188px] shrink-0 items-center justify-center rounded-[4px] bg-zinc-900"
+              className="vt-call-tile relative flex h-[108px] w-[188px] shrink-0 items-center justify-center bg-zinc-900"
               data-testid="fullscreen-participant-avatar-tile"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700 text-sm font-semibold text-white">
+              <div className="vt-call-avatar flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white">
                 {participant.name.charAt(0).toUpperCase()}
               </div>
-              <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate rounded-[3px] bg-black/60 px-1.5 py-1 text-[10px] leading-none text-white">
+              <div className="vt-call-overlay-label absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate px-1.5 py-1 text-[10px] leading-none text-white">
                 {participant.name}
               </div>
             </div>
@@ -382,13 +379,13 @@ export function FullscreenStreamView({
         </div>
 
         <div
-          className="fullscreen-ui mt-3 flex h-[50px] w-[445px] max-w-[calc(100vw-96px)] items-center justify-center gap-3 rounded-[4px] bg-black/60 px-4"
+          className="vt-call-floating fullscreen-ui mt-3 flex h-[58px] w-[445px] max-w-[calc(100vw-96px)] items-center justify-center gap-3 px-4"
           data-testid="fullscreen-control-bar"
         >
           <button
             className={cn(
-              "ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white transition-colors",
-              isMuted ? "bg-red-950 text-red-200" : "hover:bg-zinc-700",
+              "vt-call-control ctrl-btn h-10 w-10 p-0 text-white",
+              isMuted ? "bg-destructive/20 text-destructive-foreground hover:bg-destructive/30" : "bg-white/8 border-white/10 hover:bg-white/12",
             )}
             onClick={onMuteToggle}
             aria-label={isMuted ? "Unmute" : "Mute"}
@@ -396,7 +393,7 @@ export function FullscreenStreamView({
             {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
           </button>
           <button
-            className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-blue-700 p-0 text-white transition-colors hover:bg-blue-600 disabled:pointer-events-none disabled:opacity-60"
+            className="vt-call-control vt-call-control--active ctrl-btn h-10 w-10 p-0 disabled:pointer-events-none disabled:opacity-60"
             onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }}
             aria-label={
               isScreenShareUpdating
@@ -410,7 +407,7 @@ export function FullscreenStreamView({
             {isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}
           </button>
           <button
-            className="ctrl-btn ctrl-btn--danger flex h-10 w-10 items-center justify-center rounded-[4px] border border-red-500 bg-red-600 p-0 text-white hover:bg-red-500"
+            className="vt-call-control vt-call-control--danger ctrl-btn ctrl-btn--danger h-10 w-10 p-0"
             onClick={onHangUp}
             aria-label="Hang Up"
           >
@@ -418,7 +415,7 @@ export function FullscreenStreamView({
           </button>
           <button
             type="button"
-            className="ctrl-btn flex h-10 w-10 items-center justify-center rounded-[4px] border border-white/15 bg-zinc-800 p-0 text-white hover:bg-zinc-700"
+            className="vt-call-control ctrl-btn h-10 w-10 p-0 text-white bg-white/8 border-white/10 hover:bg-white/12"
             onClick={handleExitFullscreen}
             aria-label="Close stream"
           >
