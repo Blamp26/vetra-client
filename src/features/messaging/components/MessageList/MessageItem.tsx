@@ -71,7 +71,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const metadataClassName = isOwn
     ? "text-[color:var(--bubble-outgoing-meta)]"
     : "text-[color:var(--bubble-incoming-meta)]";
-  const overlayMetadataClassName = "font-medium text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.82)]";
+  const overlayMetadataClassName = "h-[18px] rounded-[10px] bg-black/[0.20] py-0 pl-[6px] pr-[5px] text-white";
   const inlineMetadataSpacingClass = isOwn
     ? msg.edited_at
       ? "min-h-6 pr-[7.7rem]"
@@ -103,18 +103,44 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const renderMetadata = (variant: "inline" | "overlay" = "inline") => (
     <div
       className={cn(
-        "inline-flex max-w-full items-center whitespace-nowrap text-[11px] leading-none",
+        "inline-flex max-w-full items-center whitespace-nowrap",
         variant === "overlay"
           ? overlayMetadataClassName
-          : metadataClassName,
-        variant === "overlay" ? "gap-[3px]" : "gap-1",
+          : cn("text-[11px] leading-none", metadataClassName, "gap-1"),
       )}
       data-testid="message-metadata"
     >
-      <span>{formatTime(msg.inserted_at)}</span>
-      {msg.edited_at && <span>(ed.)</span>}
+      <span
+        className={cn(
+          variant === "overlay"
+            ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
+            : "",
+        )}
+      >
+        {formatTime(msg.inserted_at)}
+      </span>
+      {msg.edited_at && (
+        <span
+          className={cn(
+            variant === "overlay"
+              ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
+              : "",
+          )}
+        >
+          (ed.)
+        </span>
+      )}
       {isOwn && !isRoom && (
-        <StatusIcon status={msg.status} className="ml-0 translate-y-[0.5px] text-current" />
+        variant === "overlay" ? (
+          <span
+            className="ml-[-3px] flex h-[19px] w-[19px] items-center justify-center text-white"
+            data-testid="message-media-only-status"
+          >
+            <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
+          </span>
+        ) : (
+          <StatusIcon status={msg.status} className="ml-0 translate-y-[0.5px] text-current" />
+        )
       )}
     </div>
   );
@@ -355,7 +381,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
         {isPhotoOnly && (
           <div
-            className="pointer-events-none absolute bottom-[6px] right-[7px] rounded-[6px] bg-black/40 px-[5px] py-[2px]"
+            className="pointer-events-none absolute bottom-[4px] right-[4px]"
             data-testid="message-media-only-overlay"
           >
             {renderMetadata("overlay")}

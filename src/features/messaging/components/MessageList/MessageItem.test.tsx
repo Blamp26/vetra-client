@@ -215,9 +215,11 @@ describe("MessageItem bubble layout", () => {
     expect(bubble).not.toHaveClass("bg-bubble-outgoing");
     expect(screen.getByTestId("message-media-shell")).toHaveClass("max-w-[min(28rem,calc(100vw-6rem))]");
     expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
-    expect(overlay).toHaveClass("absolute", "bottom-[6px]", "right-[7px]", "rounded-[6px]", "bg-black/40", "px-[5px]", "py-[2px]");
-    expect(metadata).toHaveClass("gap-[3px]", "text-white", "font-medium");
-    expect(overlay).not.toHaveClass("bg-black/60", "rounded-full", "backdrop-blur-[2px]", "shadow-[0_2px_10px_rgba(0,0,0,0.24)]");
+    expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
+    expect(metadata).toHaveClass("h-[18px]", "rounded-[10px]", "bg-black/[0.20]", "py-0", "pl-[6px]", "pr-[5px]", "text-white");
+    expect(metadata).not.toHaveClass("bg-black/40", "bg-black/60", "rounded-full", "backdrop-blur-[2px]", "shadow-[0_2px_10px_rgba(0,0,0,0.24)]");
+    expect(screen.getByText("12:00")).toHaveClass("mr-[4px]", "text-[12px]", "leading-[12px]", "font-normal");
+    expect(screen.getByTestId("message-media-only-status")).toHaveClass("ml-[-3px]", "h-[19px]", "w-[19px]");
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Read")).toBeInTheDocument();
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
@@ -238,7 +240,7 @@ describe("MessageItem bubble layout", () => {
     });
 
     expect(screen.getByTestId("message-media-only-overlay")).toBeInTheDocument();
-    expect(screen.getByTestId("message-media-only-overlay")).toHaveClass("bg-black/40", "rounded-[6px]");
+    expect(screen.getByTestId("message-metadata")).toHaveClass("h-[18px]", "rounded-[10px]", "bg-black/[0.20]");
     expect(screen.getByTestId("message-media-shell")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
