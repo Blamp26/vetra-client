@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Reply, Copy, Forward, CheckSquare, Edit2, Trash2 } from "lucide-react";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
+import { cn } from "@/shared/utils/cn";
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 
 interface ContextMenuData {
@@ -210,38 +211,40 @@ export function MessageContextMenu({
     <div
       ref={menuRef}
       data-testid="message-context-menu"
-      className="fixed z-floating bg-popover border border-border flex flex-col w-64"
+      className="fixed z-floating flex w-64 flex-col overflow-hidden rounded-[14px] border border-border bg-popover shadow-[var(--overlay-shadow)]"
       style={{ top: position.top, left: position.left }}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Reactions bar */}
-      <div className="flex items-center border-b border-border px-1 py-1">
+      <div className="flex items-center border-b border-border bg-sidebar/40 px-2 py-2">
         <div className="flex flex-1 items-center gap-1">
           {EMOJIS.map((e) => (
             <button
               key={e}
               onClick={() => { onToggleReaction(data.msgId, e); onClose(); }}
-              className="p-1 flex items-center justify-center hover:bg-accent"
+              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-accent"
+              aria-label={`React with ${e}`}
             >
               <Emoji emoji={e} size={18} />
             </button>
           ))}
         </div>
-        <div className="border-l border-border h-4 mx-1" />
+        <div className="mx-1 h-4 border-l border-border" />
         <button
           onClick={() => setIsPickerExpanded(!isPickerExpanded)}
-          className="p-1 text-muted-foreground hover:text-foreground"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label={isPickerExpanded ? "Hide emoji picker" : "Show emoji picker"}
         >
           {isPickerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
       </div>
 
-      <div className="relative min-h-[200px]">
+      <div className="relative min-h-[200px] bg-popover">
         {!isPickerExpanded && (
-          <div className="flex flex-col p-1">
+          <div className="flex flex-col gap-0.5 p-1.5">
             <button
               onClick={() => { onReply(); onClose(); }}
-              className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
+              className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm hover:bg-accent"
             >
               <Reply className="h-4 w-4 mr-3 text-muted-foreground" />
               Reply
@@ -250,7 +253,7 @@ export function MessageContextMenu({
             {data.hasText && (
               <button
                 onClick={() => { onCopy(); onClose(); }}
-                className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm hover:bg-accent"
               >
                 <Copy className="h-4 w-4 mr-3 text-muted-foreground" />
                 Copy
@@ -265,7 +268,11 @@ export function MessageContextMenu({
               }}
               disabled={!canForward}
               title={!canForward ? "Messages with attachments cannot be forwarded yet." : undefined}
-              className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={canForward ? "Forward" : "Forward unavailable for attachments"}
+              className={cn(
+                "flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm",
+                canForward ? "hover:bg-accent" : "cursor-not-allowed text-muted-foreground opacity-60",
+              )}
             >
               <Forward className="h-4 w-4 mr-3 text-muted-foreground" />
               {canForward ? "Forward" : "Forward unavailable for attachments"}
@@ -273,7 +280,7 @@ export function MessageContextMenu({
 
             <button
               onClick={() => { onSelect(); onClose(); }}
-              className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
+              className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm hover:bg-accent"
             >
               <CheckSquare className="h-4 w-4 mr-3 text-muted-foreground" />
               Select
@@ -284,7 +291,7 @@ export function MessageContextMenu({
                 {canEdit && (
                   <button
                     onClick={() => { onEdit(); onClose(); }}
-                    className="flex items-center w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                    className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm hover:bg-accent"
                   >
                     <Edit2 className="h-4 w-4 mr-3 text-muted-foreground" />
                     Edit
@@ -295,7 +302,7 @@ export function MessageContextMenu({
 
                 <button
                   onClick={() => { onDelete(); onClose(); }}
-                  className="flex items-center w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+                  className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm text-destructive hover:bg-destructive/10"
                 >
                   <Trash2 className="h-4 w-4 mr-3" />
                   Delete
@@ -306,7 +313,7 @@ export function MessageContextMenu({
         )}
 
         {isPickerExpanded && (
-          <div ref={pickerRef} className="h-[300px]">
+          <div ref={pickerRef} className="h-[300px] border-t border-border bg-popover">
             <EmojiPicker
               width="100%"
               height="100%"

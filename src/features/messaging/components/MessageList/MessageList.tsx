@@ -382,14 +382,14 @@ export function MessageList({
     return (
       <button
         type="button"
-        className="mb-1 block w-full border-l-2 border-border bg-muted/50 p-1 text-left text-xs"
+        className="mb-2 block w-full rounded-[12px] border border-border bg-card/65 px-3 py-2 text-left text-xs"
         onClick={() => {
           const el = messageRefs.current[msg.reply_to_id!];
           if (el) el.scrollIntoView();
         }}
       >
-        <div className="font-normal">{author}</div>
-        {previewText && <div className="truncate opacity-70">{previewText}</div>}
+        <div className="mb-0.5 font-medium text-foreground">{author}</div>
+        {previewText && <div className="truncate text-muted-foreground">{previewText}</div>}
       </button>
     );
   };
@@ -413,23 +413,32 @@ export function MessageList({
       <div 
         ref={containerRef} 
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto space-y-2 px-2 py-2 scrollbar-hide"
+        className="flex-1 overflow-y-auto space-y-3 px-4 py-4 scrollbar-hide"
         data-testid="message-list-scroll"
       >
         {hasMore && (
           <div className="flex justify-center p-2">
-            <button onClick={onLoadMore} disabled={isLoading}>
+            <button onClick={onLoadMore} disabled={isLoading} className="vt-button">
               {isLoading ? "Loading..." : "Older messages"}
             </button>
           </div>
         )}
         {messages.length === 0 && !isLoading && (
-          <div className="text-center p-4 text-muted-foreground text-sm">No messages.</div>
+          <div className="vt-panel mx-auto max-w-md px-5 py-6 text-center">
+            <div className="space-y-1.5">
+              <span className="vt-kicker">No messages yet</span>
+              <p className="text-sm text-muted-foreground">Start the conversation with a message or file.</p>
+            </div>
+          </div>
         )}
         {groupedMessages.map(({ date, messages: dayMessages }) => (
           <div key={date} className="space-y-1.5" data-testid="message-date-group">
-            <div className="my-2.5 border-b border-border text-center">
-              <span className="bg-background px-2 text-[10px] text-muted-foreground uppercase">{date}</span>
+            <div className="my-3 flex items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="rounded-full border border-border bg-card px-3 py-1 text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                {date}
+              </span>
+              <div className="h-px flex-1 bg-border" />
             </div>
             {dayMessages.map((msg, idx) => {
               const prevMsg = dayMessages[idx - 1];
@@ -460,29 +469,34 @@ export function MessageList({
       </div>
 
       {showScrollBottom && (
-        <button onClick={scrollToBottom} className="absolute bottom-20 right-4 p-2 bg-primary text-primary-foreground">
+        <button onClick={scrollToBottom} className="vt-button vt-button--primary absolute bottom-20 right-5 min-h-11 rounded-full px-4 shadow-[var(--overlay-shadow)]">
           Down
         </button>
       )}
 
       {selectionMode && (
-        <div className="p-2 border-t border-border flex items-center justify-between bg-card text-sm">
-          <span>{selectedMessageIds.length} selected</span>
-          <div className="flex items-center gap-2">
+        <div className="border-t border-border bg-card px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="font-medium">{selectedMessageIds.length} selected</span>
+            <div className="flex flex-wrap items-center gap-2">
             {selectedForwardBlocked && (
               <span className="text-[10px] text-muted-foreground">
                 Attachment messages cannot be forwarded yet.
               </span>
             )}
-            <button onClick={() => selectedMessageIds.length > 0 && setMsgToDelete(selectedMessageIds[0])} className="text-destructive">Delete</button>
+              <button onClick={() => selectedMessageIds.length > 0 && setMsgToDelete(selectedMessageIds[0])} className="vt-button vt-button--danger min-h-9 px-3 py-0 text-xs">Delete</button>
             <button
               onClick={() => !selectedForwardBlocked && setForwardingMessages(selectedMessageIds)}
               disabled={selectedForwardBlocked || selectedMessageIds.length === 0}
-              className={cn(selectedForwardBlocked && "opacity-50 cursor-not-allowed")}
+                className={cn(
+                  "vt-button min-h-9 px-3 py-0 text-xs",
+                  selectedForwardBlocked && "cursor-not-allowed opacity-50",
+                )}
             >
               Forward
             </button>
-            <button onClick={clearSelection}>Cancel</button>
+              <button onClick={clearSelection} className="vt-button vt-button--ghost min-h-9 px-3 py-0 text-xs">Cancel</button>
+            </div>
           </div>
         </div>
       )}

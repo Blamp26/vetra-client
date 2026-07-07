@@ -93,9 +93,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     return (
       <>
         {hasMedia && (
-            <div className={cn(!isPhotoOnly && "mb-1")}>
+            <div className={cn(!isPhotoOnly && "mb-2")}>
               {attachment?.kind === "photo" ? (
-                <div 
+                <div
+                  className="overflow-hidden rounded-[16px] border border-border/80 bg-card/50"
                   onClick={() => onLightbox({
                     src: attachment.url,
                     author: authorName,
@@ -103,16 +104,16 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   })}
                 >
                   <AuthenticatedImage 
-                    className="max-w-full border border-border"
+                    className="max-h-[340px] w-full max-w-full object-cover"
                     src={attachment.url} 
                     alt={attachmentName} 
                     crossOrigin="anonymous"
                   />
                 </div>
               ) : (
-                <div className="border border-border bg-background/60 p-3 text-foreground">
+                <div className="rounded-[16px] border border-border bg-card/70 p-3.5 text-foreground">
                   <div className="flex items-start gap-3">
-                    <div className="bg-muted p-2 shrink-0">
+                    <div className="shrink-0 rounded-[12px] border border-border bg-muted p-2.5">
                       {attachment?.kind === "video" ? (
                         <Film className="h-5 w-5" />
                       ) : (
@@ -132,7 +133,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                         type="button"
                         onClick={() => handleAttachmentAction("open")}
                         disabled={isAttachmentActionPending}
-                        className="inline-flex items-center gap-1 border border-border px-2 py-1 text-xs"
+                        className="vt-button h-9 min-h-9 px-3 py-0 text-xs"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                         Open
@@ -142,7 +143,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                       type="button"
                       onClick={() => handleAttachmentAction("download")}
                       disabled={isAttachmentActionPending}
-                      className="inline-flex items-center gap-1 border border-border px-2 py-1 text-xs"
+                      className="vt-button h-9 min-h-9 px-3 py-0 text-xs"
                     >
                       <Download className="h-3.5 w-3.5" />
                       Download
@@ -158,7 +159,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             </div>
         )}
         {hasText && (
-          <div className="text-sm">
+          <div className="whitespace-pre-wrap break-words text-[0.9375rem] leading-6">
             <EmojiText text={msg.content || ""} />
           </div>
         )}
@@ -169,7 +170,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const renderReactions = () => {
     if (!messageReactions || messageReactions.length === 0) return null;
     return (
-      <div className="mt-1.5 flex flex-wrap gap-1">
+      <div className="mt-2 flex flex-wrap gap-1.5">
         {messageReactions.map((g) => {
           const mine = g.user_ids.includes(currentUserId);
           return (
@@ -180,8 +181,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 onToggleReaction(msg.id, g.emoji);
               }}
               className={cn(
-                "inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[10px]",
-                mine ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
+                "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium",
+                mine
+                  ? "border-primary/40 bg-primary/12 text-foreground"
+                  : "border-border bg-background/70 text-foreground"
               )}
             >
               <Emoji emoji={g.emoji} size={12} />
@@ -212,14 +215,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "min-w-[72px] max-w-[80%] rounded-xl border border-border px-3.5 py-2.5 text-sm leading-relaxed",
+          "min-w-[88px] max-w-[min(78ch,80%)] rounded-2xl border border-border/90 px-4 py-3 text-sm",
           isSelected && "ring-1 ring-primary",
           isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text",
         )}
         data-testid="message-bubble"
       >
         {!isOwn && !isConsecutive && (
-          <div className="mb-1 text-[10px] font-medium text-primary">
+          <div className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-muted-foreground">
             {authorName}
           </div>
         )}
@@ -228,7 +231,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           {renderContent()}
         </div>
 
-        <div className="mt-1.5 flex items-center justify-end gap-1 text-[10px] leading-none opacity-70">
+        <div className="mt-2 flex items-center justify-end gap-1.5 text-[11px] leading-none text-muted-foreground">
           <span>{formatTime(msg.inserted_at)}</span>
           {msg.edited_at && <span>(ed.)</span>}
           {isOwn && !isRoom && <StatusIcon status={msg.status} />}

@@ -56,9 +56,9 @@ describe("MessageInput attachments", () => {
   it("keeps composer controls aligned with simple button and input styling", () => {
     render(<MessageInput onSend={vi.fn()} />);
 
-    expect(screen.getByRole("button", { name: "File" })).toHaveClass("h-10");
-    expect(screen.getByPlaceholderText("Message...")).toHaveClass("min-h-10");
-    expect(screen.getByRole("button", { name: "Send" })).toHaveClass("h-10");
+    expect(screen.getByRole("button", { name: "Attach" })).toHaveClass("min-h-11");
+    expect(screen.getByPlaceholderText("Message...")).toHaveClass("min-h-11");
+    expect(screen.getByRole("button", { name: "Send" })).toHaveClass("min-h-11");
   });
 
   it("sends typed text with the existing send action", async () => {
