@@ -34,8 +34,8 @@ interface ReplyTarget {
 
 function TypingIndicator({ nickname }: { nickname: string }) {
   return (
-    <div className="px-4 py-1 text-xs text-muted-foreground border-t border-border">
-      <span className="font-normal">{nickname}</span>
+    <div className="border-t border-border bg-card/70 px-5 py-2 text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">{nickname}</span>
       <span className="opacity-80 ml-1">is typing...</span>
     </div>
   );
@@ -218,7 +218,7 @@ export function ChatWindow({ activeChat, call }: Props) {
       if (!partner)
         return (
           <div
-            className="flex min-h-14 items-center border-b border-border px-4 py-2 text-sm text-muted-foreground"
+            className="flex min-h-14 min-h-[72px] items-center border-b border-border px-5 py-3 text-sm text-muted-foreground"
             data-testid="chat-header"
           >
             Loading...
@@ -242,7 +242,7 @@ export function ChatWindow({ activeChat, call }: Props) {
 
       return (
         <div
-          className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4 py-2"
+          className="flex min-h-14 min-h-[72px] items-center justify-between gap-3 border-b border-border px-5 py-3"
           data-testid="chat-header"
         >
           <div className="flex min-w-0 items-center gap-3">
@@ -253,7 +253,7 @@ export function ChatWindow({ activeChat, call }: Props) {
               status={currentStatus as any}
             />
             <div className="min-w-0">
-              <h3 className="truncate text-sm font-medium leading-5">
+              <h3 className="truncate text-base font-semibold leading-5">
                 {partner.display_name || partner.username}
               </h3>
               <p
@@ -285,11 +285,11 @@ export function ChatWindow({ activeChat, call }: Props) {
               callServiceStatus={call.callServiceStatus}
               onCall={handleStartCall}
               onUnavailable={handleCallUnavailable}
-              className="border border-border bg-card hover:bg-accent"
+              className="rounded-[12px] border border-border bg-card hover:bg-accent"
             />
             <button
               onClick={() => setIsSearchOpen(true)}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-card px-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="vt-button text-muted-foreground hover:text-foreground"
             >
               Search
             </button>
@@ -301,13 +301,13 @@ export function ChatWindow({ activeChat, call }: Props) {
       const roomPreview = roomPreviews[roomId];
       return (
         <div
-          className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4 py-2"
+          className="flex min-h-14 min-h-[72px] items-center justify-between gap-3 border-b border-border px-5 py-3"
           data-testid="chat-header"
         >
           <div className="flex min-w-0 items-center gap-3">
             <Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />
             <div className="min-w-0">
-              <h3 className="truncate text-sm font-medium leading-5">
+              <h3 className="truncate text-base font-semibold leading-5">
                 {roomPreview?.name || `Room #${roomId}`}
               </h3>
               <p className="truncate text-xs leading-4 text-muted-foreground">Group chat</p>
@@ -316,7 +316,7 @@ export function ChatWindow({ activeChat, call }: Props) {
           <div className="flex shrink-0 items-center gap-2" data-testid="chat-header-actions">
             <button
               onClick={() => setIsSearchOpen(true)}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-card px-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="vt-button text-muted-foreground hover:text-foreground"
             >
               Search
             </button>
@@ -328,12 +328,12 @@ export function ChatWindow({ activeChat, call }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden bg-background">
+    <div className="flex h-full flex-1 flex-col overflow-hidden rounded-[calc(var(--radius-xl)-2px)] bg-card">
       {renderHeader()}
 
       {(callStartIssue || (call.status === "idle" && displayCallIssue?.message)) && (
         <div
-          className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-foreground"
+          className="border-b border-destructive/40 bg-destructive/10 px-5 py-2 text-sm text-foreground"
           data-testid="call-start-issue"
         >
           {callStartIssue ?? displayCallIssue?.message}
@@ -360,7 +360,7 @@ export function ChatWindow({ activeChat, call }: Props) {
         />
       )}
 
-      <div className="relative min-h-0 flex-1 overflow-hidden p-2" data-testid="message-list-region">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.26),transparent_12%)] p-3" data-testid="message-list-region">
         <MessageList
           key={chatId}
           messages={messages}

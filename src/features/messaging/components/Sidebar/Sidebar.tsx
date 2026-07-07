@@ -120,6 +120,13 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
     return activeChat.type === "room" && activeChat.roomId === item.id;
   };
 
+  const isServerActive = (serverId: number): boolean => {
+    if (!activeChat) return false;
+    if (activeChat.type === "server") return activeChat.serverId === serverId;
+    if (activeChat.type === "channel") return activeChat.serverId === serverId;
+    return false;
+  };
+
   const handleItemClick = (item: SidebarItem) => {
     if (item.kind === "direct") {
       setActiveChat({
@@ -139,15 +146,18 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
 
   return (
     <div
-      className={cn("flex h-full w-full flex-col", isServerMode && "w-[60px]")}
+      className={cn("flex h-full w-full flex-col", isServerMode && "w-[72px]")}
     >
       {!isServerMode && (
-        <div className="border-b border-border p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h1 className="text-lg font-medium tracking-tight">Messages</h1>
+        <div className="border-b border-border px-4 pb-4 pt-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <span className="vt-kicker">Inbox</span>
+              <h1 className="text-xl font-semibold tracking-tight">Messages</h1>
+            </div>
             <button
               onClick={() => openModal("CREATE_PICKER")}
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-sm hover:bg-accent"
+              className="vt-button vt-button--primary shrink-0 rounded-md"
             >
               New
             </button>
@@ -157,27 +167,32 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
       )}
 
       {!isServerMode && serverList.length > 0 && (
-        <div className="border-b border-border p-3">
+        <div className="border-b border-border px-4 py-4">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="vt-kicker">
               Servers
             </span>
             <button
               onClick={() => openModal("CREATE_SERVER")}
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-sm hover:bg-accent"
+              className="vt-button vt-button--ghost vt-button--icon h-8 w-8 px-0"
               aria-label="Create server"
             >
               +
             </button>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {serverList.map((server) => (
               <button
                 key={server.id}
                 onClick={() =>
                   setActiveChat(serverChatForServer(server))
                 }
-                className="flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left hover:border-border hover:bg-card"
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-[10px] border px-2.5 py-2 text-left transition-colors",
+                  isServerActive(server.id)
+                    ? "border-primary/30 bg-accent"
+                    : "border-transparent hover:border-border hover:bg-card/75",
+                )}
               >
                 <Avatar name={server.name} size="small" />
                 <span className="truncate text-sm">{server.name}</span>
@@ -187,54 +202,69 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
         </div>
       )}
 
-      <div className="flex-1 space-y-1 overflow-y-auto p-2">
-        {allItems.map((item) => {
-          const isActive = isItemActive(item);
-          return (
-            <button
-              key={`${item.kind}-${item.id}`}
-              onClick={() => handleItemClick(item)}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-2 text-left hover:border-border hover:bg-card/70",
-                isActive && "border-border bg-card",
-              )}
-              data-testid={`sidebar-item-${item.kind}-${item.id}`}
-              data-presence-status={item.kind === "direct" ? item.status ?? "offline" : undefined}
-              title={item.kind === "direct" ? item.presenceText : undefined}
-            >
-              <Avatar
-                name={item.name}
-                size="medium"
-                status={
-                  item.kind === "direct"
-                    ? item.status || (item.isOnline ? "online" : "offline")
-                    : null
-                }
-              />
-              {!isServerMode && (
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm">{item.name}</span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {formatPreviewTime(item.time)}
-                    </span>
-                  </div>
-                  {item.kind === "direct" && item.presenceText && (
-                    <span className="sr-only">{item.presenceText}</span>
+      <div className="flex-1 overflow-y-auto px-3 py-3">
+        {allItems.length === 0 && !isServerMode ? (
+          <div className="vt-panel bg-card/70 px-4 py-5">
+            <div className="space-y-1.5">
+              <span className="vt-kicker">No conversations</span>
+              <p className="text-sm text-muted-foreground">
+                Start a direct chat or create a room to begin messaging.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {allItems.map((item) => {
+              const isActive = isItemActive(item);
+              return (
+                <button
+                  key={`${item.kind}-${item.id}`}
+                  onClick={() => handleItemClick(item)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md rounded-[12px] border px-2.5 py-2.5 text-left transition-colors",
+                    isActive
+                      ? "border-primary/30 bg-card bg-accent"
+                      : "border-transparent hover:border-border hover:bg-card/70",
                   )}
-                  <p className="truncate text-xs text-muted-foreground">
-                    <EmojiText text={item.preview} size={12} />
-                  </p>
-                </div>
-              )}
-              {!isServerMode && item.unread > 0 && (
-                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none text-primary-foreground">
-                  {item.unread}
-                </span>
-              )}
-            </button>
-          );
-        })}
+                  data-testid={`sidebar-item-${item.kind}-${item.id}`}
+                  data-presence-status={item.kind === "direct" ? item.status ?? "offline" : undefined}
+                  title={item.kind === "direct" ? item.presenceText : undefined}
+                >
+                  <Avatar
+                    name={item.name}
+                    size="medium"
+                    status={
+                      item.kind === "direct"
+                        ? item.status || (item.isOnline ? "online" : "offline")
+                        : null
+                    }
+                  />
+                  {!isServerMode && (
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-medium">{item.name}</span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
+                          {formatPreviewTime(item.time)}
+                        </span>
+                      </div>
+                      {item.kind === "direct" && item.presenceText && (
+                        <span className="sr-only">{item.presenceText}</span>
+                      )}
+                      <p className="truncate pt-0.5 text-xs text-muted-foreground">
+                        <EmojiText text={item.preview} size={12} />
+                      </p>
+                    </div>
+                  )}
+                  {!isServerMode && item.unread > 0 && (
+                    <span className="rounded-full bg-primary px-2 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
+                      {item.unread}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {activeModal === "CREATE_ROOM" && (

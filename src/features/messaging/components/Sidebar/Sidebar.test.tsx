@@ -174,8 +174,8 @@ describe("Sidebar attachment previews", () => {
     render(<Sidebar />);
 
     const directRow = await screen.findByTestId("sidebar-item-direct-2");
-    expect(directRow).toHaveClass("rounded-md");
-    expect(directRow).toHaveClass("bg-card");
+    expect(directRow).toHaveClass("rounded-[12px]");
+    expect(directRow).toHaveClass("bg-accent");
     expect(directRow).toHaveAttribute("data-presence-status", "online");
     expect(directRow).toHaveAttribute("title", "Online");
     expect(screen.getByText("1")).toBeInTheDocument();

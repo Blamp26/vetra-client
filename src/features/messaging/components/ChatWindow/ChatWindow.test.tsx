@@ -222,7 +222,7 @@ describe("ChatWindow presence rendering", () => {
     expect(actions).toContainElement(screen.getByRole("button", { name: "Call Alice" }));
 
     const searchButton = screen.getByRole("button", { name: "Search" });
-    expect(searchButton).toHaveClass("h-9");
+    expect(searchButton).toHaveClass("vt-button");
     fireEvent.click(searchButton);
     expect(screen.getByTestId("message-search")).toBeInTheDocument();
   });

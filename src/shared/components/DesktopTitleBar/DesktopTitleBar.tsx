@@ -81,15 +81,22 @@ export function DesktopTitleBar() {
 
   return (
     <div
-      className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-sidebar px-3 text-foreground"
+      className="flex h-11 shrink-0 items-center justify-between border-b border-border/80 bg-sidebar/90 px-3 text-foreground backdrop-blur"
       data-testid="desktop-title-bar"
       onDoubleClick={() => {
         void handleToggleMaximize();
       }}
     >
-      <div className="flex min-w-0 flex-1 items-center" data-tauri-drag-region>
-        <div className="text-sm font-medium tracking-normal" data-tauri-drag-region>
-          Vetra
+      <div className="flex min-w-0 flex-1 items-center gap-3" data-tauri-drag-region>
+        <div
+          className="flex h-7 items-center gap-2 rounded-full border border-border bg-card px-2.5 text-xs font-semibold tracking-[0.04em] text-foreground/90"
+          data-tauri-drag-region
+        >
+          <span className="h-2 w-2 rounded-full bg-primary" data-tauri-drag-region />
+          <span data-tauri-drag-region>Vetra</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground" data-tauri-drag-region>
+          Desktop
         </div>
       </div>
 
@@ -97,7 +104,7 @@ export function DesktopTitleBar() {
         <button
           type="button"
           aria-label="Minimize window"
-          className="flex h-8 w-10 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex h-8 w-10 items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={(event) => {
             handleControlClick(event);
             void handleMinimize();
@@ -108,7 +115,7 @@ export function DesktopTitleBar() {
         <button
           type="button"
           aria-label={isMaximized ? "Restore window" : "Maximize window"}
-          className="flex h-8 w-10 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex h-8 w-10 items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={(event) => {
             handleControlClick(event);
             void handleToggleMaximize();
@@ -119,7 +126,7 @@ export function DesktopTitleBar() {
         <button
           type="button"
           aria-label="Close window"
-          className="flex h-8 w-10 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground hover:bg-red-100 hover:text-red-700"
+          className="flex h-8 w-10 items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground hover:bg-destructive/12 hover:text-destructive"
           onClick={(event) => {
             handleControlClick(event);
             void handleClose();

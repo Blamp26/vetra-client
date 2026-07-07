@@ -113,7 +113,7 @@ describe("SidebarFooter call UX", () => {
       name: "Return to call with Alice",
     });
 
-    expect(returnButton).toHaveClass("rounded-md");
+    expect(returnButton).toHaveClass("rounded-[12px]");
     fireEvent.click(returnButton);
 
     expect(onReturnToCall).toHaveBeenCalledTimes(1);

@@ -34,14 +34,14 @@ export function UserSearch() {
     <div className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
       <input
-        className="h-10 w-full rounded-md border border-border bg-card pl-9 pr-8 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
-        placeholder="Search..."
+        className="vt-input h-11 pl-9 pr-10"
+        placeholder="Search people or servers"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
       {query && (
         <button
-          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={clearSearch}
         >
           <X className="h-4 w-4" />
@@ -49,29 +49,29 @@ export function UserSearch() {
       )}
 
       {isSearching && (
-        <div className="absolute left-0 right-0 top-full z-[110] mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground">
+        <div className="absolute left-0 right-0 top-full z-[110] mt-2 rounded-[var(--radius-md)] border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-[var(--overlay-shadow)]">
           Searching...
         </div>
       )}
 
       {!isSearching && query && !hasResults && (
-        <div className="absolute left-0 right-0 top-full z-[110] mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground">
+        <div className="absolute left-0 right-0 top-full z-[110] mt-2 rounded-[var(--radius-md)] border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-[var(--overlay-shadow)]">
           No results for "{query}"
         </div>
       )}
 
       {hasResults && (
-        <div className="absolute left-0 right-0 top-full z-[110] mt-1 max-h-[320px] overflow-y-auto rounded-md border border-border bg-popover p-1">
+        <div className="absolute left-0 right-0 top-full z-[110] mt-2 max-h-[320px] overflow-y-auto rounded-[var(--radius-md)] border border-border bg-popover p-1.5 shadow-[var(--overlay-shadow)]">
           {searchResults.users.length > 0 && (
             <div className="mb-2">
-              <div className="px-2 py-1 text-[10px] uppercase text-muted-foreground">
+              <div className="vt-kicker px-2 py-1">
                 Users
               </div>
               <div className="space-y-0.5">
                 {searchResults.users.map((user) => (
                   <button
                     key={`user-${user.id}`}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
+                    className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left hover:bg-accent"
                     onClick={() => handleSelectUser(user)}
                   >
                     <Avatar
@@ -103,14 +103,14 @@ export function UserSearch() {
 
           {searchResults.servers.length > 0 && (
             <div>
-              <div className="px-2 py-1 text-[10px] uppercase text-muted-foreground">
+              <div className="vt-kicker px-2 py-1">
                 Servers
               </div>
               <div className="space-y-0.5">
                 {searchResults.servers.map((server) => (
                   <button
                     key={`server-${server.id}`}
-                    className="flex items-center gap-2 w-full px-2 py-1.5 text-left hover:bg-accent"
+                    className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left hover:bg-accent"
                     onClick={() => handleSelectServer(server)}
                   >
                     <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-[10px]">
