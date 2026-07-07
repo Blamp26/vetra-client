@@ -413,7 +413,7 @@ export function MessageList({
       <div 
         ref={containerRef} 
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto space-y-3 px-4 py-4 scrollbar-hide"
+        className="flex-1 overflow-y-auto px-3 py-4 scrollbar-hide sm:px-4"
         data-testid="message-list-scroll"
       >
         {hasMore && (
@@ -432,7 +432,7 @@ export function MessageList({
           </div>
         )}
         {groupedMessages.map(({ date, messages: dayMessages }) => (
-          <div key={date} className="space-y-1.5" data-testid="message-date-group">
+          <div key={date} className="mx-auto w-full max-w-[980px]" data-testid="message-date-group">
             <div className="my-3 flex items-center gap-3">
               <div className="h-px flex-1 bg-border" />
               <span className="rounded-full border border-border bg-card px-3 py-1 text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
@@ -442,25 +442,35 @@ export function MessageList({
             </div>
             {dayMessages.map((msg, idx) => {
               const prevMsg = dayMessages[idx - 1];
+              const nextMsg = dayMessages[idx + 1];
+              const isConsecutive = prevMsg?.sender_id === msg.sender_id;
+              const isGroupedWithNext = nextMsg?.sender_id === msg.sender_id;
               return (
-                <MessageItem
+                <div
                   key={msg.id}
-                  ref={(el) => { messageRefs.current[msg.id] = el; }}
-                  msg={msg}
-                  isOwn={msg.sender_id === currentUserId}
-                  isConsecutive={prevMsg?.sender_id === msg.sender_id}
-                  isSelected={selectedMessageIds.includes(msg.id)}
-                  selectionMode={selectionMode}
-                  isRoom={chatContext.type === "room"}
-                  messageReactions={messageReactions[msg.id] || msg.reactions || []}
-                  currentUserId={currentUserId}
-                  onContextMenu={handleContextMenu}
-                  onToggleSelection={toggleMessageSelection}
-                  onToggleReaction={toggleReaction}
-                  onLightbox={setLightboxData}
-                  renderReplyPreview={renderReplyPreview}
-                  formatTime={formatTime}
-                />
+                  className={cn(
+                    idx === 0 ? "mt-0" : isConsecutive ? "mt-1" : "mt-3.5",
+                  )}
+                >
+                  <MessageItem
+                    ref={(el) => { messageRefs.current[msg.id] = el; }}
+                    msg={msg}
+                    isOwn={msg.sender_id === currentUserId}
+                    isConsecutive={isConsecutive}
+                    isGroupedWithNext={isGroupedWithNext}
+                    isSelected={selectedMessageIds.includes(msg.id)}
+                    selectionMode={selectionMode}
+                    isRoom={chatContext.type === "room"}
+                    messageReactions={messageReactions[msg.id] || msg.reactions || []}
+                    currentUserId={currentUserId}
+                    onContextMenu={handleContextMenu}
+                    onToggleSelection={toggleMessageSelection}
+                    onToggleReaction={toggleReaction}
+                    onLightbox={setLightboxData}
+                    renderReplyPreview={renderReplyPreview}
+                    formatTime={formatTime}
+                  />
+                </div>
               );
             })}
           </div>

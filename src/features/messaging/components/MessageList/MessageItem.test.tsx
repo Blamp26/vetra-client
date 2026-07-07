@@ -60,6 +60,7 @@ function renderMessageItem(
       msg={makeMessage(messageOverrides)}
       isOwn={false}
       isConsecutive={false}
+      isGroupedWithNext={false}
       isSelected={false}
       selectionMode={false}
       isRoom={false}
@@ -84,7 +85,7 @@ describe("MessageItem bubble layout", () => {
     );
   });
 
-  it("renders incoming messages as left-aligned bubbles", () => {
+  it("renders incoming direct messages as left-aligned bubbles without sender labels", () => {
     renderMessageItem({ content: "Hello from Alice" });
 
     const row = screen.getByTestId("message-bubble-row");
@@ -93,27 +94,26 @@ describe("MessageItem bubble layout", () => {
     expect(row).toHaveAttribute("data-own-message", "false");
     expect(row).toHaveClass("justify-start");
     expect(row).not.toHaveClass("justify-end");
-    expect(bubble).toHaveClass("min-w-[88px]");
-    expect(bubble).toHaveClass("max-w-[min(78ch,80%)]");
-    expect(bubble).toHaveClass("rounded-2xl");
-    expect(bubble).toHaveClass("px-4");
-    expect(bubble).toHaveClass("py-3");
+    expect(bubble).toHaveClass("w-fit");
+    expect(bubble).toHaveClass("max-w-[min(66%,42rem)]");
+    expect(bubble).toHaveClass("rounded-[18px]");
     expect(bubble).toHaveClass("bg-bubble-incoming");
     expect(bubble).not.toHaveClass("flex-1");
-    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.queryByText("Alice")).not.toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
   });
 
-  it("renders own messages as right-aligned bubbles at all widths", () => {
+  it("renders own short messages as right-aligned bubbles with integrated metadata", () => {
     renderMessageItem(
       {
-        content: "My message",
+        content: "23",
         sender_id: 1,
         sender_username: "tester",
         sender_display_name: "Tester",
+        status: "sent",
       },
       { isOwn: true },
     );
@@ -124,33 +124,24 @@ describe("MessageItem bubble layout", () => {
     expect(row).toHaveAttribute("data-own-message", "true");
     expect(row).toHaveClass("justify-end");
     expect(row).not.toHaveClass("justify-start");
-    expect(bubble).toHaveClass("min-w-[88px]");
-    expect(bubble).toHaveClass("max-w-[min(78ch,80%)]");
-    expect(bubble).toHaveClass("rounded-2xl");
-    expect(bubble).toHaveClass("px-4");
-    expect(bubble).toHaveClass("py-3");
+    expect(bubble).toHaveClass("w-fit");
+    expect(bubble).toHaveClass("min-w-[4.75rem]");
+    expect(bubble).toHaveClass("max-w-[min(66%,42rem)]");
     expect(bubble).toHaveClass("bg-bubble-outgoing");
     expect(bubble).not.toHaveClass("flex-1");
     expect(screen.queryByText("Tester")).not.toBeInTheDocument();
-    expect(screen.getByText("My message")).toBeInTheDocument();
+    expect(screen.getByText("23")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(screen.getByLabelText("Sent")).toBeInTheDocument();
   });
 
-  it("renders outgoing delivery metadata when status data exists", () => {
+  it("renders group sender labels only when useful", () => {
     renderMessageItem(
-      {
-        content: "Delivered message",
-        sender_id: 1,
-        sender_username: "tester",
-        sender_display_name: "Tester",
-        status: "delivered",
-      },
-      { isOwn: true },
+      { content: "Group hello" },
+      { isRoom: true },
     );
 
-    expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
-    expect(screen.getByText("12:00")).toBeInTheDocument();
-    expect(screen.getByLabelText("Delivered")).toBeInTheDocument();
+    expect(screen.getByText("Alice")).toBeInTheDocument();
   });
 
   it("does not render Discord-style avatar/meta stream structure", () => {
@@ -176,6 +167,26 @@ describe("MessageItem bubble layout", () => {
     expect(onContextMenu.mock.calls[0][1]).toMatchObject({ id: 1, content: "Open menu" });
   });
 
+  it("keeps metadata outside the content rect used for context menu positioning", () => {
+    renderMessageItem(
+      {
+        content: "compact",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "read",
+      },
+      { isOwn: true },
+    );
+
+    const bubble = screen.getByTestId("message-bubble");
+    const metadata = screen.getByTestId("message-metadata");
+    const contentRect = bubble.querySelector("[data-message-content-rect]");
+
+    expect(contentRect).not.toBeNull();
+    expect(contentRect).not.toContain(metadata);
+  });
+
   it("renders photo attachments through AuthenticatedImage", () => {
     renderMessageItem({
       media_file_id: "media-photo-1",
@@ -194,6 +205,7 @@ describe("MessageItem bubble layout", () => {
       "/api/v1/media/media-photo-1",
     );
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument();
   });
 
   it("renders PDF attachments as a file card with actions", () => {
@@ -243,6 +255,7 @@ describe("MessageItem bubble layout", () => {
     expect(
       screen.getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument();
   });
 
   it("keeps timestamp and status visible for long outgoing text messages", () => {
@@ -260,5 +273,45 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Read")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
+  });
+
+  it("keeps metadata visible for image messages with captions", () => {
+    renderMessageItem({
+      content: "A short caption",
+      media_file_id: "media-photo-caption",
+      media_mime_type: "image/jpeg",
+      attachment: {
+        id: "media-photo-caption",
+        url: "/api/v1/media/media-photo-caption",
+        mime_type: "image/jpeg",
+        original_name: "captioned.jpg",
+        file_size: 9999,
+        kind: "photo",
+      },
+    });
+
+    expect(screen.getByTestId("authenticated-image")).toBeInTheDocument();
+    expect(screen.getByText("A short caption")).toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["sent", "Sent"],
+    ["delivered", "Delivered"],
+    ["read", "Read"],
+    ["error", "Error sending"],
+  ] as const)("renders the existing outgoing status icon for %s", (status, label) => {
+    renderMessageItem(
+      {
+        content: `status ${status}`,
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status,
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByLabelText(label)).toBeInTheDocument();
   });
 });

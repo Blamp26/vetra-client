@@ -22,6 +22,7 @@ interface MessageItemProps {
   msg: Message;
   isOwn: boolean;
   isConsecutive: boolean;
+  isGroupedWithNext: boolean;
   isSelected: boolean;
   selectionMode: boolean;
   isRoom: boolean;
@@ -39,6 +40,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   msg,
   isOwn,
   isConsecutive,
+  isGroupedWithNext,
   isSelected,
   selectionMode,
   isRoom,
@@ -55,14 +57,25 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const [isAttachmentActionPending, setIsAttachmentActionPending] = React.useState(false);
   const [attachmentActionError, setAttachmentActionError] = React.useState<string | null>(null);
   const attachment = getMessageAttachment(msg);
+  const hasMedia = !!attachment;
+  const hasText = !!(msg.content && msg.content.trim().length > 0);
   const isPhotoOnly =
     attachment?.kind === "photo" &&
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
+  const showSenderName = isRoom && !isOwn && !isConsecutive;
+  const renderInlineMetadata = hasText && !hasMedia;
   const metadataClassName = isOwn
-    ? "bg-[var(--bubble-outgoing-meta-bg)] text-[color:var(--bubble-outgoing-meta)]"
-    : "bg-[var(--bubble-incoming-meta-bg)] text-[color:var(--bubble-incoming-meta)]";
+    ? "text-[color:var(--bubble-outgoing-meta)]"
+    : "text-[color:var(--bubble-incoming-meta)]";
+  const inlineMetadataSpacingClass = isOwn
+    ? msg.edited_at
+      ? "min-h-6 pr-[7.7rem]"
+      : "min-h-6 pr-[5.9rem]"
+    : msg.edited_at
+      ? "min-h-6 pr-[6.25rem]"
+      : "min-h-6 pr-[3.85rem]";
 
   const handleAttachmentAction = async (action: "download" | "open") => {
     if (!attachment || isAttachmentActionPending) return;
@@ -85,8 +98,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   };
 
   const renderContent = () => {
-    const hasMedia = !!attachment;
-    const hasText = !!(msg.content && msg.content.trim().length > 0);
     const attachmentTypeLabel = getAttachmentTypeLabel(attachment);
     const attachmentName = getAttachmentDisplayName(attachment);
     const attachmentKindLabel = attachment
@@ -96,10 +107,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     return (
       <>
         {hasMedia && (
-            <div className={cn(!isPhotoOnly && "mb-2")}>
+            <div className={cn(!isPhotoOnly && hasText && "mb-2")}>
               {attachment?.kind === "photo" ? (
                 <div
-                  className="overflow-hidden rounded-[16px] border border-border/80 bg-card/50"
+                  className="w-[min(100%,25rem)] overflow-hidden rounded-[16px] border border-border/80 bg-card/50"
                   onClick={() => onLightbox({
                     src: attachment.url,
                     author: authorName,
@@ -114,7 +125,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   />
                 </div>
               ) : (
-                <div className="rounded-[16px] border border-border bg-card/70 p-3.5 text-foreground">
+                <div className="w-[min(100%,24rem)] rounded-[16px] border border-border bg-card/70 p-3.5 text-foreground">
                   <div className="flex items-start gap-3">
                     <div className="shrink-0 rounded-[12px] border border-border bg-muted p-2.5">
                       {attachment?.kind === "video" ? (
@@ -162,13 +173,35 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             </div>
         )}
         {hasText && (
-          <div className="whitespace-pre-wrap break-words text-[0.9375rem] leading-6">
+          <div
+            className={cn(
+              "whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45]",
+              renderInlineMetadata && inlineMetadataSpacingClass,
+            )}
+            data-testid="message-text-content"
+          >
             <EmojiText text={msg.content || ""} />
           </div>
         )}
       </>
     );
   };
+
+  const renderMetadata = () => (
+    <div
+      className={cn(
+        "inline-flex max-w-full items-center gap-1 whitespace-nowrap text-[11px] leading-none",
+        metadataClassName,
+      )}
+      data-testid="message-metadata"
+    >
+      <span>{formatTime(msg.inserted_at)}</span>
+      {msg.edited_at && <span>(ed.)</span>}
+      {isOwn && !isRoom && (
+        <StatusIcon status={msg.status} className="ml-0 translate-y-[0.5px] text-current" />
+      )}
+    </div>
+  );
 
   const renderReactions = () => {
     if (!messageReactions || messageReactions.length === 0) return null;
@@ -218,37 +251,42 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "min-w-[88px] max-w-[min(78ch,80%)] rounded-2xl border border-border/90 px-4 py-3 text-sm",
+          "relative w-fit min-w-[4.75rem] max-w-[min(66%,42rem)] rounded-[18px] border border-border/85 px-3.5 py-2.5 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
           isSelected && "ring-1 ring-primary",
+          isOwn
+            ? cn(
+                isConsecutive && "rounded-tr-[12px]",
+                isGroupedWithNext && "rounded-br-[12px]",
+              )
+            : cn(
+                isConsecutive && "rounded-tl-[12px]",
+                isGroupedWithNext && "rounded-bl-[12px]",
+              ),
           isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text",
         )}
         data-testid="message-bubble"
       >
-        {!isOwn && !isConsecutive && (
-          <div className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-muted-foreground">
+        {showSenderName && (
+          <div className="mb-1.5 text-[11px] font-semibold tracking-[0.01em] text-primary">
             {authorName}
           </div>
         )}
-        <div data-message-content-rect>
+        <div data-message-content-rect className="relative">
           {renderReplyPreview(msg, isOwn)}
           {renderContent()}
         </div>
 
-        <div className="mt-2 flex justify-end">
-          <div
-            className={cn(
-              "inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium leading-none",
-              metadataClassName,
-            )}
-            data-testid="message-metadata"
-          >
-            <span className="shrink-0 whitespace-nowrap">{formatTime(msg.inserted_at)}</span>
-            {msg.edited_at && <span className="shrink-0 whitespace-nowrap">(ed.)</span>}
-            {isOwn && !isRoom && (
-              <StatusIcon status={msg.status} className="ml-0 text-current" />
-            )}
+        {renderInlineMetadata && (
+          <div className="pointer-events-none absolute bottom-2.5 right-3.5">
+            {renderMetadata()}
           </div>
-        </div>
+        )}
+
+        {!renderInlineMetadata && (
+          <div className="mt-1.5 flex justify-end">
+            {renderMetadata()}
+          </div>
+        )}
         
         {renderReactions()}
       </div>
