@@ -275,6 +275,52 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
   });
 
+  it("renders grouped photo messages as one collage bubble with one metadata display", () => {
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "photo-1",
+            url: "/api/v1/media/photo-1",
+            mime_type: "image/jpeg",
+            original_name: "photo-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+          },
+          {
+            id: "photo-2",
+            url: "/api/v1/media/photo-2",
+            mime_type: "image/png",
+            original_name: "photo-2.png",
+            file_size: 4096,
+            kind: "photo",
+          },
+          {
+            id: "photo-3",
+            url: "/api/v1/media/photo-3",
+            mime_type: "image/png",
+            original_name: "photo-3.png",
+            file_size: 8192,
+            kind: "photo",
+          },
+        ],
+        media_file_ids: ["photo-1", "photo-2", "photo-3"],
+        media_mime_types: ["image/jpeg", "image/png", "image/png"],
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "read",
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(3);
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+    expect(screen.getByTestId("message-media-only-overlay")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("authenticated-image")).toHaveLength(3);
+  });
+
   it("renders incoming media-only messages with overlay timestamp and no outgoing status", () => {
     renderMessageItem({
       media_file_id: "media-photo-2",
@@ -328,6 +374,45 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("A short caption")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Delivered")).toBeInTheDocument();
+  });
+
+  it("renders grouped photo captions below the collage with one metadata block", () => {
+    renderMessageItem(
+      {
+        content: "Album caption",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "delivered",
+        attachments: [
+          {
+            id: "photo-1",
+            url: "/api/v1/media/photo-1",
+            mime_type: "image/jpeg",
+            original_name: "photo-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+          },
+          {
+            id: "photo-2",
+            url: "/api/v1/media/photo-2",
+            mime_type: "image/png",
+            original_name: "photo-2.png",
+            file_size: 4096,
+            kind: "photo",
+          },
+        ],
+        media_file_ids: ["photo-1", "photo-2"],
+        media_mime_types: ["image/jpeg", "image/png"],
+      },
+      { isOwn: true },
+    );
+
+    const contentRect = screen.getByTestId("message-bubble").querySelector("[data-message-content-rect]");
+    expect(contentRect).toContainElement(screen.getByTestId("message-photo-collage"));
+    expect(screen.getByText("Album caption")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
 
   it("renders PDF attachments as a compact file row with in-bubble metadata", () => {

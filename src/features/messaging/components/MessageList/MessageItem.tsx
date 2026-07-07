@@ -12,11 +12,40 @@ import {
   getAttachmentKindLabel,
   getAttachmentTypeLabel,
   getMessageAttachment,
+  getMessageAttachments,
 } from "../../utils/attachments";
 import {
   downloadAttachmentWithAuth,
   openAttachmentWithAuth,
 } from "../../utils/attachmentDownloads";
+
+function getPhotoCollageGridClassName(photoCount: number) {
+  if (photoCount === 2) return "grid-cols-2 auto-rows-[10rem]";
+  if (photoCount === 3) return "grid-cols-2 auto-rows-[6.375rem]";
+  if (photoCount === 4) return "grid-cols-2 auto-rows-[7rem]";
+  if (photoCount === 5) return "grid-cols-6 auto-rows-[4.75rem]";
+  if (photoCount === 6) return "grid-cols-3 auto-rows-[5rem]";
+  if (photoCount === 7 || photoCount === 8) return "grid-cols-3 auto-rows-[4.75rem]";
+  return "grid-cols-3 auto-rows-[4.5rem]";
+}
+
+function getPhotoCollageTileClassName(photoCount: number, index: number) {
+  if (photoCount === 3) {
+    return index === 0 ? "row-span-2" : "";
+  }
+
+  if (photoCount === 5) {
+    if (index <= 1) return "col-span-3";
+    return "col-span-2";
+  }
+
+  if (photoCount === 7 || photoCount === 8) {
+    if (index === 0) return "col-span-2 row-span-2";
+    return "";
+  }
+
+  return "";
+}
 
 interface MessageItemProps {
   msg: Message;
@@ -56,11 +85,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const authToken = useAppStore((s) => s.authToken);
   const [isAttachmentActionPending, setIsAttachmentActionPending] = React.useState(false);
   const [attachmentActionError, setAttachmentActionError] = React.useState<string | null>(null);
+  const attachments = getMessageAttachments(msg);
   const attachment = getMessageAttachment(msg);
-  const hasMedia = !!attachment;
+  const hasMedia = attachments.length > 0;
   const hasText = !!(msg.content && msg.content.trim().length > 0);
-  const isPhotoAttachment = attachment?.kind === "photo";
-  const isDocumentAttachment = Boolean(attachment && attachment.kind !== "photo");
+  const isPhotoAttachment = attachments.length > 0 && attachments.every((currentAttachment) => currentAttachment.kind === "photo");
+  const photoAttachments = isPhotoAttachment ? attachments : [];
+  const isDocumentAttachment = attachments.length > 0 && !isPhotoAttachment;
   const isPhotoOnly =
     isPhotoAttachment &&
     (!msg.content || msg.content.trim().length === 0) &&
@@ -155,6 +186,42 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   );
 
   const renderPhotoMedia = () => {
+    if (photoAttachments.length > 1) {
+      return (
+        <div
+          className={cn(
+            "relative grid max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[16px] bg-[#111] gap-[2px]",
+            getPhotoCollageGridClassName(photoAttachments.length),
+          )}
+          data-testid="message-photo-collage"
+        >
+          {photoAttachments.map((photoAttachment, index) => (
+            <button
+              key={photoAttachment.id}
+              type="button"
+              className={cn(
+                "relative min-h-[4.5rem] overflow-hidden bg-[#111]",
+                getPhotoCollageTileClassName(photoAttachments.length, index),
+              )}
+              data-testid="message-photo-collage-tile"
+              onClick={() => onLightbox({
+                src: photoAttachment.url,
+                author: authorName,
+                time: msg.inserted_at,
+              })}
+            >
+              <AuthenticatedImage
+                className="block h-full w-full object-cover"
+                src={photoAttachment.url}
+                alt={getAttachmentDisplayName(photoAttachment)}
+                crossOrigin="anonymous"
+              />
+            </button>
+          ))}
+        </div>
+      );
+    }
+
     const attachmentName = getAttachmentDisplayName(attachment);
 
     return (

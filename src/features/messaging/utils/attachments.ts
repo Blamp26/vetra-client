@@ -25,8 +25,11 @@ export const MESSAGE_ATTACHMENT_ACCEPT = Object.keys(
 
 type AttachmentLike = {
   attachment?: Attachment | null;
+  attachments?: Attachment[] | null;
   media_file_id?: string | null;
+  media_file_ids?: string[] | null;
   media_mime_type?: string | null;
+  media_mime_types?: string[] | null;
 };
 
 type PreviewLike = AttachmentLike & {
@@ -39,6 +42,18 @@ type PreviewLike = AttachmentLike & {
 
 function normalizeMimeType(mimeType?: string | null) {
   return mimeType?.toLowerCase().trim() || null;
+}
+
+function normalizeAttachment(attachment: Attachment | null | undefined): Attachment | null {
+  if (!attachment) return null;
+
+  const url = resolveAttachmentUrl(attachment.url);
+  if (!url) return null;
+
+  return {
+    ...attachment,
+    url,
+  };
 }
 
 function fallbackAttachmentName(kind: AttachmentKind) {
@@ -73,20 +88,36 @@ export function resolveAttachmentUrl(url?: string | null): string | null {
   }
 }
 
-export function getMessageAttachment(source: AttachmentLike): Attachment | null {
-  if (source.attachment) {
-    const url = resolveAttachmentUrl(source.attachment.url);
-    if (!url) return null;
-
-    return {
-      ...source.attachment,
-      url,
-    };
+export function getMessageAttachments(source: AttachmentLike): Attachment[] {
+  if (source.attachments && source.attachments.length > 0) {
+    return source.attachments
+      .map((attachment) => normalizeAttachment(attachment))
+      .filter((attachment): attachment is Attachment => attachment !== null);
   }
 
-  if (!source.media_file_id) return null;
+  const singleAttachment = normalizeAttachment(source.attachment);
+  if (singleAttachment) return [singleAttachment];
 
-  return {
+  if (source.media_file_ids && source.media_file_ids.length > 0) {
+    return source.media_file_ids.map((mediaFileId, index) => {
+      const mimeType =
+        normalizeMimeType(source.media_mime_types?.[index] ?? source.media_mime_type) ||
+        "application/octet-stream";
+
+      return {
+        id: mediaFileId,
+        url: `${API_BASE_URL}/media/${mediaFileId}`,
+        mime_type: mimeType,
+        original_name: null,
+        file_size: null,
+        kind: inferAttachmentKind(mimeType),
+      };
+    });
+  }
+
+  if (!source.media_file_id) return [];
+
+  return [{
     id: source.media_file_id,
     url: `${API_BASE_URL}/media/${source.media_file_id}`,
     mime_type:
@@ -94,11 +125,15 @@ export function getMessageAttachment(source: AttachmentLike): Attachment | null 
     original_name: null,
     file_size: null,
     kind: inferAttachmentKind(source.media_mime_type),
-  };
+  }];
+}
+
+export function getMessageAttachment(source: AttachmentLike): Attachment | null {
+  return getMessageAttachments(source)[0] ?? null;
 }
 
 export function isMessageForwardable(message: AttachmentLike): boolean {
-  return getMessageAttachment(message) == null;
+  return getMessageAttachments(message).length === 0;
 }
 
 export function getAttachmentKindLabel(kind: AttachmentKind): string {
@@ -133,7 +168,18 @@ export function formatAttachmentSize(fileSize?: number | null): string {
 }
 
 function attachmentOnlyPreview(source: PreviewLike): string | null {
-  const attachment = getMessageAttachment(source);
+  const attachments = getMessageAttachments(source);
+  if (attachments.length > 1) {
+    const allPhotos = attachments.every((attachment) => attachment.kind === "photo");
+    if (allPhotos) return "Photos";
+
+    const allVideos = attachments.every((attachment) => attachment.kind === "video");
+    if (allVideos) return "Videos";
+
+    return "Files";
+  }
+
+  const attachment = attachments[0] ?? null;
   const kind = attachment?.kind ?? source.attachment_kind ?? inferAttachmentKind(source.attachment_mime_type ?? source.media_mime_type);
   const name = attachment?.original_name ?? source.attachment_name ?? null;
 
@@ -163,7 +209,8 @@ export function getPreviewText(
 export function buildPreviewMessage(
   message: Message,
 ): PreviewMessage {
-  const attachment = getMessageAttachment(message);
+  const attachments = getMessageAttachments(message);
+  const attachment = attachments[0] ?? null;
 
   return {
     id: message.id,
@@ -174,8 +221,11 @@ export function buildPreviewMessage(
     sender_public_id: message.sender_public_id,
     status: message.status,
     media_file_id: message.media_file_id ?? null,
+    media_file_ids: message.media_file_ids ?? (attachments.length > 1 ? attachments.map((item) => item.id) : null),
     media_mime_type: message.media_mime_type ?? null,
+    media_mime_types: message.media_mime_types ?? (attachments.length > 1 ? attachments.map((item) => item.mime_type) : null),
     attachment,
+    attachments: attachments.length > 0 ? attachments : null,
     attachment_kind: attachment?.kind ?? null,
     attachment_name: attachment?.original_name ?? null,
     attachment_size: attachment?.file_size ?? null,
@@ -195,8 +245,11 @@ export function buildPreviewMessageFromSummary(
     sender_public_id: summary.sender_public_id,
     status: "sent",
     media_file_id: null,
+    media_file_ids: null,
     media_mime_type: summary.media_type ?? summary.attachment_mime_type ?? null,
+    media_mime_types: null,
     attachment: null,
+    attachments: null,
     attachment_kind: summary.attachment_kind ?? null,
     attachment_name: summary.attachment_name ?? null,
     attachment_size: summary.attachment_size ?? null,

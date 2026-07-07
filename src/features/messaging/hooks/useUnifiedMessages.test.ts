@@ -323,6 +323,93 @@ describe("useUnifiedMessages", () => {
     );
   });
 
+  it("updates the room preview immediately for a grouped photo sent message", async () => {
+    const state = makeState();
+    const sentMessage = {
+      id: 188,
+      content: null,
+      sender_id: 1,
+      sender_public_id: "me-public-id",
+      recipient_id: null,
+      room_id: 9,
+      room_public_id: "room-public-id",
+      status: "sent" as const,
+      inserted_at: "2026-06-30T12:30:30Z",
+      media_file_ids: ["media-photo-1", "media-photo-2"],
+      media_mime_types: ["image/jpeg", "image/png"],
+      attachments: [
+        {
+          id: "media-photo-1",
+          url: "/api/v1/media/media-photo-1",
+          mime_type: "image/jpeg",
+          original_name: "photo-1.jpg",
+          file_size: 2048,
+          kind: "photo" as const,
+        },
+        {
+          id: "media-photo-2",
+          url: "/api/v1/media/media-photo-2",
+          mime_type: "image/png",
+          original_name: "photo-2.png",
+          file_size: 4096,
+          kind: "photo" as const,
+        },
+      ],
+    };
+
+    state.roomPreviews = {
+      9: {
+        id: 9,
+        public_id: "room-public-id",
+        name: "general",
+        created_by: 1,
+        server_id: null,
+        inserted_at: "2026-06-28T00:00:00Z",
+        unread_count: 0,
+        last_message_at: "2026-06-30T12:00:00Z",
+        last_message: null,
+      },
+    };
+    state.socketManager.sendRoomMessageViaChannel = vi
+      .fn()
+      .mockResolvedValue(sentMessage);
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+
+    const { result } = renderHook(() =>
+      useUnifiedMessages({
+        type: "room",
+        roomId: 9,
+        roomRef: "room-public-id",
+      }),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mediaFileIds: ["media-photo-1", "media-photo-2"] });
+    });
+
+    expect(state.socketManager.sendRoomMessageViaChannel).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({
+        mediaFileIds: ["media-photo-1", "media-photo-2"],
+      }),
+    );
+    expect(state.upsertRoomPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        last_message: expect.objectContaining({
+          preview: "Photos",
+          attachments: expect.arrayContaining([
+            expect.objectContaining({ id: "media-photo-1" }),
+            expect.objectContaining({ id: "media-photo-2" }),
+          ]),
+        }),
+      }),
+    );
+  });
+
   it("updates the room preview immediately for a file-only sent message", async () => {
     const state = makeState();
     const sentMessage = {

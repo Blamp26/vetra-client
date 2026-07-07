@@ -99,6 +99,7 @@ export type ChannelCreatedHandler = (payload: {
 export type OutgoingMessagePayload = {
   content?: string | null;
   mediaFileId?: string | null;
+  mediaFileIds?: string[] | null;
   replyToId?: number | null;
 };
 
@@ -604,9 +605,12 @@ export async function connectSocket(
           reject(new Error(`Not joined room ${roomId}`));
           return;
         }
+        const mediaFileIds =
+          payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
         ch.push("send_message", {
           content: payload.content ?? null,
-          media_file_id: payload.mediaFileId ?? null,
+          media_file_id: payload.mediaFileId ?? (mediaFileIds.length === 1 ? mediaFileIds[0] : null),
+          media_file_ids: mediaFileIds.length > 1 ? mediaFileIds : null,
           reply_to_id: payload.replyToId ?? null,
         })
           .receive("ok", (p: Message) => resolve(p))
@@ -707,11 +711,14 @@ export function sendMessageViaChannel(
   payload: OutgoingMessagePayload,
 ): Promise<Message> {
   return new Promise((resolve, reject) => {
+    const mediaFileIds =
+      payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
     channel
       .push("send_message", {
         recipient_id: recipientRef,
         content: payload.content ?? null,
-        media_file_id: payload.mediaFileId ?? null,
+        media_file_id: payload.mediaFileId ?? (mediaFileIds.length === 1 ? mediaFileIds[0] : null),
+        media_file_ids: mediaFileIds.length > 1 ? mediaFileIds : null,
         reply_to_id: payload.replyToId ?? null,
       })
       .receive("ok", (payload: Message) => resolve(payload))

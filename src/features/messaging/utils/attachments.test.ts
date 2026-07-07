@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPreviewMessage,
   getMessageAttachment,
+  getMessageAttachments,
   getPreviewText,
   isMessageForwardable,
 } from "./attachments";
@@ -110,6 +111,36 @@ describe("attachments utils", () => {
     ).toBe(false);
   });
 
+  it("normalizes grouped photo attachments and uses a plural preview label", () => {
+    const attachments = getMessageAttachments({
+      attachments: [
+        {
+          id: "photo-1",
+          url: "/api/v1/media/photo-1",
+          mime_type: "image/png",
+          original_name: "photo-1.png",
+          file_size: 1234,
+          kind: "photo",
+        },
+        {
+          id: "photo-2",
+          url: "/api/v1/media/photo-2",
+          mime_type: "image/jpeg",
+          original_name: "photo-2.jpg",
+          file_size: 4567,
+          kind: "photo",
+        },
+      ],
+    });
+
+    expect(attachments).toHaveLength(2);
+    expect(getPreviewText({
+      content: "",
+      attachments,
+    })).toBe("Photos");
+    expect(isMessageForwardable({ attachments })).toBe(false);
+  });
+
   it("buildPreviewMessage normalizes legacy attachment metadata for history/previews", () => {
     const preview = buildPreviewMessage({
       id: 42,
@@ -134,5 +165,42 @@ describe("attachments utils", () => {
     });
     expect(preview.attachment_kind).toBe("file");
     expect(preview.attachment_mime_type).toBe("application/pdf");
+  });
+
+  it("buildPreviewMessage preserves grouped photo attachment arrays", () => {
+    const preview = buildPreviewMessage({
+      id: 43,
+      content: null,
+      sender_id: 7,
+      recipient_id: 8,
+      room_id: null,
+      status: "sent",
+      inserted_at: "2026-07-01T10:05:00Z",
+      media_file_ids: ["photo-1", "photo-2"],
+      media_mime_types: ["image/png", "image/jpeg"],
+      attachments: [
+        {
+          id: "photo-1",
+          url: "/api/v1/media/photo-1",
+          mime_type: "image/png",
+          original_name: "photo-1.png",
+          file_size: 1234,
+          kind: "photo",
+        },
+        {
+          id: "photo-2",
+          url: "/api/v1/media/photo-2",
+          mime_type: "image/jpeg",
+          original_name: "photo-2.jpg",
+          file_size: 2345,
+          kind: "photo",
+        },
+      ],
+    });
+
+    expect(preview.preview).toBe("Photos");
+    expect(preview.attachment_kind).toBe("photo");
+    expect(preview.attachments).toHaveLength(2);
+    expect(preview.media_file_ids).toEqual(["photo-1", "photo-2"]);
   });
 });

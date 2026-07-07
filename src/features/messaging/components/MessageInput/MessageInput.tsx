@@ -24,7 +24,10 @@ interface PendingAttachment {
 }
  
 interface Props { 
-  onSend: (payload: { content?: string | null; mediaFileId?: string | null }, replyToId?: number) => Promise<void>; 
+  onSend: (
+    payload: { content?: string | null; mediaFileId?: string | null; mediaFileIds?: string[] | null },
+    replyToId?: number,
+  ) => Promise<void>; 
    onTypingStart?: () => void; 
    onTypingStop?: () => void; 
    disabled?: boolean; 
@@ -196,6 +199,50 @@ interface Props {
 
     resetUploadState();
   };
+
+  const removeQueuedAttachments = (attachmentIds: string[]) => {
+    const attachmentIdSet = new Set(attachmentIds);
+    setPendingAttachments((current) => {
+      const next: PendingAttachment[] = [];
+      for (const attachment of current) {
+        if (attachmentIdSet.has(attachment.id)) {
+          revokeAttachmentPreview(attachment);
+          continue;
+        }
+        next.push(attachment);
+      }
+      pendingAttachmentsRef.current = next;
+      return next;
+    });
+  };
+
+  const buildSendUnits = (attachments: PendingAttachment[]) => {
+    const units: Array<{ kind: "photo" | "file"; attachments: PendingAttachment[] }> = [];
+
+    for (let index = 0; index < attachments.length; ) {
+      const current = attachments[index];
+      if (current.kind !== "photo") {
+        units.push({ kind: "file", attachments: [current] });
+        index += 1;
+        continue;
+      }
+
+      const photoRun: PendingAttachment[] = [];
+      while (index < attachments.length && attachments[index].kind === "photo") {
+        photoRun.push(attachments[index]);
+        index += 1;
+      }
+
+      for (let chunkStart = 0; chunkStart < photoRun.length; chunkStart += 9) {
+        units.push({
+          kind: "photo",
+          attachments: photoRun.slice(chunkStart, chunkStart + 9),
+        });
+      }
+    }
+
+    return units;
+  };
  
   const handleSend = async () => { 
     if ((!content.trim() && pendingAttachments.length === 0) || isSending || isUploading || sendLockRef.current) return; 
@@ -233,25 +280,51 @@ interface Props {
         resetUploadState();
        } else {
         const attachmentsToSend = [...pendingAttachmentsRef.current];
-        const totalAttachments = attachmentsToSend.length;
+        const sendUnits = buildSendUnits(attachmentsToSend);
+        const photoSelectionCount = attachmentsToSend.filter((attachment) => attachment.kind === "photo").length;
+        const reserveContentForPhotoUnit = photoSelectionCount > 1;
+        let contentConsumed = false;
+        let uploadPosition = 0;
+        const totalUploads = attachmentsToSend.length;
 
-        for (let index = 0; index < attachmentsToSend.length; index += 1) {
-          const attachment = attachmentsToSend[index];
-          const mediaFileId = await performUpload(attachment.file, index + 1, totalAttachments);
-          if (!mediaFileId) return;
+        for (const unit of sendUnits) {
+          const uploadedMediaFileIds: string[] = [];
+
+          for (const attachment of unit.attachments) {
+            uploadPosition += 1;
+            const mediaFileId = await performUpload(attachment.file, uploadPosition, totalUploads);
+            if (!mediaFileId) return;
+            uploadedMediaFileIds.push(mediaFileId);
+          }
+
+          const shouldUseContent =
+            !contentConsumed &&
+            trimmed.length > 0 &&
+            (
+              reserveContentForPhotoUnit
+                ? unit.kind === "photo"
+                : true
+            );
 
           await onSend(
             {
-              content: index === 0 ? trimmed || null : null,
-              mediaFileId,
+              content: shouldUseContent ? trimmed : null,
+              mediaFileId: uploadedMediaFileIds.length === 1 ? uploadedMediaFileIds[0] : null,
+              mediaFileIds: uploadedMediaFileIds.length > 1 ? uploadedMediaFileIds : null,
             },
-            index === 0 ? replyTo?.id : undefined,
+            !contentConsumed && shouldUseContent ? replyTo?.id : undefined,
           );
 
-          removePendingAttachment(attachment.id);
-          if (index === 0) {
+          removeQueuedAttachments(unit.attachments.map((attachment) => attachment.id));
+
+          if (shouldUseContent) {
+            contentConsumed = true;
             setContent("");
           }
+        }
+
+        if (!contentConsumed && trimmed.length > 0) {
+          setContent("");
         }
 
         resetUploadState();

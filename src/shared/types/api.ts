@@ -52,8 +52,11 @@ export interface Message {
   recipient_username?:     string;
   recipient_display_name?: string | null;
   media_file_id?:          string | null;
+  media_file_ids?:         string[] | null;
   media_mime_type?:        string | null;
+  media_mime_types?:       string[] | null;
   attachment?:             Attachment | null;
+  attachments?:            Attachment[] | null;
   sender?:                 User;
   reactions?:              MessageReactionGroup[];
 }
@@ -124,8 +127,11 @@ export interface PreviewMessage {
   sender_public_id?: string | null;
   status: MessageStatus;
   media_file_id?: string | null;
+  media_file_ids?: string[] | null;
   media_mime_type?: string | null;
+  media_mime_types?: string[] | null;
   attachment?: Attachment | null;
+  attachments?: Attachment[] | null;
   attachment_kind?: AttachmentKind | null;
   attachment_name?: string | null;
   attachment_size?: number | null;

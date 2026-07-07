@@ -168,50 +168,142 @@ describe("MessageInput attachments", () => {
 
     await waitFor(() => {
       expect(onSend).toHaveBeenCalledWith(
-        { content: null, mediaFileId: "media-report.pdf" },
+        { content: null, mediaFileId: "media-report.pdf", mediaFileIds: null },
         undefined,
       );
     });
     expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
   });
 
-  it("sends multiple attachments sequentially in selected order and keeps text on the first message only", async () => {
+  it("sends up to nine selected photos as one grouped photo message", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
-    const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
-    const third = new File(["data"], "clip.webm", { type: "video/webm" });
+    const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
+    const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
+    const third = new File([new Uint8Array(512)], "photo-3.png", { type: "image/png" });
+
+    fireEvent.change(input, { target: { files: [first, second, third] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+
+    expect(onSend).toHaveBeenCalledWith(
+      {
+        content: null,
+        mediaFileId: null,
+        mediaFileIds: ["media-photo-1.png", "media-photo-2.png", "media-photo-3.png"],
+      },
+      undefined,
+    );
+    expect(screen.queryAllByTestId("attachment-queue-item")).toHaveLength(0);
+  });
+
+  it("splits more than nine selected photos into multiple grouped messages in order", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const photos = Array.from({ length: 10 }, (_, index) =>
+      new File([new Uint8Array(256)], `photo-${index + 1}.png`, { type: "image/png" }),
+    );
+
+    fireEvent.change(input, { target: { files: photos } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
+
+    expect(onSend.mock.calls).toEqual([
+      [{
+        content: null,
+        mediaFileId: null,
+        mediaFileIds: [
+          "media-photo-1.png",
+          "media-photo-2.png",
+          "media-photo-3.png",
+          "media-photo-4.png",
+          "media-photo-5.png",
+          "media-photo-6.png",
+          "media-photo-7.png",
+          "media-photo-8.png",
+          "media-photo-9.png",
+        ],
+      }, undefined],
+      [{
+        content: null,
+        mediaFileId: "media-photo-10.png",
+        mediaFileIds: null,
+      }, undefined],
+    ]);
+  });
+
+  it("sends text with the first grouped photo message only", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
+    const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
+    const third = new File([new Uint8Array(512)], "photo-3.png", { type: "image/png" });
+    const fourth = new File([new Uint8Array(512)], "photo-4.png", { type: "image/png" });
+    const document = new File(["pdf"], "report.pdf", { type: "application/pdf" });
 
     fireEvent.change(screen.getByPlaceholderText("Message..."), {
-      target: { value: "Hello team" },
+      target: { value: "Album caption" },
     });
-    fireEvent.change(input, { target: { files: [first, second, third] } });
+    fireEvent.change(input, { target: { files: [first, second, document, third, fourth] } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(3));
 
-    expect(uploadSendMock).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ formData: expect.any(FormData), xhr: expect.any(MockXMLHttpRequest) }),
-    );
-    expect(uploadSendMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ formData: expect.any(FormData), xhr: expect.any(MockXMLHttpRequest) }),
-    );
-    expect(uploadSendMock).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({ formData: expect.any(FormData), xhr: expect.any(MockXMLHttpRequest) }),
-    );
     expect(onSend.mock.calls).toEqual([
-      [{ content: "Hello team", mediaFileId: "media-report.pdf" }, undefined],
-      [{ content: null, mediaFileId: "media-photo.png" }, undefined],
-      [{ content: null, mediaFileId: "media-clip.webm" }, undefined],
+      [{
+        content: "Album caption",
+        mediaFileId: null,
+        mediaFileIds: ["media-photo-1.png", "media-photo-2.png"],
+      }, undefined],
+      [{
+        content: null,
+        mediaFileId: "media-report.pdf",
+        mediaFileIds: null,
+      }, undefined],
+      [{
+        content: null,
+        mediaFileId: null,
+        mediaFileIds: ["media-photo-3.png", "media-photo-4.png"],
+      }, undefined],
     ]);
-    expect(screen.queryAllByTestId("attachment-queue-item")).toHaveLength(0);
   });
 
-  it("prevents duplicate multi-send while pending", async () => {
+  it("keeps documents separate and preserves queue order around consecutive photo groups", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const document = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
+    const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
+
+    fireEvent.change(screen.getByPlaceholderText("Message..."), {
+      target: { value: "Album caption" },
+    });
+    fireEvent.change(input, { target: { files: [document, first, second] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
+
+    expect(onSend.mock.calls).toEqual([
+      [{
+        content: null,
+        mediaFileId: "media-report.pdf",
+        mediaFileIds: null,
+      }, undefined],
+      [{
+        content: "Album caption",
+        mediaFileId: null,
+        mediaFileIds: ["media-photo-1.png", "media-photo-2.png"],
+      }, undefined],
+    ]);
+  });
+
+  it("prevents duplicate grouped-photo sends while pending", async () => {
     let releaseFirstSend!: () => void;
     const onSend = vi.fn().mockImplementation(
       () =>
@@ -221,21 +313,22 @@ describe("MessageInput attachments", () => {
     );
     const { container } = render(<MessageInput onSend={onSend} />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
-    const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
+    const photos = Array.from({ length: 10 }, (_, index) =>
+      new File([new Uint8Array(512)], `photo-${index + 1}.png`, { type: "image/png" }),
+    );
 
-    fireEvent.change(input, { target: { files: [first, second] } });
+    fireEvent.change(input, { target: { files: photos } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     fireEvent.click(screen.getByRole("button", { name: "Sending..." }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
-    expect(uploadSendMock).toHaveBeenCalledTimes(1);
+    expect(uploadSendMock).toHaveBeenCalledTimes(9);
 
     releaseFirstSend();
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
   });
 
-  it("keeps unsent files queued when a later upload fails", async () => {
+  it("keeps unsent files queued when a grouped photo upload fails before send", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     let uploadCount = 0;
     uploadSendMock.mockImplementation(
@@ -260,20 +353,20 @@ describe("MessageInput attachments", () => {
 
     const { container } = render(<MessageInput onSend={onSend} />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
-    const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
-    const third = new File(["data"], "clip.webm", { type: "video/webm" });
+    const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
+    const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
+    const third = new File(["pdf"], "report.pdf", { type: "application/pdf" });
 
     fireEvent.change(input, { target: { files: [first, second, third] } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(0));
     await waitFor(() => expect(screen.getByText("Upload failed")).toBeInTheDocument());
 
-    expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
-    expect(screen.getByText("photo.png")).toBeInTheDocument();
-    expect(screen.getByText("clip.webm")).toBeInTheDocument();
-    expect(screen.getAllByTestId("attachment-queue-item")).toHaveLength(2);
+    expect(screen.getByText("photo-1.png")).toBeInTheDocument();
+    expect(screen.getByText("photo-2.png")).toBeInTheDocument();
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    expect(screen.getAllByTestId("attachment-queue-item")).toHaveLength(3);
   });
 
   it("rejects unsupported file types before upload", () => {

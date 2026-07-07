@@ -271,18 +271,21 @@ export function useUnifiedMessages(context: ChatContext | null) {
 
   const sendMessage = useCallback(
     async (
-      payload: { content?: string | null; mediaFileId?: string | null },
+      payload: { content?: string | null; mediaFileId?: string | null; mediaFileIds?: string[] | null },
       replyToId?: number,
     ) => {
       if (!id || !socketManager || !currentUser || !contextType) return;
       const trimmed = payload.content?.trim() ?? "";
       const content = trimmed.length > 0 ? trimmed : null;
-      if (!content && !payload.mediaFileId) return;
+      const mediaFileIds = payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
+      const primaryMediaFileId = payload.mediaFileId ?? (mediaFileIds.length === 1 ? mediaFileIds[0] : null);
+      if (!content && !primaryMediaFileId && mediaFileIds.length === 0) return;
 
       if (contextType === "room" && roomId !== null) {
         const message = await socketManager.sendRoomMessageViaChannel(roomId, {
           content,
-          mediaFileId: payload.mediaFileId ?? null,
+          mediaFileId: primaryMediaFileId,
+          mediaFileIds,
           replyToId: replyToId ?? null,
         });
         appendRoomMessage(roomId, message);
@@ -298,7 +301,8 @@ export function useUnifiedMessages(context: ChatContext | null) {
           directTargetRef ?? directPartnerId!,
           {
             content,
-            mediaFileId: payload.mediaFileId ?? null,
+            mediaFileId: primaryMediaFileId,
+            mediaFileIds,
             replyToId: replyToId ?? null,
           },
         );
