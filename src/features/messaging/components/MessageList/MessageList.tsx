@@ -599,8 +599,25 @@ export function MessageList({
       {lightboxData?.kind === "image" && (
         <ImageLightbox
           src={lightboxData.src}
-          author={lightboxData.authorName}
-          time={lightboxData.createdAt}
+          authorName={lightboxData.authorName}
+          avatarSrc={lightboxData.avatarSrc}
+          createdAt={lightboxData.createdAt}
+          onForward={
+            (() => {
+              const targetMessage = messagesById.get(lightboxData.messageId);
+              return targetMessage && isMessageForwardable(targetMessage)
+                ? handleLightboxForward
+                : undefined;
+            })()
+          }
+          onDelete={
+            (() => {
+              const targetMessage = messagesById.get(lightboxData.messageId);
+              return targetMessage && targetMessage.sender_id === currentUserId
+                ? handleLightboxDelete
+                : undefined;
+            })()
+          }
           onClose={() => setLightboxData(null)}
         />
       )}

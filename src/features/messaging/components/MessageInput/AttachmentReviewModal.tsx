@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Play, Plus, X } from "lucide-react";
 
 import { cn } from "@/shared/utils/cn";
 import {
@@ -73,6 +73,118 @@ function getPreviewItemClasses(attachment: PendingAttachment, attachments: Pendi
   return "min-h-0";
 }
 
+function formatVideoDuration(durationSeconds: number | null) {
+  if (!durationSeconds || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return null;
+  }
+
+  const totalSeconds = Math.max(0, Math.round(durationSeconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    return `${hours}:${(minutes % 60).toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function AttachmentPreviewMedia({
+  attachment,
+}: {
+  attachment: PendingAttachment;
+}) {
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  const [hasVideoError, setHasVideoError] = useState(false);
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (attachment.previewUrl || attachment.kind !== "video") {
+      setLocalPreviewUrl(null);
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(attachment.file);
+    setLocalPreviewUrl(nextUrl);
+
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [attachment.file, attachment.kind, attachment.previewUrl]);
+
+  const previewUrl = attachment.previewUrl ?? localPreviewUrl;
+
+  if (attachment.kind === "video") {
+    if (previewUrl && !hasVideoError) {
+      const durationLabel = formatVideoDuration(videoDuration);
+
+      return (
+        <>
+          <video
+            src={previewUrl}
+            className="block h-full w-full object-cover object-center"
+            muted
+            playsInline
+            preload="metadata"
+            autoPlay
+            loop
+            data-testid={`attachment-review-video-preview-${attachment.id}`}
+            onLoadedMetadata={(event) => {
+              const duration = event.currentTarget.duration;
+              setVideoDuration(
+                Number.isFinite(duration) && duration > 0 ? duration : null,
+              );
+              setHasVideoError(false);
+            }}
+            onError={() => setHasVideoError(true)}
+          />
+          <div className="pointer-events-none absolute left-[3px] top-[3px] z-[1]">
+            {durationLabel ? (
+              <span
+                className="inline-flex h-[18px] items-center rounded-full bg-black/25 px-[6px] text-[12px] font-medium leading-[18px] text-white"
+                data-testid={`attachment-review-video-duration-${attachment.id}`}
+              >
+                {durationLabel}
+              </span>
+            ) : (
+              <span
+                className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-black/25 text-white"
+                data-testid={`attachment-review-video-badge-${attachment.id}`}
+              >
+                <Play className="h-3 w-3 fill-current" />
+              </span>
+            )}
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center bg-muted text-sm font-medium text-muted-foreground"
+        data-testid={`attachment-review-video-fallback-${attachment.id}`}
+      >
+        Video
+      </div>
+    );
+  }
+
+  if (previewUrl) {
+    return (
+      <img
+        src={previewUrl}
+        alt={attachment.name}
+        className="block h-full w-full object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-muted text-sm font-medium text-muted-foreground">
+      {getAttachmentKindLabel(attachment.kind)}
+    </div>
+  );
+}
+
 function AttachmentPreviewCard({
   attachment,
   attachments,
@@ -117,17 +229,7 @@ function AttachmentPreviewCard({
       )}
       data-testid="attachment-review-item"
     >
-      {attachment.previewUrl ? (
-        <img
-          src={attachment.previewUrl}
-          alt={attachment.name}
-          className="block h-full w-full object-cover"
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-muted text-sm font-medium text-muted-foreground">
-          {getAttachmentKindLabel(attachment.kind)}
-        </div>
-      )}
+      <AttachmentPreviewMedia attachment={attachment} />
 
       <div className="vt-attachment-review__media-fade pointer-events-none absolute inset-x-0 bottom-0 px-3 py-3 text-white">
         <div className="truncate text-sm font-medium">{attachment.name}</div>

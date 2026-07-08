@@ -15,7 +15,30 @@ vi.mock("@/store", () => ({
 }));
 
 vi.mock("@/shared/components/ImageLightbox", () => ({
-  ImageLightbox: () => null,
+  ImageLightbox: ({
+    src,
+    authorName,
+    createdAt,
+    avatarSrc,
+    onDelete,
+    onForward,
+  }: {
+    src: string;
+    authorName: string;
+    createdAt: string;
+    avatarSrc?: string | null;
+    onDelete?: () => void;
+    onForward?: () => void;
+  }) => (
+    <div data-testid="image-lightbox-mock">
+      <span>{src}</span>
+      <span>{authorName}</span>
+      <span>{createdAt}</span>
+      <span>{avatarSrc ?? "no-avatar"}</span>
+      <span>{onDelete ? "can-delete" : "cannot-delete"}</span>
+      <span>{onForward ? "can-forward" : "cannot-forward"}</span>
+    </div>
+  ),
 }));
 
 vi.mock("@/shared/components/VideoLightbox", () => ({
@@ -268,6 +291,47 @@ describe("MessageList bubble layout", () => {
     expect(screen.getByText("/avatars/alice.png")).toBeInTheDocument();
     expect(screen.getByText("cannot-forward")).toBeInTheDocument();
     expect(screen.getByText("cannot-delete")).toBeInTheDocument();
+  });
+
+  it("opens ImageLightbox with rich metadata when clicking a photo tile", () => {
+    renderMessageList([
+      makeMessage({
+        id: 9,
+        content: null,
+        sender_id: 2,
+        sender: {
+          id: 2,
+          username: "alice",
+          display_name: "Alice",
+          bio: null,
+          avatar_url: "/avatars/alice.png",
+          status: "online",
+          last_seen_at: null,
+        },
+        attachment: {
+          id: "photo-lightbox-1",
+          url: "/api/v1/media/photo-lightbox-1",
+          original_url: "/api/v1/media/photo-lightbox-1/original",
+          display_url: "/api/v1/media/photo-lightbox-1/display",
+          mime_type: "image/jpeg",
+          original_name: "still.jpg",
+          file_size: 2048,
+          kind: "photo",
+          width: 1200,
+          height: 900,
+        },
+        media_file_id: "photo-lightbox-1",
+        media_mime_type: "image/jpeg",
+      }),
+    ]);
+
+    fireEvent.click(screen.getByTestId("message-media-shell"));
+
+    expect(screen.getByTestId("image-lightbox-mock")).toBeInTheDocument();
+    expect(screen.getByText(/photo-lightbox-1\/original/)).toBeInTheDocument();
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("2026-06-30T12:00:00Z")).toBeInTheDocument();
+    expect(screen.getByText("/avatars/alice.png")).toBeInTheDocument();
   });
 
   it("opens VideoLightbox with delete capability for the current user's own grouped video message", () => {

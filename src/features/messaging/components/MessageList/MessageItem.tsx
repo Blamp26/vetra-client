@@ -100,10 +100,6 @@ const MESSAGE_ALBUM_LAYOUT_OPTIONS = {
   wideRatio: 1.25,
 } as const;
 
-function isPhotoAttachment(attachment: Attachment): attachment is PhotoAttachment {
-  return attachment.kind === "photo";
-}
-
 function isVisualAttachment(attachment: Attachment): attachment is VisualAttachment {
   return attachment.kind === "photo" || attachment.kind === "video";
 }
@@ -239,16 +235,16 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const hasMedia = attachments.length > 0;
   const hasText = !!(msg.content && msg.content.trim().length > 0);
   const isVisualMediaGroup = attachments.length > 1 && attachments.every(isVisualAttachment);
-  const isSinglePhotoMessage = attachments.length === 1 && attachments.every(isPhotoAttachment);
+  const isSingleVisualMessage = attachments.length === 1 && attachments.every(isVisualAttachment);
   const visualAttachments = isVisualMediaGroup
     ? attachments
-    : isSinglePhotoMessage
+    : isSingleVisualMessage
       ? attachments
       : [];
   const isVisualMediaMessage = visualAttachments.length > 0;
   const isVisualAlbum = visualAttachments.length > 1;
   const isDocumentAttachment = attachments.length > 0 && !isVisualMediaMessage;
-  const isPhotoOnly =
+  const isMediaOnly =
     isVisualMediaMessage &&
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id;
@@ -735,7 +731,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
   const renderPhotoMedia = () => {
     const layout = photoLayout;
-    const tileRadius = isPhotoOnly
+    const tileRadius = isMediaOnly
       ? { top: 15, bottom: 6 }
       : { top: 14, bottom: 8 };
 
@@ -815,17 +811,16 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
     const currentAttachment = resolvedVisualAttachments[0];
     if (!currentAttachment) return null;
-    if (currentAttachment.attachment.kind !== "photo") return null;
     const attachmentName = getAttachmentDisplayName(currentAttachment.attachment);
-
-    if (!currentAttachment.displaySrc || !currentAttachment.lightboxSrc) return null;
+    if (!currentAttachment.lightboxSrc) return null;
 
     return (
-      <div
+      <button
+        type="button"
         className="relative block h-full w-full overflow-hidden"
         data-testid="message-media-shell"
         onClick={() => onLightbox({
-          kind: "image",
+          kind: currentAttachment.attachment.kind === "video" ? "video" : "image",
           src: currentAttachment.lightboxSrc,
           authorName,
           createdAt: msg.inserted_at,
@@ -839,22 +834,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         }}
         data-photo-layout-state={currentAttachment.dimensionSource === "fallback" ? "pending" : "resolved"}
       >
-        <AuthenticatedImage
-          className="block h-full w-full object-cover"
-          src={currentAttachment.displaySrc}
-          alt={attachmentName}
-          crossOrigin="anonymous"
-          onLoad={(event) => handleDecodedVisualDimensions(
-            currentAttachment.attachment.id,
-            event.currentTarget.naturalWidth,
-            event.currentTarget.naturalHeight,
-          )}
-          onMediaDiagnostics={(diagnostics) => handleVisualDiagnostics(
-            currentAttachment.attachment.id,
-            currentAttachment.displaySrc,
-            diagnostics,
-          )}
-        />
+        {renderVisualMedia(currentAttachment, attachmentName)}
         {isMediaDebugEnabled && (
           <div
             className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
@@ -873,7 +853,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
           </div>
         )}
-      </div>
+      </button>
     );
   };
 
@@ -1047,7 +1027,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         className={cn(
           "relative w-fit text-sm",
           !isVisualMediaMessage && "shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
-          isPhotoOnly
+          isMediaOnly
             ? cn(
                 "min-w-0 overflow-hidden p-0",
                 isVisualAlbum
@@ -1082,7 +1062,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   isConsecutive && "rounded-tl-[12px]",
                   isGroupedWithNext && "rounded-bl-[12px]",
                 ),
-          isPhotoOnly
+          isMediaOnly
             ? "text-white"
             : isVisualMediaMessage
               ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
@@ -1126,7 +1106,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {isPhotoOnly && (
+        {isMediaOnly && (
           <div
             className="pointer-events-none absolute bottom-[4px] right-[4px]"
             data-testid="message-media-only-overlay"
@@ -1141,7 +1121,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {!isTextOnly && !isPhotoOnly && !isVisualMediaMessage && !isDocumentAttachment && (
+        {!isTextOnly && !isMediaOnly && !isVisualMediaMessage && !isDocumentAttachment && (
           <div className="mt-1.5 flex justify-end">
             {renderMetadata()}
           </div>

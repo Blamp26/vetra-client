@@ -345,7 +345,7 @@ interface Props {
         mimeType,
         size: file.size,
         kind,
-        previewUrl: kind === "photo" ? URL.createObjectURL(file) : null,
+        previewUrl: kind === "file" ? null : URL.createObjectURL(file),
       };
 
       validAttachments.push(pendingAttachment);

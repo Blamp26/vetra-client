@@ -244,6 +244,29 @@ describe("MessageInput attachments", () => {
     expect(screen.getByAltText("photo.png")).toBeInTheDocument();
   });
 
+  it("renders a real local video preview in the attachment review modal", () => {
+    const { container } = render(<MessageInput onSend={vi.fn()} />);
+    const input = getMediaInput(container);
+    const file = new File([new Uint8Array(1024)], "clip.mp4", {
+      type: "video/mp4",
+    });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    const preview = screen.getByTestId("attachment-review-video-preview-pending-attachment-0");
+    expect(preview).toBeInTheDocument();
+    expect(preview.tagName).toBe("VIDEO");
+
+    Object.defineProperty(preview, "duration", {
+      configurable: true,
+      value: 42,
+    });
+    fireEvent(preview, new Event("loadedmetadata"));
+
+    expect(screen.getByTestId("attachment-review-video-duration-pending-attachment-0")).toHaveTextContent("0:42");
+    expect(screen.queryByTestId("attachment-review-video-fallback-pending-attachment-0")).not.toBeInTheDocument();
+  });
+
   it("allows adding more files while the review modal is open and appends them to the queue", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
     const mediaInput = getMediaInput(container);

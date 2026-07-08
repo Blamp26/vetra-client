@@ -1195,7 +1195,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(2);
   });
 
-  it("renders single video attachments through the existing file row path", () => {
+  it("renders single video attachments as visual media instead of a file row", () => {
     renderMessageItem(
       {
         media_file_id: "media-video-1",
@@ -1214,13 +1214,13 @@ describe("MessageItem bubble layout", () => {
       { isOwn: true },
     );
 
-    expect(screen.getByTestId("message-file-row")).toBeInTheDocument();
-    expect(screen.getByText("clip.mp4")).toBeInTheDocument();
-    expect(screen.getByText("Video · 4.0 KB")).toBeInTheDocument();
-    expect(screen.queryByTestId("message-media-shell")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-media-shell")).toBeInTheDocument();
+    expect(screen.getByTestId("message-video-tile-media-video-1")).toBeInTheDocument();
+    expect(screen.getByTestId("message-media-only-overlay")).toBeInTheDocument();
   });
 
-  it("opens single video file rows in the in-app video viewer", () => {
+  it("opens single video visual bubbles in the in-app video viewer", () => {
     const onLightbox = vi.fn();
 
     renderMessageItem(
@@ -1239,7 +1239,7 @@ describe("MessageItem bubble layout", () => {
       { isOwn: true, onLightbox },
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByTestId("message-video-tile-media-video-open"));
 
     expect(onLightbox).toHaveBeenCalledWith(expect.objectContaining({
       kind: "video",
