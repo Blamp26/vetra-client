@@ -19,7 +19,21 @@ vi.mock("@/shared/components/ImageLightbox", () => ({
 }));
 
 vi.mock("@/shared/components/VideoLightbox", () => ({
-  VideoLightbox: () => null,
+  VideoLightbox: ({
+    src,
+    author,
+    time,
+  }: {
+    src: string;
+    author: string;
+    time: string;
+  }) => (
+    <div data-testid="video-lightbox-mock">
+      <span>{src}</span>
+      <span>{author}</span>
+      <span>{time}</span>
+    </div>
+  ),
 }));
 
 vi.mock("@/shared/components/AuthenticatedImage", () => ({
@@ -192,6 +206,47 @@ describe("MessageList bubble layout", () => {
 
     expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+
+  it("opens VideoLightbox when clicking a grouped video tile", () => {
+    renderMessageList([
+      makeMessage({
+        id: 7,
+        content: null,
+        sender_id: 2,
+        attachments: [
+          {
+            id: "video-group-1",
+            url: "/api/v1/media/video-group-1",
+            mime_type: "video/mp4",
+            original_name: "clip.mp4",
+            file_size: 4096,
+            kind: "video",
+            width: 720,
+            height: 1280,
+          },
+          {
+            id: "photo-group-2",
+            url: "/api/v1/media/photo-group-2",
+            mime_type: "image/jpeg",
+            original_name: "still.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1200,
+            height: 900,
+          },
+        ],
+        media_file_ids: ["video-group-1", "photo-group-2"],
+        media_mime_types: ["video/mp4", "image/jpeg"],
+      }),
+    ]);
+
+    fireEvent.click(screen.getByTestId("message-video-tile-video-group-1"));
+
+    expect(screen.getByTestId("video-lightbox-mock")).toBeInTheDocument();
+    expect(screen.getByText(/video-group-1/)).toBeInTheDocument();
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("2026-06-30T12:00:00Z")).toBeInTheDocument();
   });
 
   it("uses tighter spacing between consecutive media/document messages from the same sender", () => {

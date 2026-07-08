@@ -1,7 +1,6 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Download, X } from "lucide-react";
 import { useAppStore } from "@/store";
-import { cn } from "@/shared/utils/cn";
 import { AuthenticatedVideo } from "./AuthenticatedVideo";
 
 interface VideoLightboxProps {
@@ -18,20 +17,55 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
   onClose,
 }) => {
   const authToken = useAppStore((s) => s.authToken);
+  const [viewportSize, setViewportSize] = useState(() => ({
+    width: typeof window === "undefined" ? 1280 : window.innerWidth,
+    height: typeof window === "undefined" ? 720 : window.innerHeight,
+  }));
+  const [mediaSize, setMediaSize] = useState({ width: 1, height: 1 });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    const handleResize = () => {
+      setViewportSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
 
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleResize);
     document.body.style.overflow = "hidden";
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleResize);
       document.body.style.overflow = "auto";
     };
   }, [onClose]);
+
+  const lightboxFrame = useMemo(() => {
+    const availableWidth = Math.min(viewportSize.width * 0.96, 1152);
+    const availableHeight = Math.max(240, viewportSize.height - 80);
+    const ratio = mediaSize.width > 0 && mediaSize.height > 0
+      ? mediaSize.width / mediaSize.height
+      : 1;
+
+    let width = availableWidth;
+    let height = width / ratio;
+
+    if (height > availableHeight) {
+      height = availableHeight;
+      width = height * ratio;
+    }
+
+    return {
+      width: Math.round(width),
+      height: Math.round(height),
+      ratio,
+    };
+  }, [mediaSize.height, mediaSize.width, viewportSize.height, viewportSize.width]);
 
   const handleDownload = async (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -55,22 +89,41 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/88 px-4 py-6"
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/92 px-4 py-4"
       data-testid="video-lightbox"
       onClick={onClose}
     >
       <button
-        className="absolute right-4 top-4 z-[2001] inline-flex h-10 w-10 items-center justify-center rounded-full bg-background/92 text-foreground shadow-sm ring-1 ring-border transition-colors hover:bg-background"
+        aria-label="Close video viewer"
+        className="absolute right-4 top-4 z-[2002] inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/52 text-white shadow-[0_12px_24px_rgba(0,0,0,0.28)] ring-1 ring-white/12 transition-colors hover:bg-black/68"
+        data-testid="video-lightbox-close"
         onClick={onClose}
       >
         <X className="h-5 w-5" />
       </button>
 
+      <button
+        type="button"
+        aria-label="Download video"
+        className="absolute right-4 top-16 z-[2002] inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/52 text-white shadow-[0_12px_24px_rgba(0,0,0,0.28)] ring-1 ring-white/12 transition-colors hover:bg-black/68"
+        data-testid="video-lightbox-download"
+        onClick={handleDownload}
+      >
+        <Download className="h-5 w-5" />
+      </button>
+
       <div
-        className="relative flex w-full max-w-[min(72rem,calc(100vw-2rem))] flex-col gap-3"
+        className="relative flex items-center justify-center"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="overflow-hidden rounded-[18px] bg-black shadow-[0_18px_60px_rgba(0,0,0,0.42)] ring-1 ring-white/10">
+        <div
+          className="relative overflow-hidden rounded-[18px] shadow-[0_18px_48px_rgba(0,0,0,0.34)] ring-1 ring-white/10"
+          data-testid="video-lightbox-stage"
+          style={{
+            width: `${lightboxFrame.width}px`,
+            height: `${lightboxFrame.height}px`,
+          }}
+        >
           <AuthenticatedVideo
             src={src}
             controls
@@ -79,30 +132,27 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
             loop={false}
             playsInline
             preload="metadata"
-            className="block max-h-[min(80vh,48rem)] w-full bg-black object-contain"
+            className="block h-full w-full bg-black object-contain"
             data-testid="video-lightbox-player"
+            onMediaDiagnostics={(diagnostics) => {
+              if (diagnostics.naturalWidth > 0 && diagnostics.naturalHeight > 0) {
+                setMediaSize({
+                  width: diagnostics.naturalWidth,
+                  height: diagnostics.naturalHeight,
+                });
+              }
+            }}
           />
-        </div>
 
-        <div
-          className={cn(
-            "flex items-center justify-between gap-4 rounded-[16px] bg-background/94 px-4 py-3 ring-1 ring-border",
-            "backdrop-blur-0",
-          )}
-        >
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-foreground">{author}</div>
-            <div className="truncate text-xs text-muted-foreground">{time}</div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+          <div
+            className="pointer-events-none absolute inset-x-3 bottom-3 flex justify-start"
+            data-testid="video-lightbox-meta"
           >
-            <Download className="h-4 w-4" />
-            Download
-          </button>
+            <div className="max-w-[80%] rounded-full bg-black/30 px-3 py-1.5 text-left text-[12px] leading-[1.2] text-white/88 ring-1 ring-white/10">
+              <div className="truncate font-medium text-white">{author}</div>
+              <div className="truncate text-white/70">{time}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
