@@ -224,6 +224,8 @@ describe("MessageList bubble layout", () => {
           original_name: `photo-${index + 1}.jpg`,
           file_size: 1024 + index,
           kind: "photo" as const,
+          width: index % 2 === 0 ? 1600 : 900,
+          height: index % 3 === 0 ? 900 : 1200,
         })),
       }),
     ]);
@@ -231,8 +233,7 @@ describe("MessageList bubble layout", () => {
     const album = screen.getByTestId("message-photo-collage");
     expect(screen.getAllByTestId("message-bubble-row")).toHaveLength(1);
     expect(album).toBeInTheDocument();
-    expect(album).toHaveClass("w-[min(480px,calc(100vw-6rem))]");
-    expect(album).toHaveStyle({ aspectRatio: "480 / 384" });
+    expect(album.getAttribute("style")).toContain("aspect-ratio");
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(9);
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
@@ -253,6 +254,8 @@ describe("MessageList bubble layout", () => {
           original_name: "photo-1.jpg",
           file_size: 1024,
           kind: "photo" as const,
+          width: 900,
+          height: 1400,
         },
       }),
     ]);

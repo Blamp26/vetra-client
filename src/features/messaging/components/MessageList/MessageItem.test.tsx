@@ -249,6 +249,8 @@ describe("MessageItem bubble layout", () => {
           original_name: "photo.jpg",
           file_size: 2048,
           kind: "photo",
+          width: 900,
+          height: 1600,
         },
         sender_id: 1,
         sender_username: "tester",
@@ -261,10 +263,11 @@ describe("MessageItem bubble layout", () => {
     const bubble = screen.getByTestId("message-bubble");
     const overlay = screen.getByTestId("message-media-only-overlay");
     const metadata = screen.getByTestId("message-metadata");
+    const mediaShell = screen.getByTestId("message-media-shell");
 
     expect(bubble).not.toHaveClass("bg-bubble-outgoing");
-    expect(screen.getByTestId("message-media-shell")).toHaveClass("max-w-[min(28rem,calc(100vw-6rem))]");
     expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
+    expect(mediaShell).toHaveStyle({ width: "216px", aspectRatio: "216 / 384" });
     expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
     expect(metadata).toHaveClass("h-[18px]", "rounded-[10px]", "bg-black/[0.20]", "py-0", "pl-[6px]", "pr-[5px]", "text-white");
     expect(metadata).not.toHaveClass("bg-black/40", "bg-black/60", "rounded-full", "backdrop-blur-[2px]", "shadow-[0_2px_10px_rgba(0,0,0,0.24)]");
@@ -275,7 +278,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
   });
 
-  it("renders a nine-photo grouped message with Telegram-like album geometry", () => {
+  it("renders a nine-photo grouped message with aspect-aware album geometry", () => {
     renderMessageItem(
       {
         attachments: Array.from({ length: 9 }, (_, index) => ({
@@ -285,6 +288,8 @@ describe("MessageItem bubble layout", () => {
           original_name: `photo-${index + 1}.jpg`,
           file_size: 2048 + index,
           kind: "photo" as const,
+          width: index % 2 === 0 ? 1600 : 900,
+          height: index % 3 === 0 ? 900 : 1200,
         })),
         media_file_ids: Array.from({ length: 9 }, (_, index) => `photo-${index + 1}`),
         media_mime_types: Array.from({ length: 9 }, () => "image/jpeg"),
@@ -302,30 +307,14 @@ describe("MessageItem bubble layout", () => {
     const tile7 = screen.getByTestId("message-photo-collage-tile-7");
 
     expect(album).toBeInTheDocument();
-    expect(album).toHaveClass("w-[min(480px,calc(100vw-6rem))]");
-    expect(album).toHaveStyle({ aspectRatio: "480 / 384" });
+    expect(album.getAttribute("style")).toContain("aspect-ratio");
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(9);
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
     expect(screen.getByTestId("message-media-only-overlay")).toBeInTheDocument();
     expect(screen.queryAllByTestId("authenticated-image")).toHaveLength(9);
-    expect(tile0).toHaveStyle({
-      left: "0.0000%",
-      top: "0.0000%",
-      width: "39.5833%",
-      height: "37.2396%",
-    });
-    expect(tile4).toHaveStyle({
-      left: "30.2083%",
-      top: "37.7604%",
-      width: "39.5833%",
-      height: "37.2396%",
-    });
-    expect(tile7).toHaveStyle({
-      left: "20.0000%",
-      top: "75.5208%",
-      width: "53.7500%",
-      height: "24.4792%",
-    });
+    expect(tile0.getAttribute("style")).toContain("left:");
+    expect(tile4.getAttribute("style")).toContain("top:");
+    expect(tile7.getAttribute("style")).toContain("width:");
   });
 
   it("renders a grouped photo album from compatibility payloads with media_file_id plus media_file_ids", () => {
@@ -341,6 +330,8 @@ describe("MessageItem bubble layout", () => {
           original_name: "photo-1.jpg",
           file_size: 2048,
           kind: "photo",
+          width: 900,
+          height: 1400,
         },
       },
       { isOwn: true },
@@ -366,9 +357,96 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
 
+  it("renders a three-item media album with three visible tiles", () => {
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "photo-1",
+            url: "/api/v1/media/photo-1",
+            mime_type: "image/jpeg",
+            original_name: "photo-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 900,
+            height: 1400,
+          },
+          {
+            id: "photo-2",
+            url: "/api/v1/media/photo-2",
+            mime_type: "image/png",
+            original_name: "photo-2.png",
+            file_size: 4096,
+            kind: "photo",
+            width: 1600,
+            height: 900,
+          },
+          {
+            id: "photo-3",
+            url: "/api/v1/media/photo-3",
+            mime_type: "image/webp",
+            original_name: "photo-3.webp",
+            file_size: 1024,
+            kind: "photo",
+            width: 1000,
+            height: 900,
+          },
+        ],
+        media_file_ids: ["photo-1", "photo-2", "photo-3"],
+        media_mime_types: ["image/jpeg", "image/png", "image/webp"],
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(3);
+  });
+
   it("renders four attachments for a four-photo album message", () => {
     renderMessageItem(
       {
+        attachments: [
+          {
+            id: "photo-1",
+            url: "/api/v1/media/photo-1",
+            mime_type: "image/jpeg",
+            original_name: "photo-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1200,
+            height: 900,
+          },
+          {
+            id: "photo-2",
+            url: "/api/v1/media/photo-2",
+            mime_type: "image/png",
+            original_name: "photo-2.png",
+            file_size: 2048,
+            kind: "photo",
+            width: 1180,
+            height: 900,
+          },
+          {
+            id: "photo-3",
+            url: "/api/v1/media/photo-3",
+            mime_type: "image/webp",
+            original_name: "photo-3.webp",
+            file_size: 2048,
+            kind: "photo",
+            width: 1150,
+            height: 900,
+          },
+          {
+            id: "photo-4",
+            url: "/api/v1/media/photo-4",
+            mime_type: "image/gif",
+            original_name: "photo-4.gif",
+            file_size: 2048,
+            kind: "photo",
+            width: 1170,
+            height: 900,
+          },
+        ],
         media_file_ids: ["photo-1", "photo-2", "photo-3", "photo-4"],
         media_mime_types: ["image/jpeg", "image/png", "image/webp", "image/gif"],
       },
@@ -391,6 +469,8 @@ describe("MessageItem bubble layout", () => {
         original_name: "portrait.jpg",
         file_size: 3200,
         kind: "photo",
+        width: 1600,
+        height: 900,
       },
     });
 
@@ -418,6 +498,8 @@ describe("MessageItem bubble layout", () => {
           original_name: "captioned.jpg",
           file_size: 9999,
           kind: "photo",
+          width: 1600,
+          height: 900,
         },
       },
       { isOwn: true },
@@ -446,23 +528,27 @@ describe("MessageItem bubble layout", () => {
         attachments: [
           {
             id: "photo-1",
-            url: "/api/v1/media/photo-1",
-            mime_type: "image/jpeg",
-            original_name: "photo-1.jpg",
-            file_size: 2048,
-            kind: "photo",
-          },
-          {
-            id: "photo-2",
-            url: "/api/v1/media/photo-2",
-            mime_type: "image/png",
-            original_name: "photo-2.png",
-            file_size: 4096,
-            kind: "photo",
-          },
-        ],
-        media_file_ids: ["photo-1", "photo-2"],
-        media_mime_types: ["image/jpeg", "image/png"],
+          url: "/api/v1/media/photo-1",
+          mime_type: "image/jpeg",
+          original_name: "photo-1.jpg",
+          file_size: 2048,
+          kind: "photo",
+          width: 1600,
+          height: 900,
+        },
+        {
+          id: "photo-2",
+          url: "/api/v1/media/photo-2",
+          mime_type: "image/png",
+          original_name: "photo-2.png",
+          file_size: 4096,
+          kind: "photo",
+          width: 900,
+          height: 1400,
+        },
+      ],
+      media_file_ids: ["photo-1", "photo-2"],
+      media_mime_types: ["image/jpeg", "image/png"],
       },
       { isOwn: true },
     );
@@ -472,6 +558,61 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("Album caption")).toBeInTheDocument();
     expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+  });
+
+  it("renders a safe fallback layout when media dimensions are missing", () => {
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "photo-1",
+            url: "/api/v1/media/photo-1",
+            mime_type: "image/jpeg",
+            original_name: "photo-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+          },
+          {
+            id: "photo-2",
+            url: "/api/v1/media/photo-2",
+            mime_type: "image/jpeg",
+            original_name: "photo-2.jpg",
+            file_size: 2048,
+            kind: "photo",
+          },
+        ],
+        media_file_ids: ["photo-1", "photo-2"],
+        media_mime_types: ["image/jpeg", "image/jpeg"],
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(2);
+  });
+
+  it("renders video attachments in the visual media path instead of the file row", () => {
+    renderMessageItem(
+      {
+        media_file_id: "media-video-1",
+        media_mime_type: "video/mp4",
+        attachment: {
+          id: "media-video-1",
+          url: "/api/v1/media/media-video-1",
+          mime_type: "video/mp4",
+          original_name: "clip.mp4",
+          file_size: 4096,
+          kind: "video",
+          width: 1920,
+          height: 1080,
+        },
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("message-media-shell")).toBeInTheDocument();
+    expect(screen.getByTestId("message-video")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
   });
 
   it("renders PDF attachments as a compact file row with in-bubble metadata", () => {

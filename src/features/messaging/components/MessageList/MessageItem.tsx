@@ -4,9 +4,10 @@ import { cn } from "@/shared/utils/cn";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
 import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
 import { useAppStore } from "@/store";
-import { Download, ExternalLink, FileText, Film } from "lucide-react";
+import { Download, ExternalLink, FileText, Film, Play } from "lucide-react";
 import { StatusIcon } from "./StatusIcon";
 import {
+  type Attachment,
   formatAttachmentSize,
   getAttachmentDisplayName,
   getAttachmentKindLabel,
@@ -23,7 +24,7 @@ import {
   downloadAttachmentWithAuth,
   openAttachmentWithAuth,
 } from "../../utils/attachmentDownloads";
-import { getPhotoAlbumLayout } from "./photoAlbumLayout";
+import { computeMediaAlbumLayout, type MediaAlbumTile } from "../../utils/mediaAlbumLayout";
 
 interface MessageItemProps {
   msg: Message;
@@ -41,6 +42,58 @@ interface MessageItemProps {
   onLightbox: (data: { src: string; author: string; time: string }) => void;
   renderReplyPreview: (msg: Message, isOwn: boolean) => React.ReactNode;
   formatTime: (iso: string) => string;
+}
+
+type VisualAttachment = Attachment & { kind: "photo" | "video" };
+type AttachmentWithVisualMetadata = Attachment & {
+  width?: number | null;
+  height?: number | null;
+  media_width?: number | null;
+  media_height?: number | null;
+  original_width?: number | null;
+  original_height?: number | null;
+};
+
+function isVisualAttachment(attachment: Attachment): attachment is VisualAttachment {
+  return attachment.kind === "photo" || attachment.kind === "video";
+}
+
+function readPositiveNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function getAttachmentIntrinsicSize(attachment: Attachment) {
+  const source = attachment as AttachmentWithVisualMetadata;
+
+  return {
+    width:
+      readPositiveNumber(source.width) ??
+      readPositiveNumber(source.media_width) ??
+      readPositiveNumber(source.original_width),
+    height:
+      readPositiveNumber(source.height) ??
+      readPositiveNumber(source.media_height) ??
+      readPositiveNumber(source.original_height),
+  };
+}
+
+function toPercent(value: number, total: number) {
+  if (total <= 0) return "0%";
+  return `${((value / total) * 100).toFixed(4)}%`;
+}
+
+function getTileCornerRadius(
+  tile: MediaAlbumTile,
+  radius: { top: number; bottom: number },
+) {
+  return [
+    tile.outerCorners.topLeft ? `${radius.top}px` : "0px",
+    tile.outerCorners.topRight ? `${radius.top}px` : "0px",
+    tile.outerCorners.bottomRight ? `${radius.bottom}px` : "0px",
+    tile.outerCorners.bottomLeft ? `${radius.bottom}px` : "0px",
+  ].join(" ");
 }
 
 export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
@@ -67,12 +120,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const attachment = getMessageAttachment(msg);
   const hasMedia = attachments.length > 0;
   const hasText = !!(msg.content && msg.content.trim().length > 0);
-  const isPhotoAttachment = attachments.length > 0 && attachments.every((currentAttachment) => currentAttachment.kind === "photo");
-  const photoAttachments = isPhotoAttachment ? attachments : [];
-  const isPhotoAlbum = photoAttachments.length > 1;
-  const isDocumentAttachment = attachments.length > 0 && !isPhotoAttachment;
-  const isPhotoOnly =
-    isPhotoAttachment &&
+  const isVisualMediaAttachment = attachments.length > 0 && attachments.every(isVisualAttachment);
+  const visualAttachments = isVisualMediaAttachment ? attachments : [];
+  const isMediaAlbum = visualAttachments.length > 1;
+  const isDocumentAttachment = attachments.length > 0 && !isVisualMediaAttachment;
+  const isVisualOnly =
+    isVisualMediaAttachment &&
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id;
   const isTextOnly = hasText && !hasMedia;
@@ -100,13 +153,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     logAttachmentDebug("message.render", {
       ...summarizeMessageMedia(msg as Record<string, unknown>),
       renderAttachmentCount: attachments.length,
-      treatedAsAlbum: isPhotoAlbum,
-      isPhotoAttachment,
+      treatedAsAlbum: isMediaAlbum,
+      isPhotoAttachment: isVisualMediaAttachment,
       isDocumentAttachment,
     }, {
       table: attachments.map((currentAttachment) => summarizeAttachmentLike(currentAttachment)),
     });
-  }, [attachments, hasMedia, isDocumentAttachment, isPhotoAlbum, isPhotoAttachment, msg]);
+  }, [attachments, hasMedia, isDocumentAttachment, isMediaAlbum, isVisualMediaAttachment, msg]);
 
   const handleAttachmentAction = async (action: "download" | "open") => {
     if (!attachment || isAttachmentActionPending) return;
@@ -178,72 +231,162 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     </div>
   );
 
-  const renderPhotoMedia = () => {
-    if (photoAttachments.length > 1) {
-      const layout = getPhotoAlbumLayout(photoAttachments.length);
+  const renderVisualTile = (
+    currentAttachment: VisualAttachment,
+    tile: MediaAlbumTile,
+    layout: ReturnType<typeof computeMediaAlbumLayout>,
+    radius: { top: number; bottom: number },
+  ) => {
+    const tileStyle = {
+      left: toPercent(tile.x, layout.width),
+      top: toPercent(tile.y, layout.height),
+      width: toPercent(tile.width, layout.width),
+      height: toPercent(tile.height, layout.height),
+      borderRadius: getTileCornerRadius(tile, radius),
+    } as const;
+    const attachmentName = getAttachmentDisplayName(currentAttachment);
+    const isVideo = currentAttachment.kind === "video";
+
+    return (
+      <div
+        key={currentAttachment.id}
+        className="absolute overflow-hidden"
+        data-testid={`message-photo-collage-tile-${tile.index}`}
+        style={tileStyle}
+      >
+        {isVideo ? (
+          <div
+            className="relative h-full w-full overflow-hidden bg-[#111]"
+            data-testid="message-photo-collage-tile"
+          >
+            <video
+              className="block h-full w-full object-cover object-center"
+              src={currentAttachment.url}
+              preload="metadata"
+              muted
+              playsInline
+              data-testid="message-video-tile"
+            />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white shadow-[0_2px_12px_rgba(0,0,0,0.25)]">
+                <Play className="ml-0.5 h-4 w-4 fill-current" />
+              </span>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="relative flex h-full w-full overflow-hidden bg-[#111]"
+            data-testid="message-photo-collage-tile"
+            onClick={() => onLightbox({
+              src: currentAttachment.url,
+              author: authorName,
+              time: msg.inserted_at,
+            })}
+          >
+            <AuthenticatedImage
+              className="block h-full w-full object-cover object-center"
+              src={currentAttachment.url}
+              alt={attachmentName}
+              crossOrigin="anonymous"
+            />
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderVisualMedia = () => {
+    const layout = computeMediaAlbumLayout(
+      visualAttachments.map((currentAttachment) => {
+        const { width, height } = getAttachmentIntrinsicSize(currentAttachment);
+        return {
+          id: currentAttachment.id,
+          width,
+          height,
+          kind: currentAttachment.kind === "video" ? "video" : "image",
+        };
+      }),
+      {
+        maxWidth: 480,
+        maxHeight: 384,
+        spacing: 2,
+        minTileSize: 88,
+        fallbackRatio: 1,
+        narrowRatio: 0.8,
+        wideRatio: 1.25,
+      },
+    );
+    const tileRadius = isVisualOnly
+      ? { top: 15, bottom: 6 }
+      : { top: 14, bottom: 8 };
+
+    if (visualAttachments.length > 1) {
 
       return (
         <div
-          className="relative w-[min(480px,calc(100vw-6rem))] max-w-full overflow-hidden rounded-t-[15px] rounded-bl-[6px] rounded-br-[6px] bg-[#111] shadow-[0_1px_2px_rgba(16,16,16,0.61)]"
-          style={{ aspectRatio: `${layout.width} / ${layout.height}` }}
+          className="relative max-w-full overflow-hidden bg-[#111] shadow-[0_1px_2px_rgba(16,16,16,0.61)]"
+          style={{
+            width: `${layout.width}px`,
+            maxWidth: "100%",
+            aspectRatio: `${layout.width} / ${layout.height}`,
+          }}
           data-testid="message-photo-collage"
         >
           <div className="relative h-full w-full" data-testid="message-photo-collage-inner">
-            {photoAttachments.map((photoAttachment, index) => {
-              const tile = layout.tiles[index];
-
-              return (
-                <div
-                  key={photoAttachment.id}
-                  className="absolute"
-                  data-testid={`message-photo-collage-tile-${index}`}
-                  style={{
-                    left: tile.left,
-                    top: tile.top,
-                    width: tile.width,
-                    height: tile.height,
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="relative flex h-full w-full overflow-hidden bg-[#111]"
-                    data-testid="message-photo-collage-tile"
-                    onClick={() => onLightbox({
-                      src: photoAttachment.url,
-                      author: authorName,
-                      time: msg.inserted_at,
-                    })}
-                  >
-                    <AuthenticatedImage
-                      className="block h-full w-full object-cover object-center"
-                      src={photoAttachment.url}
-                      alt={getAttachmentDisplayName(photoAttachment)}
-                      crossOrigin="anonymous"
-                    />
-                  </button>
-                </div>
-              );
-            })}
+            {visualAttachments.map((currentAttachment, index) =>
+              renderVisualTile(currentAttachment, layout.tiles[index], layout, tileRadius),
+            )}
           </div>
         </div>
       );
     }
 
-    const attachmentName = getAttachmentDisplayName(attachment);
+    const currentAttachment = visualAttachments[0];
+    if (!currentAttachment) return null;
+    const attachmentName = getAttachmentDisplayName(currentAttachment);
+
+    if (currentAttachment.kind === "video") {
+      return (
+        <div
+          className="relative inline-block max-w-full overflow-hidden rounded-[16px] bg-[#111]"
+          data-testid="message-media-shell"
+          style={{
+            width: `${layout.width}px`,
+            maxWidth: "100%",
+            aspectRatio: `${layout.width} / ${layout.height}`,
+          }}
+        >
+          <video
+            className="block h-full w-full object-cover"
+            src={currentAttachment.url}
+            controls
+            preload="metadata"
+            playsInline
+            data-testid="message-video"
+          />
+        </div>
+      );
+    }
 
     return (
       <div
-        className="relative inline-block max-w-[min(28rem,calc(100vw-6rem))] overflow-hidden rounded-[16px] bg-[#111]"
+        className="relative inline-block max-w-full overflow-hidden rounded-[16px] bg-[#111]"
         data-testid="message-media-shell"
         onClick={() => onLightbox({
-          src: attachment!.url,
+          src: currentAttachment.url,
           author: authorName,
           time: msg.inserted_at,
         })}
+        style={{
+          width: `${layout.width}px`,
+          maxWidth: "100%",
+          aspectRatio: `${layout.width} / ${layout.height}`,
+        }}
       >
         <AuthenticatedImage
-          className="block h-auto max-h-[32rem] w-auto max-w-full object-contain"
-          src={attachment!.url}
+          className="block h-full w-full object-cover"
+          src={currentAttachment.url}
           alt={attachmentName}
           crossOrigin="anonymous"
         />
@@ -344,15 +487,15 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <>
         {hasMedia && (
           <>
-            {isPhotoAttachment ? renderPhotoMedia() : renderDocumentAttachment()}
+            {isVisualMediaAttachment ? renderVisualMedia() : renderDocumentAttachment()}
           </>
         )}
         {hasText && !isDocumentAttachment && (
           <div
             className={cn(
               "whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]",
-              isPhotoAttachment && "px-2.5 pt-2",
-              isPhotoAttachment &&
+              isVisualMediaAttachment && "px-2.5 pt-2",
+              isVisualMediaAttachment &&
                 !isTextOnly &&
                 (isOwn
                   ? msg.edited_at
@@ -420,20 +563,20 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
           "relative w-fit text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
-          isPhotoOnly
+          isVisualOnly
             ? cn(
                 "min-w-0 overflow-hidden border border-black/10 bg-transparent p-0",
-                isPhotoAlbum
+                isMediaAlbum
                   ? "rounded-t-[15px] rounded-bl-[6px] rounded-br-[6px]"
                   : "rounded-[18px]",
-                isPhotoAlbum
+                isMediaAlbum
                   ? "max-w-[min(480px,calc(100vw-6rem))]"
                   : "max-w-[min(28rem,calc(100vw-6rem))]",
               )
-            : isPhotoAttachment
+            : isVisualMediaAttachment
               ? cn(
                   "min-w-[11rem] overflow-hidden rounded-[18px] border border-border/85 px-1.5 pb-2.5 pt-1.5",
-                  isPhotoAlbum
+                  isMediaAlbum
                     ? "max-w-[min(480px,calc(100vw-6rem))]"
                     : "max-w-[min(28rem,calc(100vw-6rem))]",
                 )
@@ -452,9 +595,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   isConsecutive && "rounded-tl-[12px]",
                   isGroupedWithNext && "rounded-bl-[12px]",
                 ),
-          isPhotoOnly
+          isVisualOnly
             ? "text-white"
-            : isPhotoAttachment
+            : isVisualMediaAttachment
               ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
               : isDocumentAttachment
                 ? (
@@ -496,7 +639,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {isPhotoOnly && (
+        {isVisualOnly && (
           <div
             className="pointer-events-none absolute bottom-[4px] right-[4px]"
             data-testid="message-media-only-overlay"
@@ -505,13 +648,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {isPhotoAttachment && hasText && (
+        {isVisualMediaAttachment && hasText && (
           <div className="pointer-events-none absolute bottom-2.5 right-3.5">
             {renderMetadata()}
           </div>
         )}
 
-        {!isTextOnly && !isPhotoOnly && !isPhotoAttachment && !isDocumentAttachment && (
+        {!isTextOnly && !isVisualOnly && !isVisualMediaAttachment && !isDocumentAttachment && (
           <div className="mt-1.5 flex justify-end">
             {renderMetadata()}
           </div>
