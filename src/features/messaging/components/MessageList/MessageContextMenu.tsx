@@ -301,7 +301,13 @@ export function MessageContextMenu({
       event.preventDefault();
       onClose();
     };
-    const handleScroll = () => onClose();
+    const handleScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) {
+        return;
+      }
+      onClose();
+    };
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("scroll", handleScroll, true);
@@ -412,7 +418,7 @@ export function MessageContextMenu({
               className="px-2 pb-2 pt-2"
               data-testid="message-context-expanded-picker-search-wrap"
             >
-              <label className="flex h-9 w-full items-center gap-2 rounded-[18px] bg-black/20 px-3 text-[#aaaaaa] ring-1 ring-white/6">
+              <label className="flex h-9 w-full items-center gap-2 rounded-[18px] bg-black/20 px-3 text-[#aaaaaa] transition-colors duration-150 focus-within:bg-black/28">
                 <Search className="h-4 w-4 shrink-0" />
                 <input
                   type="text"

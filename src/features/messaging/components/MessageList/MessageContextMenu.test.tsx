@@ -344,6 +344,15 @@ describe("MessageContextMenu", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("does not close when scrolling inside the expanded picker grid", () => {
+    const onClose = vi.fn();
+    renderMenu({}, { isPickerExpanded: true, onClose });
+
+    fireEvent.scroll(screen.getByTestId("message-context-expanded-picker-grid"));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("shows the chevron only in the collapsed quick strip", () => {
     renderMenu({}, { isPickerExpanded: true });
 
