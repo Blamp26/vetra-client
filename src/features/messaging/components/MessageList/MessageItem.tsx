@@ -4,10 +4,10 @@ import { cn } from "@/shared/utils/cn";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
 import {
   AuthenticatedImage,
-  type AuthenticatedImageDiagnostics,
 } from "@/shared/components/AuthenticatedImage";
+import { AuthenticatedVideo } from "@/shared/components/AuthenticatedVideo";
 import { useAppStore } from "@/store";
-import { Download, ExternalLink, FileText, Film } from "lucide-react";
+import { Download, ExternalLink, FileText, Film, Play } from "lucide-react";
 import { StatusIcon } from "./StatusIcon";
 import {
   type Attachment,
@@ -48,7 +48,10 @@ interface MessageItemProps {
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, msg: Message) => void;
   onToggleSelection: (id: number) => void;
   onToggleReaction: (msgId: number, emoji: string) => void;
-  onLightbox: (data: { src: string; author: string; time: string }) => void;
+  onLightbox: (data:
+    | { kind: "image"; src: string; author: string; time: string }
+    | { kind: "video"; src: string; author: string; time: string }
+  ) => void;
   renderReplyPreview: (msg: Message, isOwn: boolean) => React.ReactNode;
   formatTime: (iso: string) => string;
 }
@@ -74,7 +77,15 @@ type ResolvedVisualAttachment = {
   height?: number;
   dimensionSource: "server" | "decoded" | "fallback";
 };
-type PhotoRuntimeMetrics = AuthenticatedImageDiagnostics & {
+type MediaRuntimeDiagnostics = {
+  naturalWidth: number;
+  naturalHeight: number;
+  renderedWidth: number;
+  renderedHeight: number;
+  devicePixelRatio: number;
+};
+
+type VisualRuntimeMetrics = MediaRuntimeDiagnostics & {
   chosenImageSource: string | null;
 };
 
@@ -195,11 +206,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const authToken = useAppStore((s) => s.authToken);
   const [isAttachmentActionPending, setIsAttachmentActionPending] = React.useState(false);
   const [attachmentActionError, setAttachmentActionError] = React.useState<string | null>(null);
-  const [decodedPhotoDimensions, setDecodedPhotoDimensions] = React.useState<
+  const [decodedVisualDimensions, setDecodedVisualDimensions] = React.useState<
     Record<string, { width: number; height: number }>
   >({});
-  const [photoRuntimeMetrics, setPhotoRuntimeMetrics] = React.useState<
-    Record<string, PhotoRuntimeMetrics>
+  const [visualRuntimeMetrics, setVisualRuntimeMetrics] = React.useState<
+    Record<string, VisualRuntimeMetrics>
   >({});
   const [isMediaDebugEnabled, setIsMediaDebugEnabled] = React.useState(false);
   const warnedMissingDimensionKeysRef = React.useRef(new Set<string>());
@@ -227,7 +238,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const resolvedVisualAttachments = React.useMemo<ResolvedVisualAttachment[]>(() => (
     visualAttachments.map((currentAttachment) => {
       const serverDimensions = getAttachmentIntrinsicSize(currentAttachment);
-      const decodedDimensions = decodedPhotoDimensions[currentAttachment.id];
+      const decodedDimensions = decodedVisualDimensions[currentAttachment.id];
       const hasServerDimensions = Boolean(serverDimensions.width && serverDimensions.height);
       const hasDecodedDimensions = Boolean(decodedDimensions?.width && decodedDimensions?.height);
 
@@ -246,7 +257,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             : "fallback",
       };
     })
-  ), [decodedPhotoDimensions, visualAttachments]);
+  ), [decodedVisualDimensions, visualAttachments]);
   const photoLayout = React.useMemo(() => computeMediaAlbumLayout(
     resolvedVisualAttachments.map((currentAttachment) => ({
       id: currentAttachment.attachment.id,
@@ -256,11 +267,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     })),
     MESSAGE_ALBUM_LAYOUT_OPTIONS,
   ), [resolvedVisualAttachments]);
-  const hasPendingDecodedPhotoDimensions = resolvedVisualAttachments.some(
+  const hasPendingDecodedVisualDimensions = resolvedVisualAttachments.some(
     (currentAttachment) => currentAttachment.dimensionSource === "fallback",
   );
-  const isTemporaryPhotoLayout =
-    hasPendingDecodedPhotoDimensions ||
+  const isTemporaryVisualLayout =
+    hasPendingDecodedVisualDimensions ||
     !hasCompleteAlbumLayout(photoLayout, resolvedVisualAttachments.length);
   const showSenderName = isRoom && !isOwn && !isConsecutive;
   const metadataClassName = isOwn
@@ -340,7 +351,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       pendingDimensionCount: resolvedVisualAttachments.filter((attachment) => attachment.dimensionSource === "fallback").length,
       layoutWidth: photoLayout.width,
       layoutHeight: photoLayout.height,
-      layoutState: isTemporaryPhotoLayout ? "pending" : "resolved",
+      layoutState: isTemporaryVisualLayout ? "pending" : "resolved",
     }, {
       table: resolvedVisualAttachments.map((currentAttachment, index) => {
         const tile = photoLayout.tiles[index];
@@ -353,10 +364,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           dimensionSource: currentAttachment.dimensionSource,
           sourceRatio: getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height),
           packingRatio: getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height),
-          naturalWidth: photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? null,
-          naturalHeight: photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? null,
-          renderedWidth: photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? null,
-          renderedHeight: photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? null,
+          naturalWidth: visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? null,
+          naturalHeight: visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? null,
+          renderedWidth: visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? null,
+          renderedHeight: visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? null,
           tileX: tile?.x ?? null,
           tileY: tile?.y ?? null,
           tileWidth: tile?.width ?? null,
@@ -364,13 +375,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         };
       }),
     });
-  }, [isVisualMediaMessage, isTemporaryPhotoLayout, msg.id, photoLayout, photoRuntimeMetrics, resolvedVisualAttachments]);
+  }, [isVisualMediaMessage, isTemporaryVisualLayout, msg.id, photoLayout, resolvedVisualAttachments, visualRuntimeMetrics]);
 
   React.useEffect(() => {
     if (!import.meta.env.DEV) return;
 
     resolvedVisualAttachments.forEach((currentAttachment) => {
-      const runtimeMetrics = photoRuntimeMetrics[currentAttachment.attachment.id];
+      const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
       if (!runtimeMetrics) return;
 
       const requiredWidth = runtimeMetrics.renderedWidth * runtimeMetrics.devicePixelRatio;
@@ -399,14 +410,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         devicePixelRatio: runtimeMetrics.devicePixelRatio,
       });
     });
-  }, [msg.id, photoRuntimeMetrics, resolvedVisualAttachments]);
+  }, [msg.id, resolvedVisualAttachments, visualRuntimeMetrics]);
 
-  const handleDecodedPhotoDimensions = React.useCallback(
+  const handleDecodedVisualDimensions = React.useCallback(
     (attachmentId: string, naturalWidth: number, naturalHeight: number) => {
       if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight)) return;
       if (naturalWidth <= 0 || naturalHeight <= 0) return;
 
-      setDecodedPhotoDimensions((current) => {
+      setDecodedVisualDimensions((current) => {
         const existing = current[attachmentId];
         if (existing?.width === naturalWidth && existing.height === naturalHeight) {
           return current;
@@ -424,10 +435,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     [],
   );
 
-  const handlePhotoDiagnostics = React.useCallback(
-    (attachmentId: string, chosenImageSource: string | null, diagnostics: AuthenticatedImageDiagnostics) => {
-      setPhotoRuntimeMetrics((current) => {
-        const nextMetrics: PhotoRuntimeMetrics = {
+  const handleVisualDiagnostics = React.useCallback(
+    (attachmentId: string, chosenImageSource: string | null, diagnostics: MediaRuntimeDiagnostics) => {
+      setVisualRuntimeMetrics((current) => {
+        const nextMetrics: VisualRuntimeMetrics = {
           ...diagnostics,
           chosenImageSource,
         };
@@ -460,6 +471,22 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
     try {
       if (action === "open") {
+        if (attachment.kind === "video") {
+          const videoSrc = getAttachmentOriginalSrc(attachment);
+          if (!videoSrc) {
+            setAttachmentActionError("Attachment unavailable");
+            return;
+          }
+
+          onLightbox({
+            kind: "video",
+            src: videoSrc,
+            author: authorName,
+            time: msg.inserted_at,
+          });
+          return;
+        }
+
         await openAttachmentWithAuth({ attachment, authToken });
       } else {
         await downloadAttachmentWithAuth({ attachment, authToken });
@@ -523,24 +550,95 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   );
 
   const handleVisualAttachmentOpen = React.useCallback(async (currentAttachment: VisualAttachment) => {
-    if (currentAttachment.kind === "photo") {
-      const lightboxSrc = getAttachmentOriginalSrc(currentAttachment);
-      if (!lightboxSrc) return;
-      onLightbox({
-        src: lightboxSrc,
-        author: authorName,
-        time: msg.inserted_at,
-      });
+    const viewerSrc = getAttachmentOriginalSrc(currentAttachment);
+    if (!viewerSrc) {
+      setAttachmentActionError("Attachment unavailable");
       return;
     }
 
-    try {
-      await openAttachmentWithAuth({ attachment: currentAttachment, authToken });
-    } catch (error) {
-      console.error("Visual attachment open failed:", error);
-      setAttachmentActionError("Attachment unavailable");
-    }
-  }, [authToken, authorName, msg.inserted_at, onLightbox]);
+    onLightbox({
+      kind: currentAttachment.kind === "video" ? "video" : "image",
+      src: viewerSrc,
+      author: authorName,
+      time: msg.inserted_at,
+    });
+  }, [authorName, msg.inserted_at, onLightbox]);
+
+  const renderVisualMedia = React.useCallback(
+    (currentAttachment: ResolvedVisualAttachment, attachmentName: string) => {
+      if (currentAttachment.attachment.kind === "photo" && currentAttachment.displaySrc) {
+        return (
+          <AuthenticatedImage
+            className="block h-full w-full object-cover object-center"
+            src={currentAttachment.displaySrc}
+            alt={attachmentName}
+            crossOrigin="anonymous"
+            onLoad={(event) => handleDecodedVisualDimensions(
+              currentAttachment.attachment.id,
+              event.currentTarget.naturalWidth,
+              event.currentTarget.naturalHeight,
+            )}
+            onMediaDiagnostics={(diagnostics) => handleVisualDiagnostics(
+              currentAttachment.attachment.id,
+              currentAttachment.displaySrc,
+              diagnostics,
+            )}
+          />
+        );
+      }
+
+      if (currentAttachment.attachment.kind === "video" && currentAttachment.displaySrc) {
+        return (
+          <>
+            <AuthenticatedVideo
+              className="block h-full w-full object-cover object-center bg-black"
+              src={currentAttachment.displaySrc}
+              aria-label={attachmentName}
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="metadata"
+              data-testid={`message-video-tile-${currentAttachment.attachment.id}`}
+              onMediaDiagnostics={(diagnostics) => {
+                handleDecodedVisualDimensions(
+                  currentAttachment.attachment.id,
+                  diagnostics.naturalWidth,
+                  diagnostics.naturalHeight,
+                );
+                handleVisualDiagnostics(
+                  currentAttachment.attachment.id,
+                  currentAttachment.displaySrc,
+                  diagnostics,
+                );
+              }}
+            />
+            <div className="pointer-events-none absolute inset-x-2 bottom-2 flex items-center justify-between">
+              <span className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-medium text-white shadow-sm ring-1 ring-white/10">
+                <Play className="h-3.5 w-3.5 fill-current" />
+                Video
+              </span>
+            </div>
+          </>
+        );
+      }
+
+      return (
+        <div
+          className="flex h-full w-full items-center justify-center bg-black/70 text-white/88"
+          data-testid={`message-video-placeholder-${currentAttachment.attachment.id}`}
+        >
+          <div className="flex flex-col items-center gap-2">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white">
+              <Film className="h-5 w-5" />
+            </span>
+            <span className="text-[11px] font-medium">Video unavailable</span>
+          </div>
+        </div>
+      );
+    },
+    [handleDecodedVisualDimensions, handleVisualDiagnostics],
+  );
 
   const renderVisualTile = (
     currentAttachment: ResolvedVisualAttachment,
@@ -556,7 +654,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       borderRadius: getTileCornerRadius(tile, radius),
     } as const;
     const attachmentName = getAttachmentDisplayName(currentAttachment.attachment);
-    const runtimeMetrics = photoRuntimeMetrics[currentAttachment.attachment.id];
+    const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
     const computedRatio = getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height);
 
     return (
@@ -572,36 +670,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           data-testid="message-photo-collage-tile"
           onClick={() => void handleVisualAttachmentOpen(currentAttachment.attachment)}
         >
-          {currentAttachment.attachment.kind === "photo" && currentAttachment.displaySrc ? (
-            <AuthenticatedImage
-              className="block h-full w-full object-cover object-center"
-              src={currentAttachment.displaySrc}
-              alt={attachmentName}
-              crossOrigin="anonymous"
-              onLoad={(event) => handleDecodedPhotoDimensions(
-                currentAttachment.attachment.id,
-                event.currentTarget.naturalWidth,
-                event.currentTarget.naturalHeight,
-              )}
-              onMediaDiagnostics={(diagnostics) => handlePhotoDiagnostics(
-                currentAttachment.attachment.id,
-                currentAttachment.displaySrc,
-                diagnostics,
-              )}
-            />
-          ) : (
-            <div
-              className="flex h-full w-full items-center justify-center bg-[color:var(--surface-0)] text-[color:var(--muted-foreground)]"
-              data-testid={`message-video-placeholder-${currentAttachment.attachment.id}`}
-            >
-              <div className="flex flex-col items-center gap-2">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white">
-                  <Film className="h-5 w-5" />
-                </span>
-                <span className="text-[11px] font-medium text-white/88">Video</span>
-              </div>
-            </div>
-          )}
+          {renderVisualMedia(currentAttachment, attachmentName)}
           {isMediaDebugEnabled && (
             <div
               className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
@@ -632,7 +701,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       : { top: 14, bottom: 8 };
 
     if (resolvedVisualAttachments.length > 1) {
-      if (isTemporaryPhotoLayout) {
+      if (isTemporaryVisualLayout) {
         return (
           <div
             className="grid max-w-full grid-cols-2 gap-[2px] overflow-hidden"
@@ -644,7 +713,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             data-photo-layout-state="pending"
           >
             {resolvedVisualAttachments.map((currentAttachment) => {
-              const runtimeMetrics = photoRuntimeMetrics[currentAttachment.attachment.id];
+              const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
 
               return (
                 <button
@@ -654,36 +723,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   data-testid="message-photo-collage-tile"
                   onClick={() => void handleVisualAttachmentOpen(currentAttachment.attachment)}
                 >
-                  {currentAttachment.attachment.kind === "photo" && currentAttachment.displaySrc ? (
-                    <AuthenticatedImage
-                      className="block h-full w-full object-cover object-center"
-                      src={currentAttachment.displaySrc}
-                      alt={getAttachmentDisplayName(currentAttachment.attachment)}
-                      crossOrigin="anonymous"
-                      onLoad={(event) => handleDecodedPhotoDimensions(
-                        currentAttachment.attachment.id,
-                        event.currentTarget.naturalWidth,
-                        event.currentTarget.naturalHeight,
-                      )}
-                      onMediaDiagnostics={(diagnostics) => handlePhotoDiagnostics(
-                        currentAttachment.attachment.id,
-                        currentAttachment.displaySrc,
-                        diagnostics,
-                      )}
-                    />
-                  ) : (
-                    <div
-                      className="flex h-full w-full items-center justify-center bg-[color:var(--surface-0)] text-[color:var(--muted-foreground)]"
-                      data-testid={`message-video-placeholder-${currentAttachment.attachment.id}`}
-                    >
-                      <div className="flex flex-col items-center gap-2">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/20 text-white">
-                          <Film className="h-5 w-5" />
-                        </span>
-                        <span className="text-[11px] font-medium text-white/88">Video</span>
-                      </div>
-                    </div>
-                  )}
+                  {renderVisualMedia(currentAttachment, getAttachmentDisplayName(currentAttachment.attachment))}
                   {isMediaDebugEnabled && (
                     <div
                       className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
@@ -741,6 +781,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         className="relative block h-full w-full overflow-hidden"
         data-testid="message-media-shell"
         onClick={() => onLightbox({
+          kind: "image",
           src: currentAttachment.lightboxSrc,
           author: authorName,
           time: msg.inserted_at,
@@ -757,12 +798,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           src={currentAttachment.displaySrc}
           alt={attachmentName}
           crossOrigin="anonymous"
-          onLoad={(event) => handleDecodedPhotoDimensions(
+          onLoad={(event) => handleDecodedVisualDimensions(
             currentAttachment.attachment.id,
             event.currentTarget.naturalWidth,
             event.currentTarget.naturalHeight,
           )}
-          onMediaDiagnostics={(diagnostics) => handlePhotoDiagnostics(
+          onMediaDiagnostics={(diagnostics) => handleVisualDiagnostics(
             currentAttachment.attachment.id,
             currentAttachment.displaySrc,
             diagnostics,
@@ -778,10 +819,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
             </div>
             <div>
-              n:{photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? "?"}x{photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? "?"}
+              n:{visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? "?"}x{visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? "?"}
             </div>
             <div>
-              r:{photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? "?"}x{photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? "?"}
+              r:{visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? "?"}x{visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? "?"}
             </div>
             <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
           </div>
@@ -796,7 +837,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     const attachmentKindLabel = attachment
       ? getAttachmentKindLabel(attachment.kind)
       : "Attachment";
-    const canOpenInline = attachment?.mime_type === "application/pdf";
+    const canOpenInline = attachment?.mime_type === "application/pdf" || attachment?.kind === "video";
     const actionButtonClassName = cn(
       "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-current transition-colors disabled:opacity-50",
       isOwn ? "hover:bg-white/16" : "hover:bg-accent",

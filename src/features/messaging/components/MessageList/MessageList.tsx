@@ -5,6 +5,7 @@ import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { ForwardModal } from "../ForwardModal";
 import { sendMessageViaChannel } from "@/services/socket";
 import { ImageLightbox } from "@/shared/components/ImageLightbox";
+import { VideoLightbox } from "@/shared/components/VideoLightbox";
 import { cn } from "@/shared/utils/cn";
 import { roomChatForPreview } from "@/shared/utils/chatRoutes";
 import { withFallbackRef } from "@/shared/utils/refs";
@@ -55,6 +56,10 @@ interface ContextMenu {
     height: number;
   };
 }
+
+type MediaViewerState =
+  | { kind: "image"; src: string; author: string; time: string }
+  | { kind: "video"; src: string; author: string; time: string };
 
 function toRect(rect: DOMRect | DOMRectReadOnly) {
   return {
@@ -147,7 +152,7 @@ export function MessageList({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [isPickerExpanded, setIsPickerExpanded] = useState(false);
-  const [lightboxData, setLightboxData] = useState<{ src: string; author: string; time: string } | null>(null);
+  const [lightboxData, setLightboxData] = useState<MediaViewerState | null>(null);
 
   const handleScroll = () => {
     const el = containerRef.current;
@@ -561,8 +566,17 @@ export function MessageList({
         />
       )}
 
-      {lightboxData && (
+      {lightboxData?.kind === "image" && (
         <ImageLightbox
+          src={lightboxData.src}
+          author={lightboxData.author}
+          time={lightboxData.time}
+          onClose={() => setLightboxData(null)}
+        />
+      )}
+
+      {lightboxData?.kind === "video" && (
+        <VideoLightbox
           src={lightboxData.src}
           author={lightboxData.author}
           time={lightboxData.time}

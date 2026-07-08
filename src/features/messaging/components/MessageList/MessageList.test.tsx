@@ -18,6 +18,10 @@ vi.mock("@/shared/components/ImageLightbox", () => ({
   ImageLightbox: () => null,
 }));
 
+vi.mock("@/shared/components/VideoLightbox", () => ({
+  VideoLightbox: () => null,
+}));
+
 vi.mock("@/shared/components/AuthenticatedImage", () => ({
   AuthenticatedImage: ({
     src,
@@ -51,6 +55,42 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
           devicePixelRatio: 1,
         });
         onLoad?.(event);
+      }}
+    />
+  ),
+}));
+
+vi.mock("@/shared/components/AuthenticatedVideo", () => ({
+  AuthenticatedVideo: ({
+    src,
+    className,
+    onLoadedMetadata,
+    onMediaDiagnostics,
+    ...props
+  }: ComponentProps<"video"> & {
+    src: string;
+    onMediaDiagnostics?: (diagnostics: {
+      naturalWidth: number;
+      naturalHeight: number;
+      renderedWidth: number;
+      renderedHeight: number;
+      devicePixelRatio: number;
+    }) => void;
+  }) => (
+    <video
+      data-testid="authenticated-video"
+      src={src}
+      className={className}
+      {...props}
+      onLoadedMetadata={(event) => {
+        onMediaDiagnostics?.({
+          naturalWidth: event.currentTarget.videoWidth,
+          naturalHeight: event.currentTarget.videoHeight,
+          renderedWidth: event.currentTarget.clientWidth,
+          renderedHeight: event.currentTarget.clientHeight,
+          devicePixelRatio: 1,
+        });
+        onLoadedMetadata?.(event);
       }}
     />
   ),

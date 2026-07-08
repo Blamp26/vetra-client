@@ -50,6 +50,42 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
   ),
 }));
 
+vi.mock("@/shared/components/AuthenticatedVideo", () => ({
+  AuthenticatedVideo: ({
+    src,
+    className,
+    onLoadedMetadata,
+    onMediaDiagnostics,
+    ...props
+  }: ComponentProps<"video"> & {
+    src: string;
+    onMediaDiagnostics?: (diagnostics: {
+      naturalWidth: number;
+      naturalHeight: number;
+      renderedWidth: number;
+      renderedHeight: number;
+      devicePixelRatio: number;
+    }) => void;
+  }) => (
+    <video
+      data-testid="authenticated-video"
+      src={src}
+      className={className}
+      {...props}
+      onLoadedMetadata={(event) => {
+        onMediaDiagnostics?.({
+          naturalWidth: event.currentTarget.videoWidth,
+          naturalHeight: event.currentTarget.videoHeight,
+          renderedWidth: event.currentTarget.clientWidth,
+          renderedHeight: event.currentTarget.clientHeight,
+          devicePixelRatio: 1,
+        });
+        onLoadedMetadata?.(event);
+      }}
+    />
+  ),
+}));
+
 vi.mock("../../utils/attachmentDownloads", () => ({
   downloadAttachmentWithAuth: vi.fn(),
   openAttachmentWithAuth: vi.fn(),
@@ -608,6 +644,7 @@ describe("MessageItem bubble layout", () => {
     screen.getByTestId("message-media-shell").click();
 
     expect(onLightbox).toHaveBeenCalledWith({
+      kind: "image",
       src: expect.stringContaining("/api/v1/media/media-photo-rich?variant=original"),
       author: "Alice",
       time: "2026-06-30T12:00:00Z",
@@ -696,12 +733,12 @@ describe("MessageItem bubble layout", () => {
 
     expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(3);
-    expect(screen.getByTestId("message-video-placeholder-visual-video-2")).toBeInTheDocument();
+    expect(screen.getByTestId("message-video-tile-visual-video-2")).toBeInTheDocument();
     expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
   });
 
-  it("opens grouped video tiles through the safe attachment action path", async () => {
-    const openSpy = vi.mocked(attachmentDownloads.openAttachmentWithAuth);
+  it("opens grouped video tiles in the in-app video viewer", async () => {
+    const onLightbox = vi.fn();
 
     renderMessageItem(
       {
@@ -730,14 +767,66 @@ describe("MessageItem bubble layout", () => {
         media_file_ids: ["video-album-1", "photo-album-2"],
         media_mime_types: ["video/mp4", "image/jpeg"],
       },
+      { isOwn: true, onLightbox },
+    );
+
+    fireEvent.click(screen.getByTestId("message-video-tile-video-album-1"));
+
+    expect(onLightbox).toHaveBeenCalledWith({
+      kind: "video",
+      src: expect.stringContaining("/api/v1/media/video-album-1"),
+      author: "Alice",
+      time: "2026-06-30T12:00:00Z",
+    });
+  });
+
+  it("updates grouped video layout dimensions after metadata loads", () => {
+    const originalComputeMediaAlbumLayout = mediaAlbumLayout.computeMediaAlbumLayout;
+    const layoutSpy = vi.spyOn(mediaAlbumLayout, "computeMediaAlbumLayout");
+    layoutSpy.mockImplementation((...args) => originalComputeMediaAlbumLayout(...args));
+
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "video-fallback-1",
+            url: "/api/v1/media/video-fallback-1",
+            mime_type: "video/mp4",
+            original_name: "video-fallback-1.mp4",
+            file_size: 4096,
+            kind: "video",
+          },
+          {
+            id: "photo-known-2",
+            url: "/api/v1/media/photo-known-2",
+            mime_type: "image/jpeg",
+            original_name: "photo-known-2.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1200,
+            height: 900,
+          },
+        ],
+        media_file_ids: ["video-fallback-1", "photo-known-2"],
+        media_mime_types: ["video/mp4", "image/jpeg"],
+      },
       { isOwn: true },
     );
 
-    fireEvent.click(screen.getByTestId("message-video-placeholder-video-album-1"));
+    const video = screen.getByTestId("message-video-tile-video-fallback-1");
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 1920 },
+      videoHeight: { configurable: true, value: 1080 },
+      clientWidth: { configurable: true, value: 180 },
+      clientHeight: { configurable: true, value: 101 },
+    });
+    fireEvent(video, new Event("loadedmetadata"));
 
-    expect(openSpy).toHaveBeenCalledWith(expect.objectContaining({
-      attachment: expect.objectContaining({ id: "video-album-1", kind: "video" }),
-    }));
+    expect(layoutSpy.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({ id: "video-fallback-1", width: 1920, height: 1080, kind: "video" }),
+      expect.objectContaining({ id: "photo-known-2", width: 1200, height: 900, kind: "image" }),
+    ]);
+    layoutSpy.mockRestore();
   });
 
   it("renders a grouped photo album from compatibility payloads with media_file_id plus media_file_ids", () => {
@@ -1075,6 +1164,36 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("clip.mp4")).toBeInTheDocument();
     expect(screen.getByText("Video · 4.0 KB")).toBeInTheDocument();
     expect(screen.queryByTestId("message-media-shell")).not.toBeInTheDocument();
+  });
+
+  it("opens single video file rows in the in-app video viewer", () => {
+    const onLightbox = vi.fn();
+
+    renderMessageItem(
+      {
+        media_file_id: "media-video-open",
+        media_mime_type: "video/mp4",
+        attachment: {
+          id: "media-video-open",
+          url: "/api/v1/media/media-video-open",
+          mime_type: "video/mp4",
+          original_name: "open.mp4",
+          file_size: 4096,
+          kind: "video",
+        },
+      },
+      { isOwn: true, onLightbox },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+
+    expect(onLightbox).toHaveBeenCalledWith({
+      kind: "video",
+      src: expect.stringContaining("/api/v1/media/media-video-open"),
+      author: "Alice",
+      time: "2026-06-30T12:00:00Z",
+    });
+    expect(attachmentDownloads.openAttachmentWithAuth).not.toHaveBeenCalled();
   });
 
   it("renders PDF attachments as a compact file row with in-bubble metadata", () => {
