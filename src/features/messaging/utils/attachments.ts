@@ -23,7 +23,8 @@ const ALLOWED_ATTACHMENT_TYPES = {
   "image/heic": [".heic"],
   "image/heif": [".heif"],
   "application/pdf": [".pdf"],
-  "video/mp4": [".mp4"],
+  "video/mp4": [".mp4", ".m4v"],
+  "video/quicktime": [".mov"],
   "video/webm": [".webm"],
   "video/ogg": [".ogv", ".ogg"],
 } as const;
@@ -31,7 +32,13 @@ const ALLOWED_ATTACHMENT_TYPES = {
 const MIME_TYPE_ALIASES: Record<string, keyof typeof ALLOWED_ATTACHMENT_TYPES> = {
   "image/jpg": "image/jpeg",
   "image/pjpeg": "image/jpeg",
+  "video/x-m4v": "video/mp4",
+  "video/m4v": "video/mp4",
+  "application/mp4": "video/mp4",
 };
+
+const ALLOWED_ATTACHMENT_LABEL =
+  "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, M4V, MOV, WEBM, OGG.";
 
 export const MESSAGE_ATTACHMENT_ACCEPT = Object.keys(
   ALLOWED_ATTACHMENT_TYPES,
@@ -503,7 +510,7 @@ export function validateAttachmentFile(file: File): string | null {
   const mimeType = resolveAttachmentMimeType(file.type, file.name);
 
   if (!mimeType || !extension) {
-    return "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, WEBM, OGG.";
+    return ALLOWED_ATTACHMENT_LABEL;
   }
 
   if (
@@ -520,3 +527,5 @@ export function validateAttachmentFile(file: File): string | null {
 
   return null;
 }
+
+export { ALLOWED_ATTACHMENT_LABEL };

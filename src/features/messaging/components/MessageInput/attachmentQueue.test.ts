@@ -10,11 +10,16 @@ function makeAttachment(
   id: string,
   kind: PendingAttachment["kind"],
 ): PendingAttachment {
+  const extension =
+    kind === "photo" ? "png" : kind === "video" ? "mp4" : "pdf";
+  const mimeType =
+    kind === "photo" ? "image/png" : kind === "video" ? "video/mp4" : "application/pdf";
+
   return {
     id,
-    file: new File([new Uint8Array(16)], `${id}.${kind === "photo" ? "png" : "pdf"}`),
-    name: `${id}.${kind === "photo" ? "png" : "pdf"}`,
-    mimeType: kind === "photo" ? "image/png" : "application/pdf",
+    file: new File([new Uint8Array(16)], `${id}.${extension}`),
+    name: `${id}.${extension}`,
+    mimeType,
     size: 16,
     kind,
     previewUrl: kind === "photo" ? `blob:${id}` : null,
@@ -29,7 +34,7 @@ describe("attachmentQueue helpers", () => {
     ]);
 
     expect(units).toHaveLength(1);
-    expect(units[0].kind).toBe("photo");
+    expect(units[0].kind).toBe("visual");
     expect(units[0].attachments).toHaveLength(2);
   });
 
@@ -39,7 +44,7 @@ describe("attachmentQueue helpers", () => {
     );
 
     expect(units).toHaveLength(1);
-    expect(units[0].kind).toBe("photo");
+    expect(units[0].kind).toBe("visual");
     expect(units[0].attachments.map((attachment) => attachment.id)).toEqual([
       "photo-1",
       "photo-2",
@@ -87,11 +92,42 @@ describe("attachmentQueue helpers", () => {
     expect(units[1].attachments).toHaveLength(3);
   });
 
+  it("groups mixed photo and video runs into one visual album unit", () => {
+    const units = buildAttachmentSendUnits([
+      makeAttachment("photo-1", "photo"),
+      makeAttachment("video-2", "video"),
+      makeAttachment("photo-3", "photo"),
+    ]);
+
+    expect(units).toHaveLength(1);
+    expect(units[0]).toMatchObject({
+      kind: "visual",
+    });
+    expect(units[0].attachments.map((attachment) => attachment.id)).toEqual([
+      "photo-1",
+      "video-2",
+      "photo-3",
+    ]);
+  });
+
+  it("splits ten visual media items into 9 plus 1 while preserving order", () => {
+    const units = buildAttachmentSendUnits([
+      ...Array.from({ length: 5 }, (_, index) => makeAttachment(`photo-${index + 1}`, "photo")),
+      ...Array.from({ length: 5 }, (_, index) => makeAttachment(`video-${index + 6}`, "video")),
+    ]);
+
+    expect(units).toHaveLength(2);
+    expect(units[0].kind).toBe("visual");
+    expect(units[0].attachments).toHaveLength(9);
+    expect(units[1].kind).toBe("visual");
+    expect(units[1].attachments.map((attachment) => attachment.id)).toEqual(["video-10"]);
+  });
+
   it("keeps documents separate while preserving photo runs", () => {
     const units = buildAttachmentSendUnits([
       makeAttachment("file-1", "file"),
       makeAttachment("photo-1", "photo"),
-      makeAttachment("photo-2", "photo"),
+      makeAttachment("video-2", "video"),
       makeAttachment("file-2", "file"),
       makeAttachment("photo-3", "photo"),
     ]);
@@ -101,9 +137,9 @@ describe("attachmentQueue helpers", () => {
       ids: unit.attachments.map((attachment) => attachment.id),
     }))).toEqual([
       { kind: "file", ids: ["file-1"] },
-      { kind: "photo", ids: ["photo-1", "photo-2"] },
+      { kind: "visual", ids: ["photo-1", "video-2"] },
       { kind: "file", ids: ["file-2"] },
-      { kind: "photo", ids: ["photo-3"] },
+      { kind: "visual", ids: ["photo-3"] },
     ]);
   });
 

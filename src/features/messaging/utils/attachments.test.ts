@@ -9,6 +9,7 @@ import {
   getAttachmentOriginalSrc,
   getPreviewText,
   isMessageForwardable,
+  validateAttachmentFile,
 } from "./attachments";
 
 describe("attachments utils", () => {
@@ -418,5 +419,49 @@ describe("attachments utils", () => {
       kind: "photo",
       mimeType: "image/heic",
     });
+  });
+
+  it("accepts canonical and aliased video MIME types plus extension fallback", () => {
+    expect(
+      classifyPendingAttachment(new File([new Uint8Array(32)], "clip.mp4", { type: "video/mp4" })),
+    ).toEqual({
+      kind: "video",
+      mimeType: "video/mp4",
+    });
+
+    expect(
+      classifyPendingAttachment(new File([new Uint8Array(32)], "clip.mov", { type: "video/quicktime" })),
+    ).toEqual({
+      kind: "video",
+      mimeType: "video/quicktime",
+    });
+
+    expect(
+      classifyPendingAttachment(new File([new Uint8Array(32)], "clip.m4v", { type: "video/x-m4v" })),
+    ).toEqual({
+      kind: "video",
+      mimeType: "video/mp4",
+    });
+
+    expect(
+      classifyPendingAttachment(new File([new Uint8Array(32)], "clip.mp4", { type: "application/mp4" })),
+    ).toEqual({
+      kind: "video",
+      mimeType: "video/mp4",
+    });
+
+    expect(
+      classifyPendingAttachment(new File([new Uint8Array(32)], "clip.mp4", { type: "" })),
+    ).toEqual({
+      kind: "video",
+      mimeType: "video/mp4",
+    });
+  });
+
+  it("rejects unsupported random files while accepting empty-mime MOV by extension", () => {
+    expect(validateAttachmentFile(new File([new Uint8Array(32)], "clip.mov", { type: "" }))).toBeNull();
+    expect(validateAttachmentFile(new File(["plain"], "notes.txt", { type: "text/plain" }))).toMatch(
+      /Unsupported file type/,
+    );
   });
 });

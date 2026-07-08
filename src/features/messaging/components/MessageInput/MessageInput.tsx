@@ -6,6 +6,7 @@ import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
+  ALLOWED_ATTACHMENT_LABEL,
   classifyPendingAttachment,
   MESSAGE_FILE_ATTACHMENT_ACCEPT,
   MESSAGE_MEDIA_ATTACHMENT_ACCEPT,
@@ -331,8 +332,7 @@ interface Props {
           localAttachmentId: null,
           validationError: "Unsupported file type",
         });
-        firstValidationError ??=
-          "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, WEBM, OGG.";
+        firstValidationError ??= ALLOWED_ATTACHMENT_LABEL;
         continue;
       }
 
@@ -486,17 +486,19 @@ interface Props {
           ...unit,
           attachments: [...unit.attachments],
         }));
-        const photoSelectionCount = attachmentsToSend.filter((attachment) => attachment.kind === "photo").length;
-        const reserveContentForPhotoUnit = photoSelectionCount > 1;
+        const visualSelectionCount = attachmentsToSend.filter(
+          (attachment) => attachment.kind === "photo" || attachment.kind === "video",
+        ).length;
+        const reserveContentForVisualUnit = visualSelectionCount > 1;
         let contentConsumed = false;
         let uploadPosition = 0;
         const totalUploads = attachmentsToSend.length;
 
         logAttachmentDebug("send.click", {
           queueCount: attachmentsToSend.length,
-          photoSelectionCount,
-          documentSelectionCount: attachmentsToSend.length - photoSelectionCount,
-          classification: reserveContentForPhotoUnit ? "album-capable" : "single-or-mixed",
+          visualSelectionCount,
+          documentSelectionCount: attachmentsToSend.length - visualSelectionCount,
+          classification: reserveContentForVisualUnit ? "album-capable" : "single-or-mixed",
         }, {
           batchId,
           table: attachmentsToSend.map((attachment) => summarizeAttachmentLike(attachment)),
@@ -538,9 +540,9 @@ interface Props {
             uploadedMediaFileIds.push(mediaFileId);
           }
 
-          if (unit.kind === "photo" && unit.attachments.length > 1 && uploadedMediaFileIds.length === 1) {
+          if (unit.kind === "visual" && unit.attachments.length > 1 && uploadedMediaFileIds.length === 1) {
             logAttachmentDebug("warning.album-collapsed-before-send", {
-              selectedPhotoCount: unit.attachments.length,
+              selectedVisualMediaCount: unit.attachments.length,
               uploadedMediaFileIds,
               localAttachmentIds: debugMeta.localAttachmentIds,
             }, {
@@ -554,13 +556,13 @@ interface Props {
             !contentConsumed &&
             trimmed.length > 0 &&
             (
-              reserveContentForPhotoUnit
-                ? unit.kind === "photo"
+              reserveContentForVisualUnit
+                ? unit.kind === "visual"
                 : true
             );
 
           sendFailureMessage =
-            unit.kind === "photo" && uploadedMediaFileIds.length > 1
+            unit.kind === "visual" && uploadedMediaFileIds.length > 1
               ? "Album send failed"
               : "Message send failed";
 

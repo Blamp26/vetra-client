@@ -11,12 +11,16 @@ export interface PendingAttachment {
 }
 
 export interface AttachmentSendUnit {
-  kind: "photo" | "file";
+  kind: "visual" | "file";
   attachments: PendingAttachment[];
 }
 
+function isVisualAttachment(kind: AttachmentKind) {
+  return kind === "photo" || kind === "video";
+}
+
 export function getAttachmentSendUnitType(unit: AttachmentSendUnit) {
-  if (unit.kind === "photo") {
+  if (unit.kind === "visual") {
     return unit.attachments.length > 1 ? "photo_album" : "single_photo";
   }
 
@@ -30,22 +34,22 @@ export function buildAttachmentSendUnits(
 
   for (let index = 0; index < attachments.length; ) {
     const current = attachments[index];
-    if (current.kind !== "photo") {
+    if (!isVisualAttachment(current.kind)) {
       units.push({ kind: "file", attachments: [current] });
       index += 1;
       continue;
     }
 
-    const photoRun: PendingAttachment[] = [];
-    while (index < attachments.length && attachments[index].kind === "photo") {
-      photoRun.push(attachments[index]);
+    const visualRun: PendingAttachment[] = [];
+    while (index < attachments.length && isVisualAttachment(attachments[index].kind)) {
+      visualRun.push(attachments[index]);
       index += 1;
     }
 
-    for (let chunkStart = 0; chunkStart < photoRun.length; chunkStart += 9) {
+    for (let chunkStart = 0; chunkStart < visualRun.length; chunkStart += 9) {
       units.push({
-        kind: "photo",
-        attachments: photoRun.slice(chunkStart, chunkStart + 9),
+        kind: "visual",
+        attachments: visualRun.slice(chunkStart, chunkStart + 9),
       });
     }
   }
@@ -63,7 +67,7 @@ export function getAttachmentReviewTitle(
     return `Send ${attachments.length} Photo${attachments.length === 1 ? "" : "s"}`;
   }
 
-  const allFiles = attachments.every((attachment) => attachment.kind !== "photo");
+  const allFiles = attachments.every((attachment) => !isVisualAttachment(attachment.kind));
   if (allFiles) {
     const fileCount = attachments.length;
     return `Send ${fileCount} File${fileCount === 1 ? "" : "s"}`;

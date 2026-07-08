@@ -149,7 +149,7 @@ describe("MessageInput attachments", () => {
 
     expect(mediaInput).toHaveAttribute(
       "accept",
-      "image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,video/mp4,video/webm,video/ogg",
+      "image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,video/mp4,video/quicktime,video/webm,video/ogg",
     );
     expect(fileInput).toHaveAttribute("accept", "application/pdf");
     expect(mediaInput).toHaveAttribute("multiple");
@@ -400,6 +400,30 @@ describe("MessageInput attachments", () => {
     );
   });
 
+  it("accepts video MIME aliases and groups mixed visual media into one album payload", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = getMediaInput(container);
+    const files = [
+      new File([new Uint8Array(256)], "photo-1.png", { type: "image/png" }),
+      new File([new Uint8Array(256)], "clip-2.mov", { type: "video/quicktime" }),
+      new File([new Uint8Array(256)], "photo-3.jpg", { type: "" }),
+    ];
+
+    fireEvent.change(input, { target: { files } });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      {
+        content: null,
+        mediaFileId: "media-photo-1.png",
+        mediaFileIds: ["media-photo-1.png", "media-clip-2.mov", "media-photo-3.jpg"],
+      },
+      undefined,
+    );
+  });
+
   it("splits more than nine selected photos into multiple grouped messages in order", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
@@ -597,6 +621,40 @@ describe("MessageInput attachments", () => {
     ]);
   });
 
+  it("preserves queue order around mixed visual media and documents", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const mediaInput = getMediaInput(container);
+    const fileInput = getFileInput(container);
+    const photo = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
+    const pdf = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+    const video = new File([new Uint8Array(512)], "clip-1.mp4", { type: "video/mp4" });
+
+    fireEvent.change(mediaInput, { target: { files: [photo] } });
+    fireEvent.change(fileInput, { target: { files: [pdf] } });
+    fireEvent.change(mediaInput, { target: { files: [video] } });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(3));
+    expect(onSend.mock.calls).toEqual([
+      [{
+        content: null,
+        mediaFileId: "media-photo-1.png",
+        mediaFileIds: null,
+      }, undefined],
+      [{
+        content: null,
+        mediaFileId: "media-report.pdf",
+        mediaFileIds: null,
+      }, undefined],
+      [{
+        content: null,
+        mediaFileId: "media-clip-1.mp4",
+        mediaFileIds: null,
+      }, undefined],
+    ]);
+  });
+
   it("prevents duplicate grouped-photo sends while pending", async () => {
     let releaseFirstSend!: () => void;
     const onSend = vi.fn().mockImplementation(
@@ -727,7 +785,7 @@ describe("MessageInput attachments", () => {
 
     expect(
       screen.getByText(
-        "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, WEBM, OGG.",
+        "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, M4V, MOV, WEBM, OGG.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("notes.txt")).not.toBeInTheDocument();
