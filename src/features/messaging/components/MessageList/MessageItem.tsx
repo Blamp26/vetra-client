@@ -903,7 +903,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           !isPhotoMessage && "shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
           isPhotoOnly
             ? cn(
-                "min-w-0 overflow-hidden bg-[#111] p-0",
+                "min-w-0 overflow-hidden p-0",
+                isPhotoAlbum
+                  ? "bg-[#111]"
+                  : "bg-transparent",
                 isPhotoAlbum
                   ? "rounded-t-[15px] rounded-bl-[6px] rounded-br-[6px]"
                   : "rounded-[18px]",

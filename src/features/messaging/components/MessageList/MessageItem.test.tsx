@@ -326,7 +326,8 @@ describe("MessageItem bubble layout", () => {
     const mediaShell = screen.getByTestId("message-media-shell");
     const image = screen.getByTestId("authenticated-image");
 
-    expect(bubble).toHaveClass("overflow-hidden", "bg-[#111]", "p-0");
+    expect(bubble).toHaveClass("overflow-hidden", "bg-transparent", "p-0");
+    expect(bubble).not.toHaveClass("bg-[#111]");
     expect(mediaShell).toHaveClass("block", "h-full", "w-full", "overflow-hidden");
     expect(mediaShell).not.toHaveClass("rounded-[16px]");
     expect(image).toHaveClass("block", "h-full", "w-full", "object-cover");
