@@ -483,6 +483,164 @@ body {
     box-shadow: var(--overlay-shadow);
   }
 
+  .vt-modal-backdrop--flat {
+    background: color-mix(in srgb, black 25%, transparent);
+    backdrop-filter: none;
+  }
+
+  .vt-attachment-review__dialog {
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent 12%);
+    border-radius: var(--radius-xl);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 20%),
+      color-mix(in srgb, var(--card) 92%, var(--sidebar) 8%);
+    color: var(--foreground);
+    box-shadow: 0 10px 30px rgba(18, 24, 20, 0.18);
+  }
+
+  .vt-attachment-review__surface-button {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent 12%);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--card) 84%, var(--sidebar) 16%);
+    color: var(--foreground);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .vt-attachment-review__surface-button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 74%, var(--card) 26%);
+    border-color: color-mix(in srgb, var(--border) 70%, var(--primary) 30%);
+  }
+
+  .vt-attachment-review__surface-button--active {
+    background: color-mix(in srgb, var(--accent) 82%, var(--card) 18%);
+    border-color: color-mix(in srgb, var(--primary) 40%, var(--border) 60%);
+    color: var(--foreground);
+  }
+
+  .vt-attachment-review__surface-button:focus-visible,
+  .vt-attachment-review__send:focus-visible,
+  .vt-attachment-review__caption:focus-visible,
+  .vt-attachment-review__menu-item:focus-visible,
+  .vt-attachment-review__remove:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+
+  .vt-attachment-review__title {
+    color: var(--foreground);
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0;
+  }
+
+  .vt-attachment-review__preview {
+    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent 10%);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
+      color-mix(in srgb, var(--sidebar) 74%, var(--background) 26%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    scrollbar-gutter: stable;
+  }
+
+  .vt-attachment-review__media,
+  .vt-attachment-review__file-row {
+    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent 10%);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--card) 76%, var(--sidebar) 24%);
+  }
+
+  .vt-attachment-review__file-row {
+    color: var(--foreground);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .vt-attachment-review__meta {
+    color: var(--muted-foreground);
+  }
+
+  .vt-attachment-review__media-fade {
+    background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, black 62%, transparent) 100%);
+  }
+
+  .vt-attachment-review__media-actions {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-0) 52%, black 48%);
+    box-shadow: 0 4px 10px color-mix(in srgb, black 18%, transparent);
+  }
+
+  .vt-attachment-review__remove {
+    border-radius: var(--radius-md);
+    color: white;
+  }
+
+  .vt-attachment-review__remove:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .vt-attachment-review__footer {
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent 12%);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%),
+      color-mix(in srgb, var(--card) 90%, var(--sidebar) 10%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .vt-attachment-review__upload-meta {
+    color: var(--muted-foreground);
+  }
+
+  .vt-attachment-review__progress-track {
+    background: color-mix(in srgb, var(--sidebar) 80%, transparent 20%);
+  }
+
+  .vt-attachment-review__progress-bar {
+    background: var(--primary);
+  }
+
+  .vt-attachment-review__caption {
+    color: var(--foreground);
+    caret-color: var(--foreground);
+  }
+
+  .vt-attachment-review__caption::placeholder {
+    color: var(--muted-foreground);
+  }
+
+  .vt-attachment-review__send {
+    min-height: 2.625rem;
+    width: 4.5rem;
+    border-radius: 999px;
+    padding-inline: 1rem;
+  }
+
+  .vt-attachment-review__menu {
+    min-width: 11.75rem;
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent 12%);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--popover) 96%, var(--sidebar) 4%);
+    color: var(--popover-foreground);
+    box-shadow: 0 10px 24px color-mix(in srgb, black 18%, transparent);
+  }
+
+  .vt-attachment-review__menu-item {
+    border-radius: var(--radius-sm);
+    color: inherit;
+  }
+
+  .vt-attachment-review__menu-item:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 70%, transparent 30%);
+  }
+
+  .vt-attachment-review__menu-icon {
+    color: var(--muted-foreground);
+  }
+
   .vt-empty-state {
     border: 1px solid var(--border);
     border-radius: var(--radius-xl);

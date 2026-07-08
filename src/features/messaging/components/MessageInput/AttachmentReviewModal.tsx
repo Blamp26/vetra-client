@@ -87,12 +87,12 @@ function AttachmentPreviewCard({
   if (attachment.kind === "file") {
     return (
       <div
-        className="vt-attachment-review__file-row flex items-center gap-3 rounded-[20px] bg-[#1b1b1b] px-4 py-3 text-[#eef2ee]"
+        className="vt-attachment-review__file-row flex items-center gap-3 px-4 py-3"
         data-testid="attachment-review-item"
       >
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-sm font-medium">{attachment.name}</span>
-          <span className="truncate text-[12px] text-[#a2acb4]">
+          <span className="vt-attachment-review__meta truncate text-[12px]">
             {getAttachmentKindLabel(attachment.kind)} · {formatAttachmentSize(attachment.size)}
           </span>
         </div>
@@ -100,7 +100,7 @@ function AttachmentPreviewCard({
           type="button"
           onClick={() => onRemove(attachment.id)}
           disabled={disabled}
-          className="flex h-8 min-w-8 items-center justify-center rounded-full bg-black/30 px-2 text-[12px] font-medium text-white transition hover:bg-black/45 disabled:opacity-50"
+          className="vt-attachment-review__remove flex h-8 min-w-8 items-center justify-center rounded-full bg-transparent px-2 text-[12px] font-medium transition disabled:opacity-50"
           aria-label={`Remove ${attachment.name}`}
         >
           Remove
@@ -112,7 +112,7 @@ function AttachmentPreviewCard({
   return (
     <div
       className={cn(
-        "vt-attachment-review__media group relative overflow-hidden rounded-[18px] bg-[#1a1a1a]",
+        "vt-attachment-review__media group relative overflow-hidden",
         getPreviewItemClasses(attachment, attachments),
       )}
       data-testid="attachment-review-item"
@@ -124,12 +124,12 @@ function AttachmentPreviewCard({
           className="block h-full w-full object-cover"
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-[#171717] text-sm font-medium text-[#c7d0cd]">
+        <div className="flex h-full w-full items-center justify-center bg-muted text-sm font-medium text-muted-foreground">
           {getAttachmentKindLabel(attachment.kind)}
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent px-3 py-3 text-white">
+      <div className="vt-attachment-review__media-fade pointer-events-none absolute inset-x-0 bottom-0 px-3 py-3 text-white">
         <div className="truncate text-sm font-medium">{attachment.name}</div>
         <div className="truncate text-[11px] text-white/72">
           {getAttachmentKindLabel(attachment.kind)} · {formatAttachmentSize(attachment.size)}
@@ -137,12 +137,12 @@ function AttachmentPreviewCard({
       </div>
 
       <div className="absolute right-3 top-3 z-10 flex opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-        <div className="flex items-center gap-1 rounded-2xl bg-black/25 p-1 shadow-[0_4px_10px_rgba(0,0,0,0.25)] backdrop-blur-sm">
+        <div className="vt-attachment-review__media-actions flex items-center gap-1 p-1">
           <button
             type="button"
             onClick={() => onRemove(attachment.id)}
             disabled={disabled}
-            className="flex h-8 min-w-8 items-center justify-center rounded-2xl px-2 text-[12px] font-medium text-white transition hover:bg-white/12 disabled:opacity-50"
+            className="vt-attachment-review__remove flex h-8 min-w-8 items-center justify-center px-2 text-[12px] font-medium transition disabled:opacity-50"
             aria-label={`Remove ${attachment.name}`}
           >
             <X className="h-4 w-4" />
@@ -220,15 +220,15 @@ export function AttachmentReviewModal({
         if (!isBusy) onClose();
       }}
     >
-      <div className="vt-modal-backdrop" />
+      <div className="vt-modal-backdrop vt-modal-backdrop--flat" />
       <div
-        className="vt-attachment-review__dialog relative z-10 flex max-h-[calc(100vh-24px)] min-h-0 w-[min(420px,calc(100vw-24px))] flex-col overflow-hidden rounded-[32px] bg-[#0f0f0f] text-[#eef2ee] shadow-[0_4px_8px_2px_rgba(16,16,16,0.61)] transition-[transform,opacity] duration-200 sm:max-h-[calc(100vh-64px)] sm:rounded-[40px]"
+        className="vt-attachment-review__dialog relative z-10 flex max-h-[calc(100vh-24px)] min-h-0 w-[min(420px,calc(100vw-24px))] flex-col overflow-hidden transition-[transform,opacity] duration-200 sm:max-h-[calc(100vh-64px)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="grid min-h-14 shrink-0 grid-cols-[44px_1fr_52px] items-center gap-2 px-[22px] py-[6px]">
+        <div className="grid min-h-14 shrink-0 grid-cols-[40px_minmax(0,1fr)_72px] items-center gap-2 px-4 py-2 sm:px-[22px] sm:py-[6px]">
           <button
             type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/6 text-white transition hover:bg-white/10 disabled:opacity-50"
+            className="vt-attachment-review__surface-button flex h-10 w-10 items-center justify-center transition disabled:opacity-50"
             onClick={onClose}
             disabled={isBusy}
             aria-label="Close attachment review"
@@ -238,7 +238,7 @@ export function AttachmentReviewModal({
 
           <h3
             id="attachment-review-title"
-            className="mx-[22px] overflow-hidden text-center text-[20px] leading-[30px] font-medium text-white"
+            className="vt-attachment-review__title mx-3 overflow-hidden text-center sm:mx-[22px]"
           >
             <span className="block truncate">{title}</span>
           </h3>
@@ -247,8 +247,8 @@ export function AttachmentReviewModal({
             <button
               type="button"
               className={cn(
-                "flex h-10 items-center justify-center gap-1 rounded-full px-3 text-sm font-medium transition",
-                isAddMenuOpen ? "bg-white/14 text-white" : "bg-white/6 text-[#d7dedb] hover:bg-white/10",
+                "vt-attachment-review__surface-button flex h-10 min-w-[72px] items-center justify-center gap-1 px-3 text-sm font-medium transition",
+                isAddMenuOpen && "vt-attachment-review__surface-button--active",
               )}
               onClick={onToggleAddMenu}
               disabled={isBusy}
@@ -264,7 +264,7 @@ export function AttachmentReviewModal({
         <div className="flex min-h-0 flex-1 flex-col pb-2">
           <div className="px-0 pt-1">
             <div
-              className="vt-attachment-review__preview mx-4 min-h-20 w-[calc(100%-32px)] max-w-[388px] overflow-y-auto rounded-[24px] bg-[#141414]"
+              className="vt-attachment-review__preview mx-4 min-h-20 w-[calc(100%-32px)] max-w-[388px] overflow-y-auto"
               style={{ maxHeight: "min(416px, calc(100vh - 248px))" }}
               data-testid="attachment-review-scroll"
             >
@@ -289,26 +289,26 @@ export function AttachmentReviewModal({
           </div>
 
           <div className="mt-auto shrink-0 px-0 pb-4 pt-4" data-testid="attachment-review-footer">
-            <div className="mx-4 flex w-[calc(100%-32px)] max-w-[388px] flex-col gap-2 rounded-[24px] bg-[#212121] px-[8px] py-[4px] shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
+            <div className="vt-attachment-review__footer mx-4 flex w-[calc(100%-32px)] max-w-[388px] flex-col gap-2 px-[8px] py-[4px]">
               {uploadStatus !== "idle" && (
-                <div className="px-2 pt-2 text-[11px] text-[#cdd4d1]">
+                <div className="vt-attachment-review__upload-meta px-2 pt-2 text-[11px]">
                   {uploadStatus === "uploading" ? (
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-3">
                         <span className="font-medium">
                           {uploadLabel ? `Uploading ${uploadLabel}` : "Uploading attachment"}
                         </span>
-                        <span className="text-[#a2acb4]">{uploadProgress}%</span>
+                        <span className="vt-attachment-review__meta">{uploadProgress}%</span>
                       </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                      <div className="vt-attachment-review__progress-track h-1.5 overflow-hidden rounded-full">
                         <div
-                          className="h-full rounded-full bg-[rgb(135,116,225)] transition-[width]"
+                          className="vt-attachment-review__progress-bar h-full rounded-full transition-[width]"
                           style={{ width: `${uploadProgress}%` }}
                         />
                       </div>
                     </div>
                   ) : (
-                    <span className="text-[#f0b1a8]">{uploadError}</span>
+                    <span className="text-destructive">{uploadError}</span>
                   )}
                 </div>
               )}
@@ -317,7 +317,7 @@ export function AttachmentReviewModal({
                 <textarea
                   id="attachment-review-caption"
                   ref={captionRef}
-                  className="min-h-12 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-[13px] text-[16px] leading-[21px] text-white outline-none placeholder:text-[#a2acb4] disabled:opacity-60"
+                  className="vt-attachment-review__caption min-h-12 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-[13px] text-[15px] leading-[21px] outline-none disabled:opacity-60"
                   placeholder="Add a caption"
                   rows={1}
                   value={content}
@@ -328,7 +328,7 @@ export function AttachmentReviewModal({
 
                 <button
                   type="button"
-                  className="mb-[3px] flex h-[42px] w-[66px] shrink-0 items-center justify-center rounded-[22px] bg-[rgb(135,116,225)] px-[17px] text-sm font-semibold text-white transition hover:brightness-105 disabled:pointer-events-none disabled:opacity-60"
+                  className="vt-attachment-review__send vt-button vt-button--primary mb-[3px] shrink-0 disabled:pointer-events-none disabled:opacity-60"
                   onClick={onSend}
                   disabled={attachments.length === 0 || isBusy}
                 >

@@ -67,7 +67,7 @@ function AttachmentSourceMenu({
     <div
       ref={menuRef}
       className={cn(
-        "vt-attachment-menu absolute z-40 min-w-[188px] rounded-[10px] border border-white/8 bg-[rgba(33,33,33,0.867)] p-1.5 text-[#eef2ee] shadow-[0_4px_8px_2px_rgba(16,16,16,0.61)] backdrop-blur-md",
+        "vt-attachment-review__menu absolute z-40 p-1.5",
         placement === "composer" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2",
       )}
       data-testid="attachment-source-menu"
@@ -75,26 +75,26 @@ function AttachmentSourceMenu({
     >
       <button
         type="button"
-        className="flex w-full items-center gap-3 rounded-[6px] px-3 py-2 text-left text-[14px] font-medium text-inherit transition hover:bg-white/8"
+        className="vt-attachment-review__menu-item flex w-full items-center gap-3 px-3 py-2 text-left text-[14px] font-medium transition"
         onClick={() => {
           onSelectMedia();
           onClose();
         }}
         role="menuitem"
       >
-        <ImagePlus className="h-4 w-4 text-[#b9c6c0]" />
+        <ImagePlus className="vt-attachment-review__menu-icon h-4 w-4" />
         <span>Photo or Video</span>
       </button>
       <button
         type="button"
-        className="mt-0.5 flex w-full items-center gap-3 rounded-[6px] px-3 py-2 text-left text-[14px] font-medium text-inherit transition hover:bg-white/8"
+        className="vt-attachment-review__menu-item mt-0.5 flex w-full items-center gap-3 px-3 py-2 text-left text-[14px] font-medium transition"
         onClick={() => {
           onSelectFile();
           onClose();
         }}
         role="menuitem"
       >
-        <FileText className="h-4 w-4 text-[#b9c6c0]" />
+        <FileText className="vt-attachment-review__menu-icon h-4 w-4" />
         <span>File</span>
       </button>
     </div>
