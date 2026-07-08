@@ -243,9 +243,14 @@ describe("MessageContextMenu", () => {
 
     fireEvent.click(button);
     expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
+    expect(screen.getByTestId("message-context-reactions")).toHaveClass("top-[-48px]");
+    expect(screen.getByTestId("message-context-reactions")).toHaveClass("w-[384px]");
+    expect(screen.queryByTestId("message-context-reactions-surface")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-context-reaction-tail-large")).not.toBeInTheDocument();
 
-    fireEvent.click(button);
+    fireEvent.click(screen.getByTestId("message-context-reaction-more"));
     expect(screen.queryByTestId("message-context-expanded-picker")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-context-reactions-surface")).toBeInTheDocument();
   });
 
   it("uses a transparent 216px anchor with a narrower visible action surface", () => {
@@ -340,5 +345,18 @@ describe("MessageContextMenu", () => {
     fireEvent.keyDown(window, { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the expanded picker in the reaction layer instead of below the action menu", () => {
+    renderMenu({}, { isPickerExpanded: true });
+
+    const picker = screen.getByTestId("message-context-expanded-picker");
+    const reactionLayer = screen.getByTestId("message-context-reactions");
+    const actionSurface = screen.getByTestId("message-context-surface");
+
+    expect(reactionLayer).toContainElement(picker);
+    expect(actionSurface).not.toContainElement(picker);
+    expect(reactionLayer).toHaveClass("left-[-82px]");
+    expect(reactionLayer).toHaveClass("top-[-48px]");
   });
 });

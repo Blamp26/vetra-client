@@ -315,102 +315,115 @@ export function MessageContextMenu({
       onClick={(event) => event.stopPropagation()}
     >
       <div
-        className="absolute left-[-82px] top-0 z-[1] h-10 w-[298px] overflow-visible bg-transparent"
-        style={{ transform: "translateY(-48px)" }}
+        className={cn(
+          "absolute z-[2] overflow-visible bg-transparent transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)]",
+          isPickerExpanded
+            ? "left-[-82px] top-[-48px] h-[358px] w-[384px]"
+            : "left-[-82px] top-0 h-10 w-[298px]",
+        )}
+        style={isPickerExpanded ? { transformOrigin: "144px 74px" } : { transform: "translateY(-48px)" }}
         data-testid="message-context-reactions"
       >
-        <div
-          className="relative flex h-10 w-[298px] items-center overflow-visible rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
-          data-testid="message-context-reactions-surface"
-        >
+        {isPickerExpanded ? (
           <div
-            className="absolute bottom-[-8px] right-[18px] h-2 w-4 rounded-b-[16px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
-            data-testid="message-context-reaction-tail-large"
-          />
-          <div
-            className="absolute bottom-[-20px] right-[18px] h-2 w-2 rounded-full bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
-            data-testid="message-context-reaction-tail-small"
-          />
-          <div className="flex h-full w-full items-center px-2" data-testid="message-context-reaction-items">
-            {EMOJIS.map((emoji, index) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => {
-                  onToggleReaction(data.msgId, emoji);
-                  onClose();
-                }}
-                className={cn(
-                  "relative inline-flex h-8 min-h-8 w-8 min-w-8 items-center justify-center rounded-full text-[18px] transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-                  index === 0 ? "ml-0" : "ml-1",
-                )}
-                aria-label={`React with ${emoji}`}
-                data-testid="message-context-reaction-button"
-              >
-                <Emoji emoji={emoji} size={18} />
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setIsPickerExpanded(!isPickerExpanded)}
-              className="ml-1 mr-[-2px] inline-flex h-8 w-8 items-center justify-center rounded-full bg-transparent p-0 text-[#aaaaaa] transition-colors duration-150 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              aria-label={isPickerExpanded ? "Hide more reactions" : "Show more reactions"}
-              data-testid="message-context-reaction-more"
+            className="h-[358px] min-w-[216px] w-[384px] overflow-hidden rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+            data-testid="message-context-expanded-picker"
+          >
+            <div
+              className="flex h-12 w-full items-center overflow-x-auto overflow-y-hidden px-[6px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              data-testid="message-context-expanded-picker-rail"
             >
-              <ChevronDown className={cn("h-5 w-5 transition-transform duration-150", isPickerExpanded && "rotate-180")} />
-            </button>
+              {EMOJIS.map((emoji) => (
+                <button
+                  key={`rail-${emoji}`}
+                  type="button"
+                  onClick={() => {
+                    onToggleReaction(data.msgId, emoji);
+                    onClose();
+                  }}
+                  className="mx-[2px] my-[6px] inline-grid h-9 w-9 shrink-0 place-items-center rounded-[6px] text-[#aaaaaa] transition-colors duration-150 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  aria-label={`Quick react with ${emoji}`}
+                  data-testid="message-context-expanded-picker-rail-button"
+                >
+                  <Emoji emoji={emoji} size={18} />
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setIsPickerExpanded(false)}
+                className="mx-[2px] my-[6px] inline-grid h-9 w-9 shrink-0 place-items-center rounded-[6px] bg-transparent text-[#aaaaaa] transition-colors duration-150 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label="Hide more reactions"
+                data-testid="message-context-reaction-more"
+              >
+                <ChevronDown className="h-5 w-5 rotate-180" />
+              </button>
+            </div>
+            <div
+              className="grid h-[calc(358px-48px)] grid-cols-[repeat(auto-fill,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              data-testid="message-context-expanded-picker-grid"
+            >
+              {EXPANDED_EMOJIS.map((emoji, index) => (
+                <button
+                  key={`${emoji}-${index}`}
+                  type="button"
+                  onClick={() => {
+                    onToggleReaction(data.msgId, emoji);
+                    onClose();
+                  }}
+                  className="inline-grid h-9 w-9 place-items-center rounded-[8px] text-[20px] text-white transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  aria-label={`React with ${emoji}`}
+                  data-testid="message-context-expanded-picker-button"
+                >
+                  <Emoji emoji={emoji} size={20} />
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div
+            className="relative flex h-10 w-[298px] items-center overflow-visible rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+            data-testid="message-context-reactions-surface"
+          >
+            <div
+              className="absolute bottom-[-8px] right-[18px] h-2 w-4 rounded-b-[16px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+              data-testid="message-context-reaction-tail-large"
+            />
+            <div
+              className="absolute bottom-[-20px] right-[18px] h-2 w-2 rounded-full bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+              data-testid="message-context-reaction-tail-small"
+            />
+            <div className="flex h-full w-full items-center px-2" data-testid="message-context-reaction-items">
+              {EMOJIS.map((emoji, index) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => {
+                    onToggleReaction(data.msgId, emoji);
+                    onClose();
+                  }}
+                  className={cn(
+                    "relative inline-flex h-8 min-h-8 w-8 min-w-8 items-center justify-center rounded-full text-[18px] transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                    index === 0 ? "ml-0" : "ml-1",
+                  )}
+                  aria-label={`React with ${emoji}`}
+                  data-testid="message-context-reaction-button"
+                >
+                  <Emoji emoji={emoji} size={18} />
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setIsPickerExpanded(true)}
+                className="ml-1 mr-[-2px] inline-flex h-8 w-8 items-center justify-center rounded-full bg-transparent p-0 text-[#aaaaaa] transition-colors duration-150 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label="Show more reactions"
+                data-testid="message-context-reaction-more"
+              >
+                <ChevronDown className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-
-      {isPickerExpanded ? (
-        <div
-          className="absolute left-[-12px] top-[calc(100%+10px)] z-[2] h-[358px] min-w-[216px] w-[384px] overflow-hidden rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] supports-[backdrop-filter]:backdrop-blur-[25px]"
-          style={{ transformOrigin: "144px 74px" }}
-          data-testid="message-context-expanded-picker"
-        >
-          <div
-            className="flex h-12 w-full items-center overflow-x-auto overflow-y-hidden px-[6px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            data-testid="message-context-expanded-picker-rail"
-          >
-            {EMOJIS.map((emoji) => (
-              <button
-                key={`rail-${emoji}`}
-                type="button"
-                onClick={() => {
-                  onToggleReaction(data.msgId, emoji);
-                  onClose();
-                }}
-                className="mx-[2px] my-[6px] inline-grid h-9 w-9 shrink-0 place-items-center rounded-[6px] text-[#aaaaaa] transition-colors duration-150 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                aria-label={`Quick react with ${emoji}`}
-                data-testid="message-context-expanded-picker-rail-button"
-              >
-                <Emoji emoji={emoji} size={18} />
-              </button>
-            ))}
-          </div>
-          <div
-            className="grid h-[calc(358px-48px)] grid-cols-[repeat(auto-fill,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            data-testid="message-context-expanded-picker-grid"
-          >
-            {EXPANDED_EMOJIS.map((emoji, index) => (
-              <button
-                key={`${emoji}-${index}`}
-                type="button"
-                onClick={() => {
-                  onToggleReaction(data.msgId, emoji);
-                  onClose();
-                }}
-                className="inline-grid h-9 w-9 place-items-center rounded-[8px] text-[20px] text-white transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                aria-label={`React with ${emoji}`}
-                data-testid="message-context-expanded-picker-button"
-              >
-                <Emoji emoji={emoji} size={20} />
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       <div
         className="mr-[44px] flex min-h-[248px] w-[172px] overflow-y-auto rounded-[16px] bg-[rgba(33,33,33,0.867)] py-1 shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[10px]"
