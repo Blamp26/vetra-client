@@ -57,6 +57,7 @@ vi.mock("../../utils/attachmentDownloads", () => ({
 
 import { MessageItem } from "./MessageItem";
 import * as mediaAlbumLayout from "../../utils/mediaAlbumLayout";
+import * as attachmentDownloads from "../../utils/attachmentDownloads";
 
 function makeMessage(overrides: Record<string, unknown> = {}) {
   return {
@@ -376,6 +377,49 @@ describe("MessageItem bubble layout", () => {
     layoutSpy.mockRestore();
   });
 
+  it("passes video dimensions into the layout helper for grouped visual media", () => {
+    const originalComputeMediaAlbumLayout = mediaAlbumLayout.computeMediaAlbumLayout;
+    const layoutSpy = vi.spyOn(mediaAlbumLayout, "computeMediaAlbumLayout");
+    layoutSpy.mockImplementation((...args) => originalComputeMediaAlbumLayout(...args));
+
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "photo-mixed-1",
+            url: "/api/v1/media/photo-mixed-1",
+            mime_type: "image/jpeg",
+            original_name: "photo-mixed-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1800,
+            height: 1200,
+          },
+          {
+            id: "video-mixed-2",
+            url: "/api/v1/media/video-mixed-2",
+            mime_type: "video/mp4",
+            original_name: "video-mixed-2.mp4",
+            file_size: 4096,
+            kind: "video",
+            width: 1280,
+            height: 720,
+          },
+        ],
+        media_file_ids: ["photo-mixed-1", "video-mixed-2"],
+        media_mime_types: ["image/jpeg", "video/mp4"],
+      },
+      { isOwn: true },
+    );
+
+    expect(layoutSpy).toHaveBeenCalled();
+    expect(layoutSpy.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({ id: "photo-mixed-1", width: 1800, height: 1200, kind: "image" }),
+      expect.objectContaining({ id: "video-mixed-2", width: 1280, height: 720, kind: "video" }),
+    ]);
+    layoutSpy.mockRestore();
+  });
+
   it("warns in dev when album attachments are still missing dimensions", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -607,6 +651,93 @@ describe("MessageItem bubble layout", () => {
     expect(tile0.getAttribute("style")).toContain("left:");
     expect(tile4.getAttribute("style")).toContain("top:");
     expect(tile7.getAttribute("style")).toContain("width:");
+  });
+
+  it("renders grouped photo and video attachments as one visual album", () => {
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "visual-photo-1",
+            url: "/api/v1/media/visual-photo-1",
+            mime_type: "image/jpeg",
+            original_name: "visual-photo-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1600,
+            height: 900,
+          },
+          {
+            id: "visual-video-2",
+            url: "/api/v1/media/visual-video-2",
+            mime_type: "video/mp4",
+            original_name: "visual-video-2.mp4",
+            file_size: 4096,
+            kind: "video",
+            width: 1280,
+            height: 720,
+          },
+          {
+            id: "visual-photo-3",
+            url: "/api/v1/media/visual-photo-3",
+            mime_type: "image/png",
+            original_name: "visual-photo-3.png",
+            file_size: 1024,
+            kind: "photo",
+            width: 1200,
+            height: 1200,
+          },
+        ],
+        media_file_ids: ["visual-photo-1", "visual-video-2", "visual-photo-3"],
+        media_mime_types: ["image/jpeg", "video/mp4", "image/png"],
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(3);
+    expect(screen.getByTestId("message-video-placeholder-visual-video-2")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
+  });
+
+  it("opens grouped video tiles through the safe attachment action path", async () => {
+    const openSpy = vi.mocked(attachmentDownloads.openAttachmentWithAuth);
+
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "video-album-1",
+            url: "/api/v1/media/video-album-1",
+            mime_type: "video/mp4",
+            original_name: "video-album-1.mp4",
+            file_size: 4096,
+            kind: "video",
+            width: 1280,
+            height: 720,
+          },
+          {
+            id: "photo-album-2",
+            url: "/api/v1/media/photo-album-2",
+            mime_type: "image/jpeg",
+            original_name: "photo-album-2.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1200,
+            height: 900,
+          },
+        ],
+        media_file_ids: ["video-album-1", "photo-album-2"],
+        media_mime_types: ["video/mp4", "image/jpeg"],
+      },
+      { isOwn: true },
+    );
+
+    fireEvent.click(screen.getByTestId("message-video-placeholder-video-album-1"));
+
+    expect(openSpy).toHaveBeenCalledWith(expect.objectContaining({
+      attachment: expect.objectContaining({ id: "video-album-1", kind: "video" }),
+    }));
   });
 
   it("renders a grouped photo album from compatibility payloads with media_file_id plus media_file_ids", () => {
@@ -921,7 +1052,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(2);
   });
 
-  it("renders video attachments through the existing file row path", () => {
+  it("renders single video attachments through the existing file row path", () => {
     renderMessageItem(
       {
         media_file_id: "media-video-1",
