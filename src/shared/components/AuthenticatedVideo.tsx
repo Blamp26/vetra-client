@@ -7,6 +7,7 @@ export interface AuthenticatedVideoDiagnostics {
   renderedWidth: number;
   renderedHeight: number;
   devicePixelRatio: number;
+  duration: number | null;
 }
 
 interface AuthenticatedVideoProps extends React.VideoHTMLAttributes<HTMLVideoElement> {
@@ -36,6 +37,10 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
       renderedWidth: video.clientWidth,
       renderedHeight: video.clientHeight,
       devicePixelRatio: window.devicePixelRatio || 1,
+      duration:
+        Number.isFinite(video.duration) && video.duration > 0
+          ? video.duration
+          : null,
     };
 
     onMediaDiagnostics?.(diagnostics);

@@ -177,6 +177,46 @@ describe("MessageInput attachments", () => {
     expect(screen.getByRole("button", { name: "Send" })).toHaveClass("min-h-11");
   });
 
+  it("hides the textarea internal scrollbar while keeping the composer compact", () => {
+    render(<MessageInput onSend={vi.fn()} />);
+
+    const textarea = screen.getByTestId("message-input-textarea");
+
+    expect(textarea).toHaveStyle({ overflowY: "hidden" });
+    expect(textarea).toHaveClass("vt-textarea", "min-h-11", "max-h-44", "resize-none");
+  });
+
+  it("auto-resizes the textarea from scrollHeight without changing keyboard send behavior", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    render(<MessageInput onSend={onSend} />);
+
+    const textarea = screen.getByTestId("message-input-textarea") as HTMLTextAreaElement;
+    Object.defineProperty(textarea, "scrollHeight", {
+      configurable: true,
+      get: () => 132,
+    });
+
+    fireEvent.change(textarea, { target: { value: "First line\nSecond line" } });
+
+    await waitFor(() => expect(textarea.style.height).toBe("132px"));
+
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith({ content: "First line\nSecond line", mediaFileId: null }, undefined));
+  });
+
+  it("keeps Shift+Enter as a newline instead of sending", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    render(<MessageInput onSend={onSend} />);
+
+    const textarea = screen.getByTestId("message-input-textarea");
+    fireEvent.change(textarea, { target: { value: "Hello" } });
+
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
+
+    await waitFor(() => expect(onSend).not.toHaveBeenCalled());
+  });
+
   it("sends typed text with the existing send action", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     render(<MessageInput onSend={onSend} />);

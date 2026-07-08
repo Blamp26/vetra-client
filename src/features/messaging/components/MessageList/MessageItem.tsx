@@ -83,6 +83,7 @@ type MediaRuntimeDiagnostics = {
   renderedWidth: number;
   renderedHeight: number;
   devicePixelRatio: number;
+  duration: number | null;
 };
 
 type VisualRuntimeMetrics = MediaRuntimeDiagnostics & {
@@ -148,6 +149,24 @@ function getResolvedPhotoPackingRatio(width?: number, height?: number) {
 function shortenAttachmentId(attachmentId: string) {
   if (attachmentId.length <= 8) return attachmentId;
   return `${attachmentId.slice(0, 4)}…${attachmentId.slice(-3)}`;
+}
+
+function formatVideoDuration(durationSeconds: number | null) {
+  if (!durationSeconds || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return null;
+  }
+
+  const totalSeconds = Math.max(0, Math.round(durationSeconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    const displayMinutes = minutes % 60;
+    return `${hours}:${displayMinutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function toPercent(value: number, total: number) {
@@ -408,6 +427,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         renderedWidth: runtimeMetrics.renderedWidth,
         renderedHeight: runtimeMetrics.renderedHeight,
         devicePixelRatio: runtimeMetrics.devicePixelRatio,
+        duration: runtimeMetrics.duration,
       });
     });
   }, [msg.id, resolvedVisualAttachments, visualRuntimeMetrics]);
@@ -588,6 +608,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       }
 
       if (currentAttachment.attachment.kind === "video" && currentAttachment.displaySrc) {
+        const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
+        const durationLabel = formatVideoDuration(runtimeMetrics?.duration ?? null);
+
         return (
           <>
             <AuthenticatedVideo
@@ -613,11 +636,22 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 );
               }}
             />
-            <div className="pointer-events-none absolute inset-x-2 bottom-2 flex items-center justify-between">
-              <span className="inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[11px] font-medium text-white shadow-sm ring-1 ring-white/10">
-                <Play className="h-3.5 w-3.5 fill-current" />
-                Video
-              </span>
+            <div className="pointer-events-none absolute left-[3px] top-[3px] z-[1]">
+              {durationLabel ? (
+                <span
+                  className="inline-flex h-[18px] items-center rounded-full bg-black/25 px-[6px] text-[12px] leading-[18px] font-medium text-white"
+                  data-testid={`message-video-duration-${currentAttachment.attachment.id}`}
+                >
+                  {durationLabel}
+                </span>
+              ) : (
+                <span
+                  className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-black/25 text-white"
+                  data-testid={`message-video-badge-${currentAttachment.attachment.id}`}
+                >
+                  <Play className="h-3 w-3 fill-current" />
+                </span>
+              )}
             </div>
           </>
         );
@@ -637,7 +671,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         </div>
       );
     },
-    [handleDecodedVisualDimensions, handleVisualDiagnostics],
+    [handleDecodedVisualDimensions, handleVisualDiagnostics, visualRuntimeMetrics],
   );
 
   const renderVisualTile = (
@@ -668,6 +702,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           type="button"
           className="relative block h-full w-full overflow-hidden"
           data-testid="message-photo-collage-tile"
+          aria-label={currentAttachment.attachment.kind === "video" ? `Open video ${attachmentName}` : `Open photo ${attachmentName}`}
           onClick={() => void handleVisualAttachmentOpen(currentAttachment.attachment)}
         >
           {renderVisualMedia(currentAttachment, attachmentName)}
@@ -721,6 +756,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   type="button"
                   className="relative aspect-square overflow-hidden"
                   data-testid="message-photo-collage-tile"
+                  aria-label={
+                    currentAttachment.attachment.kind === "video"
+                      ? `Open video ${getAttachmentDisplayName(currentAttachment.attachment)}`
+                      : `Open photo ${getAttachmentDisplayName(currentAttachment.attachment)}`
+                  }
                   onClick={() => void handleVisualAttachmentOpen(currentAttachment.attachment)}
                 >
                   {renderVisualMedia(currentAttachment, getAttachmentDisplayName(currentAttachment.attachment))}

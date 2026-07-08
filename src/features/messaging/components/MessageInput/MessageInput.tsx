@@ -224,6 +224,7 @@ interface Props {
     if (!textarea) return;
     textarea.style.height = "0px";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 176)}px`;
+    textarea.style.overflowY = "hidden";
   }, [content, isEditing]);
 
   const stopTyping = () => { onTypingStop?.() }; 
@@ -892,6 +893,7 @@ interface Props {
           <textarea
             ref={textareaRef}
             className="vt-textarea min-h-11 max-h-44 flex-1 resize-none bg-card px-4 py-3 text-sm leading-6 disabled:opacity-60"
+            data-testid="message-input-textarea"
             placeholder={pendingAttachments.length > 0 ? "Review attachments in dialog" : "Message..."}
             value={content}
             onChange={(e) => handleChange(e.target.value)}
@@ -899,6 +901,7 @@ interface Props {
             onPaste={handlePaste}
             disabled={disabled || isSending || isUploading || pendingAttachments.length > 0}
             rows={1}
+            style={{ overflowY: "hidden" }}
           />
 
           <button 

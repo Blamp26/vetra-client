@@ -38,6 +38,7 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
       renderedWidth: number;
       renderedHeight: number;
       devicePixelRatio: number;
+      duration: number | null;
     }) => void;
   }) => (
     <img
@@ -89,6 +90,7 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
           renderedWidth: event.currentTarget.clientWidth,
           renderedHeight: event.currentTarget.clientHeight,
           devicePixelRatio: 1,
+          duration: Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : null,
         });
         onLoadedMetadata?.(event);
       }}

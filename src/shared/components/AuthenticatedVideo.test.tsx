@@ -104,17 +104,24 @@ describe("AuthenticatedVideo", () => {
       videoHeight: { configurable: true, value: 720 },
       clientWidth: { configurable: true, value: 320 },
       clientHeight: { configurable: true, value: 180 },
+      duration: { configurable: true, value: 42 },
     });
 
     fireEvent(video, new Event("loadedmetadata"));
 
     expect(video).toHaveClass("h-full", "w-full", "object-cover");
+    expect(video).toHaveStyle({
+      display: "block",
+      width: "100%",
+      height: "100%",
+    });
     expect(video).toHaveAttribute("src", "blob:video-preview");
     expect(diagnosticsSpy).toHaveBeenCalledWith(expect.objectContaining({
       naturalWidth: 1280,
       naturalHeight: 720,
       renderedWidth: 320,
       renderedHeight: 180,
+      duration: 42,
     }));
   });
 

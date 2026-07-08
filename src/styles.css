@@ -450,6 +450,16 @@ body {
     border-color: color-mix(in srgb, var(--input) 72%, var(--primary) 28%);
   }
 
+  .vt-textarea {
+    overflow-y: hidden;
+    scrollbar-width: none;
+    transition: height 180ms cubic-bezier(0.2, 1, 0.3, 1);
+  }
+
+  .vt-textarea::-webkit-scrollbar {
+    display: none;
+  }
+
   .vt-label {
     display: inline-flex;
     align-items: center;

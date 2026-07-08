@@ -22,13 +22,14 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
     ...props
   }: ComponentProps<"img"> & {
     src: string;
-    onMediaDiagnostics?: (diagnostics: {
-      naturalWidth: number;
-      naturalHeight: number;
-      renderedWidth: number;
-      renderedHeight: number;
-      devicePixelRatio: number;
-    }) => void;
+      onMediaDiagnostics?: (diagnostics: {
+        naturalWidth: number;
+        naturalHeight: number;
+        renderedWidth: number;
+        renderedHeight: number;
+        devicePixelRatio: number;
+        duration: number | null;
+      }) => void;
   }) => (
     <img
       data-testid="authenticated-image"
@@ -79,6 +80,7 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
           renderedWidth: event.currentTarget.clientWidth,
           renderedHeight: event.currentTarget.clientHeight,
           devicePixelRatio: 1,
+          duration: Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : null,
         });
         onLoadedMetadata?.(event);
       }}
@@ -734,7 +736,53 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(3);
     expect(screen.getByTestId("message-video-tile-visual-video-2")).toBeInTheDocument();
+    expect(screen.getByLabelText("Open video visual-video-2.mp4")).toBeInTheDocument();
     expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
+  });
+
+  it("shows a compact duration badge for loaded grouped video tiles instead of a large Video label", () => {
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "visual-video-duration",
+            url: "/api/v1/media/visual-video-duration",
+            mime_type: "video/mp4",
+            original_name: "visual-video-duration.mp4",
+            file_size: 4096,
+            kind: "video",
+            width: 1280,
+            height: 720,
+          },
+          {
+            id: "visual-photo-duration",
+            url: "/api/v1/media/visual-photo-duration",
+            mime_type: "image/jpeg",
+            original_name: "visual-photo-duration.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1200,
+            height: 900,
+          },
+        ],
+        media_file_ids: ["visual-video-duration", "visual-photo-duration"],
+        media_mime_types: ["video/mp4", "image/jpeg"],
+      },
+      { isOwn: true },
+    );
+
+    const video = screen.getByTestId("message-video-tile-visual-video-duration");
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 1280 },
+      videoHeight: { configurable: true, value: 720 },
+      clientWidth: { configurable: true, value: 187 },
+      clientHeight: { configurable: true, value: 110 },
+      duration: { configurable: true, value: 42 },
+    });
+    fireEvent(video, new Event("loadedmetadata"));
+
+    expect(screen.getByTestId("message-video-duration-visual-video-duration")).toHaveTextContent("0:42");
+    expect(screen.queryByText("Video")).not.toBeInTheDocument();
   });
 
   it("opens grouped video tiles in the in-app video viewer", async () => {
@@ -819,6 +867,7 @@ describe("MessageItem bubble layout", () => {
       videoHeight: { configurable: true, value: 1080 },
       clientWidth: { configurable: true, value: 180 },
       clientHeight: { configurable: true, value: 101 },
+      duration: { configurable: true, value: 15 },
     });
     fireEvent(video, new Event("loadedmetadata"));
 
@@ -826,6 +875,7 @@ describe("MessageItem bubble layout", () => {
       expect.objectContaining({ id: "video-fallback-1", width: 1920, height: 1080, kind: "video" }),
       expect.objectContaining({ id: "photo-known-2", width: 1200, height: 900, kind: "image" }),
     ]);
+    expect(screen.getByTestId("message-video-duration-video-fallback-1")).toHaveTextContent("0:15");
     layoutSpy.mockRestore();
   });
 
