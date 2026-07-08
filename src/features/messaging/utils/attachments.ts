@@ -135,9 +135,16 @@ function normalizeAttachment(attachment: Attachment | null | undefined): Attachm
   const url = resolveAttachmentUrl(attachment.url);
   if (!url) return null;
 
+  const displayUrl = resolveAttachmentUrl(attachment.display_url ?? attachment.displayUrl) ?? null;
+  const originalUrl = resolveAttachmentUrl(attachment.original_url ?? attachment.originalUrl) ?? null;
+
   return {
     ...attachment,
     url,
+    display_url: displayUrl ?? attachment.display_url ?? null,
+    displayUrl: displayUrl ?? attachment.displayUrl ?? null,
+    original_url: originalUrl ?? attachment.original_url ?? null,
+    originalUrl: originalUrl ?? attachment.originalUrl ?? null,
   };
 }
 
@@ -335,6 +342,28 @@ export function getAttachmentDisplayName(
 ): string {
   if (!attachment) return "Attachment";
   return attachment.original_name || fallbackAttachmentName(attachment.kind);
+}
+
+export function getAttachmentDisplaySrc(attachment: Attachment | null): string | null {
+  if (!attachment) return null;
+
+  return (
+    resolveAttachmentUrl(attachment.display_url ?? attachment.displayUrl) ??
+    resolveAttachmentUrl(attachment.url) ??
+    resolveAttachmentUrl(attachment.original_url ?? attachment.originalUrl) ??
+    null
+  );
+}
+
+export function getAttachmentOriginalSrc(attachment: Attachment | null): string | null {
+  if (!attachment) return null;
+
+  return (
+    resolveAttachmentUrl(attachment.original_url ?? attachment.originalUrl) ??
+    resolveAttachmentUrl(attachment.url) ??
+    resolveAttachmentUrl(attachment.display_url ?? attachment.displayUrl) ??
+    null
+  );
 }
 
 export function getAttachmentTypeLabel(

@@ -70,6 +70,34 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...
     };
   }, [src, authToken, isInView]);
 
+  const handleLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
+    if (import.meta.env.DEV) {
+      const image = event.currentTarget;
+      const renderedWidth = image.clientWidth;
+      const renderedHeight = image.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      const requiredWidth = renderedWidth * dpr;
+      const requiredHeight = renderedHeight * dpr;
+
+      if (
+        renderedWidth > 0 &&
+        renderedHeight > 0 &&
+        (image.naturalWidth < requiredWidth * 0.9 || image.naturalHeight < requiredHeight * 0.9)
+      ) {
+        console.warn('[AuthenticatedImage] Rendered image source may be too small for the current tile.', {
+          src,
+          naturalWidth: image.naturalWidth,
+          naturalHeight: image.naturalHeight,
+          renderedWidth,
+          renderedHeight,
+          devicePixelRatio: dpr,
+        });
+      }
+    }
+
+    props.onLoad?.(event);
+  };
+
   if (error) {
     return <img {...props} src="" alt="Failed to load" />;
   }
@@ -84,5 +112,5 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...
     );
   }
 
-  return <img {...props} src={objectUrl} />;
+  return <img {...props} src={objectUrl} onLoad={handleLoad} />;
 };

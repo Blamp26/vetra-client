@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildPreviewMessage,
   classifyPendingAttachment,
+  getAttachmentDisplaySrc,
   getMessageAttachment,
   getMessageAttachments,
+  getAttachmentOriginalSrc,
   getPreviewText,
   isMessageForwardable,
 } from "./attachments";
@@ -140,6 +142,35 @@ describe("attachments utils", () => {
       attachments,
     })).toBe("Photos");
     expect(isMessageForwardable({ attachments })).toBe(false);
+  });
+
+  it("preserves rich attachment URLs and dimensions when present", () => {
+    const [attachment] = getMessageAttachments({
+      attachments: [
+        {
+          id: "photo-rich-1",
+          url: "/api/v1/media/photo-rich-1",
+          display_url: "/api/v1/media/photo-rich-1?variant=display",
+          original_url: "/api/v1/media/photo-rich-1?variant=original",
+          mime_type: "image/png",
+          original_name: "photo-rich.png",
+          file_size: 4321,
+          kind: "photo",
+          width: 2048,
+          height: 1536,
+        },
+      ],
+    });
+
+    expect(attachment).toMatchObject({
+      id: "photo-rich-1",
+      width: 2048,
+      height: 1536,
+      display_url: expect.stringMatching(/photo-rich-1\?variant=display$/),
+      original_url: expect.stringMatching(/photo-rich-1\?variant=original$/),
+    });
+    expect(getAttachmentDisplaySrc(attachment)).toMatch(/photo-rich-1\?variant=display$/);
+    expect(getAttachmentOriginalSrc(attachment)).toMatch(/photo-rich-1\?variant=original$/);
   });
 
   it("buildPreviewMessage normalizes legacy attachment metadata for history/previews", () => {

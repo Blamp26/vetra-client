@@ -21,10 +21,16 @@ export type AttachmentKind = "photo" | "video" | "file";
 export interface Attachment {
   id: string;
   url: string;
+  display_url?: string | null;
+  displayUrl?: string | null;
+  original_url?: string | null;
+  originalUrl?: string | null;
   mime_type: string;
   original_name: string | null;
   file_size: number | null;
   kind: AttachmentKind;
+  width?: number | null;
+  height?: number | null;
 }
 
 // Сгруппированная реакция для одного emoji на одном сообщении

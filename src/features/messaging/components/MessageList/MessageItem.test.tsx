@@ -278,6 +278,42 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
   });
 
+  it("uses display-quality image URLs in chat and original URLs in the lightbox", () => {
+    const onLightbox = vi.fn();
+
+    renderMessageItem(
+      {
+        media_file_id: "media-photo-rich",
+        media_mime_type: "image/jpeg",
+        attachment: {
+          id: "media-photo-rich",
+          url: "/api/v1/media/media-photo-rich",
+          display_url: "/api/v1/media/media-photo-rich?variant=display",
+          original_url: "/api/v1/media/media-photo-rich?variant=original",
+          mime_type: "image/jpeg",
+          original_name: "photo-rich.jpg",
+          file_size: 2048,
+          kind: "photo",
+          width: 1600,
+          height: 900,
+        },
+      },
+      { isOwn: true, onLightbox },
+    );
+
+    expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain(
+      "/api/v1/media/media-photo-rich?variant=display",
+    );
+
+    screen.getByTestId("message-media-shell").click();
+
+    expect(onLightbox).toHaveBeenCalledWith({
+      src: expect.stringContaining("/api/v1/media/media-photo-rich?variant=original"),
+      author: "Alice",
+      time: "2026-06-30T12:00:00Z",
+    });
+  });
+
   it("renders a nine-photo grouped message with aspect-aware album geometry", () => {
     renderMessageItem(
       {

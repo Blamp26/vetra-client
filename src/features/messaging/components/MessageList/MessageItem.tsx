@@ -8,9 +8,11 @@ import { Download, ExternalLink, FileText, Film } from "lucide-react";
 import { StatusIcon } from "./StatusIcon";
 import {
   type Attachment,
+  getAttachmentDisplaySrc,
   formatAttachmentSize,
   getAttachmentDisplayName,
   getAttachmentKindLabel,
+  getAttachmentOriginalSrc,
   getAttachmentTypeLabel,
   getMessageAttachment,
   getMessageAttachments,
@@ -264,6 +266,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       borderRadius: getTileCornerRadius(tile, radius),
     } as const;
     const attachmentName = getAttachmentDisplayName(currentAttachment);
+    const displaySrc = getAttachmentDisplaySrc(currentAttachment);
+    const lightboxSrc = getAttachmentOriginalSrc(currentAttachment);
+
+    if (!displaySrc || !lightboxSrc) return null;
 
     return (
       <div
@@ -277,14 +283,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           className="relative flex h-full w-full overflow-hidden bg-[#111]"
           data-testid="message-photo-collage-tile"
           onClick={() => onLightbox({
-            src: currentAttachment.url,
+            src: lightboxSrc,
             author: authorName,
             time: msg.inserted_at,
           })}
         >
           <AuthenticatedImage
             className="block h-full w-full object-cover object-center"
-            src={currentAttachment.url}
+            src={displaySrc}
             alt={attachmentName}
             crossOrigin="anonymous"
           />
@@ -329,26 +335,32 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             }}
             data-testid="message-photo-collage"
           >
-            {photoAttachments.map((currentAttachment) => (
-              <button
-                key={currentAttachment.id}
-                type="button"
-                className="relative aspect-square overflow-hidden bg-[#111]"
-                data-testid="message-photo-collage-tile"
-                onClick={() => onLightbox({
-                  src: currentAttachment.url,
-                  author: authorName,
-                  time: msg.inserted_at,
-                })}
-              >
-                <AuthenticatedImage
-                  className="block h-full w-full object-cover object-center"
-                  src={currentAttachment.url}
-                  alt={getAttachmentDisplayName(currentAttachment)}
-                  crossOrigin="anonymous"
-                />
-              </button>
-            ))}
+            {photoAttachments.map((currentAttachment) => {
+              const displaySrc = getAttachmentDisplaySrc(currentAttachment);
+              const lightboxSrc = getAttachmentOriginalSrc(currentAttachment);
+              if (!displaySrc || !lightboxSrc) return null;
+
+              return (
+                <button
+                  key={currentAttachment.id}
+                  type="button"
+                  className="relative aspect-square overflow-hidden bg-[#111]"
+                  data-testid="message-photo-collage-tile"
+                  onClick={() => onLightbox({
+                    src: lightboxSrc,
+                    author: authorName,
+                    time: msg.inserted_at,
+                  })}
+                >
+                  <AuthenticatedImage
+                    className="block h-full w-full object-cover object-center"
+                    src={displaySrc}
+                    alt={getAttachmentDisplayName(currentAttachment)}
+                    crossOrigin="anonymous"
+                  />
+                </button>
+              );
+            })}
           </div>
         );
       }
@@ -375,13 +387,17 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     const currentAttachment = photoAttachments[0];
     if (!currentAttachment) return null;
     const attachmentName = getAttachmentDisplayName(currentAttachment);
+    const displaySrc = getAttachmentDisplaySrc(currentAttachment);
+    const lightboxSrc = getAttachmentOriginalSrc(currentAttachment);
+
+    if (!displaySrc || !lightboxSrc) return null;
 
     return (
       <div
         className="relative inline-block max-w-full overflow-hidden rounded-[16px] bg-[#111]"
         data-testid="message-media-shell"
         onClick={() => onLightbox({
-          src: currentAttachment.url,
+          src: lightboxSrc,
           author: authorName,
           time: msg.inserted_at,
         })}
@@ -393,7 +409,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       >
         <AuthenticatedImage
           className="block h-full w-full object-cover"
-          src={currentAttachment.url}
+          src={displaySrc}
           alt={attachmentName}
           crossOrigin="anonymous"
         />
