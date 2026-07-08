@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   CheckSquare,
+  ChevronDown,
   Copy,
   Download,
   Edit2,
-  Ellipsis,
   Forward,
   Reply,
   Trash2,
@@ -45,6 +45,13 @@ interface MessageContextMenuProps {
 }
 
 const EMOJIS = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🔥"];
+const EXPANDED_EMOJIS = [
+  "❤️", "👍", "👎", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱", "🤬", "😢", "🎉", "🤩", "🤮", "💩",
+  "🙏", "👌", "🕊️", "🤡", "🥱", "🥴", "😍", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "🤣", "⚡", "🍌", "🏆",
+  "💔", "🧐", "😐", "🍓", "🍾", "💋", "🖕", "😈", "😴", "😭", "🤓", "👻", "👀", "🎃", "🙈", "😇",
+  "😨", "🤝", "✍️", "🤗", "🫡", "🎅", "🎄", "⛄", "💅", "🤪", "🗿", "🦄", "😘", "💊", "🙊", "😎",
+  "👾", "🤷‍♂️", "🤷", "🤷‍♀️", "😡",
+];
 const VIEWPORT_MARGIN = 8;
 const POPUP_REACTION_OFFSET_LEFT = 82;
 const POPUP_REACTION_OFFSET_TOP = 48;
@@ -350,11 +357,60 @@ export function MessageContextMenu({
               aria-label={isPickerExpanded ? "Hide more reactions" : "Show more reactions"}
               data-testid="message-context-reaction-more"
             >
-              <Ellipsis className="h-6 w-6" />
+              <ChevronDown className={cn("h-5 w-5 transition-transform duration-150", isPickerExpanded && "rotate-180")} />
             </button>
           </div>
         </div>
       </div>
+
+      {isPickerExpanded ? (
+        <div
+          className="absolute left-[-12px] top-[calc(100%+10px)] z-[2] h-[358px] min-w-[216px] w-[384px] overflow-hidden rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+          style={{ transformOrigin: "144px 74px" }}
+          data-testid="message-context-expanded-picker"
+        >
+          <div
+            className="flex h-12 w-full items-center overflow-x-auto overflow-y-hidden px-[6px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            data-testid="message-context-expanded-picker-rail"
+          >
+            {EMOJIS.map((emoji) => (
+              <button
+                key={`rail-${emoji}`}
+                type="button"
+                onClick={() => {
+                  onToggleReaction(data.msgId, emoji);
+                  onClose();
+                }}
+                className="mx-[2px] my-[6px] inline-grid h-9 w-9 shrink-0 place-items-center rounded-[6px] text-[#aaaaaa] transition-colors duration-150 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label={`Quick react with ${emoji}`}
+                data-testid="message-context-expanded-picker-rail-button"
+              >
+                <Emoji emoji={emoji} size={18} />
+              </button>
+            ))}
+          </div>
+          <div
+            className="grid h-[calc(358px-48px)] grid-cols-[repeat(auto-fill,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            data-testid="message-context-expanded-picker-grid"
+          >
+            {EXPANDED_EMOJIS.map((emoji, index) => (
+              <button
+                key={`${emoji}-${index}`}
+                type="button"
+                onClick={() => {
+                  onToggleReaction(data.msgId, emoji);
+                  onClose();
+                }}
+                className="inline-grid h-9 w-9 place-items-center rounded-[8px] text-[20px] text-white transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label={`React with ${emoji}`}
+                data-testid="message-context-expanded-picker-button"
+              >
+                <Emoji emoji={emoji} size={20} />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div
         className="mr-[44px] flex min-h-[248px] w-[172px] overflow-y-auto rounded-[16px] bg-[rgba(33,33,33,0.867)] py-1 shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[10px]"

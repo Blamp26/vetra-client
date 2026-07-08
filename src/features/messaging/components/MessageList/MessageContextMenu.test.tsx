@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MessageContextMenu, calculateContextMenuPosition, type Rect } from "./MessageContextMenu";
@@ -193,6 +194,60 @@ describe("MessageContextMenu", () => {
     expect(screen.getByTestId("message-context-reaction-tail-small")).toBeInTheDocument();
   });
 
+  it("renders a down arrow button instead of the three-dots more glyph", () => {
+    renderMenu();
+
+    const button = screen.getByTestId("message-context-reaction-more");
+    expect(button.querySelector("svg")).toHaveClass("lucide-chevron-down");
+    expect(button.querySelector("svg")).not.toHaveClass("lucide-ellipsis");
+  });
+
+  it("toggles the expanded reactions picker from the down arrow", () => {
+    function Wrapper() {
+      const [expanded, setExpanded] = React.useState(false);
+      return (
+        <MessageContextMenu
+          data={{
+            msgId: 1,
+            content: "Hello",
+            x: 160,
+            y: 220,
+            isOwn: true,
+            hasText: true,
+            hasAttachment: false,
+            author: "Alice",
+          }}
+          isPickerExpanded={expanded}
+          setIsPickerExpanded={setExpanded}
+          onToggleReaction={vi.fn()}
+          onReply={vi.fn()}
+          onCopy={vi.fn()}
+          onDownload={vi.fn()}
+          onForward={vi.fn()}
+          onSelect={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+          canReply={true}
+          canEdit={true}
+          canForward={true}
+          canDownload={false}
+          onClose={vi.fn()}
+        />
+      );
+    }
+
+    render(<Wrapper />);
+
+    const button = screen.getByTestId("message-context-reaction-more");
+    expect(screen.queryByTestId("message-context-expanded-picker")).not.toBeInTheDocument();
+
+    fireEvent.click(button);
+    expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
+
+    fireEvent.click(button);
+    expect(screen.queryByTestId("message-context-expanded-picker")).not.toBeInTheDocument();
+  });
+
   it("uses a transparent 216px anchor with a narrower visible action surface", () => {
     renderMenu();
 
@@ -274,5 +329,16 @@ describe("MessageContextMenu", () => {
     fireEvent.scroll(window);
 
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps Escape closing the popup while the expanded picker is open", () => {
+    const onClose = vi.fn();
+    renderMenu({}, { isPickerExpanded: true, onClose });
+
+    expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
