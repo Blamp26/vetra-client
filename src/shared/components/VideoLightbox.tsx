@@ -93,31 +93,42 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
       data-testid="video-lightbox"
       onClick={onClose}
     >
-      <button
-        aria-label="Close video viewer"
-        className="absolute right-4 top-4 z-[2002] inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/52 text-white shadow-[0_12px_24px_rgba(0,0,0,0.28)] ring-1 ring-white/12 transition-colors hover:bg-black/68"
-        data-testid="video-lightbox-close"
-        onClick={onClose}
+      <div
+        className="pointer-events-none absolute left-4 top-4 z-[2002] max-w-[min(60vw,22rem)] text-left text-white/88"
+        data-testid="video-lightbox-meta"
+        style={{ textShadow: "0 1px 2px rgba(0, 0, 0, 0.42)" }}
       >
-        <X className="h-5 w-5" />
-      </button>
+        <div className="truncate text-[15px] font-medium leading-[1.2] text-white">{author}</div>
+        <div className="truncate pt-0.5 text-[12px] leading-[1.25] text-white/70">{time}</div>
+      </div>
 
-      <button
-        type="button"
-        aria-label="Download video"
-        className="absolute right-4 top-16 z-[2002] inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/52 text-white shadow-[0_12px_24px_rgba(0,0,0,0.28)] ring-1 ring-white/12 transition-colors hover:bg-black/68"
-        data-testid="video-lightbox-download"
-        onClick={handleDownload}
-      >
-        <Download className="h-5 w-5" />
-      </button>
+      <div className="absolute right-3 top-3 z-[2002] flex items-center gap-1">
+        <button
+          type="button"
+          aria-label="Download video"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-white/82 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+          data-testid="video-lightbox-download"
+          onClick={handleDownload}
+        >
+          <Download className="h-5 w-5" />
+        </button>
+
+        <button
+          aria-label="Close video viewer"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-white/82 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+          data-testid="video-lightbox-close"
+          onClick={onClose}
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
       <div
         className="relative flex items-center justify-center"
         onClick={(event) => event.stopPropagation()}
       >
         <div
-          className="relative overflow-hidden rounded-[18px] shadow-[0_18px_48px_rgba(0,0,0,0.34)] ring-1 ring-white/10"
+          className="relative overflow-hidden rounded-[14px]"
           data-testid="video-lightbox-stage"
           style={{
             width: `${lightboxFrame.width}px`,
@@ -143,16 +154,6 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
               }
             }}
           />
-
-          <div
-            className="pointer-events-none absolute inset-x-3 bottom-3 flex justify-start"
-            data-testid="video-lightbox-meta"
-          >
-            <div className="max-w-[80%] rounded-full bg-black/30 px-3 py-1.5 text-left text-[12px] leading-[1.2] text-white/88 ring-1 ring-white/10">
-              <div className="truncate font-medium text-white">{author}</div>
-              <div className="truncate text-white/70">{time}</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

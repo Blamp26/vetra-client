@@ -76,6 +76,48 @@ describe("VideoLightbox", () => {
     expect(screen.queryByTestId("video-lightbox-footer")).not.toBeInTheDocument();
   });
 
+  it("renders top-left metadata as plain overlay text without a badge panel", () => {
+    render(
+      <VideoLightbox
+        src="/api/v1/media/video-meta"
+        author="Alice"
+        time="12:00"
+        onClose={vi.fn()}
+      />,
+    );
+
+    const meta = screen.getByTestId("video-lightbox-meta");
+    expect(meta).toHaveTextContent("Alice");
+    expect(meta).toHaveTextContent("12:00");
+    expect(meta.className).not.toContain("rounded");
+    expect(meta.className).not.toContain("bg-");
+    expect(meta.className).not.toContain("ring-");
+    expect(meta.className).not.toContain("border");
+  });
+
+  it("uses frameless top-right action buttons instead of bordered modal controls", () => {
+    render(
+      <VideoLightbox
+        src="/api/v1/media/video-actions"
+        author="Alice"
+        time="12:00"
+        onClose={vi.fn()}
+      />,
+    );
+
+    const closeButton = screen.getByTestId("video-lightbox-close");
+    const downloadButton = screen.getByTestId("video-lightbox-download");
+
+    expect(closeButton.className).toContain("bg-transparent");
+    expect(downloadButton.className).toContain("bg-transparent");
+    expect(closeButton.className).not.toContain("ring-");
+    expect(downloadButton.className).not.toContain("ring-");
+    expect(closeButton.className).not.toContain("border");
+    expect(downloadButton.className).not.toContain("border");
+    expect(closeButton.className).not.toContain("shadow");
+    expect(downloadButton.className).not.toContain("shadow");
+  });
+
   it("sizes portrait video as portrait after metadata loads", async () => {
     render(
       <VideoLightbox
