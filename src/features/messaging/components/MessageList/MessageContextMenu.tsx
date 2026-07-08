@@ -410,7 +410,7 @@ export function MessageContextMenu({
       >
         {isPickerExpanded ? (
           <div
-            className="h-[358px] min-w-[216px] w-[298px] overflow-hidden rounded-[20px] bg-[rgba(33,33,33,0.867)] opacity-100 shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none supports-[backdrop-filter]:backdrop-blur-[25px]"
+            className="h-[358px] min-w-[216px] w-[298px] overflow-hidden rounded-[20px] border-0 bg-[rgba(33,33,33,0.867)] opacity-100 shadow-[0px_4px_8px_0px_rgba(16,16,16,0.61)] outline-none transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none supports-[backdrop-filter]:backdrop-blur-[25px]"
             style={{ transform: "translateY(0)" }}
             data-testid="message-context-expanded-picker"
           >
@@ -418,7 +418,7 @@ export function MessageContextMenu({
               className="px-2 pb-2 pt-2"
               data-testid="message-context-expanded-picker-search-wrap"
             >
-              <label className="flex h-9 w-full items-center gap-2 rounded-[18px] bg-black/20 px-3 text-[#aaaaaa] transition-colors duration-150 focus-within:bg-black/28">
+              <label className="flex h-9 w-full items-center gap-2 rounded-[18px] border-0 bg-black/20 px-3 text-[#aaaaaa] shadow-none outline-none ring-0 transition-colors duration-150 focus-within:bg-black/28 focus-within:shadow-none focus-within:outline-none focus-within:ring-0">
                 <Search className="h-4 w-4 shrink-0" />
                 <input
                   type="text"
@@ -431,7 +431,7 @@ export function MessageContextMenu({
                     }
                   }}
                   placeholder="Search"
-                  className="h-full w-full bg-transparent text-sm text-white outline-none placeholder:text-[#aaaaaa]"
+                  className="h-full w-full appearance-none border-0 bg-transparent px-0 text-sm text-white shadow-none outline-none ring-0 placeholder:text-[#aaaaaa] focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
                   data-testid="message-context-expanded-picker-search"
                 />
               </label>
