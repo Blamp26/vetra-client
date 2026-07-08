@@ -289,6 +289,37 @@ describe("MessageList bubble layout", () => {
     expect(screen.queryByTestId("message-context-menu")).not.toBeInTheDocument();
   });
 
+  it("resets the reactions picker to collapsed on every new context menu open", () => {
+    renderMessageList([
+      makeMessage({ id: 1, content: "First message" }),
+      makeMessage({ id: 2, content: "Second message" }),
+    ]);
+
+    const bubbles = screen.getAllByTestId("message-bubble");
+
+    fireEvent.contextMenu(bubbles[0]);
+    fireEvent.click(screen.getByTestId("message-context-reaction-more"));
+
+    expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-context-reactions-surface")).not.toBeInTheDocument();
+
+    fireEvent.click(document.body);
+    expect(screen.queryByTestId("message-context-menu")).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(bubbles[0]);
+    expect(screen.queryByTestId("message-context-expanded-picker")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-context-reactions-surface")).toBeInTheDocument();
+    expect(screen.getByTestId("message-context-reaction-more")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("message-context-reaction-more"));
+    expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
+
+    fireEvent.contextMenu(bubbles[1]);
+    expect(screen.queryByTestId("message-context-expanded-picker")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-context-reactions-surface")).toBeInTheDocument();
+    expect(screen.getByTestId("message-context-reaction-more")).toBeInTheDocument();
+  });
+
   it("keeps the popup positioned inside the viewport", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({
       x: 0,

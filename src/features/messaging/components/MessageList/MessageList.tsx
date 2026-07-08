@@ -238,6 +238,7 @@ export function MessageList({
       e.preventDefault();
       const bubble = e.currentTarget;
       const author = msg.sender_display_name || msg.sender_username || `User #${msg.sender_id}`;
+      setIsPickerExpanded(false);
       setContextMenu({
         msgId: msg.id,
         content: msg.content,
