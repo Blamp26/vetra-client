@@ -148,6 +148,12 @@ vi.mock("../ForwardModal", () => ({
   ForwardModal: () => null,
 }));
 
+vi.mock("../../utils/attachmentDownloads", () => ({
+  downloadAttachmentWithAuth: vi.fn(),
+}));
+
+import * as attachmentDownloads from "../../utils/attachmentDownloads";
+
 function makeMessage(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
@@ -168,7 +174,10 @@ function makeMessage(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderMessageList(messages = [makeMessage()]) {
+function renderMessageList(
+  messages = [makeMessage()],
+  propOverrides: Partial<ComponentProps<typeof MessageList>> = {},
+) {
   return render(
     <MessageList
       messages={messages}
@@ -177,6 +186,8 @@ function renderMessageList(messages = [makeMessage()]) {
       hasMore={false}
       onLoadMore={vi.fn()}
       chatContext={{ type: "direct", partnerId: 2 }}
+      onReply={vi.fn()}
+      {...propOverrides}
     />,
   );
 }
@@ -184,6 +195,12 @@ function renderMessageList(messages = [makeMessage()]) {
 describe("MessageList bubble layout", () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn(),
+      },
+    });
     useAppStoreMock.mockReset();
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
       selector({
@@ -236,8 +253,105 @@ describe("MessageList bubble layout", () => {
 
     fireEvent.contextMenu(screen.getByTestId("message-bubble"));
 
-    expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(screen.getByTestId("message-context-menu")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Reply" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Copy Text" })).toBeInTheDocument();
+  });
+
+  it("prevents the native context menu on right-click", () => {
+    renderMessageList([makeMessage({ content: "Context menu message" })]);
+
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 120,
+      clientY: 140,
+    });
+
+    screen.getByTestId("message-bubble").dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("closes the popup on Escape and outside click", () => {
+    renderMessageList([makeMessage({ content: "Context menu message" })]);
+
+    fireEvent.contextMenu(screen.getByTestId("message-bubble"));
+    expect(screen.getByTestId("message-context-menu")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("message-context-menu")).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByTestId("message-bubble"));
+    expect(screen.getByTestId("message-context-menu")).toBeInTheDocument();
+
+    fireEvent.click(document.body);
+    expect(screen.queryByTestId("message-context-menu")).not.toBeInTheDocument();
+  });
+
+  it("keeps the popup positioned inside the viewport", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      bottom: 248,
+      right: 216,
+      width: 216,
+      height: 248,
+      toJSON: () => ({}),
+    }));
+    renderMessageList([makeMessage({ content: "Context menu message" })]);
+
+    fireEvent.contextMenu(screen.getByTestId("message-bubble"), {
+      clientX: 990,
+      clientY: 790,
+    });
+
+    const popup = screen.getByTestId("message-context-menu");
+    expect(parseFloat(popup.style.left)).toBeGreaterThanOrEqual(90);
+    expect(parseFloat(popup.style.top)).toBeGreaterThanOrEqual(56);
+  });
+
+  it("calls the existing reply handler from the popup", () => {
+    const onReply = vi.fn();
+    renderMessageList([makeMessage({ content: "Reply target" })], { onReply });
+
+    fireEvent.contextMenu(screen.getByTestId("message-bubble"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reply" }));
+
+    expect(onReply).toHaveBeenCalledWith({
+      id: 1,
+      content: "Reply target",
+      author: "Alice",
+    });
+  });
+
+  it("shows download for attachments and calls the existing authenticated download path", () => {
+    renderMessageList([
+      makeMessage({
+        id: 21,
+        content: null,
+        attachment: {
+          id: "file-21",
+          url: "/api/v1/media/file-21",
+          mime_type: "application/pdf",
+          original_name: "report.pdf",
+          file_size: 2048,
+          kind: "file",
+        },
+        media_file_id: "file-21",
+        media_mime_type: "application/pdf",
+      }),
+    ]);
+
+    fireEvent.contextMenu(screen.getByTestId("message-bubble"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Download" }));
+
+    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith({
+      attachment: expect.objectContaining({ id: "file-21" }),
+      authToken: "secret-token",
+    });
   });
 
   it("opens VideoLightbox when clicking a grouped video tile", () => {

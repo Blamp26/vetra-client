@@ -14,6 +14,7 @@ import {
   getPreviewText,
   isMessageForwardable,
 } from "../../utils/attachments";
+import { downloadAttachmentWithAuth } from "../../utils/attachmentDownloads";
 
 import { MessageItem } from "./MessageItem";
 import { MessageContextMenu } from "./MessageContextMenu";
@@ -143,6 +144,7 @@ export function MessageList({
     startEditing,
     conversationPreviews,
     roomPreviews,
+    authToken,
   } = useAppStore((s: RootState) => ({
     selectionMode: s.selectionMode,
     selectedMessageIds: s.selectedMessageIds,
@@ -159,6 +161,7 @@ export function MessageList({
     startEditing: s.startEditing,
     conversationPreviews: s.conversationPreviews,
     roomPreviews: s.roomPreviews,
+    authToken: s.authToken,
   }), true);
 
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
@@ -327,6 +330,23 @@ export function MessageList({
     setForwardingMessages([contextMenu.msgId]);
     setContextMenu(null);
   }, [contextMenu, messagesById, setForwardingMessages]);
+
+  const handleDownload = useCallback(async () => {
+    if (!contextMenu) return;
+    const msg = messagesById.get(contextMenu.msgId);
+    if (!msg) return;
+
+    const attachment = getMessageAttachment(msg);
+    if (!attachment) return;
+
+    try {
+      await downloadAttachmentWithAuth({ attachment, authToken });
+    } catch (err) {
+      console.error("Download failed:", err);
+    } finally {
+      setContextMenu(null);
+    }
+  }, [authToken, contextMenu, messagesById]);
 
   const handleLightboxDelete = useCallback(() => {
     if (!lightboxData) return;
@@ -571,13 +591,19 @@ export function MessageList({
           onToggleReaction={toggleReaction}
           onReply={handleReplyClick}
           onCopy={handleCopy}
+          onDownload={handleDownload}
           onForward={handleForward}
           onSelect={handleSelect}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          canReply={Boolean(onReply)}
           canEdit={(() => {
             const contextMessage = messagesById.get(contextMenu.msgId);
             return !!contextMessage && isMessageForwardable(contextMessage);
+          })()}
+          canDownload={(() => {
+            const contextMessage = messagesById.get(contextMenu.msgId);
+            return !!contextMessage && getMessageAttachment(contextMessage) != null;
           })()}
           canForward={!contextMenu.hasAttachment}
           onClose={() => setContextMenu(null)}

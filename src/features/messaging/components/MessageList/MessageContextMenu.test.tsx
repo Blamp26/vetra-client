@@ -1,17 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("emoji-picker-react", () => ({
-  __esModule: true,
-  default: () => <div data-testid="emoji-picker" />,
-  Theme: { AUTO: "auto" },
-  EmojiStyle: { APPLE: "apple" },
-}));
-
 import { MessageContextMenu, calculateContextMenuPosition, type Rect } from "./MessageContextMenu";
 
-function menuRect(position: { left: number; top: number }, width = 256, height = 240): Rect {
+function menuRect(position: { left: number; top: number }, width = 216, height = 248): Rect {
   return {
     left: position.left,
     top: position.top,
@@ -44,10 +37,10 @@ describe("MessageContextMenu", () => {
       y: 0,
       top: 0,
       left: 0,
-      bottom: 240,
-      right: 256,
-      width: 256,
-      height: 240,
+      bottom: 248,
+      right: 216,
+      width: 216,
+      height: 248,
       toJSON: () => ({}),
     }));
   });
@@ -73,10 +66,11 @@ describe("MessageContextMenu", () => {
         data={{
           msgId: 1,
           content: "Hello",
-          x: 100,
-          y: 200,
+          x: 160,
+          y: 220,
           isOwn: true,
           hasText: true,
+          hasAttachment: false,
           author: "Alice",
           ...dataOverrides,
         }}
@@ -85,12 +79,15 @@ describe("MessageContextMenu", () => {
         onToggleReaction={vi.fn()}
         onReply={vi.fn()}
         onCopy={vi.fn()}
+        onDownload={vi.fn()}
         onForward={vi.fn()}
         onSelect={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
+        canReply={true}
         canEdit={true}
         canForward={true}
+        canDownload={false}
         onClose={vi.fn()}
         {...propOverrides}
       />,
@@ -106,7 +103,7 @@ describe("MessageContextMenu", () => {
     });
   });
 
-  it("keeps the outgoing message menu off the message text while staying near the bubble", () => {
+  it("keeps the outgoing message popup off the message text while staying near the bubble", () => {
     const contentRect = {
       left: 720,
       top: 140,
@@ -118,19 +115,19 @@ describe("MessageContextMenu", () => {
     const position = calculateContextMenuPosition({
       x: 900,
       y: 160,
-      menuWidth: 256,
-      menuHeight: 240,
+      menuWidth: 216,
+      menuHeight: 248,
       viewportWidth: 1000,
       viewportHeight: 800,
       contentRect,
       isOwn: true,
     });
 
-    expect(position.left).toBe(464);
+    expect(position.left).toBe(504);
     expect(intersects(menuRect(position), contentRect)).toBe(false);
   });
 
-  it("keeps the incoming message menu off the message text while staying near the bubble", () => {
+  it("keeps the incoming message popup off the message text while staying near the bubble", () => {
     const contentRect = {
       left: 100,
       top: 180,
@@ -142,8 +139,8 @@ describe("MessageContextMenu", () => {
     const position = calculateContextMenuPosition({
       x: 120,
       y: 200,
-      menuWidth: 256,
-      menuHeight: 240,
+      menuWidth: 216,
+      menuHeight: 248,
       viewportWidth: 1000,
       viewportHeight: 800,
       contentRect,
@@ -154,12 +151,12 @@ describe("MessageContextMenu", () => {
     expect(intersects(menuRect(position), contentRect)).toBe(false);
   });
 
-  it("keeps the reaction row and full menu inside the viewport near the bottom edge", () => {
+  it("keeps the full popup inside the viewport near the bottom edge", () => {
     const position = calculateContextMenuPosition({
       x: 980,
       y: 780,
-      menuWidth: 256,
-      menuHeight: 240,
+      menuWidth: 216,
+      menuHeight: 248,
       viewportWidth: 1000,
       viewportHeight: 800,
       contentRect: {
@@ -173,63 +170,81 @@ describe("MessageContextMenu", () => {
       isOwn: true,
     });
 
-    expect(position.left).toBeGreaterThanOrEqual(8);
-    expect(position.top).toBeGreaterThanOrEqual(8);
-    expect(position.left + 256).toBeLessThanOrEqual(992);
-    expect(position.top + 240).toBeLessThanOrEqual(792);
+    expect(position.left).toBeGreaterThanOrEqual(90);
+    expect(position.top).toBeGreaterThanOrEqual(56);
+    expect(position.left + 216).toBeLessThanOrEqual(992);
+    expect(position.top + 248).toBeLessThanOrEqual(792);
   });
 
-  it("still clamps inside the viewport when the preferred side would overflow", () => {
-    const position = calculateContextMenuPosition({
-      x: 990,
-      y: 790,
-      menuWidth: 256,
-      menuHeight: 240,
-      viewportWidth: 1000,
-      viewportHeight: 800,
-      contentRect: {
-        left: 820,
-        top: 730,
-        right: 980,
-        bottom: 790,
-        width: 160,
-        height: 60,
-      },
-      isOwn: false,
-    });
+  it("renders the floating reaction strip with the expected emojis", () => {
+    renderMenu();
 
-    expect(position.left).toBeGreaterThanOrEqual(8);
-    expect(position.top).toBeGreaterThanOrEqual(8);
-    expect(position.left + 256).toBeLessThanOrEqual(992);
-    expect(position.top + 240).toBeLessThanOrEqual(792);
+    expect(screen.getByTestId("message-context-reactions")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-context-reaction-button")).toHaveLength(7);
+    expect(screen.getByRole("button", { name: "React with 👍" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "React with 🔥" })).toBeInTheDocument();
+  });
+
+  it("calls reply when available", () => {
+    const onReply = vi.fn();
+    const onClose = vi.fn();
+    renderMenu({}, { onReply, onClose });
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Reply" }));
+
+    expect(onReply).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides Copy Text for media-only messages", () => {
+    renderMenu({ content: null, hasText: false });
+
+    expect(screen.queryByRole("menuitem", { name: "Copy Text" })).not.toBeInTheDocument();
+  });
+
+  it("renders download for attachment messages and calls the existing download handler", () => {
+    const onDownload = vi.fn();
+    const onClose = vi.fn();
+    renderMenu({ hasAttachment: true }, { canDownload: true, onDownload, onClose });
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Download" }));
+
+    expect(onDownload).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("disables forwarding for attachment messages", () => {
-    renderMenu({ content: null, hasText: false }, { canEdit: false, canForward: false });
+    renderMenu({ hasAttachment: true, content: null, hasText: false }, { canEdit: false, canForward: false });
 
-    expect(
-      screen.getByRole("button", {
-        name: "Forward unavailable for attachments",
-      }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("button", {
-        name: "Forward unavailable for attachments",
-      }),
-    ).toHaveAttribute(
-      "title",
-      "Messages with attachments cannot be forwarded yet.",
-    );
+    const button = screen.getByRole("menuitem", {
+      name: "Forward unavailable for attachments",
+    });
+
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Messages with attachments cannot be forwarded yet.");
   });
 
-  it("renders the existing core actions", () => {
-    renderMenu();
+  it("renders delete as the destructive bottom action and only fires when available", () => {
+    const onDelete = vi.fn();
+    const onClose = vi.fn();
+    renderMenu({}, { onDelete, onClose });
 
-    expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Forward" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Select" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    const button = screen.getByRole("menuitem", { name: "Delete" });
+    expect(button).toHaveClass("text-[#e53935]");
+
+    fireEvent.click(button);
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes on Escape and scroll", () => {
+    const onClose = vi.fn();
+    renderMenu({}, { onClose });
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.scroll(window);
+
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

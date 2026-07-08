@@ -1,17 +1,26 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Reply, Copy, Forward, CheckSquare, Edit2, Trash2 } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  CheckSquare,
+  Copy,
+  Download,
+  Edit2,
+  Ellipsis,
+  Forward,
+  Reply,
+  Trash2,
+} from "lucide-react";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
 import { cn } from "@/shared/utils/cn";
-import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react';
 
 interface ContextMenuData {
-  msgId:    number;
-  content:  string | null;
-  x:        number;
-  y:        number;
-  isOwn:    boolean;
-  hasText:  boolean;
-  author:   string;
+  msgId: number;
+  content: string | null;
+  x: number;
+  y: number;
+  isOwn: boolean;
+  hasText: boolean;
+  hasAttachment: boolean;
+  author: string;
   bubbleRect?: Rect;
   contentRect?: Rect;
 }
@@ -23,17 +32,24 @@ interface MessageContextMenuProps {
   onToggleReaction: (msgId: number, emoji: string) => void;
   onReply: () => void;
   onCopy: () => void;
+  onDownload: () => void;
   onForward: () => void;
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  canReply: boolean;
   canEdit: boolean;
   canForward: boolean;
+  canDownload: boolean;
   onClose: () => void;
 }
 
-const EMOJIS = ["👍","❤️","😂","🎉","😮","😢","🔥"];
+const EMOJIS = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🔥"];
 const VIEWPORT_MARGIN = 8;
+const POPUP_WIDTH = 216;
+const POPUP_REACTION_WIDTH = 298;
+const POPUP_REACTION_OFFSET_LEFT = 82;
+const POPUP_REACTION_OFFSET_TOP = 48;
 
 export interface Rect {
   left: number;
@@ -75,6 +91,14 @@ export function calculateContextMenuPosition({
   contentRect?: Rect;
   isOwn: boolean;
 }) {
+  const minLeft = VIEWPORT_MARGIN + POPUP_REACTION_OFFSET_LEFT;
+  const maxLeft = Math.max(
+    minLeft,
+    viewportWidth - menuWidth - VIEWPORT_MARGIN,
+  );
+  const minTop = VIEWPORT_MARGIN + POPUP_REACTION_OFFSET_TOP;
+  const maxTop = Math.max(VIEWPORT_MARGIN, viewportHeight - menuHeight - VIEWPORT_MARGIN);
+
   if (!bubbleRect && !contentRect) {
     let left = x;
     let top = y;
@@ -87,10 +111,10 @@ export function calculateContextMenuPosition({
       top = y - menuHeight;
     }
 
-    left = Math.min(Math.max(VIEWPORT_MARGIN, left), Math.max(VIEWPORT_MARGIN, viewportWidth - menuWidth - VIEWPORT_MARGIN));
-    top = Math.min(Math.max(VIEWPORT_MARGIN, top), Math.max(VIEWPORT_MARGIN, viewportHeight - menuHeight - VIEWPORT_MARGIN));
-
-    return { left, top };
+    return {
+      left: Math.min(Math.max(minLeft, left), maxLeft),
+      top: Math.min(Math.max(minTop, top), maxTop),
+    };
   }
 
   const anchorRect = contentRect ?? bubbleRect ?? {
@@ -102,10 +126,6 @@ export function calculateContextMenuPosition({
     height: 0,
   };
   const contentAreaRect = contentRect ?? anchorRect;
-  const minLeft = VIEWPORT_MARGIN;
-  const maxLeft = Math.max(VIEWPORT_MARGIN, viewportWidth - menuWidth - VIEWPORT_MARGIN);
-  const minTop = VIEWPORT_MARGIN;
-  const maxTop = Math.max(VIEWPORT_MARGIN, viewportHeight - menuHeight - VIEWPORT_MARGIN);
   const preferredTop = anchorRect.top + menuHeight <= viewportHeight - VIEWPORT_MARGIN
     ? anchorRect.top
     : anchorRect.bottom - menuHeight;
@@ -151,6 +171,18 @@ export function calculateContextMenuPosition({
   return { left: candidates[0].left, top: candidates[0].top };
 }
 
+type ActionRow = {
+  key: string;
+  label: string;
+  icon: typeof Reply;
+  onSelect?: () => void;
+  disabled?: boolean;
+  hidden?: boolean;
+  destructive?: boolean;
+  title?: string;
+  ariaLabel?: string;
+};
+
 export function MessageContextMenu({
   data,
   isPickerExpanded,
@@ -158,16 +190,18 @@ export function MessageContextMenu({
   onToggleReaction,
   onReply,
   onCopy,
+  onDownload,
   onForward,
   onSelect,
   onEdit,
   onDelete,
+  canReply,
   canEdit,
   canForward,
-  onClose
+  canDownload,
+  onClose,
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: data.x, top: data.y });
 
   useLayoutEffect(() => {
@@ -188,148 +222,172 @@ export function MessageContextMenu({
         isOwn: data.isOwn,
       }),
     );
-  }, [data.x, data.y, data.bubbleRect, data.contentRect, isPickerExpanded, data.isOwn, data.hasText, canEdit, canForward]);
+  }, [data, isPickerExpanded, canReply, canEdit, canForward, canDownload]);
 
   useEffect(() => {
-    if (!isPickerExpanded || !pickerRef.current) return;
-
-    const addAttributes = () => {
-      const input = pickerRef.current?.querySelector('input[aria-label*="search"], input[type="text"]');
-      if (input) {
-        if (!input.getAttribute('id')) input.setAttribute('id', 'emoji-search-input-ctx');
-        if (!input.getAttribute('name')) input.setAttribute('name', 'emoji-search-ctx');
-      }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
     };
+    const handleScroll = () => onClose();
 
-    addAttributes();
-    const observer = new MutationObserver(addAttributes);
-    observer.observe(pickerRef.current, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [isPickerExpanded]);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", handleScroll, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [onClose]);
+
+  const actions = useMemo<ActionRow[]>(() => {
+    const rows: ActionRow[] = [
+      {
+        key: "reply",
+        label: "Reply",
+        icon: Reply,
+        onSelect: canReply ? onReply : undefined,
+        hidden: !canReply,
+      },
+      {
+        key: "copy",
+        label: "Copy Text",
+        icon: Copy,
+        onSelect: data.hasText ? onCopy : undefined,
+        hidden: !data.hasText,
+      },
+      {
+        key: "download",
+        label: "Download",
+        icon: Download,
+        onSelect: canDownload ? onDownload : undefined,
+        hidden: !data.hasAttachment,
+      },
+      {
+        key: "forward",
+        label: canForward ? "Forward" : "Forward unavailable",
+        icon: Forward,
+        onSelect: canForward ? onForward : undefined,
+        disabled: !canForward,
+        title: !canForward ? "Messages with attachments cannot be forwarded yet." : undefined,
+        ariaLabel: canForward ? "Forward" : "Forward unavailable for attachments",
+      },
+      {
+        key: "select",
+        label: "Select",
+        icon: CheckSquare,
+        onSelect,
+      },
+      {
+        key: "edit",
+        label: "Edit",
+        icon: Edit2,
+        onSelect: canEdit ? onEdit : undefined,
+        hidden: !canEdit,
+      },
+      {
+        key: "delete",
+        label: "Delete",
+        icon: Trash2,
+        onSelect: data.isOwn ? onDelete : undefined,
+        hidden: !data.isOwn,
+        destructive: true,
+      },
+    ];
+
+    return rows.filter((row) => !row.hidden);
+  }, [canDownload, canEdit, canForward, canReply, data.hasAttachment, data.hasText, data.isOwn, onCopy, onDelete, onDownload, onEdit, onForward, onReply, onSelect]);
 
   return (
     <div
       ref={menuRef}
       data-testid="message-context-menu"
-      className="fixed z-floating flex w-64 flex-col overflow-hidden rounded-[14px] border border-border bg-popover shadow-[var(--overlay-shadow)]"
+      role="menu"
+      aria-label={`Message actions for ${data.author}`}
+      className="fixed z-floating flex w-[216px] flex-col overflow-visible"
       style={{ top: position.top, left: position.left }}
-      onClick={(e) => e.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
     >
-      {/* Reactions bar */}
-      <div className="flex items-center border-b border-border bg-sidebar/40 px-2 py-2">
-        <div className="flex flex-1 items-center gap-1">
-          {EMOJIS.map((e) => (
-            <button
-              key={e}
-              onClick={() => { onToggleReaction(data.msgId, e); onClose(); }}
-              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-accent"
-              aria-label={`React with ${e}`}
-            >
-              <Emoji emoji={e} size={18} />
-            </button>
-          ))}
-        </div>
-        <div className="mx-1 h-4 border-l border-border" />
+      <div
+        className="absolute left-[-82px] top-0 z-[1] flex h-10 w-[298px] items-center gap-1 rounded-[16px] border border-border/80 bg-popover px-2 shadow-[var(--overlay-shadow)]"
+        style={{ transform: "translateY(-48px)" }}
+        data-testid="message-context-reactions"
+      >
+        {EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            onClick={() => {
+              onToggleReaction(data.msgId, emoji);
+              onClose();
+            }}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            aria-label={`React with ${emoji}`}
+            data-testid="message-context-reaction-button"
+          >
+            <Emoji emoji={emoji} size={18} />
+          </button>
+        ))}
         <button
+          type="button"
           onClick={() => setIsPickerExpanded(!isPickerExpanded)}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label={isPickerExpanded ? "Hide emoji picker" : "Show emoji picker"}
+          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          aria-label={isPickerExpanded ? "Hide more reactions" : "Show more reactions"}
+          data-testid="message-context-reaction-more"
         >
-          {isPickerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          <Ellipsis className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="relative min-h-[200px] bg-popover">
-        {!isPickerExpanded && (
-          <div className="flex flex-col gap-0.5 p-1.5">
-            <button
-              onClick={() => { onReply(); onClose(); }}
-              className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm hover:bg-accent"
-            >
-              <Reply className="h-4 w-4 mr-3 text-muted-foreground" />
-              Reply
-            </button>
+      <div className="rounded-[16px] border border-border/85 bg-popover px-0 py-1 shadow-[var(--overlay-shadow)]">
+        <div className="flex flex-col" data-testid="message-context-actions">
+          {actions.map((action, index) => {
+            const Icon = action.icon;
+            const isDestructive = Boolean(action.destructive);
+            const isDisabled = Boolean(action.disabled);
+            const showSeparator = isDestructive && index > 0;
 
-            {data.hasText && (
-              <button
-                onClick={() => { onCopy(); onClose(); }}
-                className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm hover:bg-accent"
-              >
-                <Copy className="h-4 w-4 mr-3 text-muted-foreground" />
-                Copy
-              </button>
-            )}
-
-            <button
-              onClick={() => {
-                if (!canForward) return;
-                onForward();
-                onClose();
-              }}
-              disabled={!canForward}
-              title={!canForward ? "Messages with attachments cannot be forwarded yet." : undefined}
-              aria-label={canForward ? "Forward" : "Forward unavailable for attachments"}
-              className={cn(
-                "flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm",
-                canForward ? "hover:bg-accent" : "cursor-not-allowed text-muted-foreground opacity-60",
-              )}
-            >
-              <Forward className="h-4 w-4 mr-3 text-muted-foreground" />
-              {canForward ? "Forward" : "Forward unavailable for attachments"}
-            </button>
-
-            <button
-              onClick={() => { onSelect(); onClose(); }}
-              className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm hover:bg-accent"
-            >
-              <CheckSquare className="h-4 w-4 mr-3 text-muted-foreground" />
-              Select
-            </button>
-
-            {data.isOwn && (
-              <>
-                {canEdit && (
-                  <button
-                    onClick={() => { onEdit(); onClose(); }}
-                    className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm hover:bg-accent"
-                  >
-                    <Edit2 className="h-4 w-4 mr-3 text-muted-foreground" />
-                    Edit
-                  </button>
-                )}
-
-                <div className="border-t border-border my-1" />
-
+            return (
+              <div key={action.key}>
+                {showSeparator && <div className="mx-4 my-1 h-px bg-border/80" />}
                 <button
-                  onClick={() => { onDelete(); onClose(); }}
-                  className="flex w-full items-center rounded-[10px] px-3 py-2.5 text-left text-sm text-destructive hover:bg-destructive/10"
+                  type="button"
+                  role="menuitem"
+                  disabled={isDisabled}
+                  title={action.title}
+                  aria-label={action.ariaLabel ?? action.label}
+                  onClick={() => {
+                    if (isDisabled || !action.onSelect) return;
+                    action.onSelect();
+                    onClose();
+                  }}
+                  className={cn(
+                    "mx-1 my-[2px] flex h-8 w-[calc(100%-8px)] items-center rounded-[6px] px-3 py-1 text-left text-[14px] font-medium leading-6 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                    isDestructive
+                      ? "text-[#e53935] hover:bg-[#e53935]/10"
+                      : isDisabled
+                        ? "cursor-not-allowed text-muted-foreground/70"
+                        : "text-foreground hover:bg-accent/75",
+                  )}
+                  data-testid={`message-context-action-${action.key}`}
                 >
-                  <Trash2 className="h-4 w-4 mr-3" />
-                  Delete
+                  <Icon
+                    className={cn(
+                      "mr-5 ml-2 h-5 w-5 shrink-0",
+                      isDestructive
+                        ? "text-[#e53935]"
+                        : isDisabled
+                          ? "text-muted-foreground/70"
+                          : "text-muted-foreground",
+                    )}
+                  />
+                  <span className="truncate">{action.label}</span>
                 </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {isPickerExpanded && (
-          <div ref={pickerRef} className="h-[300px] border-t border-border bg-popover">
-            <EmojiPicker
-              width="100%"
-              height="100%"
-              onEmojiClick={(emojiData) => {
-                onToggleReaction(data.msgId, emojiData.emoji);
-                onClose();
-              }}
-              theme={Theme.AUTO}
-              emojiStyle={EmojiStyle.APPLE}
-              lazyLoadEmojis={true}
-              searchPlaceholder="Search..."
-              previewConfig={{ showPreview: false }}
-              skinTonesDisabled={true}
-            />
-          </div>
-        )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
