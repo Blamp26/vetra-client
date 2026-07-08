@@ -410,7 +410,7 @@ export function MessageContextMenu({
       >
         {isPickerExpanded ? (
           <div
-            className="h-[358px] min-w-[216px] w-[298px] overflow-hidden rounded-[20px] border-0 bg-[rgba(33,33,33,0.867)] opacity-100 shadow-[0px_12px_24px_-14px_rgba(0,0,0,0.72)] outline-none transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none supports-[backdrop-filter]:backdrop-blur-[25px]"
+            className="h-[358px] min-w-[216px] w-[298px] overflow-visible rounded-[20px] border-0 bg-[rgba(33,33,33,0.867)] opacity-100 shadow-[0px_12px_24px_-14px_rgba(0,0,0,0.72)] outline-none transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none supports-[backdrop-filter]:backdrop-blur-[25px]"
             style={{ transform: "translateY(0)" }}
             data-testid="message-context-expanded-picker"
           >
