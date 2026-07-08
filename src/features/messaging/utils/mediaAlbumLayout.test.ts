@@ -4,7 +4,6 @@ import { computeMediaAlbumLayout, type MediaAlbumInput, type MediaAlbumLayout } 
 
 const DEFAULT_OPTIONS = {
   maxWidth: 480,
-  maxHeight: 384,
   spacing: 2,
   minTileSize: 88,
   fallbackRatio: 1,
@@ -75,7 +74,7 @@ describe("mediaAlbumLayout", () => {
     expectFinitePositiveLayout(layout);
     expect(layout.width).toBeLessThan(layout.height);
     expect(layout.width).toBeLessThan(DEFAULT_OPTIONS.maxWidth);
-    expect(layout.height).toBe(DEFAULT_OPTIONS.maxHeight);
+    expect(layout.height).toBe(DEFAULT_OPTIONS.maxWidth);
   });
 
   it("gives one landscape item a wider and shorter layout", () => {
@@ -84,7 +83,7 @@ describe("mediaAlbumLayout", () => {
     expectFinitePositiveLayout(layout);
     expect(layout.width).toBe(DEFAULT_OPTIONS.maxWidth);
     expect(layout.height).toBeLessThan(layout.width);
-    expect(layout.height).toBeLessThan(DEFAULT_OPTIONS.maxHeight);
+    expect(layout.height).toBeLessThan(DEFAULT_OPTIONS.maxWidth);
   });
 
   it("uses a safe square-ish fallback when dimensions are missing", () => {
@@ -92,7 +91,28 @@ describe("mediaAlbumLayout", () => {
 
     expectFinitePositiveLayout(layout);
     expect(layout.width).toBe(layout.height);
-    expect(layout.width).toBeLessThanOrEqual(DEFAULT_OPTIONS.maxHeight);
+    expect(layout.width).toBeLessThanOrEqual(DEFAULT_OPTIONS.maxWidth);
+  });
+
+  it("defaults maxHeight to maxWidth when it is omitted", () => {
+    const layout = computeMediaAlbumLayout([makeItem("portrait", 900, 1600)], {
+      ...DEFAULT_OPTIONS,
+      maxWidth: 480,
+    });
+
+    expect(layout.width).toBeCloseTo(270, 4);
+    expect(layout.height).toBe(480);
+  });
+
+  it("respects an explicit maxHeight override when one is provided", () => {
+    const layout = computeMediaAlbumLayout([makeItem("portrait", 900, 1600)], {
+      ...DEFAULT_OPTIONS,
+      maxWidth: 480,
+      maxHeight: 384,
+    });
+
+    expect(layout.width).toBeCloseTo(216, 4);
+    expect(layout.height).toBe(384);
   });
 
   it("does not force two mixed-ratio items to a 50/50 split when ratios differ", () => {
@@ -156,6 +176,7 @@ describe("mediaAlbumLayout", () => {
     expect(layout.tiles[0].height).toBeGreaterThan(layout.tiles[1].height);
     expect(layout.tiles[0].outerCorners.topLeft).toBe(true);
     expect(layout.tiles[0].outerCorners.bottomLeft).toBe(true);
+    expect(Math.min(...layout.tiles.map((tile) => tile.height))).toBeGreaterThan(95);
   });
 
   it.each([5, 6, 7, 8, 9])("keeps %s mixed items inside bounds without overlap", (count) => {
@@ -173,6 +194,7 @@ describe("mediaAlbumLayout", () => {
     expectFinitePositiveLayout(layout);
     expectTilesInsideBounds(layout);
     expectNoOverlap(layout);
+    expect(Math.min(...layout.tiles.map((tile) => tile.height))).toBeGreaterThan(70);
   });
 
   it("clamps extreme panoramic ratios so tiles do not collapse into slivers", () => {

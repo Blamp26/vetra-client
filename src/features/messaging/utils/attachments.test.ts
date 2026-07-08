@@ -173,6 +173,54 @@ describe("attachments utils", () => {
     expect(getAttachmentOriginalSrc(attachment)).toMatch(/photo-rich-1\?variant=original$/);
   });
 
+  it("prefers rich grouped attachment objects over synthetic grouped fallbacks", () => {
+    const attachments = getMessageAttachments({
+      media_file_ids: ["photo-rich-1", "photo-rich-2"],
+      media_mime_types: ["image/png", "image/jpeg"],
+      attachments: [
+        {
+          id: "photo-rich-1",
+          url: "/api/v1/media/photo-rich-1",
+          display_url: "/api/v1/media/photo-rich-1?variant=display",
+          original_url: "/api/v1/media/photo-rich-1?variant=original",
+          mime_type: "image/png",
+          original_name: "photo-rich-1.png",
+          file_size: 1234,
+          kind: "photo",
+          width: 1600,
+          height: 900,
+        },
+        {
+          id: "photo-rich-2",
+          url: "/api/v1/media/photo-rich-2",
+          display_url: "/api/v1/media/photo-rich-2?variant=display",
+          original_url: "/api/v1/media/photo-rich-2?variant=original",
+          mime_type: "image/jpeg",
+          original_name: "photo-rich-2.jpg",
+          file_size: 2345,
+          kind: "photo",
+          width: 1080,
+          height: 1350,
+        },
+      ],
+    });
+
+    expect(attachments).toEqual([
+      expect.objectContaining({
+        id: "photo-rich-1",
+        width: 1600,
+        height: 900,
+        display_url: expect.stringMatching(/photo-rich-1\?variant=display$/),
+      }),
+      expect.objectContaining({
+        id: "photo-rich-2",
+        width: 1080,
+        height: 1350,
+        original_url: expect.stringMatching(/photo-rich-2\?variant=original$/),
+      }),
+    ]);
+  });
+
   it("buildPreviewMessage normalizes legacy attachment metadata for history/previews", () => {
     const preview = buildPreviewMessage({
       id: 42,

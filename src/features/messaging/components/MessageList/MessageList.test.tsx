@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { within } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MessageList } from "./MessageList";
 
@@ -22,11 +23,10 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
     src,
     alt,
     className,
-  }: {
+    ...props
+  }: ComponentProps<"img"> & {
     src: string;
-    alt: string;
-    className?: string;
-  }) => <img data-testid="authenticated-image" src={src} alt={alt} className={className} />,
+  }) => <img data-testid="authenticated-image" src={src} alt={alt} className={className} {...props} />,
 }));
 
 vi.mock("../ForwardModal", () => ({

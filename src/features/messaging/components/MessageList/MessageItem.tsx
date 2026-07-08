@@ -55,6 +55,24 @@ type AttachmentWithVisualMetadata = Attachment & {
   original_width?: number | null;
   original_height?: number | null;
 };
+type ResolvedPhotoAttachment = {
+  attachment: PhotoAttachment;
+  displaySrc: string | null;
+  lightboxSrc: string | null;
+  width?: number;
+  height?: number;
+  dimensionSource: "server" | "decoded" | "fallback";
+};
+
+const MESSAGE_ALBUM_MAX_WIDTH = 480;
+const MESSAGE_ALBUM_LAYOUT_OPTIONS = {
+  maxWidth: MESSAGE_ALBUM_MAX_WIDTH,
+  spacing: 2,
+  minTileSize: 88,
+  fallbackRatio: 1,
+  narrowRatio: 0.8,
+  wideRatio: 1.25,
+} as const;
 
 function isPhotoAttachment(attachment: Attachment): attachment is PhotoAttachment {
   return attachment.kind === "photo";
@@ -79,6 +97,16 @@ function getAttachmentIntrinsicSize(attachment: Attachment) {
       readPositiveNumber(source.media_height) ??
       readPositiveNumber(source.original_height),
   };
+}
+
+function getResolvedPhotoRatio(
+  width?: number,
+  height?: number,
+  fallbackRatio = MESSAGE_ALBUM_LAYOUT_OPTIONS.fallbackRatio,
+) {
+  if (!width || !height) return fallbackRatio;
+  const rawRatio = width / height;
+  return Number.isFinite(rawRatio) && rawRatio > 0 ? rawRatio : fallbackRatio;
 }
 
 function toPercent(value: number, total: number) {
@@ -137,6 +165,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const authToken = useAppStore((s) => s.authToken);
   const [isAttachmentActionPending, setIsAttachmentActionPending] = React.useState(false);
   const [attachmentActionError, setAttachmentActionError] = React.useState<string | null>(null);
+  const [decodedPhotoDimensions, setDecodedPhotoDimensions] = React.useState<
+    Record<string, { width: number; height: number }>
+  >({});
+  const warnedMissingDimensionKeysRef = React.useRef(new Set<string>());
   const attachments = getMessageAttachments(msg);
   const attachment = getMessageAttachment(msg);
   const hasMedia = attachments.length > 0;
@@ -151,6 +183,42 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     !msg.reply_to_id;
   const isTextOnly = hasText && !hasMedia;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
+  const resolvedPhotoAttachments = React.useMemo<ResolvedPhotoAttachment[]>(() => (
+    photoAttachments.map((currentAttachment) => {
+      const serverDimensions = getAttachmentIntrinsicSize(currentAttachment);
+      const decodedDimensions = decodedPhotoDimensions[currentAttachment.id];
+      const hasServerDimensions = Boolean(serverDimensions.width && serverDimensions.height);
+      const hasDecodedDimensions = Boolean(decodedDimensions?.width && decodedDimensions?.height);
+
+      return {
+        attachment: currentAttachment,
+        displaySrc: getAttachmentDisplaySrc(currentAttachment),
+        lightboxSrc: getAttachmentOriginalSrc(currentAttachment),
+        width: serverDimensions.width ?? decodedDimensions?.width,
+        height: serverDimensions.height ?? decodedDimensions?.height,
+        dimensionSource: hasServerDimensions
+          ? "server"
+          : hasDecodedDimensions
+            ? "decoded"
+            : "fallback",
+      };
+    })
+  ), [decodedPhotoDimensions, photoAttachments]);
+  const photoLayout = React.useMemo(() => computeMediaAlbumLayout(
+    resolvedPhotoAttachments.map((currentAttachment) => ({
+      id: currentAttachment.attachment.id,
+      width: currentAttachment.width,
+      height: currentAttachment.height,
+      kind: "image" as const,
+    })),
+    MESSAGE_ALBUM_LAYOUT_OPTIONS,
+  ), [resolvedPhotoAttachments]);
+  const hasPendingDecodedPhotoDimensions = resolvedPhotoAttachments.some(
+    (currentAttachment) => currentAttachment.dimensionSource === "fallback",
+  );
+  const isTemporaryPhotoLayout =
+    hasPendingDecodedPhotoDimensions ||
+    !hasCompleteAlbumLayout(photoLayout, resolvedPhotoAttachments.length);
   const showSenderName = isRoom && !isOwn && !isConsecutive;
   const metadataClassName = isOwn
     ? "text-white/60"
@@ -181,6 +249,80 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       table: attachments.map((currentAttachment) => summarizeAttachmentLike(currentAttachment)),
     });
   }, [attachments, hasMedia, isDocumentAttachment, isPhotoAlbum, isPhotoMessage, msg]);
+
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) return;
+
+    resolvedPhotoAttachments.forEach((currentAttachment) => {
+      if (currentAttachment.dimensionSource !== "fallback") return;
+
+      const warningKey = `${msg.id}:${currentAttachment.attachment.id}`;
+      if (warnedMissingDimensionKeysRef.current.has(warningKey)) return;
+      warnedMissingDimensionKeysRef.current.add(warningKey);
+
+      console.warn("[VETRA album-layout] Missing attachment dimensions at render boundary.", {
+        messageId: msg.id,
+        attachmentId: currentAttachment.attachment.id,
+        chosenImageSource: currentAttachment.displaySrc,
+        width: currentAttachment.width ?? null,
+        height: currentAttachment.height ?? null,
+        dimensionSource: currentAttachment.dimensionSource,
+      });
+    });
+  }, [msg.id, resolvedPhotoAttachments]);
+
+  React.useEffect(() => {
+    if (!import.meta.env.DEV || !isPhotoMessage) return;
+
+    logAttachmentDebug("message.album-layout", {
+      messageId: msg.id,
+      attachmentCount: resolvedPhotoAttachments.length,
+      isAlbum: resolvedPhotoAttachments.length > 1,
+      pendingDimensionCount: resolvedPhotoAttachments.filter((attachment) => attachment.dimensionSource === "fallback").length,
+      layoutWidth: photoLayout.width,
+      layoutHeight: photoLayout.height,
+      layoutState: isTemporaryPhotoLayout ? "pending" : "resolved",
+    }, {
+      table: resolvedPhotoAttachments.map((currentAttachment, index) => {
+        const tile = photoLayout.tiles[index];
+        return {
+          attachmentId: currentAttachment.attachment.id,
+          chosenImageSource: currentAttachment.displaySrc,
+          width: currentAttachment.width ?? null,
+          height: currentAttachment.height ?? null,
+          dimensionSource: currentAttachment.dimensionSource,
+          computedRatio: getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height),
+          tileX: tile?.x ?? null,
+          tileY: tile?.y ?? null,
+          tileWidth: tile?.width ?? null,
+          tileHeight: tile?.height ?? null,
+        };
+      }),
+    });
+  }, [isPhotoMessage, isTemporaryPhotoLayout, msg.id, photoLayout, resolvedPhotoAttachments]);
+
+  const handleDecodedPhotoDimensions = React.useCallback(
+    (attachmentId: string, naturalWidth: number, naturalHeight: number) => {
+      if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight)) return;
+      if (naturalWidth <= 0 || naturalHeight <= 0) return;
+
+      setDecodedPhotoDimensions((current) => {
+        const existing = current[attachmentId];
+        if (existing?.width === naturalWidth && existing.height === naturalHeight) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [attachmentId]: {
+            width: naturalWidth,
+            height: naturalHeight,
+          },
+        };
+      });
+    },
+    [],
+  );
 
   const handleAttachmentAction = async (action: "download" | "open") => {
     if (!attachment || isAttachmentActionPending) return;
@@ -253,7 +395,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   );
 
   const renderPhotoTile = (
-    currentAttachment: PhotoAttachment,
+    currentAttachment: ResolvedPhotoAttachment,
     tile: MediaAlbumTile,
     layout: ReturnType<typeof computeMediaAlbumLayout>,
     radius: { top: number; bottom: number },
@@ -265,15 +407,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       height: toPercent(tile.height, layout.height),
       borderRadius: getTileCornerRadius(tile, radius),
     } as const;
-    const attachmentName = getAttachmentDisplayName(currentAttachment);
-    const displaySrc = getAttachmentDisplaySrc(currentAttachment);
-    const lightboxSrc = getAttachmentOriginalSrc(currentAttachment);
+    const attachmentName = getAttachmentDisplayName(currentAttachment.attachment);
 
-    if (!displaySrc || !lightboxSrc) return null;
+    if (!currentAttachment.displaySrc || !currentAttachment.lightboxSrc) return null;
 
     return (
       <div
-        key={currentAttachment.id}
+        key={currentAttachment.attachment.id}
         className="absolute overflow-hidden"
         data-testid={`message-photo-collage-tile-${tile.index}`}
         style={tileStyle}
@@ -283,16 +423,21 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           className="relative flex h-full w-full overflow-hidden bg-[#111]"
           data-testid="message-photo-collage-tile"
           onClick={() => onLightbox({
-            src: lightboxSrc,
+            src: currentAttachment.lightboxSrc,
             author: authorName,
             time: msg.inserted_at,
           })}
         >
           <AuthenticatedImage
             className="block h-full w-full object-cover object-center"
-            src={displaySrc}
+            src={currentAttachment.displaySrc}
             alt={attachmentName}
             crossOrigin="anonymous"
+            onLoad={(event) => handleDecodedPhotoDimensions(
+              currentAttachment.attachment.id,
+              event.currentTarget.naturalWidth,
+              event.currentTarget.naturalHeight,
+            )}
           />
         </button>
       </div>
@@ -300,63 +445,48 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   };
 
   const renderPhotoMedia = () => {
-    const layout = computeMediaAlbumLayout(
-      photoAttachments.map((currentAttachment) => {
-        const { width, height } = getAttachmentIntrinsicSize(currentAttachment);
-        return {
-          id: currentAttachment.id,
-          width,
-          height,
-          kind: "image",
-        };
-      }),
-      {
-        maxWidth: 480,
-        maxHeight: 384,
-        spacing: 2,
-        minTileSize: 88,
-        fallbackRatio: 1,
-        narrowRatio: 0.8,
-        wideRatio: 1.25,
-      },
-    );
+    const layout = photoLayout;
     const tileRadius = isPhotoOnly
       ? { top: 15, bottom: 6 }
       : { top: 14, bottom: 8 };
 
-    if (photoAttachments.length > 1) {
-      if (!hasCompleteAlbumLayout(layout, photoAttachments.length)) {
+    if (resolvedPhotoAttachments.length > 1) {
+      if (isTemporaryPhotoLayout) {
         return (
           <div
             className="grid max-w-full grid-cols-2 gap-[2px] overflow-hidden bg-[#111] shadow-[0_1px_2px_rgba(16,16,16,0.61)]"
             style={{
-              width: "min(480px, calc(100vw - 6rem))",
+              width: `min(${MESSAGE_ALBUM_MAX_WIDTH}px, calc(100vw - 6rem))`,
               maxWidth: "100%",
             }}
             data-testid="message-photo-collage"
+            data-photo-layout-state="pending"
           >
-            {photoAttachments.map((currentAttachment) => {
-              const displaySrc = getAttachmentDisplaySrc(currentAttachment);
-              const lightboxSrc = getAttachmentOriginalSrc(currentAttachment);
-              if (!displaySrc || !lightboxSrc) return null;
+            {resolvedPhotoAttachments.map((currentAttachment) => {
+              if (!currentAttachment.displaySrc || !currentAttachment.lightboxSrc) return null;
 
               return (
                 <button
-                  key={currentAttachment.id}
+                  key={currentAttachment.attachment.id}
                   type="button"
                   className="relative aspect-square overflow-hidden bg-[#111]"
                   data-testid="message-photo-collage-tile"
                   onClick={() => onLightbox({
-                    src: lightboxSrc,
+                    src: currentAttachment.lightboxSrc,
                     author: authorName,
                     time: msg.inserted_at,
                   })}
                 >
                   <AuthenticatedImage
                     className="block h-full w-full object-cover object-center"
-                    src={displaySrc}
-                    alt={getAttachmentDisplayName(currentAttachment)}
+                    src={currentAttachment.displaySrc}
+                    alt={getAttachmentDisplayName(currentAttachment.attachment)}
                     crossOrigin="anonymous"
+                    onLoad={(event) => handleDecodedPhotoDimensions(
+                      currentAttachment.attachment.id,
+                      event.currentTarget.naturalWidth,
+                      event.currentTarget.naturalHeight,
+                    )}
                   />
                 </button>
               );
@@ -374,9 +504,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             aspectRatio: `${layout.width} / ${layout.height}`,
           }}
           data-testid="message-photo-collage"
+          data-photo-layout-state="resolved"
         >
           <div className="relative h-full w-full" data-testid="message-photo-collage-inner">
-            {photoAttachments.map((currentAttachment, index) =>
+            {resolvedPhotoAttachments.map((currentAttachment, index) =>
               renderPhotoTile(currentAttachment, layout.tiles[index], layout, tileRadius),
             )}
           </div>
@@ -384,20 +515,18 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       );
     }
 
-    const currentAttachment = photoAttachments[0];
+    const currentAttachment = resolvedPhotoAttachments[0];
     if (!currentAttachment) return null;
-    const attachmentName = getAttachmentDisplayName(currentAttachment);
-    const displaySrc = getAttachmentDisplaySrc(currentAttachment);
-    const lightboxSrc = getAttachmentOriginalSrc(currentAttachment);
+    const attachmentName = getAttachmentDisplayName(currentAttachment.attachment);
 
-    if (!displaySrc || !lightboxSrc) return null;
+    if (!currentAttachment.displaySrc || !currentAttachment.lightboxSrc) return null;
 
     return (
       <div
         className="relative inline-block max-w-full overflow-hidden rounded-[16px] bg-[#111]"
         data-testid="message-media-shell"
         onClick={() => onLightbox({
-          src: lightboxSrc,
+          src: currentAttachment.lightboxSrc,
           author: authorName,
           time: msg.inserted_at,
         })}
@@ -406,12 +535,18 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           maxWidth: "100%",
           aspectRatio: `${layout.width} / ${layout.height}`,
         }}
+        data-photo-layout-state={currentAttachment.dimensionSource === "fallback" ? "pending" : "resolved"}
       >
         <AuthenticatedImage
           className="block h-full w-full object-cover"
-          src={displaySrc}
+          src={currentAttachment.displaySrc}
           alt={attachmentName}
           crossOrigin="anonymous"
+          onLoad={(event) => handleDecodedPhotoDimensions(
+            currentAttachment.attachment.id,
+            event.currentTarget.naturalWidth,
+            event.currentTarget.naturalHeight,
+          )}
         />
       </div>
     );

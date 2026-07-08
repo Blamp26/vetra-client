@@ -83,7 +83,7 @@ function isPositiveFinite(value: unknown): value is number {
 }
 
 function getMaxHeight(options: MediaAlbumLayoutOptions) {
-  return options.maxHeight ?? Math.round(options.maxWidth * 0.8);
+  return options.maxHeight ?? options.maxWidth;
 }
 
 function getSpacing(options: MediaAlbumLayoutOptions) {
@@ -318,7 +318,7 @@ function buildTwoStackLayout(
   const spacing = getSpacing(options);
   const [first, second] = items;
   const denominator = (1 / first.ratio) + (1 / second.ratio);
-  const targetHeight = Math.min(maxHeight, maxWidth * 0.82);
+  const targetHeight = maxHeight;
   const width = Math.min(maxWidth, (targetHeight - spacing) / denominator);
   const firstHeight = width / first.ratio;
   const secondHeight = width / second.ratio;
@@ -440,7 +440,7 @@ function scoreCandidate(
   const maxWidth = options.maxWidth;
   const maxHeight = getMaxHeight(options);
   const minTileSize = getMinTileSize(options);
-  const targetHeight = Math.min(maxHeight, maxWidth * 0.8);
+  const targetHeight = maxHeight;
   const targetRowHeight = Math.min(maxHeight, Math.max(minTileSize, maxWidth / 3));
   const rowHeights = candidate.rowHeights.length > 0 ? candidate.rowHeights : [candidate.layout.height];
   const tilePenalty = candidate.layout.tiles.reduce((sum, tile) => {

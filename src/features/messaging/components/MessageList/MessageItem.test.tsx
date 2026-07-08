@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,11 +17,10 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
     src,
     alt,
     className,
-  }: {
+    ...props
+  }: ComponentProps<"img"> & {
     src: string;
-    alt: string;
-    className?: string;
-  }) => <img data-testid="authenticated-image" src={src} alt={alt} className={className} />,
+  }) => <img data-testid="authenticated-image" src={src} alt={alt} className={className} {...props} />,
 }));
 
 vi.mock("../../utils/attachmentDownloads", () => ({
@@ -30,6 +29,7 @@ vi.mock("../../utils/attachmentDownloads", () => ({
 }));
 
 import { MessageItem } from "./MessageItem";
+import * as mediaAlbumLayout from "../../utils/mediaAlbumLayout";
 
 function makeMessage(overrides: Record<string, unknown> = {}) {
   return {
@@ -267,7 +267,7 @@ describe("MessageItem bubble layout", () => {
 
     expect(bubble).not.toHaveClass("bg-bubble-outgoing");
     expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
-    expect(mediaShell).toHaveStyle({ width: "216px", aspectRatio: "216 / 384" });
+    expect(mediaShell).toHaveStyle({ width: "270px", aspectRatio: "270 / 480" });
     expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
     expect(metadata).toHaveClass("h-[18px]", "rounded-[10px]", "bg-black/[0.20]", "py-0", "pl-[6px]", "pr-[5px]", "text-white");
     expect(metadata).not.toHaveClass("bg-black/40", "bg-black/60", "rounded-full", "backdrop-blur-[2px]", "shadow-[0_2px_10px_rgba(0,0,0,0.24)]");
@@ -276,6 +276,131 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Read")).toBeInTheDocument();
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
+  });
+
+  it("passes server width and height into the album layout helper", () => {
+    const originalComputeMediaAlbumLayout = mediaAlbumLayout.computeMediaAlbumLayout;
+    const layoutSpy = vi.spyOn(mediaAlbumLayout, "computeMediaAlbumLayout");
+    layoutSpy.mockImplementation((...args) => originalComputeMediaAlbumLayout(...args));
+
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "photo-server-1",
+            url: "/api/v1/media/photo-server-1",
+            mime_type: "image/jpeg",
+            original_name: "photo-server-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1800,
+            height: 1200,
+          },
+          {
+            id: "photo-server-2",
+            url: "/api/v1/media/photo-server-2",
+            mime_type: "image/jpeg",
+            original_name: "photo-server-2.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 900,
+            height: 1600,
+          },
+        ],
+        media_file_ids: ["photo-server-1", "photo-server-2"],
+        media_mime_types: ["image/jpeg", "image/jpeg"],
+      },
+      { isOwn: true },
+    );
+
+    expect(layoutSpy).toHaveBeenCalled();
+    expect(layoutSpy.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({ id: "photo-server-1", width: 1800, height: 1200 }),
+      expect.objectContaining({ id: "photo-server-2", width: 900, height: 1600 }),
+    ]);
+    layoutSpy.mockRestore();
+  });
+
+  it("warns in dev when album attachments are still missing dimensions", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    renderMessageItem(
+      {
+        id: 99,
+        attachments: [
+          {
+            id: "photo-missing-1",
+            url: "/api/v1/media/photo-missing-1",
+            mime_type: "image/jpeg",
+            original_name: "photo-missing-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+          },
+          {
+            id: "photo-missing-2",
+            url: "/api/v1/media/photo-missing-2",
+            mime_type: "image/jpeg",
+            original_name: "photo-missing-2.jpg",
+            file_size: 2048,
+            kind: "photo",
+          },
+        ],
+        media_file_ids: ["photo-missing-1", "photo-missing-2"],
+        media_mime_types: ["image/jpeg", "image/jpeg"],
+      },
+      { isOwn: true },
+    );
+
+    expect(
+      warnSpy.mock.calls.some(([label, payload]) =>
+        String(label).includes("[VETRA album-layout]") &&
+        (payload as Record<string, unknown>).messageId === 99 &&
+        (payload as Record<string, unknown>).attachmentId === "photo-missing-1",
+      ),
+    ).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it("renders a temporary fallback while client-side dimensions are pending and recomputes after load", () => {
+    const originalComputeMediaAlbumLayout = mediaAlbumLayout.computeMediaAlbumLayout;
+    const layoutSpy = vi.spyOn(mediaAlbumLayout, "computeMediaAlbumLayout");
+    layoutSpy.mockImplementation((...args) => originalComputeMediaAlbumLayout(...args));
+
+    renderMessageItem(
+      {
+        media_file_id: "photo-pending-1",
+        media_mime_type: "image/jpeg",
+        attachment: {
+          id: "photo-pending-1",
+          url: "/api/v1/media/photo-pending-1",
+          mime_type: "image/jpeg",
+          original_name: "photo-pending-1.jpg",
+          file_size: 2048,
+          kind: "photo",
+        },
+      },
+      { isOwn: true },
+    );
+
+    const mediaShell = screen.getByTestId("message-media-shell");
+    const image = screen.getByTestId("authenticated-image");
+
+    expect(mediaShell).toHaveAttribute("data-photo-layout-state", "pending");
+    expect(layoutSpy.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({ id: "photo-pending-1", width: undefined, height: undefined }),
+    ]);
+
+    Object.defineProperties(image, {
+      naturalWidth: { configurable: true, value: 1600 },
+      naturalHeight: { configurable: true, value: 900 },
+    });
+    fireEvent.load(image);
+
+    expect(mediaShell).toHaveAttribute("data-photo-layout-state", "resolved");
+    expect(layoutSpy.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({ id: "photo-pending-1", width: 1600, height: 900 }),
+    ]);
+    layoutSpy.mockRestore();
   });
 
   it("uses display-quality image URLs in chat and original URLs in the lightbox", () => {

@@ -99,14 +99,20 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...
   };
 
   if (error) {
-    return <img {...props} src="" alt="Failed to load" />;
+    return (
+      <div
+        aria-label={typeof props.alt === "string" ? props.alt : "Failed to load image"}
+        className={props.className}
+        style={props.style}
+      />
+    );
   }
 
   if (!objectUrl) {
     return (
       <div 
         ref={containerRef}
-        className={props.className + " bg-muted animate-pulse"} 
+        className={`${props.className ?? ""} bg-muted animate-pulse`.trim()} 
         style={{ ...props.style, minHeight: props.height || '100px' }} 
       />
     );
