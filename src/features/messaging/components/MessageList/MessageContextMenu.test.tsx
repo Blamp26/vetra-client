@@ -180,9 +180,37 @@ describe("MessageContextMenu", () => {
     renderMenu();
 
     expect(screen.getByTestId("message-context-reactions")).toBeInTheDocument();
+    expect(screen.getByTestId("message-context-reactions")).toHaveClass("left-[-82px]");
+    expect(screen.getByTestId("message-context-reactions")).toHaveClass("w-[298px]");
+    expect(screen.getByTestId("message-context-reactions")).toHaveStyle({
+      transform: "translateY(-48px)",
+    });
+    expect(screen.getByTestId("message-context-reactions-surface")).toHaveClass("rounded-[20px]");
     expect(screen.getAllByTestId("message-context-reaction-button")).toHaveLength(7);
     expect(screen.getByRole("button", { name: "React with 👍" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "React with 🔥" })).toBeInTheDocument();
+    expect(screen.getByTestId("message-context-reaction-tail-large")).toBeInTheDocument();
+    expect(screen.getByTestId("message-context-reaction-tail-small")).toBeInTheDocument();
+  });
+
+  it("uses a transparent 216px anchor with a narrower visible action surface", () => {
+    renderMenu();
+
+    expect(screen.getByTestId("message-context-menu")).toHaveClass("w-[216px]");
+    expect(screen.getByTestId("message-context-menu")).toHaveClass("min-w-[216px]");
+    expect(screen.getByTestId("message-context-surface")).toHaveClass("w-[172px]");
+    expect(screen.getByTestId("message-context-surface")).toHaveClass("mr-[44px]");
+    expect(screen.getByTestId("message-context-surface")).toHaveClass("rounded-[16px]");
+  });
+
+  it("renders compact 32px action rows with Telegram-like icon spacing", () => {
+    renderMenu();
+
+    const reply = screen.getByTestId("message-context-action-reply");
+    expect(reply).toHaveClass("h-8");
+    expect(reply).toHaveClass("w-[164px]");
+    expect(reply).toHaveClass("rounded-[6px]");
+    expect(reply.querySelector("svg")).toHaveClass("h-5", "w-5", "ml-2", "mr-5");
   });
 
   it("calls reply when available", () => {

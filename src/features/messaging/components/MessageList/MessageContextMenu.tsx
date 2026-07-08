@@ -46,8 +46,6 @@ interface MessageContextMenuProps {
 
 const EMOJIS = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🔥"];
 const VIEWPORT_MARGIN = 8;
-const POPUP_WIDTH = 216;
-const POPUP_REACTION_WIDTH = 298;
 const POPUP_REACTION_OFFSET_LEFT = 82;
 const POPUP_REACTION_OFFSET_TOP = 48;
 
@@ -303,54 +301,75 @@ export function MessageContextMenu({
     <div
       ref={menuRef}
       data-testid="message-context-menu"
-      role="menu"
+      role="presentation"
       aria-label={`Message actions for ${data.author}`}
-      className="fixed z-floating flex w-[216px] flex-col overflow-visible"
+      className="fixed z-floating flex min-h-[248px] w-[216px] min-w-[216px] flex-col overflow-visible rounded-[16px] bg-transparent opacity-100 transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)]"
       style={{ top: position.top, left: position.left }}
       onClick={(event) => event.stopPropagation()}
     >
       <div
-        className="absolute left-[-82px] top-0 z-[1] flex h-10 w-[298px] items-center gap-1 rounded-[16px] border border-border/80 bg-popover px-2 shadow-[var(--overlay-shadow)]"
+        className="absolute left-[-82px] top-0 z-[1] h-10 w-[298px] overflow-visible bg-transparent"
         style={{ transform: "translateY(-48px)" }}
         data-testid="message-context-reactions"
       >
-        {EMOJIS.map((emoji) => (
-          <button
-            key={emoji}
-            type="button"
-            onClick={() => {
-              onToggleReaction(data.msgId, emoji);
-              onClose();
-            }}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            aria-label={`React with ${emoji}`}
-            data-testid="message-context-reaction-button"
-          >
-            <Emoji emoji={emoji} size={18} />
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => setIsPickerExpanded(!isPickerExpanded)}
-          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          aria-label={isPickerExpanded ? "Hide more reactions" : "Show more reactions"}
-          data-testid="message-context-reaction-more"
+        <div
+          className="relative flex h-10 w-[298px] items-center overflow-visible rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+          data-testid="message-context-reactions-surface"
         >
-          <Ellipsis className="h-4 w-4" />
-        </button>
+          <div
+            className="absolute bottom-[-8px] right-[18px] h-2 w-4 rounded-b-[16px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+            data-testid="message-context-reaction-tail-large"
+          />
+          <div
+            className="absolute bottom-[-20px] right-[18px] h-2 w-2 rounded-full bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+            data-testid="message-context-reaction-tail-small"
+          />
+          <div className="flex h-full w-full items-center px-2" data-testid="message-context-reaction-items">
+            {EMOJIS.map((emoji, index) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => {
+                  onToggleReaction(data.msgId, emoji);
+                  onClose();
+                }}
+                className={cn(
+                  "relative inline-flex h-8 min-h-8 w-8 min-w-8 items-center justify-center rounded-full text-[18px] transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                  index === 0 ? "ml-0" : "ml-1",
+                )}
+                aria-label={`React with ${emoji}`}
+                data-testid="message-context-reaction-button"
+              >
+                <Emoji emoji={emoji} size={18} />
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setIsPickerExpanded(!isPickerExpanded)}
+              className="ml-1 mr-[-2px] inline-flex h-8 w-8 items-center justify-center rounded-full bg-transparent p-0 text-[#aaaaaa] transition-colors duration-150 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              aria-label={isPickerExpanded ? "Hide more reactions" : "Show more reactions"}
+              data-testid="message-context-reaction-more"
+            >
+              <Ellipsis className="h-6 w-6" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="rounded-[16px] border border-border/85 bg-popover px-0 py-1 shadow-[var(--overlay-shadow)]">
-        <div className="flex flex-col" data-testid="message-context-actions">
-          {actions.map((action, index) => {
+      <div
+        className="mr-[44px] flex min-h-[248px] w-[172px] overflow-y-auto rounded-[16px] bg-[rgba(33,33,33,0.867)] py-1 shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[10px]"
+        role="menu"
+        aria-label={`Message actions for ${data.author}`}
+        data-testid="message-context-surface"
+      >
+        <div className="flex w-full flex-col" data-testid="message-context-actions">
+          {actions.map((action) => {
             const Icon = action.icon;
             const isDestructive = Boolean(action.destructive);
             const isDisabled = Boolean(action.disabled);
-            const showSeparator = isDestructive && index > 0;
 
             return (
               <div key={action.key}>
-                {showSeparator && <div className="mx-4 my-1 h-px bg-border/80" />}
                 <button
                   type="button"
                   role="menuitem"
@@ -363,12 +382,12 @@ export function MessageContextMenu({
                     onClose();
                   }}
                   className={cn(
-                    "mx-1 my-[2px] flex h-8 w-[calc(100%-8px)] items-center rounded-[6px] px-3 py-1 text-left text-[14px] font-medium leading-6 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                    "mx-1 my-[2px] flex h-8 w-[164px] items-center overflow-hidden rounded-[6px] px-[12px] py-1 pl-1 text-left text-[14px] font-medium leading-6 transition-[transform,background-color,color,opacity] duration-150 ease-in-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                     isDestructive
                       ? "text-[#e53935] hover:bg-[#e53935]/10"
                       : isDisabled
-                        ? "cursor-not-allowed text-muted-foreground/70"
-                        : "text-foreground hover:bg-accent/75",
+                        ? "cursor-not-allowed text-white/45"
+                        : "text-white hover:bg-white/8",
                   )}
                   data-testid={`message-context-action-${action.key}`}
                 >
@@ -378,8 +397,8 @@ export function MessageContextMenu({
                       isDestructive
                         ? "text-[#e53935]"
                         : isDisabled
-                          ? "text-muted-foreground/70"
-                          : "text-muted-foreground",
+                          ? "text-white/35"
+                          : "text-[#aaaaaa]",
                     )}
                   />
                   <span className="truncate">{action.label}</span>
