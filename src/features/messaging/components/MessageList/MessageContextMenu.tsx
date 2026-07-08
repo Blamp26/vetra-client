@@ -318,7 +318,7 @@ export function MessageContextMenu({
         className={cn(
           "absolute z-[2] overflow-visible bg-transparent transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)]",
           isPickerExpanded
-            ? "left-[-82px] top-[-48px] h-[358px] w-[384px]"
+            ? "left-[-82px] top-[-48px] h-[358px] w-[298px]"
             : "left-[-82px] top-0 h-10 w-[298px]",
         )}
         style={isPickerExpanded ? { transformOrigin: "144px 74px" } : { transform: "translateY(-48px)" }}
@@ -326,7 +326,7 @@ export function MessageContextMenu({
       >
         {isPickerExpanded ? (
           <div
-            className="h-[358px] min-w-[216px] w-[384px] overflow-hidden rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+            className="h-[358px] min-w-[216px] w-[298px] overflow-hidden rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
             data-testid="message-context-expanded-picker"
           >
             <div
@@ -359,7 +359,7 @@ export function MessageContextMenu({
               </button>
             </div>
             <div
-              className="grid h-[calc(358px-48px)] grid-cols-[repeat(auto-fill,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="grid h-[calc(358px-48px)] grid-cols-[repeat(auto-fit,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               data-testid="message-context-expanded-picker-grid"
             >
               {EXPANDED_EMOJIS.map((emoji, index) => (

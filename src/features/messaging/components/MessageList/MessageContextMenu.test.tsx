@@ -244,7 +244,8 @@ describe("MessageContextMenu", () => {
     fireEvent.click(button);
     expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
     expect(screen.getByTestId("message-context-reactions")).toHaveClass("top-[-48px]");
-    expect(screen.getByTestId("message-context-reactions")).toHaveClass("w-[384px]");
+    expect(screen.getByTestId("message-context-reactions")).toHaveClass("w-[298px]");
+    expect(screen.getByTestId("message-context-expanded-picker")).toHaveClass("w-[298px]");
     expect(screen.queryByTestId("message-context-reactions-surface")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-context-reaction-tail-large")).not.toBeInTheDocument();
 
@@ -358,5 +359,7 @@ describe("MessageContextMenu", () => {
     expect(actionSurface).not.toContainElement(picker);
     expect(reactionLayer).toHaveClass("left-[-82px]");
     expect(reactionLayer).toHaveClass("top-[-48px]");
+    expect(reactionLayer).toHaveClass("w-[298px]");
+    expect(picker).toHaveClass("w-[298px]");
   });
 });
