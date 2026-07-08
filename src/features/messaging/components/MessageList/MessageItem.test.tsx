@@ -591,7 +591,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(2);
   });
 
-  it("renders video attachments in the visual media path instead of the file row", () => {
+  it("renders video attachments through the existing file row path", () => {
     renderMessageItem(
       {
         media_file_id: "media-video-1",
@@ -610,9 +610,10 @@ describe("MessageItem bubble layout", () => {
       { isOwn: true },
     );
 
-    expect(screen.getByTestId("message-media-shell")).toBeInTheDocument();
-    expect(screen.getByTestId("message-video")).toBeInTheDocument();
-    expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-file-row")).toBeInTheDocument();
+    expect(screen.getByText("clip.mp4")).toBeInTheDocument();
+    expect(screen.getByText("Video · 4.0 KB")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-media-shell")).not.toBeInTheDocument();
   });
 
   it("renders PDF attachments as a compact file row with in-bubble metadata", () => {
