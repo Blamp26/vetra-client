@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react"; 
+import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
+import { FileText, ImagePlus, Paperclip } from "lucide-react";
 import { useAppStore, type RootState } from "@/store"; 
 import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
@@ -6,7 +7,8 @@ import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
   classifyPendingAttachment,
-  MESSAGE_ATTACHMENT_ACCEPT,
+  MESSAGE_FILE_ATTACHMENT_ACCEPT,
+  MESSAGE_MEDIA_ATTACHMENT_ACCEPT,
   validateAttachmentFile,
 } from "../../utils/attachments";
 import { AttachmentReviewModal } from "./AttachmentReviewModal";
@@ -24,10 +26,84 @@ import {
   summarizeUnknownShape,
   type AttachmentDebugMeta,
 } from "../../utils/attachmentDebug";
- 
-interface ReplyTarget { id: number; content: string; author: string; } 
- 
-interface Props { 
+
+type AttachmentMenuPlacement = "composer" | "modal";
+
+function AttachmentSourceMenu({
+  placement,
+  onClose,
+  onSelectMedia,
+  onSelectFile,
+}: {
+  placement: AttachmentMenuPlacement;
+  onClose: () => void;
+  onSelectMedia: () => void;
+  onSelectFile: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      window.setTimeout(onClose, 0);
+    };
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      className={cn(
+        "vt-attachment-menu absolute z-40 min-w-[188px] rounded-[10px] border border-white/8 bg-[rgba(33,33,33,0.867)] p-1.5 text-[#eef2ee] shadow-[0_4px_8px_2px_rgba(16,16,16,0.61)] backdrop-blur-md",
+        placement === "composer" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2",
+      )}
+      data-testid="attachment-source-menu"
+      role="menu"
+    >
+      <button
+        type="button"
+        className="flex w-full items-center gap-3 rounded-[6px] px-3 py-2 text-left text-[14px] font-medium text-inherit transition hover:bg-white/8"
+        onClick={() => {
+          onSelectMedia();
+          onClose();
+        }}
+        role="menuitem"
+      >
+        <ImagePlus className="h-4 w-4 text-[#b9c6c0]" />
+        <span>Photo or Video</span>
+      </button>
+      <button
+        type="button"
+        className="mt-0.5 flex w-full items-center gap-3 rounded-[6px] px-3 py-2 text-left text-[14px] font-medium text-inherit transition hover:bg-white/8"
+        onClick={() => {
+          onSelectFile();
+          onClose();
+        }}
+        role="menuitem"
+      >
+        <FileText className="h-4 w-4 text-[#b9c6c0]" />
+        <span>File</span>
+      </button>
+    </div>
+  );
+}
+
+interface ReplyTarget { id: number; content: string; author: string; }
+
+interface Props {
   onSend: (
     payload: {
       content?: string | null;
@@ -59,8 +135,11 @@ interface Props {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadLabel, setUploadLabel] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
- 
-   const textareaRef = useRef<HTMLTextAreaElement>(null); 
+  const [isComposerAttachmentMenuOpen, setIsComposerAttachmentMenuOpen] = useState(false);
+  const [isModalAttachmentMenuOpen, setIsModalAttachmentMenuOpen] = useState(false);
+
+   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentIdRef = useRef(0);
   const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
@@ -106,6 +185,18 @@ interface Props {
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments;
   }, [pendingAttachments]);
+
+  useEffect(() => {
+    if (pendingAttachments.length === 0) {
+      setIsModalAttachmentMenuOpen(false);
+    }
+  }, [pendingAttachments.length]);
+
+  useEffect(() => {
+    if (!disabled && !isSending && !isUploading && !isEditing) return;
+    setIsComposerAttachmentMenuOpen(false);
+    setIsModalAttachmentMenuOpen(false);
+  }, [disabled, isEditing, isSending, isUploading]);
 
   useEffect(() => {
     logAttachmentDebug("modal.state", {
@@ -167,6 +258,8 @@ interface Props {
     attachments.forEach(revokeAttachmentPreview);
     pendingAttachmentsRef.current = [];
     attachmentBatchIdRef.current = null;
+    setIsComposerAttachmentMenuOpen(false);
+    setIsModalAttachmentMenuOpen(false);
     setPendingAttachments([]);
     resetUploadState();
   };
@@ -190,6 +283,11 @@ interface Props {
         batchId: attachmentBatchIdRef.current,
         table: next.map((attachment) => summarizeAttachmentLike(attachment)),
       });
+      if (next.length === 0) {
+        attachmentBatchIdRef.current = null;
+        setIsModalAttachmentMenuOpen(false);
+        resetUploadState();
+      }
       return next;
     });
   };
@@ -346,6 +444,8 @@ interface Props {
     if ((!content.trim() && pendingAttachments.length === 0) || isSending || isUploading || sendLockRef.current) return; 
  
      stopTyping(); 
+     setIsComposerAttachmentMenuOpen(false);
+     setIsModalAttachmentMenuOpen(false);
      sendLockRef.current = true;
      setIsSending(true); 
      let sendFailureMessage = "Message send failed";
@@ -621,6 +721,14 @@ interface Props {
     appendPendingAttachments(files);
   };
 
+  const openMediaPicker = () => {
+    mediaInputRef.current?.click();
+  };
+
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
+  };
+
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(e.clipboardData.items)
       .filter((item) => item.kind === "file")
@@ -634,7 +742,14 @@ interface Props {
 
   const handleAttachClick = () => {
     if (disabled || isSending || isEditing || isUploading) return;
-    fileInputRef.current?.click();
+    setIsModalAttachmentMenuOpen(false);
+    setIsComposerAttachmentMenuOpen((current) => !current);
+  };
+
+  const handleModalAddClick = () => {
+    if (disabled || isSending || isEditing || isUploading) return;
+    setIsComposerAttachmentMenuOpen(false);
+    setIsModalAttachmentMenuOpen((current) => !current);
   };
 
   const handleCloseAttachmentReview = () => {
@@ -667,8 +782,17 @@ interface Props {
          uploadProgress={uploadProgress}
          uploadLabel={uploadLabel}
          uploadError={uploadError}
+         isAddMenuOpen={isModalAttachmentMenuOpen}
+         addAttachmentMenu={
+           <AttachmentSourceMenu
+             placement="modal"
+             onClose={() => setIsModalAttachmentMenuOpen(false)}
+             onSelectMedia={openMediaPicker}
+             onSelectFile={openFilePicker}
+           />
+         }
          onClose={handleCloseAttachmentReview}
-         onAddAttachments={handleAttachClick}
+         onToggleAddMenu={handleModalAddClick}
          onRemoveAttachment={removePendingAttachment}
          onContentChange={handleChange}
          onSend={handleSend}
@@ -720,18 +844,47 @@ interface Props {
        )}
  
        <div className="flex items-end gap-3 px-4 py-4">
-          <button 
-            onClick={handleAttachClick}
-            disabled={disabled || isSending || isEditing || isUploading}
-            className="vt-button min-h-11 shrink-0 px-3.5"
-          >Attach</button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            className="hidden" 
-            accept={MESSAGE_ATTACHMENT_ACCEPT}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={handleAttachClick}
+              disabled={disabled || isSending || isEditing || isUploading}
+              className={cn(
+                "vt-button min-h-11 shrink-0 gap-2 rounded-[18px] px-3.5",
+                isComposerAttachmentMenuOpen && "border-[#4f6158] bg-accent",
+              )}
+              aria-haspopup="menu"
+              aria-expanded={isComposerAttachmentMenuOpen}
+            >
+              <Paperclip className="h-4 w-4" />
+              <span>Attach</span>
+            </button>
+            {isComposerAttachmentMenuOpen && (
+              <AttachmentSourceMenu
+                placement="composer"
+                onClose={() => setIsComposerAttachmentMenuOpen(false)}
+                onSelectMedia={openMediaPicker}
+                onSelectFile={openFilePicker}
+              />
+            )}
+          </div>
+          <input
+            type="file"
+            ref={mediaInputRef}
+            data-testid="attachment-input-media"
+            className="hidden"
+            accept={MESSAGE_MEDIA_ATTACHMENT_ACCEPT}
             multiple
-            onChange={handleFileChange} 
+            onChange={handleFileChange}
+          />
+          <input
+            type="file"
+            ref={fileInputRef}
+            data-testid="attachment-input-file"
+            className="hidden"
+            accept={MESSAGE_FILE_ATTACHMENT_ACCEPT}
+            multiple
+            onChange={handleFileChange}
           />
 
           <textarea

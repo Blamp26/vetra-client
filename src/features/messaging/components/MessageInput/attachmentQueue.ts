@@ -60,24 +60,21 @@ export function getAttachmentReviewTitle(
 
   const allPhotos = attachments.every((attachment) => attachment.kind === "photo");
   if (allPhotos) {
-    return attachments.length === 1 ? "Send Photo" : "Send Photos";
+    return `Send ${attachments.length} Photo${attachments.length === 1 ? "" : "s"}`;
   }
 
-  const allFiles = attachments.every((attachment) => attachment.kind === "file");
-  if (allFiles) return "Send Files";
+  const allFiles = attachments.every((attachment) => attachment.kind !== "photo");
+  if (allFiles) {
+    const fileCount = attachments.length;
+    return `Send ${fileCount} File${fileCount === 1 ? "" : "s"}`;
+  }
 
-  return "Send Attachments";
+  return `Send ${attachments.length} Item${attachments.length === 1 ? "" : "s"}`;
 }
 
 export function getAttachmentReviewSendLabel(
-  attachments: PendingAttachment[],
   isSending: boolean,
 ): string {
   if (isSending) return "Sending...";
-
-  const title = getAttachmentReviewTitle(attachments);
-  if (title === "Send Photo") return "Send Photo";
-  if (title === "Send Photos") return "Send Photos";
-  if (title === "Send Files") return "Send Files";
-  return "Send Attachments";
+  return "Send";
 }

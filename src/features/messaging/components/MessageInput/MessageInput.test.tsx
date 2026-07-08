@@ -43,6 +43,14 @@ function makeState() {
   };
 }
 
+function getMediaInput(container: HTMLElement) {
+  return container.querySelector('[data-testid="attachment-input-media"]') as HTMLInputElement;
+}
+
+function getFileInput(container: HTMLElement) {
+  return container.querySelector('[data-testid="attachment-input-file"]') as HTMLInputElement;
+}
+
 describe("MessageInput attachments", () => {
   beforeEach(() => {
     useAppStoreMock.mockReset();
@@ -74,24 +82,85 @@ describe("MessageInput attachments", () => {
     );
   });
 
+  it("opens the attachment source menu from the attachment button", () => {
+    render(<MessageInput onSend={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+
+    expect(screen.getByTestId("attachment-source-menu")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Photo or Video" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "File" })).toBeInTheDocument();
+  });
+
+  it("closes the attachment source menu on outside click", async () => {
+    render(<MessageInput onSend={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    expect(screen.getByTestId("attachment-source-menu")).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("attachment-source-menu")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("closes the attachment source menu on Escape", () => {
+    render(<MessageInput onSend={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    expect(screen.getByTestId("attachment-source-menu")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByTestId("attachment-source-menu")).not.toBeInTheDocument();
+  });
+
+  it("Photo or Video triggers the media input", () => {
+    const { container } = render(<MessageInput onSend={vi.fn()} />);
+    const mediaInput = getMediaInput(container);
+    const mediaInputClick = vi.spyOn(mediaInput, "click");
+
+    fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Photo or Video" }));
+
+    expect(mediaInputClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("attachment-source-menu")).not.toBeInTheDocument();
+  });
+
+  it("File triggers the generic file input", () => {
+    const { container } = render(<MessageInput onSend={vi.fn()} />);
+    const fileInput = getFileInput(container);
+    const fileInputClick = vi.spyOn(fileInput, "click");
+
+    fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "File" }));
+
+    expect(fileInputClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("attachment-source-menu")).not.toBeInTheDocument();
+  });
+
   it("selecting attachments opens the attachment review modal without expanding the main composer", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const mediaInput = getMediaInput(container);
+    const fileInput = getFileInput(container);
     const pdf = new File(["pdf"], "report.pdf", { type: "application/pdf" });
     const image = new File([new Uint8Array(1024)], "photo.png", { type: "image/png" });
 
-    expect(input).toHaveAttribute(
+    expect(mediaInput).toHaveAttribute(
       "accept",
-      "image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,application/pdf,video/mp4,video/webm,video/ogg",
+      "image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,video/mp4,video/webm,video/ogg",
     );
-    expect(input).toHaveAttribute("multiple");
+    expect(fileInput).toHaveAttribute("accept", "application/pdf");
+    expect(mediaInput).toHaveAttribute("multiple");
+    expect(fileInput).toHaveAttribute("multiple");
 
-    fireEvent.change(input, { target: { files: [pdf, image] } });
+    fireEvent.change(fileInput, { target: { files: [pdf] } });
+    fireEvent.change(mediaInput, { target: { files: [image] } });
 
     expect(screen.getByTestId("attachment-review-modal")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Send Attachments" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send Attachments" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("heading", { name: "Send 2 Items" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" })).toBeEnabled();
     expect(screen.queryByTestId("attachment-queue")).not.toBeInTheDocument();
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.getByText("File · 3 B")).toBeInTheDocument();
@@ -122,51 +191,57 @@ describe("MessageInput attachments", () => {
 
   it("accepts images and labels them as photos", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const file = new File([new Uint8Array(1024)], "photo.png", {
       type: "image/png",
     });
 
     fireEvent.change(input, { target: { files: [file] } });
 
-    expect(screen.getByRole("heading", { name: "Send Photo" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Send 1 Photo" })).toBeInTheDocument();
     expect(screen.getByText("photo.png")).toBeInTheDocument();
     expect(screen.getByText("Photo · 1.0 KB")).toBeInTheDocument();
-    expect(screen.getByAltText("preview")).toBeInTheDocument();
+    expect(screen.getByAltText("photo.png")).toBeInTheDocument();
   });
 
   it("allows adding more files while the review modal is open and appends them to the queue", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const mediaInput = getMediaInput(container);
+    const fileInput = getFileInput(container);
     const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
     const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
 
-    fireEvent.change(input, { target: { files: [first] } });
-    expect(screen.getByRole("button", { name: "Add More" })).toBeInTheDocument();
-    fireEvent.change(input, { target: { files: [second] } });
+    fireEvent.change(fileInput, { target: { files: [first] } });
+    fireEvent.click(screen.getByRole("button", { name: "Add attachments" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Photo or Video" }));
+    fireEvent.change(mediaInput, { target: { files: [second] } });
 
     expect(screen.getAllByTestId("attachment-review-item")).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: "Send 2 Items" })).toBeInTheDocument();
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.getByText("photo.png")).toBeInTheDocument();
   });
 
   it("removes one queued file without clearing the others", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const mediaInput = getMediaInput(container);
+    const fileInput = getFileInput(container);
     const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
     const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
 
-    fireEvent.change(input, { target: { files: [first, second] } });
+    fireEvent.change(fileInput, { target: { files: [first] } });
+    fireEvent.change(mediaInput, { target: { files: [second] } });
     fireEvent.click(screen.getByRole("button", { name: "Remove report.pdf" }));
 
     expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
     expect(screen.getByText("photo.png")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Send 1 Photo" })).toBeInTheDocument();
     expect(screen.getAllByTestId("attachment-review-item")).toHaveLength(1);
   });
 
   it("can review many attachments in a scrollable modal without moving the main composer", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const photos = Array.from({ length: 12 }, (_, index) =>
       new File([new Uint8Array(256)], `photo-${index + 1}.png`, { type: "image/png" }),
     );
@@ -174,18 +249,21 @@ describe("MessageInput attachments", () => {
     fireEvent.change(input, { target: { files: photos } });
 
     expect(screen.getByTestId("attachment-review-scroll")).toBeInTheDocument();
+    expect(screen.getByTestId("attachment-review-footer")).toBeInTheDocument();
     expect(screen.getAllByTestId("attachment-review-item")).toHaveLength(12);
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" })).toBeEnabled();
   });
 
-  it("cancel clears the attachment queue and closes the review modal", () => {
+  it("close clears the attachment queue and closes the review modal", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const mediaInput = getMediaInput(container);
+    const fileInput = getFileInput(container);
     const first = new File(["pdf"], "report.pdf", { type: "application/pdf" });
     const second = new File([new Uint8Array(512)], "photo.png", { type: "image/png" });
 
-    fireEvent.change(input, { target: { files: [first, second] } });
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.change(fileInput, { target: { files: [first] } });
+    fireEvent.change(mediaInput, { target: { files: [second] } });
+    fireEvent.click(screen.getByRole("button", { name: "Close attachment review" }));
 
     expect(screen.queryByTestId("attachment-review-modal")).not.toBeInTheDocument();
     expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
@@ -195,11 +273,11 @@ describe("MessageInput attachments", () => {
   it("sends a single attachment with the existing upload and send flow", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getFileInput(container);
     const file = new File(["pdf"], "report.pdf", { type: "application/pdf" });
 
     fireEvent.change(input, { target: { files: [file] } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Files" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => {
       expect(onSend).toHaveBeenCalledWith(
@@ -214,11 +292,11 @@ describe("MessageInput attachments", () => {
   it("sends a single photo with the existing single-media behavior", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const file = new File([new Uint8Array(1024)], "photo.png", { type: "image/png" });
 
     fireEvent.change(input, { target: { files: [file] } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Photo" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => {
       expect(onSend).toHaveBeenCalledWith(
@@ -231,12 +309,14 @@ describe("MessageInput attachments", () => {
   it("sends two selected photos as one grouped photo payload", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
     const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
 
     fireEvent.change(input, { target: { files: [first, second] } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Photos" }));
+    expect(screen.getByRole("heading", { name: "Send 2 Photos" })).toBeInTheDocument();
+    expect(screen.getByTestId("attachment-review-grid")).toHaveClass("grid-cols-2", "auto-rows-[192px]");
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     expect(onSend).toHaveBeenCalledWith(
@@ -249,16 +329,16 @@ describe("MessageInput attachments", () => {
     );
   });
 
-  it("sends up to nine selected photos as one grouped photo message", async () => {
+  it("sends exactly nine selected photos as one grouped photo message", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
-    const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
-    const third = new File([new Uint8Array(512)], "photo-3.png", { type: "image/png" });
+    const input = getMediaInput(container);
+    const photos = Array.from({ length: 9 }, (_, index) =>
+      new File([new Uint8Array(512)], `photo-${index + 1}.png`, { type: "image/png" }),
+    );
 
-    fireEvent.change(input, { target: { files: [first, second, third] } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Photos" }));
+    fireEvent.change(input, { target: { files: photos } });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
 
@@ -266,7 +346,17 @@ describe("MessageInput attachments", () => {
       {
         content: null,
         mediaFileId: "media-photo-1.png",
-        mediaFileIds: ["media-photo-1.png", "media-photo-2.png", "media-photo-3.png"],
+        mediaFileIds: [
+          "media-photo-1.png",
+          "media-photo-2.png",
+          "media-photo-3.png",
+          "media-photo-4.png",
+          "media-photo-5.png",
+          "media-photo-6.png",
+          "media-photo-7.png",
+          "media-photo-8.png",
+          "media-photo-9.png",
+        ],
       },
       undefined,
     );
@@ -276,7 +366,7 @@ describe("MessageInput attachments", () => {
   it("groups empty-mime images by extension without dropping any photo formats", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const photos = [
       new File([new Uint8Array(512)], "photo-1.jpg", { type: "" }),
       new File([new Uint8Array(512)], "photo-2.png", { type: "" }),
@@ -288,7 +378,7 @@ describe("MessageInput attachments", () => {
     ];
 
     fireEvent.change(input, { target: { files: photos } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Photos" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
 
@@ -313,13 +403,13 @@ describe("MessageInput attachments", () => {
   it("splits more than nine selected photos into multiple grouped messages in order", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const photos = Array.from({ length: 10 }, (_, index) =>
       new File([new Uint8Array(256)], `photo-${index + 1}.png`, { type: "image/png" }),
     );
 
     fireEvent.change(input, { target: { files: photos } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Photos" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
 
@@ -350,13 +440,13 @@ describe("MessageInput attachments", () => {
   it("sends twelve photos as two photo-bearing units in order: 9 plus 3", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const photos = Array.from({ length: 12 }, (_, index) =>
       new File([new Uint8Array(256)], `photo-${index + 1}.png`, { type: "image/png" }),
     );
 
     fireEvent.change(input, { target: { files: photos } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Photos" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
 
@@ -388,10 +478,52 @@ describe("MessageInput attachments", () => {
     ]);
   });
 
+  it("renders four selected photos in a compact 2x2 preview grid", () => {
+    const { container } = render(<MessageInput onSend={vi.fn()} />);
+    const input = getMediaInput(container);
+    const photos = Array.from({ length: 4 }, (_, index) =>
+      new File([new Uint8Array(256)], `photo-${index + 1}.png`, { type: "image/png" }),
+    );
+
+    fireEvent.change(input, { target: { files: photos } });
+
+    expect(screen.getByRole("heading", { name: "Send 4 Photos" })).toBeInTheDocument();
+    expect(screen.getByTestId("attachment-review-grid")).toHaveClass("grid-cols-2", "auto-rows-[120px]");
+    expect(screen.getAllByTestId("attachment-review-item")).toHaveLength(4);
+  });
+
+  it("sends four selected photos as one grouped photo_album payload", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = getMediaInput(container);
+    const photos = Array.from({ length: 4 }, (_, index) =>
+      new File([new Uint8Array(256)], `photo-${index + 1}.png`, { type: "image/png" }),
+    );
+
+    fireEvent.change(input, { target: { files: photos } });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      {
+        content: null,
+        mediaFileId: "media-photo-1.png",
+        mediaFileIds: [
+          "media-photo-1.png",
+          "media-photo-2.png",
+          "media-photo-3.png",
+          "media-photo-4.png",
+        ],
+      },
+      undefined,
+    );
+  });
+
   it("sends text with the first grouped photo message only", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const mediaInput = getMediaInput(container);
+    const fileInput = getFileInput(container);
     const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
     const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
     const third = new File([new Uint8Array(512)], "photo-3.png", { type: "image/png" });
@@ -401,11 +533,13 @@ describe("MessageInput attachments", () => {
     fireEvent.change(screen.getByPlaceholderText("Message..."), {
       target: { value: "Album caption" },
     });
-    fireEvent.change(input, { target: { files: [first, second, document, third, fourth] } });
+    fireEvent.change(mediaInput, { target: { files: [first, second] } });
+    fireEvent.change(fileInput, { target: { files: [document] } });
+    fireEvent.change(mediaInput, { target: { files: [third, fourth] } });
     fireEvent.change(screen.getByLabelText("Caption"), {
       target: { value: "Album caption" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Send Attachments" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(3));
 
@@ -431,7 +565,8 @@ describe("MessageInput attachments", () => {
   it("keeps documents separate and preserves queue order around consecutive photo groups", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const mediaInput = getMediaInput(container);
+    const fileInput = getFileInput(container);
     const document = new File(["pdf"], "report.pdf", { type: "application/pdf" });
     const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
     const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
@@ -439,11 +574,12 @@ describe("MessageInput attachments", () => {
     fireEvent.change(screen.getByPlaceholderText("Message..."), {
       target: { value: "Album caption" },
     });
-    fireEvent.change(input, { target: { files: [document, first, second] } });
+    fireEvent.change(fileInput, { target: { files: [document] } });
+    fireEvent.change(mediaInput, { target: { files: [first, second] } });
     fireEvent.change(screen.getByLabelText("Caption"), {
       target: { value: "Album caption" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Send Attachments" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
 
@@ -470,13 +606,13 @@ describe("MessageInput attachments", () => {
         }),
     );
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const photos = Array.from({ length: 10 }, (_, index) =>
       new File([new Uint8Array(512)], `photo-${index + 1}.png`, { type: "image/png" }),
     );
 
     fireEvent.change(input, { target: { files: photos } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Photos" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
     await waitFor(() =>
       expect(
         within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Sending..." }),
@@ -517,13 +653,15 @@ describe("MessageInput attachments", () => {
     );
 
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const mediaInput = getMediaInput(container);
+    const fileInput = getFileInput(container);
     const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
     const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
     const third = new File(["pdf"], "report.pdf", { type: "application/pdf" });
 
-    fireEvent.change(input, { target: { files: [first, second, third] } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Attachments" }));
+    fireEvent.change(mediaInput, { target: { files: [first, second] } });
+    fireEvent.change(fileInput, { target: { files: [third] } });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(0));
     await waitFor(() => expect(screen.getByText("Upload failed")).toBeInTheDocument());
@@ -537,12 +675,12 @@ describe("MessageInput attachments", () => {
   it("shows a send-specific error when grouped send rejects after uploads succeed", async () => {
     const onSend = vi.fn().mockRejectedValue(new Error("album payload rejected"));
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
     const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
 
     fireEvent.change(input, { target: { files: [first, second] } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Photos" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByText("Album send failed")).toBeInTheDocument());
@@ -562,19 +700,18 @@ describe("MessageInput attachments", () => {
         }),
     );
     const { container } = render(<MessageInput onSend={onSend} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getMediaInput(container);
     const first = new File([new Uint8Array(512)], "photo-1.png", { type: "image/png" });
     const second = new File([new Uint8Array(512)], "photo-2.png", { type: "image/png" });
 
     fireEvent.change(input, { target: { files: [first, second] } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Photos" }));
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
 
     const modal = screen.getByTestId("attachment-review-modal");
     await waitFor(() =>
       expect(within(modal).getByRole("button", { name: "Sending..." })).toBeDisabled(),
     );
-    expect(within(modal).getByRole("button", { name: "Add More" })).toBeDisabled();
-    expect(within(modal).getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(within(modal).getByRole("button", { name: "Add attachments" })).toBeDisabled();
     expect(within(modal).getByRole("button", { name: "Close attachment review" })).toBeDisabled();
 
     releaseSend();
@@ -583,7 +720,7 @@ describe("MessageInput attachments", () => {
 
   it("rejects unsupported file types before upload", () => {
     const { container } = render(<MessageInput onSend={vi.fn()} />);
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = getFileInput(container);
     const file = new File(["plain text"], "notes.txt", { type: "text/plain" });
 
     fireEvent.change(input, { target: { files: [file] } });

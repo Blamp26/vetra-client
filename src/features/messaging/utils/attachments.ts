@@ -37,6 +37,13 @@ export const MESSAGE_ATTACHMENT_ACCEPT = Object.keys(
   ALLOWED_ATTACHMENT_TYPES,
 ).join(",");
 
+export const MESSAGE_MEDIA_ATTACHMENT_ACCEPT = Object.keys(
+  ALLOWED_ATTACHMENT_TYPES,
+).filter((mimeType) => mimeType.startsWith("image/") || mimeType.startsWith("video/"))
+  .join(",");
+
+export const MESSAGE_FILE_ATTACHMENT_ACCEPT = "application/pdf";
+
 type AttachmentLike = {
   attachment?: Attachment | null;
   attachments?: Attachment[] | null;

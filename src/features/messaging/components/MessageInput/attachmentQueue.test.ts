@@ -108,17 +108,17 @@ describe("attachmentQueue helpers", () => {
   });
 
   it("builds Telegram-like modal titles for photo and mixed selections", () => {
-    expect(getAttachmentReviewTitle([makeAttachment("photo-1", "photo")])).toBe("Send Photo");
+    expect(getAttachmentReviewTitle([makeAttachment("photo-1", "photo")])).toBe("Send 1 Photo");
     expect(getAttachmentReviewTitle([
       makeAttachment("photo-1", "photo"),
       makeAttachment("photo-2", "photo"),
-    ])).toBe("Send Photos");
+    ])).toBe("Send 2 Photos");
     expect(getAttachmentReviewTitle([
       makeAttachment("file-1", "file"),
-    ])).toBe("Send Files");
+    ])).toBe("Send 1 File");
     expect(getAttachmentReviewTitle([
       makeAttachment("file-1", "file"),
       makeAttachment("photo-1", "photo"),
-    ])).toBe("Send Attachments");
+    ])).toBe("Send 2 Items");
   });
 });
