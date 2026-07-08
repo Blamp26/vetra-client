@@ -49,8 +49,8 @@ interface MessageItemProps {
   onToggleSelection: (id: number) => void;
   onToggleReaction: (msgId: number, emoji: string) => void;
   onLightbox: (data:
-    | { kind: "image"; src: string; author: string; time: string }
-    | { kind: "video"; src: string; author: string; time: string }
+    | { kind: "image"; src: string; authorName: string; createdAt: string; avatarSrc?: string | null; messageId: number }
+    | { kind: "video"; src: string; authorName: string; createdAt: string; avatarSrc?: string | null; messageId: number }
   ) => void;
   renderReplyPreview: (msg: Message, isOwn: boolean) => React.ReactNode;
   formatTime: (iso: string) => string;
@@ -501,8 +501,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           onLightbox({
             kind: "video",
             src: videoSrc,
-            author: authorName,
-            time: msg.inserted_at,
+            authorName,
+            createdAt: msg.inserted_at,
+            avatarSrc: msg.sender?.avatar_url ?? null,
+            messageId: msg.id,
           });
           return;
         }
@@ -579,10 +581,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     onLightbox({
       kind: currentAttachment.kind === "video" ? "video" : "image",
       src: viewerSrc,
-      author: authorName,
-      time: msg.inserted_at,
+      authorName,
+      createdAt: msg.inserted_at,
+      avatarSrc: msg.sender?.avatar_url ?? null,
+      messageId: msg.id,
     });
-  }, [authorName, msg.inserted_at, onLightbox]);
+  }, [authorName, msg.id, msg.inserted_at, msg.sender?.avatar_url, onLightbox]);
 
   const renderVisualMedia = React.useCallback(
     (currentAttachment: ResolvedVisualAttachment, attachmentName: string) => {
@@ -823,8 +827,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         onClick={() => onLightbox({
           kind: "image",
           src: currentAttachment.lightboxSrc,
-          author: authorName,
-          time: msg.inserted_at,
+          authorName,
+          createdAt: msg.inserted_at,
+          avatarSrc: msg.sender?.avatar_url ?? null,
+          messageId: msg.id,
         })}
         style={{
           width: `${layout.width}px`,

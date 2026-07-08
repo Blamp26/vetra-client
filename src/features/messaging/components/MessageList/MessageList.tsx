@@ -58,8 +58,22 @@ interface ContextMenu {
 }
 
 type MediaViewerState =
-  | { kind: "image"; src: string; author: string; time: string }
-  | { kind: "video"; src: string; author: string; time: string };
+  | {
+    kind: "image";
+    src: string;
+    authorName: string;
+    createdAt: string;
+    avatarSrc?: string | null;
+    messageId: number;
+  }
+  | {
+    kind: "video";
+    src: string;
+    authorName: string;
+    createdAt: string;
+    avatarSrc?: string | null;
+    messageId: number;
+  };
 
 function toRect(rect: DOMRect | DOMRectReadOnly) {
   return {
@@ -313,6 +327,22 @@ export function MessageList({
     setForwardingMessages([contextMenu.msgId]);
     setContextMenu(null);
   }, [contextMenu, messagesById, setForwardingMessages]);
+
+  const handleLightboxDelete = useCallback(() => {
+    if (!lightboxData) return;
+    const targetMessage = messagesById.get(lightboxData.messageId);
+    if (!targetMessage || targetMessage.sender_id !== currentUserId) return;
+    setLightboxData(null);
+    setMsgToDelete(targetMessage.id);
+  }, [currentUserId, lightboxData, messagesById]);
+
+  const handleLightboxForward = useCallback(() => {
+    if (!lightboxData) return;
+    const targetMessage = messagesById.get(lightboxData.messageId);
+    if (!targetMessage || !isMessageForwardable(targetMessage)) return;
+    setLightboxData(null);
+    setForwardingMessages([targetMessage.id]);
+  }, [lightboxData, messagesById, setForwardingMessages]);
 
   const handlePerformForward = useCallback(async (target: { type: 'direct' | 'room', id: number; ref?: string | number | null }) => {
     if (!forwardingMessageIds || forwardingMessageIds.length === 0 || !socketManager) return;
@@ -569,8 +599,8 @@ export function MessageList({
       {lightboxData?.kind === "image" && (
         <ImageLightbox
           src={lightboxData.src}
-          author={lightboxData.author}
-          time={lightboxData.time}
+          author={lightboxData.authorName}
+          time={lightboxData.createdAt}
           onClose={() => setLightboxData(null)}
         />
       )}
@@ -578,8 +608,25 @@ export function MessageList({
       {lightboxData?.kind === "video" && (
         <VideoLightbox
           src={lightboxData.src}
-          author={lightboxData.author}
-          time={lightboxData.time}
+          authorName={lightboxData.authorName}
+          avatarSrc={lightboxData.avatarSrc}
+          createdAt={lightboxData.createdAt}
+          onForward={
+            (() => {
+              const targetMessage = messagesById.get(lightboxData.messageId);
+              return targetMessage && isMessageForwardable(targetMessage)
+                ? handleLightboxForward
+                : undefined;
+            })()
+          }
+          onDelete={
+            (() => {
+              const targetMessage = messagesById.get(lightboxData.messageId);
+              return targetMessage && targetMessage.sender_id === currentUserId
+                ? handleLightboxDelete
+                : undefined;
+            })()
+          }
           onClose={() => setLightboxData(null)}
         />
       )}

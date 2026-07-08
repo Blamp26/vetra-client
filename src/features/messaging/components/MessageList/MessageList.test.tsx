@@ -21,17 +21,26 @@ vi.mock("@/shared/components/ImageLightbox", () => ({
 vi.mock("@/shared/components/VideoLightbox", () => ({
   VideoLightbox: ({
     src,
-    author,
-    time,
+    authorName,
+    createdAt,
+    avatarSrc,
+    onDelete,
+    onForward,
   }: {
     src: string;
-    author: string;
-    time: string;
+    authorName: string;
+    createdAt: string;
+    avatarSrc?: string | null;
+    onDelete?: () => void;
+    onForward?: () => void;
   }) => (
     <div data-testid="video-lightbox-mock">
       <span>{src}</span>
-      <span>{author}</span>
-      <span>{time}</span>
+      <span>{authorName}</span>
+      <span>{createdAt}</span>
+      <span>{avatarSrc ?? "no-avatar"}</span>
+      <span>{onDelete ? "can-delete" : "cannot-delete"}</span>
+      <span>{onForward ? "can-forward" : "cannot-forward"}</span>
     </div>
   ),
 }));
@@ -214,6 +223,15 @@ describe("MessageList bubble layout", () => {
         id: 7,
         content: null,
         sender_id: 2,
+        sender: {
+          id: 2,
+          username: "alice",
+          display_name: "Alice",
+          bio: null,
+          avatar_url: "/avatars/alice.png",
+          status: "online",
+          last_seen_at: null,
+        },
         attachments: [
           {
             id: "video-group-1",
@@ -247,6 +265,58 @@ describe("MessageList bubble layout", () => {
     expect(screen.getByText(/video-group-1/)).toBeInTheDocument();
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("2026-06-30T12:00:00Z")).toBeInTheDocument();
+    expect(screen.getByText("/avatars/alice.png")).toBeInTheDocument();
+    expect(screen.getByText("cannot-forward")).toBeInTheDocument();
+    expect(screen.getByText("cannot-delete")).toBeInTheDocument();
+  });
+
+  it("opens VideoLightbox with delete capability for the current user's own grouped video message", () => {
+    renderMessageList([
+      makeMessage({
+        id: 8,
+        content: null,
+        sender_id: 1,
+        sender_display_name: "You",
+        sender: {
+          id: 1,
+          username: "you",
+          display_name: "You",
+          bio: null,
+          avatar_url: "/avatars/you.png",
+          status: "online",
+          last_seen_at: null,
+        },
+        attachments: [
+          {
+            id: "video-own-1",
+            url: "/api/v1/media/video-own-1",
+            mime_type: "video/mp4",
+            original_name: "own.mp4",
+            file_size: 2048,
+            kind: "video",
+            width: 1280,
+            height: 720,
+          },
+          {
+            id: "photo-own-2",
+            url: "/api/v1/media/photo-own-2",
+            mime_type: "image/jpeg",
+            original_name: "own.jpg",
+            file_size: 1024,
+            kind: "photo",
+            width: 1200,
+            height: 900,
+          },
+        ],
+        media_file_ids: ["video-own-1", "photo-own-2"],
+        media_mime_types: ["video/mp4", "image/jpeg"],
+      }),
+    ]);
+
+    fireEvent.click(screen.getByTestId("message-video-tile-video-own-1"));
+
+    expect(screen.getByTestId("video-lightbox-mock")).toBeInTheDocument();
+    expect(screen.getByText("can-delete")).toBeInTheDocument();
   });
 
   it("uses tighter spacing between consecutive media/document messages from the same sender", () => {

@@ -645,12 +645,14 @@ describe("MessageItem bubble layout", () => {
 
     screen.getByTestId("message-media-shell").click();
 
-    expect(onLightbox).toHaveBeenCalledWith({
+    expect(onLightbox).toHaveBeenCalledWith(expect.objectContaining({
       kind: "image",
       src: expect.stringContaining("/api/v1/media/media-photo-rich?variant=original"),
-      author: "Alice",
-      time: "2026-06-30T12:00:00Z",
-    });
+      authorName: "Alice",
+      createdAt: "2026-06-30T12:00:00Z",
+      avatarSrc: null,
+      messageId: 1,
+    }));
   });
 
   it("renders a nine-photo grouped message with aspect-aware album geometry", () => {
@@ -820,12 +822,14 @@ describe("MessageItem bubble layout", () => {
 
     fireEvent.click(screen.getByTestId("message-video-tile-video-album-1"));
 
-    expect(onLightbox).toHaveBeenCalledWith({
+    expect(onLightbox).toHaveBeenCalledWith(expect.objectContaining({
       kind: "video",
       src: expect.stringContaining("/api/v1/media/video-album-1"),
-      author: "Alice",
-      time: "2026-06-30T12:00:00Z",
-    });
+      authorName: "Alice",
+      createdAt: "2026-06-30T12:00:00Z",
+      avatarSrc: null,
+      messageId: 1,
+    }));
   });
 
   it("updates grouped video layout dimensions after metadata loads", () => {
@@ -1237,12 +1241,14 @@ describe("MessageItem bubble layout", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
-    expect(onLightbox).toHaveBeenCalledWith({
+    expect(onLightbox).toHaveBeenCalledWith(expect.objectContaining({
       kind: "video",
       src: expect.stringContaining("/api/v1/media/media-video-open"),
-      author: "Alice",
-      time: "2026-06-30T12:00:00Z",
-    });
+      authorName: "Alice",
+      createdAt: "2026-06-30T12:00:00Z",
+      avatarSrc: null,
+      messageId: 1,
+    }));
     expect(attachmentDownloads.openAttachmentWithAuth).not.toHaveBeenCalled();
   });
 
