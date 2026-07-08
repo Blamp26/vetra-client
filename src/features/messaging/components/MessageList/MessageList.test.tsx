@@ -23,10 +23,37 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
     src,
     alt,
     className,
+    onLoad,
+    onMediaDiagnostics,
     ...props
   }: ComponentProps<"img"> & {
     src: string;
-  }) => <img data-testid="authenticated-image" src={src} alt={alt} className={className} {...props} />,
+    onMediaDiagnostics?: (diagnostics: {
+      naturalWidth: number;
+      naturalHeight: number;
+      renderedWidth: number;
+      renderedHeight: number;
+      devicePixelRatio: number;
+    }) => void;
+  }) => (
+    <img
+      data-testid="authenticated-image"
+      src={src}
+      alt={alt}
+      className={className}
+      {...props}
+      onLoad={(event) => {
+        onMediaDiagnostics?.({
+          naturalWidth: event.currentTarget.naturalWidth,
+          naturalHeight: event.currentTarget.naturalHeight,
+          renderedWidth: event.currentTarget.clientWidth,
+          renderedHeight: event.currentTarget.clientHeight,
+          devicePixelRatio: 1,
+        });
+        onLoad?.(event);
+      }}
+    />
+  ),
 }));
 
 vi.mock("../ForwardModal", () => ({

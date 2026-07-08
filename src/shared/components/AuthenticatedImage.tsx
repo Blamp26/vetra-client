@@ -1,20 +1,61 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '@/store';
 
+export interface AuthenticatedImageDiagnostics {
+  naturalWidth: number;
+  naturalHeight: number;
+  renderedWidth: number;
+  renderedHeight: number;
+  devicePixelRatio: number;
+}
+
 interface AuthenticatedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
+  onMediaDiagnostics?: (diagnostics: AuthenticatedImageDiagnostics) => void;
 }
 
 /**
  * Component for loading images with a Bearer token.
  * Implements manual lazy loading via IntersectionObserver.
  */
-export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...props }) => {
+export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
+  src,
+  onMediaDiagnostics,
+  ...props
+}) => {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<boolean>(false);
   const [isInView, setIsInView] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
   const authToken = useAppStore((s) => s.authToken);
+
+  const notifyDiagnostics = React.useCallback((image: HTMLImageElement) => {
+    const diagnostics = {
+      naturalWidth: image.naturalWidth,
+      naturalHeight: image.naturalHeight,
+      renderedWidth: image.clientWidth,
+      renderedHeight: image.clientHeight,
+      devicePixelRatio: window.devicePixelRatio || 1,
+    };
+
+    onMediaDiagnostics?.(diagnostics);
+
+    if (
+      import.meta.env.DEV &&
+      diagnostics.renderedWidth > 0 &&
+      diagnostics.renderedHeight > 0 &&
+      (
+        diagnostics.naturalWidth < diagnostics.renderedWidth * diagnostics.devicePixelRatio * 0.9 ||
+        diagnostics.naturalHeight < diagnostics.renderedHeight * diagnostics.devicePixelRatio * 0.9
+      )
+    ) {
+      console.warn('[AuthenticatedImage] Rendered image source may be too small for the current tile.', {
+        src,
+        ...diagnostics,
+      });
+    }
+  }, [onMediaDiagnostics, src]);
 
   // Intersection Observer for lazy loading
   useEffect(() => {
@@ -70,31 +111,23 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...
     };
   }, [src, authToken, isInView]);
 
-  const handleLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
-    if (import.meta.env.DEV) {
-      const image = event.currentTarget;
-      const renderedWidth = image.clientWidth;
-      const renderedHeight = image.clientHeight;
-      const dpr = window.devicePixelRatio || 1;
-      const requiredWidth = renderedWidth * dpr;
-      const requiredHeight = renderedHeight * dpr;
+  useEffect(() => {
+    if (!objectUrl || !imageRef.current) return;
+    if (typeof ResizeObserver === 'undefined') return;
 
-      if (
-        renderedWidth > 0 &&
-        renderedHeight > 0 &&
-        (image.naturalWidth < requiredWidth * 0.9 || image.naturalHeight < requiredHeight * 0.9)
-      ) {
-        console.warn('[AuthenticatedImage] Rendered image source may be too small for the current tile.', {
-          src,
-          naturalWidth: image.naturalWidth,
-          naturalHeight: image.naturalHeight,
-          renderedWidth,
-          renderedHeight,
-          devicePixelRatio: dpr,
-        });
+    const image = imageRef.current;
+    const observer = new ResizeObserver(() => {
+      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+        notifyDiagnostics(image);
       }
-    }
+    });
 
+    observer.observe(image);
+    return () => observer.disconnect();
+  }, [notifyDiagnostics, objectUrl]);
+
+  const handleLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
+    notifyDiagnostics(event.currentTarget);
     props.onLoad?.(event);
   };
 
@@ -103,7 +136,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...
       <div
         aria-label={typeof props.alt === "string" ? props.alt : "Failed to load image"}
         className={props.className}
-        style={props.style}
+        style={{ display: "block", width: "100%", height: "100%", ...props.style }}
       />
     );
   }
@@ -113,10 +146,18 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, ...
       <div 
         ref={containerRef}
         className={`${props.className ?? ""} bg-muted animate-pulse`.trim()} 
-        style={{ ...props.style, minHeight: props.height || '100px' }} 
+        style={{ display: "block", width: "100%", height: "100%", ...props.style }} 
       />
     );
   }
 
-  return <img {...props} src={objectUrl} onLoad={handleLoad} />;
+  return (
+    <img
+      {...props}
+      ref={imageRef}
+      src={objectUrl}
+      onLoad={handleLoad}
+      style={{ display: "block", width: "100%", height: "100%", ...props.style }}
+    />
+  );
 };

@@ -454,6 +454,16 @@ function scoreCandidate(
   const variance = rowHeights.length <= 1
     ? 0
     : Math.max(...rowHeights) - Math.min(...rowHeights);
+  const ratioPenalty = candidate.layout.tiles.reduce((sum, tile) => {
+    const sourceRatio = items[tile.index]?.ratio ?? getFallbackRatio(options);
+    const tileRatio = tile.width / tile.height;
+    if (!Number.isFinite(tileRatio) || tileRatio <= 0) return sum + 6;
+
+    const distortion = Math.abs(Math.log(tileRatio / sourceRatio));
+    const severeMismatch = Math.max(tileRatio, sourceRatio) / Math.min(tileRatio, sourceRatio);
+
+    return sum + (distortion * 1.35) + (severeMismatch > 1.9 ? (severeMismatch - 1.9) * 3.2 : 0);
+  }, 0);
   const widthPenalty = candidate.layout.width < maxWidth * 0.42
     ? 1.5
     : 0;
@@ -461,7 +471,7 @@ function scoreCandidate(
   const heightPenalty = Math.abs(candidate.layout.height - targetHeight) / targetHeight;
   const coveragePenalty = candidate.layout.width < maxWidth * 0.58 && items.length > 1 ? 0.6 : 0;
 
-  return tilePenalty + rowPenalty + heightPenalty + (variance / Math.max(targetRowHeight, 1)) * 0.35 + widthPenalty + lastRowPenalty + coveragePenalty;
+  return tilePenalty + rowPenalty + ratioPenalty + heightPenalty + (variance / Math.max(targetRowHeight, 1)) * 0.35 + widthPenalty + lastRowPenalty + coveragePenalty;
 }
 
 function pickBestCandidate(

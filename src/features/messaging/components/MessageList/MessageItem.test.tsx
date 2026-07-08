@@ -17,10 +17,37 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
     src,
     alt,
     className,
+    onLoad,
+    onMediaDiagnostics,
     ...props
   }: ComponentProps<"img"> & {
     src: string;
-  }) => <img data-testid="authenticated-image" src={src} alt={alt} className={className} {...props} />,
+    onMediaDiagnostics?: (diagnostics: {
+      naturalWidth: number;
+      naturalHeight: number;
+      renderedWidth: number;
+      renderedHeight: number;
+      devicePixelRatio: number;
+    }) => void;
+  }) => (
+    <img
+      data-testid="authenticated-image"
+      src={src}
+      alt={alt}
+      className={className}
+      {...props}
+      onLoad={(event) => {
+        onMediaDiagnostics?.({
+          naturalWidth: event.currentTarget.naturalWidth,
+          naturalHeight: event.currentTarget.naturalHeight,
+          renderedWidth: event.currentTarget.clientWidth,
+          renderedHeight: event.currentTarget.clientHeight,
+          devicePixelRatio: 1,
+        });
+        onLoad?.(event);
+      }}
+    />
+  ),
 }));
 
 vi.mock("../../utils/attachmentDownloads", () => ({
@@ -83,6 +110,7 @@ describe("MessageItem bubble layout", () => {
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
       selector({ authToken: "secret-token" }),
     );
+    window.localStorage.removeItem("vetra.mediaDebug");
   });
 
   it("renders incoming direct messages as left-aligned bubbles without sender labels", () => {
@@ -278,6 +306,32 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
   });
 
+  it("keeps the single-photo shell clipped to a fill image without an extra inner frame", () => {
+    renderMessageItem({
+      media_file_id: "media-photo-shell",
+      media_mime_type: "image/jpeg",
+      attachment: {
+        id: "media-photo-shell",
+        url: "/api/v1/media/media-photo-shell",
+        mime_type: "image/jpeg",
+        original_name: "shell.jpg",
+        file_size: 2048,
+        kind: "photo",
+        width: 1600,
+        height: 900,
+      },
+    });
+
+    const bubble = screen.getByTestId("message-bubble");
+    const mediaShell = screen.getByTestId("message-media-shell");
+    const image = screen.getByTestId("authenticated-image");
+
+    expect(bubble).toHaveClass("overflow-hidden", "bg-[#111]", "p-0");
+    expect(mediaShell).toHaveClass("block", "h-full", "w-full", "overflow-hidden");
+    expect(mediaShell).not.toHaveClass("rounded-[16px]");
+    expect(image).toHaveClass("block", "h-full", "w-full", "object-cover");
+  });
+
   it("passes server width and height into the album layout helper", () => {
     const originalComputeMediaAlbumLayout = mediaAlbumLayout.computeMediaAlbumLayout;
     const layoutSpy = vi.spyOn(mediaAlbumLayout, "computeMediaAlbumLayout");
@@ -401,6 +455,82 @@ describe("MessageItem bubble layout", () => {
       expect.objectContaining({ id: "photo-pending-1", width: 1600, height: 900 }),
     ]);
     layoutSpy.mockRestore();
+  });
+
+  it("renders a dev-only media debug badge with server, natural, and rendered sizes", () => {
+    window.localStorage.setItem("vetra.mediaDebug", "1");
+
+    renderMessageItem(
+      {
+        media_file_id: "media-photo-debug",
+        media_mime_type: "image/jpeg",
+        attachment: {
+          id: "media-photo-debug",
+          url: "/api/v1/media/media-photo-debug",
+          mime_type: "image/jpeg",
+          original_name: "debug.jpg",
+          file_size: 2048,
+          kind: "photo",
+          width: 1600,
+          height: 900,
+        },
+      },
+      { isOwn: true },
+    );
+
+    const image = screen.getByTestId("authenticated-image");
+    Object.defineProperties(image, {
+      naturalWidth: { configurable: true, value: 1600 },
+      naturalHeight: { configurable: true, value: 900 },
+      clientWidth: { configurable: true, value: 320 },
+      clientHeight: { configurable: true, value: 180 },
+    });
+    fireEvent.load(image);
+
+    expect(screen.getByTestId("message-media-debug-media-photo-debug")).toHaveTextContent("s:1600x900");
+    expect(screen.getByTestId("message-media-debug-media-photo-debug")).toHaveTextContent("n:1600x900");
+    expect(screen.getByTestId("message-media-debug-media-photo-debug")).toHaveTextContent("r:320x180");
+  });
+
+  it("warns in dev when the loaded source is smaller than the rendered tile", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    renderMessageItem(
+      {
+        id: 77,
+        media_file_id: "media-photo-small-source",
+        media_mime_type: "image/jpeg",
+        attachment: {
+          id: "media-photo-small-source",
+          url: "/api/v1/media/media-photo-small-source",
+          mime_type: "image/jpeg",
+          original_name: "small.jpg",
+          file_size: 2048,
+          kind: "photo",
+          width: 800,
+          height: 600,
+        },
+      },
+      { isOwn: true },
+    );
+
+    const image = screen.getByTestId("authenticated-image");
+    Object.defineProperties(image, {
+      naturalWidth: { configurable: true, value: 400 },
+      naturalHeight: { configurable: true, value: 300 },
+      clientWidth: { configurable: true, value: 420 },
+      clientHeight: { configurable: true, value: 315 },
+    });
+    fireEvent.load(image);
+
+    expect(
+      warnSpy.mock.calls.some(([label, payload]) =>
+        String(label).includes("[VETRA media-quality]") &&
+        (payload as Record<string, unknown>).messageId === 77 &&
+        (payload as Record<string, unknown>).attachmentId === "media-photo-small-source",
+      ),
+    ).toBe(true);
+    warnSpy.mockRestore();
   });
 
   it("uses display-quality image URLs in chat and original URLs in the lightbox", () => {
@@ -617,6 +747,44 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-photo-collage")).toBeInTheDocument();
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(4);
     expect(screen.getAllByTestId("authenticated-image")).toHaveLength(4);
+  });
+
+  it("keeps album tile media filling each tile boundary", () => {
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "photo-fill-1",
+            url: "/api/v1/media/photo-fill-1",
+            mime_type: "image/jpeg",
+            original_name: "photo-fill-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1200,
+            height: 900,
+          },
+          {
+            id: "photo-fill-2",
+            url: "/api/v1/media/photo-fill-2",
+            mime_type: "image/jpeg",
+            original_name: "photo-fill-2.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 900,
+            height: 1400,
+          },
+        ],
+        media_file_ids: ["photo-fill-1", "photo-fill-2"],
+        media_mime_types: ["image/jpeg", "image/jpeg"],
+      },
+      { isOwn: true },
+    );
+
+    const tile = screen.getAllByTestId("message-photo-collage-tile")[0];
+    const image = screen.getAllByTestId("authenticated-image")[0];
+
+    expect(tile).toHaveClass("relative", "block", "h-full", "w-full", "overflow-hidden");
+    expect(image).toHaveClass("block", "h-full", "w-full", "object-cover", "object-center");
   });
 
   it("renders incoming media-only messages with overlay timestamp and no outgoing status", () => {

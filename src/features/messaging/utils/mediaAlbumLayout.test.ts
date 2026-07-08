@@ -59,6 +59,23 @@ function expectNoOverlap(layout: MediaAlbumLayout) {
   });
 }
 
+function expectNoAbsurdRatioMismatch(
+  layout: MediaAlbumLayout,
+  items: MediaAlbumInput[],
+  maxRatioFactor = 2,
+) {
+  layout.tiles.forEach((tile) => {
+    const input = items[tile.index];
+    if (!input?.width || !input?.height) return;
+
+    const tileRatio = tile.width / tile.height;
+    const mediaRatio = input.width / input.height;
+    const ratioFactor = Math.max(tileRatio, mediaRatio) / Math.min(tileRatio, mediaRatio);
+
+    expect(ratioFactor).toBeLessThan(maxRatioFactor);
+  });
+}
+
 describe("mediaAlbumLayout", () => {
   it("returns an empty layout safely for empty input", () => {
     expect(computeMediaAlbumLayout([], DEFAULT_OPTIONS)).toEqual({
@@ -84,6 +101,28 @@ describe("mediaAlbumLayout", () => {
     expect(layout.width).toBe(DEFAULT_OPTIONS.maxWidth);
     expect(layout.height).toBeLessThan(layout.width);
     expect(layout.height).toBeLessThan(DEFAULT_OPTIONS.maxWidth);
+  });
+
+  it("keeps a 16:9 screenshot readable instead of compressing it into a short strip", () => {
+    const layout = computeMediaAlbumLayout([makeItem("screenshot-wide", 1920, 1080)], DEFAULT_OPTIONS);
+
+    expect(layout.width).toBe(480);
+    expect(layout.height).toBeCloseTo(270, 4);
+  });
+
+  it("keeps a 4:3 UI capture readable within the square album bound", () => {
+    const layout = computeMediaAlbumLayout([makeItem("screenshot-ui", 1600, 1200)], DEFAULT_OPTIONS);
+
+    expect(layout.width).toBe(480);
+    expect(layout.height).toBeCloseTo(360, 4);
+  });
+
+  it("keeps a tall phone screenshot portrait within the square album bound", () => {
+    const layout = computeMediaAlbumLayout([makeItem("screenshot-tall", 1080, 2340)], DEFAULT_OPTIONS);
+
+    expect(layout.width).toBeLessThan(layout.height);
+    expect(layout.height).toBe(480);
+    expect(layout.width).toBeGreaterThan(200);
   });
 
   it("uses a safe square-ish fallback when dimensions are missing", () => {
@@ -179,6 +218,22 @@ describe("mediaAlbumLayout", () => {
     expect(Math.min(...layout.tiles.map((tile) => tile.height))).toBeGreaterThan(95);
   });
 
+  it("keeps mixed screenshots and photos within reasonable tile ratio distortion", () => {
+    const items = [
+      makeItem("screenshot-wide", 1920, 1080),
+      makeItem("screenshot-ui", 1600, 1200),
+      makeItem("phone", 1080, 2340),
+      makeItem("photo", 1350, 1350),
+    ];
+    const layout = computeMediaAlbumLayout(items, DEFAULT_OPTIONS);
+
+    expectFinitePositiveLayout(layout);
+    expectTilesInsideBounds(layout);
+    expectNoOverlap(layout);
+    expect(Math.min(...layout.tiles.map((tile) => tile.height))).toBeGreaterThan(105);
+    expectNoAbsurdRatioMismatch(layout, items, 1.95);
+  });
+
   it.each([5, 6, 7, 8, 9])("keeps %s mixed items inside bounds without overlap", (count) => {
     const items = Array.from({ length: count }, (_, index) => {
       const dimensions = [
@@ -195,6 +250,7 @@ describe("mediaAlbumLayout", () => {
     expectTilesInsideBounds(layout);
     expectNoOverlap(layout);
     expect(Math.min(...layout.tiles.map((tile) => tile.height))).toBeGreaterThan(70);
+    expectNoAbsurdRatioMismatch(layout, items, 2.2);
   });
 
   it("clamps extreme panoramic ratios so tiles do not collapse into slivers", () => {

@@ -2,7 +2,10 @@ import React from "react";
 import { Message, MessageReactionGroup } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
-import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
+import {
+  AuthenticatedImage,
+  type AuthenticatedImageDiagnostics,
+} from "@/shared/components/AuthenticatedImage";
 import { useAppStore } from "@/store";
 import { Download, ExternalLink, FileText, Film } from "lucide-react";
 import { StatusIcon } from "./StatusIcon";
@@ -59,9 +62,14 @@ type ResolvedPhotoAttachment = {
   attachment: PhotoAttachment;
   displaySrc: string | null;
   lightboxSrc: string | null;
+  serverWidth?: number;
+  serverHeight?: number;
   width?: number;
   height?: number;
   dimensionSource: "server" | "decoded" | "fallback";
+};
+type PhotoRuntimeMetrics = AuthenticatedImageDiagnostics & {
+  chosenImageSource: string | null;
 };
 
 const MESSAGE_ALBUM_MAX_WIDTH = 480;
@@ -107,6 +115,11 @@ function getResolvedPhotoRatio(
   if (!width || !height) return fallbackRatio;
   const rawRatio = width / height;
   return Number.isFinite(rawRatio) && rawRatio > 0 ? rawRatio : fallbackRatio;
+}
+
+function shortenAttachmentId(attachmentId: string) {
+  if (attachmentId.length <= 8) return attachmentId;
+  return `${attachmentId.slice(0, 4)}…${attachmentId.slice(-3)}`;
 }
 
 function toPercent(value: number, total: number) {
@@ -168,7 +181,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const [decodedPhotoDimensions, setDecodedPhotoDimensions] = React.useState<
     Record<string, { width: number; height: number }>
   >({});
+  const [photoRuntimeMetrics, setPhotoRuntimeMetrics] = React.useState<
+    Record<string, PhotoRuntimeMetrics>
+  >({});
+  const [isMediaDebugEnabled, setIsMediaDebugEnabled] = React.useState(false);
   const warnedMissingDimensionKeysRef = React.useRef(new Set<string>());
+  const warnedSmallSourceKeysRef = React.useRef(new Set<string>());
   const attachments = getMessageAttachments(msg);
   const attachment = getMessageAttachment(msg);
   const hasMedia = attachments.length > 0;
@@ -194,6 +212,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         attachment: currentAttachment,
         displaySrc: getAttachmentDisplaySrc(currentAttachment),
         lightboxSrc: getAttachmentOriginalSrc(currentAttachment),
+        serverWidth: serverDimensions.width,
+        serverHeight: serverDimensions.height,
         width: serverDimensions.width ?? decodedDimensions?.width,
         height: serverDimensions.height ?? decodedDimensions?.height,
         dimensionSource: hasServerDimensions
@@ -235,6 +255,22 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         isConsecutive && "rounded-tl-[8px]",
         isGroupedWithNext ? "rounded-bl-[8px]" : "rounded-bl-[4px]",
       );
+
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) return;
+
+    const readDebugFlag = () => {
+      try {
+        setIsMediaDebugEnabled(window.localStorage.getItem("vetra.mediaDebug") === "1");
+      } catch {
+        setIsMediaDebugEnabled(false);
+      }
+    };
+
+    readDebugFlag();
+    window.addEventListener("storage", readDebugFlag);
+    return () => window.removeEventListener("storage", readDebugFlag);
+  }, []);
 
   React.useEffect(() => {
     if (!hasMedia) return;
@@ -292,6 +328,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           height: currentAttachment.height ?? null,
           dimensionSource: currentAttachment.dimensionSource,
           computedRatio: getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height),
+          naturalWidth: photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? null,
+          naturalHeight: photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? null,
+          renderedWidth: photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? null,
+          renderedHeight: photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? null,
           tileX: tile?.x ?? null,
           tileY: tile?.y ?? null,
           tileWidth: tile?.width ?? null,
@@ -299,7 +339,42 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         };
       }),
     });
-  }, [isPhotoMessage, isTemporaryPhotoLayout, msg.id, photoLayout, resolvedPhotoAttachments]);
+  }, [isPhotoMessage, isTemporaryPhotoLayout, msg.id, photoLayout, photoRuntimeMetrics, resolvedPhotoAttachments]);
+
+  React.useEffect(() => {
+    if (!import.meta.env.DEV) return;
+
+    resolvedPhotoAttachments.forEach((currentAttachment) => {
+      const runtimeMetrics = photoRuntimeMetrics[currentAttachment.attachment.id];
+      if (!runtimeMetrics) return;
+
+      const requiredWidth = runtimeMetrics.renderedWidth * runtimeMetrics.devicePixelRatio;
+      const requiredHeight = runtimeMetrics.renderedHeight * runtimeMetrics.devicePixelRatio;
+      if (
+        runtimeMetrics.naturalWidth >= requiredWidth &&
+        runtimeMetrics.naturalHeight >= requiredHeight
+      ) {
+        return;
+      }
+
+      const warningKey = `${msg.id}:${currentAttachment.attachment.id}:${runtimeMetrics.renderedWidth}x${runtimeMetrics.renderedHeight}`;
+      if (warnedSmallSourceKeysRef.current.has(warningKey)) return;
+      warnedSmallSourceKeysRef.current.add(warningKey);
+
+      console.warn("[VETRA media-quality] Rendered image source is smaller than the visible tile.", {
+        messageId: msg.id,
+        attachmentId: currentAttachment.attachment.id,
+        chosenImageSource: runtimeMetrics.chosenImageSource,
+        serverWidth: currentAttachment.serverWidth ?? null,
+        serverHeight: currentAttachment.serverHeight ?? null,
+        naturalWidth: runtimeMetrics.naturalWidth,
+        naturalHeight: runtimeMetrics.naturalHeight,
+        renderedWidth: runtimeMetrics.renderedWidth,
+        renderedHeight: runtimeMetrics.renderedHeight,
+        devicePixelRatio: runtimeMetrics.devicePixelRatio,
+      });
+    });
+  }, [msg.id, photoRuntimeMetrics, resolvedPhotoAttachments]);
 
   const handleDecodedPhotoDimensions = React.useCallback(
     (attachmentId: string, naturalWidth: number, naturalHeight: number) => {
@@ -318,6 +393,34 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             width: naturalWidth,
             height: naturalHeight,
           },
+        };
+      });
+    },
+    [],
+  );
+
+  const handlePhotoDiagnostics = React.useCallback(
+    (attachmentId: string, chosenImageSource: string | null, diagnostics: AuthenticatedImageDiagnostics) => {
+      setPhotoRuntimeMetrics((current) => {
+        const nextMetrics: PhotoRuntimeMetrics = {
+          ...diagnostics,
+          chosenImageSource,
+        };
+        const existing = current[attachmentId];
+        if (
+          existing?.naturalWidth === nextMetrics.naturalWidth &&
+          existing.naturalHeight === nextMetrics.naturalHeight &&
+          existing.renderedWidth === nextMetrics.renderedWidth &&
+          existing.renderedHeight === nextMetrics.renderedHeight &&
+          existing.devicePixelRatio === nextMetrics.devicePixelRatio &&
+          existing.chosenImageSource === nextMetrics.chosenImageSource
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [attachmentId]: nextMetrics,
         };
       });
     },
@@ -410,6 +513,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     const attachmentName = getAttachmentDisplayName(currentAttachment.attachment);
 
     if (!currentAttachment.displaySrc || !currentAttachment.lightboxSrc) return null;
+    const runtimeMetrics = photoRuntimeMetrics[currentAttachment.attachment.id];
+    const computedRatio = getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height);
 
     return (
       <div
@@ -420,7 +525,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       >
         <button
           type="button"
-          className="relative flex h-full w-full overflow-hidden bg-[#111]"
+          className="relative block h-full w-full overflow-hidden"
           data-testid="message-photo-collage-tile"
           onClick={() => onLightbox({
             src: currentAttachment.lightboxSrc,
@@ -438,7 +543,30 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               event.currentTarget.naturalWidth,
               event.currentTarget.naturalHeight,
             )}
+            onMediaDiagnostics={(diagnostics) => handlePhotoDiagnostics(
+              currentAttachment.attachment.id,
+              currentAttachment.displaySrc,
+              diagnostics,
+            )}
           />
+          {isMediaDebugEnabled && (
+            <div
+              className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
+              data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
+            >
+              <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
+              <div>
+                s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
+              </div>
+              <div>
+                n:{runtimeMetrics?.naturalWidth ?? "?"}x{runtimeMetrics?.naturalHeight ?? "?"}
+              </div>
+              <div>
+                r:{runtimeMetrics?.renderedWidth ?? "?"}x{runtimeMetrics?.renderedHeight ?? "?"}
+              </div>
+              <div>ratio:{computedRatio.toFixed(2)}</div>
+            </div>
+          )}
         </button>
       </div>
     );
@@ -454,7 +582,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       if (isTemporaryPhotoLayout) {
         return (
           <div
-            className="grid max-w-full grid-cols-2 gap-[2px] overflow-hidden bg-[#111] shadow-[0_1px_2px_rgba(16,16,16,0.61)]"
+            className="grid max-w-full grid-cols-2 gap-[2px] overflow-hidden"
             style={{
               width: `min(${MESSAGE_ALBUM_MAX_WIDTH}px, calc(100vw - 6rem))`,
               maxWidth: "100%",
@@ -464,12 +592,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           >
             {resolvedPhotoAttachments.map((currentAttachment) => {
               if (!currentAttachment.displaySrc || !currentAttachment.lightboxSrc) return null;
+              const runtimeMetrics = photoRuntimeMetrics[currentAttachment.attachment.id];
 
               return (
                 <button
                   key={currentAttachment.attachment.id}
                   type="button"
-                  className="relative aspect-square overflow-hidden bg-[#111]"
+                  className="relative aspect-square overflow-hidden"
                   data-testid="message-photo-collage-tile"
                   onClick={() => onLightbox({
                     src: currentAttachment.lightboxSrc,
@@ -487,7 +616,32 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                       event.currentTarget.naturalWidth,
                       event.currentTarget.naturalHeight,
                     )}
+                    onMediaDiagnostics={(diagnostics) => handlePhotoDiagnostics(
+                      currentAttachment.attachment.id,
+                      currentAttachment.displaySrc,
+                      diagnostics,
+                    )}
                   />
+                  {isMediaDebugEnabled && (
+                    <div
+                      className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
+                      data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
+                    >
+                      <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
+                      <div>
+                        s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
+                      </div>
+                      <div>
+                        n:{runtimeMetrics?.naturalWidth ?? "?"}x{runtimeMetrics?.naturalHeight ?? "?"}
+                      </div>
+                      <div>
+                        r:{runtimeMetrics?.renderedWidth ?? "?"}x{runtimeMetrics?.renderedHeight ?? "?"}
+                      </div>
+                      <div>
+                        ratio:{getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
                 </button>
               );
             })}
@@ -497,7 +651,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
       return (
         <div
-          className="relative max-w-full overflow-hidden bg-[#111] shadow-[0_1px_2px_rgba(16,16,16,0.61)]"
+          className="relative max-w-full overflow-hidden"
           style={{
             width: `${layout.width}px`,
             maxWidth: "100%",
@@ -523,7 +677,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
     return (
       <div
-        className="relative inline-block max-w-full overflow-hidden rounded-[16px] bg-[#111]"
+        className="relative block h-full w-full overflow-hidden"
         data-testid="message-media-shell"
         onClick={() => onLightbox({
           src: currentAttachment.lightboxSrc,
@@ -547,7 +701,32 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             event.currentTarget.naturalWidth,
             event.currentTarget.naturalHeight,
           )}
+          onMediaDiagnostics={(diagnostics) => handlePhotoDiagnostics(
+            currentAttachment.attachment.id,
+            currentAttachment.displaySrc,
+            diagnostics,
+          )}
         />
+        {isMediaDebugEnabled && (
+          <div
+            className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
+            data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
+          >
+            <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
+            <div>
+              s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
+            </div>
+            <div>
+              n:{photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? "?"}x{photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? "?"}
+            </div>
+            <div>
+              r:{photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? "?"}x{photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? "?"}
+            </div>
+            <div>
+              ratio:{getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -720,10 +899,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "relative w-fit text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
+          "relative w-fit text-sm",
+          !isPhotoMessage && "shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
           isPhotoOnly
             ? cn(
-                "min-w-0 overflow-hidden border border-black/10 bg-transparent p-0",
+                "min-w-0 overflow-hidden bg-[#111] p-0",
                 isPhotoAlbum
                   ? "rounded-t-[15px] rounded-bl-[6px] rounded-br-[6px]"
                   : "rounded-[18px]",
