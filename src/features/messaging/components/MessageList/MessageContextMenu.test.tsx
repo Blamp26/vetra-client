@@ -247,8 +247,7 @@ describe("MessageContextMenu", () => {
     expect(screen.queryByTestId("message-context-reactions-surface")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-context-reaction-tail-large")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-context-reaction-more")).not.toBeInTheDocument();
-
-    expect(screen.getAllByTestId("message-context-expanded-picker-rail-button").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("message-context-expanded-picker-search")).toBeInTheDocument();
   });
 
   it("uses a transparent 216px anchor with a narrower visible action surface", () => {
@@ -350,6 +349,31 @@ describe("MessageContextMenu", () => {
 
     expect(screen.queryByTestId("message-context-reaction-more")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
+  });
+
+  it("renders a Search input in expanded state without category controls", () => {
+    renderMenu({}, { isPickerExpanded: true });
+
+    expect(screen.getByPlaceholderText("Search")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-context-expanded-picker-rail")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-context-expanded-picker-rail-button")).not.toBeInTheDocument();
+  });
+
+  it("filters emoji results from the search input and restores them when cleared", () => {
+    renderMenu({}, { isPickerExpanded: true });
+
+    const input = screen.getByTestId("message-context-expanded-picker-search");
+    const initialCount = screen.getAllByTestId("message-context-expanded-picker-button").length;
+    expect(initialCount).toBeGreaterThan(10);
+
+    fireEvent.change(input, { target: { value: "banana" } });
+    let filtered = screen.getAllByTestId("message-context-expanded-picker-button");
+    expect(filtered).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "React with 🍌" })).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "" } });
+    filtered = screen.getAllByTestId("message-context-expanded-picker-button");
+    expect(filtered).toHaveLength(initialCount);
   });
 
   it("renders the expanded picker in the reaction layer instead of below the action menu", () => {

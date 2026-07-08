@@ -7,6 +7,7 @@ import {
   Edit2,
   Forward,
   Reply,
+  Search,
   Trash2,
 } from "lucide-react";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
@@ -45,12 +46,76 @@ interface MessageContextMenuProps {
 }
 
 const EMOJIS = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🔥"];
-const EXPANDED_EMOJIS = [
-  "❤️", "👍", "👎", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱", "🤬", "😢", "🎉", "🤩", "🤮", "💩",
-  "🙏", "👌", "🕊️", "🤡", "🥱", "🥴", "😍", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "🤣", "⚡", "🍌", "🏆",
-  "💔", "🧐", "😐", "🍓", "🍾", "💋", "🖕", "😈", "😴", "😭", "🤓", "👻", "👀", "🎃", "🙈", "😇",
-  "😨", "🤝", "✍️", "🤗", "🫡", "🎅", "🎄", "⛄", "💅", "🤪", "🗿", "🦄", "😘", "💊", "🙊", "😎",
-  "👾", "🤷‍♂️", "🤷", "🤷‍♀️", "😡",
+const EXPANDED_REACTIONS = [
+  { emoji: "❤️", keywords: ["heart", "love", "red heart"] },
+  { emoji: "👍", keywords: ["thumbs up", "like", "approve"] },
+  { emoji: "👎", keywords: ["thumbs down", "dislike"] },
+  { emoji: "🔥", keywords: ["fire", "lit"] },
+  { emoji: "🥰", keywords: ["smiling face with hearts", "love"] },
+  { emoji: "👏", keywords: ["clap", "applause"] },
+  { emoji: "😁", keywords: ["grin", "happy"] },
+  { emoji: "🤔", keywords: ["thinking", "hmm"] },
+  { emoji: "🤯", keywords: ["mind blown", "shocked"] },
+  { emoji: "😱", keywords: ["scream", "surprised"] },
+  { emoji: "🤬", keywords: ["swearing", "angry"] },
+  { emoji: "😢", keywords: ["cry", "sad"] },
+  { emoji: "🎉", keywords: ["party", "celebration"] },
+  { emoji: "🤩", keywords: ["star struck", "wow"] },
+  { emoji: "🤮", keywords: ["vomit", "sick"] },
+  { emoji: "💩", keywords: ["poop"] },
+  { emoji: "🙏", keywords: ["pray", "thanks"] },
+  { emoji: "👌", keywords: ["ok", "perfect"] },
+  { emoji: "🕊️", keywords: ["dove", "peace"] },
+  { emoji: "🤡", keywords: ["clown"] },
+  { emoji: "🥱", keywords: ["yawn", "tired"] },
+  { emoji: "🥴", keywords: ["woozy", "dizzy"] },
+  { emoji: "😍", keywords: ["heart eyes", "love"] },
+  { emoji: "🐳", keywords: ["whale"] },
+  { emoji: "❤️‍🔥", keywords: ["heart on fire", "passion"] },
+  { emoji: "🌚", keywords: ["moon face"] },
+  { emoji: "🌭", keywords: ["hot dog"] },
+  { emoji: "💯", keywords: ["hundred", "perfect"] },
+  { emoji: "🤣", keywords: ["rofl", "laugh"] },
+  { emoji: "⚡", keywords: ["lightning", "zap"] },
+  { emoji: "🍌", keywords: ["banana"] },
+  { emoji: "🏆", keywords: ["trophy", "winner"] },
+  { emoji: "💔", keywords: ["broken heart", "sad"] },
+  { emoji: "🧐", keywords: ["monocle", "inspect"] },
+  { emoji: "😐", keywords: ["neutral"] },
+  { emoji: "🍓", keywords: ["strawberry"] },
+  { emoji: "🍾", keywords: ["champagne", "celebrate"] },
+  { emoji: "💋", keywords: ["kiss"] },
+  { emoji: "🖕", keywords: ["middle finger"] },
+  { emoji: "😈", keywords: ["devil", "smirk"] },
+  { emoji: "😴", keywords: ["sleep"] },
+  { emoji: "😭", keywords: ["sob", "crying"] },
+  { emoji: "🤓", keywords: ["nerd"] },
+  { emoji: "👻", keywords: ["ghost"] },
+  { emoji: "👀", keywords: ["eyes", "look"] },
+  { emoji: "🎃", keywords: ["pumpkin", "halloween"] },
+  { emoji: "🙈", keywords: ["see no evil", "monkey"] },
+  { emoji: "😇", keywords: ["angel"] },
+  { emoji: "😨", keywords: ["fearful"] },
+  { emoji: "🤝", keywords: ["handshake", "deal"] },
+  { emoji: "✍️", keywords: ["writing", "note"] },
+  { emoji: "🤗", keywords: ["hug"] },
+  { emoji: "🫡", keywords: ["salute"] },
+  { emoji: "🎅", keywords: ["santa"] },
+  { emoji: "🎄", keywords: ["christmas tree"] },
+  { emoji: "⛄", keywords: ["snowman"] },
+  { emoji: "💅", keywords: ["nails", "sass"] },
+  { emoji: "🤪", keywords: ["zany", "crazy"] },
+  { emoji: "🗿", keywords: ["moai", "stone"] },
+  { emoji: "🦄", keywords: ["unicorn"] },
+  { emoji: "😘", keywords: ["kiss face"] },
+  { emoji: "💊", keywords: ["pill", "medicine"] },
+  { emoji: "🙊", keywords: ["speak no evil", "monkey"] },
+  { emoji: "😎", keywords: ["cool", "sunglasses"] },
+  { emoji: "👾", keywords: ["alien monster", "game"] },
+  { emoji: "🤷‍♂️", keywords: ["man shrug"] },
+  { emoji: "🤷", keywords: ["shrug"] },
+  { emoji: "🤷‍♀️", keywords: ["woman shrug"] },
+  { emoji: "😡", keywords: ["pouting", "angry"] },
 ];
 const VIEWPORT_MARGIN = 8;
 const POPUP_REACTION_OFFSET_LEFT = 82;
@@ -208,6 +273,7 @@ export function MessageContextMenu({
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: data.x, top: data.y });
+  const [searchQuery, setSearchQuery] = useState("");
 
   useLayoutEffect(() => {
     const menu = menuRef.current;
@@ -245,6 +311,10 @@ export function MessageContextMenu({
       window.removeEventListener("scroll", handleScroll, true);
     };
   }, [onClose]);
+
+  useEffect(() => {
+    setSearchQuery("");
+  }, [data.msgId, isPickerExpanded]);
 
   const actions = useMemo<ActionRow[]>(() => {
     const rows: ActionRow[] = [
@@ -304,6 +374,16 @@ export function MessageContextMenu({
     return rows.filter((row) => !row.hidden);
   }, [canDownload, canEdit, canForward, canReply, data.hasAttachment, data.hasText, data.isOwn, onCopy, onDelete, onDownload, onEdit, onForward, onReply, onSelect]);
 
+  const filteredReactions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return EXPANDED_REACTIONS;
+
+    return EXPANDED_REACTIONS.filter((reaction) =>
+      reaction.emoji.includes(query) ||
+      reaction.keywords.some((keyword) => keyword.includes(query)),
+    );
+  }, [searchQuery]);
+
   return (
     <div
       ref={menuRef}
@@ -329,44 +409,55 @@ export function MessageContextMenu({
             data-testid="message-context-expanded-picker"
           >
             <div
-              className="flex h-12 w-full items-center overflow-x-auto overflow-y-hidden px-[6px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              data-testid="message-context-expanded-picker-rail"
+              className="px-2 pb-2 pt-2"
+              data-testid="message-context-expanded-picker-search-wrap"
             >
-              {EMOJIS.map((emoji) => (
-                <button
-                  key={`rail-${emoji}`}
-                  type="button"
-                  onClick={() => {
-                    onToggleReaction(data.msgId, emoji);
-                    onClose();
+              <label className="flex h-9 w-full items-center gap-2 rounded-[18px] bg-black/20 px-3 text-[#aaaaaa] ring-1 ring-white/6">
+                <Search className="h-4 w-4 shrink-0" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape") {
+                      event.stopPropagation();
+                    }
                   }}
-                  className="mx-[2px] my-[6px] inline-grid h-9 w-9 shrink-0 place-items-center rounded-[6px] text-[#aaaaaa] transition-colors duration-150 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                  aria-label={`Quick react with ${emoji}`}
-                  data-testid="message-context-expanded-picker-rail-button"
-                >
-                  <Emoji emoji={emoji} size={18} />
-                </button>
-              ))}
+                  placeholder="Search"
+                  className="h-full w-full bg-transparent text-sm text-white outline-none placeholder:text-[#aaaaaa]"
+                  data-testid="message-context-expanded-picker-search"
+                />
+              </label>
             </div>
             <div
-              className="grid h-[calc(358px-48px)] grid-cols-[repeat(auto-fit,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="grid h-[calc(358px-52px)] grid-cols-[repeat(auto-fit,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               data-testid="message-context-expanded-picker-grid"
             >
-              {EXPANDED_EMOJIS.map((emoji, index) => (
-                <button
-                  key={`${emoji}-${index}`}
-                  type="button"
-                  onClick={() => {
-                    onToggleReaction(data.msgId, emoji);
-                    onClose();
-                  }}
-                  className="inline-grid h-9 w-9 place-items-center rounded-[8px] text-[20px] text-white transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                  aria-label={`React with ${emoji}`}
-                  data-testid="message-context-expanded-picker-button"
+              {filteredReactions.length > 0 ? (
+                filteredReactions.map((reaction, index) => (
+                  <button
+                    key={`${reaction.emoji}-${index}`}
+                    type="button"
+                    onClick={() => {
+                      onToggleReaction(data.msgId, reaction.emoji);
+                      onClose();
+                    }}
+                    className="inline-grid h-9 w-9 place-items-center rounded-[8px] text-[20px] text-white transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    aria-label={`React with ${reaction.emoji}`}
+                    data-testid="message-context-expanded-picker-button"
+                  >
+                    <Emoji emoji={reaction.emoji} size={20} />
+                  </button>
+                ))
+              ) : (
+                <div
+                  className="col-span-full px-2 py-4 text-center text-sm text-white/55"
+                  data-testid="message-context-expanded-picker-empty"
                 >
-                  <Emoji emoji={emoji} size={20} />
-                </button>
-              ))}
+                  No reactions found
+                </div>
+              )}
             </div>
           </div>
         ) : (
