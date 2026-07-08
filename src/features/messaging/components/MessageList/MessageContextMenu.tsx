@@ -316,17 +316,16 @@ export function MessageContextMenu({
     >
       <div
         className={cn(
-          "absolute z-[2] overflow-visible bg-transparent transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)]",
-          isPickerExpanded
-            ? "left-[-82px] top-[-48px] h-[358px] w-[298px]"
-            : "left-[-82px] top-0 h-10 w-[298px]",
+          "absolute left-[-82px] top-[-48px] z-[2] w-[298px] overflow-hidden bg-transparent transition-[height] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none",
+          isPickerExpanded ? "h-[358px]" : "h-10",
         )}
-        style={isPickerExpanded ? { transformOrigin: "144px 74px" } : { transform: "translateY(-48px)" }}
+        style={{ transformOrigin: "top center" }}
         data-testid="message-context-reactions"
       >
         {isPickerExpanded ? (
           <div
-            className="h-[358px] min-w-[216px] w-[298px] overflow-hidden rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+            className="h-[358px] min-w-[216px] w-[298px] overflow-hidden rounded-[20px] bg-[rgba(33,33,33,0.867)] opacity-100 shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none supports-[backdrop-filter]:backdrop-blur-[25px]"
+            style={{ transform: "translateY(0)" }}
             data-testid="message-context-expanded-picker"
           >
             <div
@@ -348,15 +347,6 @@ export function MessageContextMenu({
                   <Emoji emoji={emoji} size={18} />
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() => setIsPickerExpanded(false)}
-                className="mx-[2px] my-[6px] inline-grid h-9 w-9 shrink-0 place-items-center rounded-[6px] bg-transparent text-[#aaaaaa] transition-colors duration-150 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                aria-label="Hide more reactions"
-                data-testid="message-context-reaction-more"
-              >
-                <ChevronDown className="h-5 w-5 rotate-180" />
-              </button>
             </div>
             <div
               className="grid h-[calc(358px-48px)] grid-cols-[repeat(auto-fit,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -381,7 +371,8 @@ export function MessageContextMenu({
           </div>
         ) : (
           <div
-            className="relative flex h-10 w-[298px] items-center overflow-visible rounded-[20px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
+            className="relative flex h-10 w-[298px] items-center overflow-visible rounded-[20px] bg-[rgba(33,33,33,0.867)] opacity-100 shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none supports-[backdrop-filter]:backdrop-blur-[25px]"
+            style={{ transform: "translateY(0)" }}
             data-testid="message-context-reactions-surface"
           >
             <div

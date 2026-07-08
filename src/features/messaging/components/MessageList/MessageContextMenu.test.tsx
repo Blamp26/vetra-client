@@ -183,9 +183,7 @@ describe("MessageContextMenu", () => {
     expect(screen.getByTestId("message-context-reactions")).toBeInTheDocument();
     expect(screen.getByTestId("message-context-reactions")).toHaveClass("left-[-82px]");
     expect(screen.getByTestId("message-context-reactions")).toHaveClass("w-[298px]");
-    expect(screen.getByTestId("message-context-reactions")).toHaveStyle({
-      transform: "translateY(-48px)",
-    });
+    expect(screen.getByTestId("message-context-reactions")).toHaveClass("top-[-48px]");
     expect(screen.getByTestId("message-context-reactions-surface")).toHaveClass("rounded-[20px]");
     expect(screen.getAllByTestId("message-context-reaction-button")).toHaveLength(7);
     expect(screen.getByRole("button", { name: "React with 👍" })).toBeInTheDocument();
@@ -248,10 +246,9 @@ describe("MessageContextMenu", () => {
     expect(screen.getByTestId("message-context-expanded-picker")).toHaveClass("w-[298px]");
     expect(screen.queryByTestId("message-context-reactions-surface")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-context-reaction-tail-large")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-context-reaction-more")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("message-context-reaction-more"));
-    expect(screen.queryByTestId("message-context-expanded-picker")).not.toBeInTheDocument();
-    expect(screen.getByTestId("message-context-reactions-surface")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-context-expanded-picker-rail-button").length).toBeGreaterThan(0);
   });
 
   it("uses a transparent 216px anchor with a narrower visible action surface", () => {
@@ -346,6 +343,13 @@ describe("MessageContextMenu", () => {
     fireEvent.keyDown(window, { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the chevron only in the collapsed quick strip", () => {
+    renderMenu({}, { isPickerExpanded: true });
+
+    expect(screen.queryByTestId("message-context-reaction-more")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
   });
 
   it("renders the expanded picker in the reaction layer instead of below the action menu", () => {
