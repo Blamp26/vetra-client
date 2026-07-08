@@ -29,7 +29,11 @@ import {
   downloadAttachmentWithAuth,
   openAttachmentWithAuth,
 } from "../../utils/attachmentDownloads";
-import { computeMediaAlbumLayout, type MediaAlbumTile } from "../../utils/mediaAlbumLayout";
+import {
+  computeMediaAlbumLayout,
+  getMediaAlbumPackingRatio,
+  type MediaAlbumTile,
+} from "../../utils/mediaAlbumLayout";
 
 interface MessageItemProps {
   msg: Message;
@@ -115,6 +119,13 @@ function getResolvedPhotoRatio(
   if (!width || !height) return fallbackRatio;
   const rawRatio = width / height;
   return Number.isFinite(rawRatio) && rawRatio > 0 ? rawRatio : fallbackRatio;
+}
+
+function getResolvedPhotoPackingRatio(width?: number, height?: number) {
+  return getMediaAlbumPackingRatio({
+    width,
+    height,
+  }, MESSAGE_ALBUM_LAYOUT_OPTIONS);
 }
 
 function shortenAttachmentId(attachmentId: string) {
@@ -327,7 +338,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           width: currentAttachment.width ?? null,
           height: currentAttachment.height ?? null,
           dimensionSource: currentAttachment.dimensionSource,
-          computedRatio: getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height),
+          sourceRatio: getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height),
+          packingRatio: getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height),
           naturalWidth: photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? null,
           naturalHeight: photoRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? null,
           renderedWidth: photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? null,
@@ -514,7 +526,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
     if (!currentAttachment.displaySrc || !currentAttachment.lightboxSrc) return null;
     const runtimeMetrics = photoRuntimeMetrics[currentAttachment.attachment.id];
-    const computedRatio = getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height);
+    const computedRatio = getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height);
 
     return (
       <div
@@ -637,9 +649,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                       <div>
                         r:{runtimeMetrics?.renderedWidth ?? "?"}x{runtimeMetrics?.renderedHeight ?? "?"}
                       </div>
-                      <div>
-                        ratio:{getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}
-                      </div>
+                      <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
                     </div>
                   )}
                 </button>
@@ -722,9 +732,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             <div>
               r:{photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? "?"}x{photoRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? "?"}
             </div>
-            <div>
-              ratio:{getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}
-            </div>
+            <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
           </div>
         )}
       </div>

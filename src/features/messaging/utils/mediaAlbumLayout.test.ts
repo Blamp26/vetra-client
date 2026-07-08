@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { computeMediaAlbumLayout, type MediaAlbumInput, type MediaAlbumLayout } from "./mediaAlbumLayout";
+import {
+  computeMediaAlbumLayout,
+  getMediaAlbumPackingRatio,
+  type MediaAlbumInput,
+  type MediaAlbumLayout,
+} from "./mediaAlbumLayout";
 
 const DEFAULT_OPTIONS = {
   maxWidth: 480,
@@ -69,7 +74,7 @@ function expectNoAbsurdRatioMismatch(
     if (!input?.width || !input?.height) return;
 
     const tileRatio = tile.width / tile.height;
-    const mediaRatio = input.width / input.height;
+    const mediaRatio = getMediaAlbumPackingRatio(input, DEFAULT_OPTIONS);
     const ratioFactor = Math.max(tileRatio, mediaRatio) / Math.min(tileRatio, mediaRatio);
 
     expect(ratioFactor).toBeLessThan(maxRatioFactor);
@@ -251,6 +256,92 @@ describe("mediaAlbumLayout", () => {
     expectNoOverlap(layout);
     expect(Math.min(...layout.tiles.map((tile) => tile.height))).toBeGreaterThan(70);
     expectNoAbsurdRatioMismatch(layout, items, 2.2);
+  });
+
+  it("matches the observed Telegram nine-item fixture with three balanced rows", () => {
+    const fixtureItems: MediaAlbumInput[] = [
+      { id: "0", width: 588, height: 1280, kind: "video" },
+      { id: "1", width: 800, height: 493, kind: "image" },
+      { id: "2", width: 1280, height: 752, kind: "video" },
+      { id: "3", width: 128, height: 128, kind: "image" },
+      { id: "4", width: 800, height: 518, kind: "image" },
+      { id: "5", width: 800, height: 440, kind: "image" },
+      { id: "6", width: 480, height: 854, kind: "video" },
+      { id: "7", width: 600, height: 800, kind: "image" },
+      { id: "8", width: 800, height: 450, kind: "image" },
+    ];
+
+    const layout = computeMediaAlbumLayout(fixtureItems, DEFAULT_OPTIONS);
+    const roundedRows = [...new Set(layout.tiles.map((tile) => Math.round(tile.y)))];
+
+    expectFinitePositiveLayout(layout);
+    expect(layout.width).toBeCloseTo(480, 1);
+    expect(layout.height).toBeGreaterThan(346);
+    expect(layout.height).toBeLessThan(352);
+    expect(layout.tiles).toHaveLength(9);
+    expect(roundedRows).toHaveLength(3);
+    expect(roundedRows[0]).toBeCloseTo(0, 1);
+    expect(roundedRows[1]).toBeCloseTo(112, 3);
+    expect(roundedRows[2]).toBeCloseTo(223, 3);
+
+    const expectedTileSizes = [
+      [110, 110],
+      [179, 110],
+      [187, 110],
+      [109, 109],
+      [168, 109],
+      [199, 109],
+      [126, 126],
+      [126, 126],
+      [224, 126],
+    ] as const;
+
+    expectedTileSizes.forEach(([expectedWidth, expectedHeight], index) => {
+      expect(layout.tiles[index].width).toBeGreaterThan(expectedWidth - 3);
+      expect(layout.tiles[index].width).toBeLessThan(expectedWidth + 3);
+      expect(layout.tiles[index].height).toBeGreaterThan(expectedHeight - 3);
+      expect(layout.tiles[index].height).toBeLessThan(expectedHeight + 3);
+    });
+  });
+
+  it("keeps wide screenshot tiles close to their source ratios inside a nine-item album", () => {
+    const items = [
+      makeItem("phone", 588, 1280),
+      makeItem("wide-a", 800, 493),
+      makeItem("wide-b", 1280, 752),
+      makeItem("square", 128, 128),
+      makeItem("wide-c", 800, 518),
+      makeItem("wide-d", 800, 440),
+      makeItem("phone-2", 480, 854),
+      makeItem("portrait", 600, 800),
+      makeItem("wide-e", 800, 450),
+    ];
+    const layout = computeMediaAlbumLayout(items, DEFAULT_OPTIONS);
+
+    [1, 2, 4, 5, 8].forEach((index) => {
+      const sourceRatio = (items[index].width ?? 1) / (items[index].height ?? 1);
+      const tileRatio = layout.tiles[index].width / layout.tiles[index].height;
+      expect(tileRatio).toBeCloseTo(sourceRatio, 1);
+    });
+  });
+
+  it("chooses three rows instead of a crushed two-row pack for the Telegram-like nine-item set", () => {
+    const items = [
+      makeItem("0", 588, 1280),
+      makeItem("1", 800, 493),
+      makeItem("2", 1280, 752),
+      makeItem("3", 128, 128),
+      makeItem("4", 800, 518),
+      makeItem("5", 800, 440),
+      makeItem("6", 480, 854),
+      makeItem("7", 600, 800),
+      makeItem("8", 800, 450),
+    ];
+    const layout = computeMediaAlbumLayout(items, DEFAULT_OPTIONS);
+    const rowStarts = [...new Set(layout.tiles.map((tile) => Math.round(tile.y)))];
+
+    expect(rowStarts).toHaveLength(3);
+    expect(Math.max(...layout.tiles.map((tile) => tile.height))).toBeLessThan(132);
   });
 
   it("clamps extreme panoramic ratios so tiles do not collapse into slivers", () => {

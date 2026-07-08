@@ -41,6 +41,7 @@ export interface MediaAlbumLayout {
 interface NormalizedMediaAlbumInput extends MediaAlbumInput {
   index: number;
   ratio: number;
+  packingRatio: number;
   shape: MediaShape;
 }
 
@@ -139,6 +140,21 @@ function resolveRatio(item: MediaAlbumInput, options: MediaAlbumLayoutOptions) {
   return Math.min(DEFAULT_MAX_RATIO, Math.max(DEFAULT_MIN_RATIO, rawRatio));
 }
 
+export function getMediaAlbumPackingRatio(
+  item: Pick<MediaAlbumInput, "width" | "height">,
+  options: Pick<MediaAlbumLayoutOptions, "fallbackRatio" | "narrowRatio" | "wideRatio"> = {},
+) {
+  const resolvedRatio = resolveRatio(item, options as MediaAlbumLayoutOptions);
+
+  if (resolvedRatio <= 1.04) return 1;
+  if (resolvedRatio < 1) return 1;
+  if (resolvedRatio < getWideRatio(options as MediaAlbumLayoutOptions)) {
+    return 1 + ((resolvedRatio - 1) * 0.35);
+  }
+
+  return resolvedRatio;
+}
+
 function normalizeInputs(
   items: MediaAlbumInput[],
   options: MediaAlbumLayoutOptions,
@@ -149,6 +165,7 @@ function normalizeInputs(
       ...item,
       index,
       ratio,
+      packingRatio: getMediaAlbumPackingRatio(item, options),
       shape: classifyRatio(ratio, options),
     };
   });
@@ -261,7 +278,7 @@ function buildRowsLayout(
 
   for (const rowSize of rowSizes) {
     const rowItems = items.slice(itemIndex, itemIndex + rowSize);
-    const ratioSum = rowItems.reduce((sum, item) => sum + item.ratio, 0);
+    const ratioSum = rowItems.reduce((sum, item) => sum + item.packingRatio, 0);
     const rowHeight = (maxWidth - spacing * (rowItems.length - 1)) / ratioSum;
     rowHeights.push(rowHeight);
 
@@ -270,7 +287,7 @@ function buildRowsLayout(
       const isLastInRow = indexInRow === rowItems.length - 1;
       const width = isLastInRow
         ? maxWidth - x
-        : rowHeight * item.ratio;
+        : rowHeight * item.packingRatio;
 
       tiles.push({
         id: item.id,
@@ -317,11 +334,11 @@ function buildTwoStackLayout(
   const maxHeight = getMaxHeight(options);
   const spacing = getSpacing(options);
   const [first, second] = items;
-  const denominator = (1 / first.ratio) + (1 / second.ratio);
+  const denominator = (1 / first.packingRatio) + (1 / second.packingRatio);
   const targetHeight = maxHeight;
   const width = Math.min(maxWidth, (targetHeight - spacing) / denominator);
-  const firstHeight = width / first.ratio;
-  const secondHeight = width / second.ratio;
+  const firstHeight = width / first.packingRatio;
+  const secondHeight = width / second.packingRatio;
 
   return {
     layout: scaleRawLayout({
@@ -345,12 +362,12 @@ function buildThreeLeftDominantLayout(
   const maxHeight = getMaxHeight(options);
   const spacing = getSpacing(options);
   const [first, second, third] = items;
-  const inverseStack = (1 / second.ratio) + (1 / third.ratio);
-  const totalHeight = (((maxWidth - spacing) * inverseStack) + spacing) / (1 + first.ratio * inverseStack);
-  const leadWidth = totalHeight * first.ratio;
+  const inverseStack = (1 / second.packingRatio) + (1 / third.packingRatio);
+  const totalHeight = (((maxWidth - spacing) * inverseStack) + spacing) / (1 + first.packingRatio * inverseStack);
+  const leadWidth = totalHeight * first.packingRatio;
   const stackWidth = maxWidth - spacing - leadWidth;
-  const topHeight = stackWidth / second.ratio;
-  const bottomHeight = stackWidth / third.ratio;
+  const topHeight = stackWidth / second.packingRatio;
+  const bottomHeight = stackWidth / third.packingRatio;
 
   return {
     layout: scaleRawLayout({
@@ -382,14 +399,14 @@ function buildFourSideStackLayout(
   const maxHeight = getMaxHeight(options);
   const spacing = getSpacing(options);
   const [first, second, third, fourth] = items;
-  const inverse = (1 / second.ratio) + (1 / (third.ratio + fourth.ratio));
-  const spacingTail = spacing * (1 - (1 / (third.ratio + fourth.ratio)));
-  const totalHeight = ((maxWidth - spacing) * inverse + spacingTail) / (1 + first.ratio * inverse);
-  const leadWidth = totalHeight * first.ratio;
+  const inverse = (1 / second.packingRatio) + (1 / (third.packingRatio + fourth.packingRatio));
+  const spacingTail = spacing * (1 - (1 / (third.packingRatio + fourth.packingRatio)));
+  const totalHeight = ((maxWidth - spacing) * inverse + spacingTail) / (1 + first.packingRatio * inverse);
+  const leadWidth = totalHeight * first.packingRatio;
   const columnWidth = maxWidth - spacing - leadWidth;
-  const topHeight = columnWidth / second.ratio;
-  const bottomHeight = (columnWidth - spacing) / (third.ratio + fourth.ratio);
-  const thirdWidth = bottomHeight * third.ratio;
+  const topHeight = columnWidth / second.packingRatio;
+  const bottomHeight = (columnWidth - spacing) / (third.packingRatio + fourth.packingRatio);
+  const thirdWidth = bottomHeight * third.packingRatio;
   const fourthWidth = columnWidth - spacing - thirdWidth;
 
   return {
@@ -454,15 +471,20 @@ function scoreCandidate(
   const variance = rowHeights.length <= 1
     ? 0
     : Math.max(...rowHeights) - Math.min(...rowHeights);
+  const desiredRowCount = Math.max(1, Math.ceil(items.length / 3));
   const ratioPenalty = candidate.layout.tiles.reduce((sum, tile) => {
-    const sourceRatio = items[tile.index]?.ratio ?? getFallbackRatio(options);
+    const sourceRatio = items[tile.index]?.packingRatio ?? getFallbackRatio(options);
     const tileRatio = tile.width / tile.height;
     if (!Number.isFinite(tileRatio) || tileRatio <= 0) return sum + 6;
 
     const distortion = Math.abs(Math.log(tileRatio / sourceRatio));
     const severeMismatch = Math.max(tileRatio, sourceRatio) / Math.min(tileRatio, sourceRatio);
+    const originalRatio = items[tile.index]?.ratio ?? sourceRatio;
+    const wideMismatchPenalty = originalRatio >= getWideRatio(options) && tileRatio < originalRatio * 0.82
+      ? (originalRatio - tileRatio) * 3.1
+      : 0;
 
-    return sum + (distortion * 1.35) + (severeMismatch > 1.9 ? (severeMismatch - 1.9) * 3.2 : 0);
+    return sum + (distortion * 2.15) + (severeMismatch > 1.6 ? (severeMismatch - 1.6) * 4.1 : 0) + wideMismatchPenalty;
   }, 0);
   const widthPenalty = candidate.layout.width < maxWidth * 0.42
     ? 1.5
@@ -470,8 +492,9 @@ function scoreCandidate(
   const lastRowPenalty = candidate.rowSizes.at(-1) === 4 ? 0.2 : 0;
   const heightPenalty = Math.abs(candidate.layout.height - targetHeight) / targetHeight;
   const coveragePenalty = candidate.layout.width < maxWidth * 0.58 && items.length > 1 ? 0.6 : 0;
+  const rowCountPenalty = Math.abs(candidate.rowSizes.length - desiredRowCount) * 1.6;
 
-  return tilePenalty + rowPenalty + ratioPenalty + heightPenalty + (variance / Math.max(targetRowHeight, 1)) * 0.35 + widthPenalty + lastRowPenalty + coveragePenalty;
+  return tilePenalty + rowPenalty + ratioPenalty + heightPenalty + (variance / Math.max(targetRowHeight, 1)) * 0.35 + widthPenalty + lastRowPenalty + coveragePenalty + rowCountPenalty;
 }
 
 function pickBestCandidate(
