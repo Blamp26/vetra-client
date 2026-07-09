@@ -225,11 +225,14 @@ describe("MessageItem bubble layout", () => {
     );
 
     const row = screen.getByTestId("message-bubble-row");
+    const bubble = screen.getByTestId("message-bubble");
 
     expect(row).toHaveAttribute("data-own-message", "true");
     expect(row).toHaveAttribute("data-alignment-mode", "left-column");
     expect(row).toHaveClass("justify-start");
     expect(row).not.toHaveClass("justify-end");
+    expect(bubble).toHaveClass("rounded-bl-[4px]");
+    expect(bubble).not.toHaveClass("rounded-br-[4px]");
   });
 
   it("renders group sender labels only when useful", () => {

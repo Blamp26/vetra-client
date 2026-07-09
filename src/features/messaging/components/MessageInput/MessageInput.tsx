@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
-import { FileText, ImagePlus, Paperclip } from "lucide-react";
+import { FileText, ImagePlus, Paperclip, SendHorizonal } from "lucide-react";
 import { useAppStore, type RootState } from "@/store"; 
 import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
@@ -801,9 +801,9 @@ interface Props {
          onSend={handleSend}
        />
      )}
-     <div className="flex flex-col border-t border-border bg-card"> 
+     <div className="flex flex-col border-t border-border bg-[color:var(--vetra-shell-chat-bg,var(--color-card))]" data-testid="message-composer-shell"> 
        {isEditing && ( 
-         <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-3"> 
+         <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-2.5"> 
            <div className="flex flex-col text-xs"> 
              <span className="font-medium">Editing</span> 
              <span className="text-muted-foreground truncate max-w-md"> 
@@ -815,7 +815,7 @@ interface Props {
        )} 
  
        {replyTo && !isEditing && ( 
-        <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-2.5">
           <div className="flex flex-col text-xs">
             <span className="font-medium">Reply to {replyTo.author}</span>
             <span className="text-muted-foreground truncate max-w-md">
@@ -846,21 +846,27 @@ interface Props {
         </div>
        )}
  
-       <div className="flex items-end gap-3 px-4 py-4">
+       <div
+         className="flex items-end gap-1.5 px-3 py-2.5 sm:px-4"
+         data-testid="message-composer-bar"
+       >
           <div className="relative shrink-0">
             <button
               type="button"
               onClick={handleAttachClick}
               disabled={disabled || isSending || isEditing || isUploading}
               className={cn(
-                "vt-button min-h-11 shrink-0 gap-2 rounded-[18px] px-3.5",
-                isComposerAttachmentMenuOpen && "border-[#4f6158] bg-accent",
+                "flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors",
+                "hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                "disabled:pointer-events-none disabled:opacity-60",
+                isComposerAttachmentMenuOpen && "bg-accent text-foreground",
               )}
+              aria-label="Attach"
               aria-haspopup="menu"
               aria-expanded={isComposerAttachmentMenuOpen}
             >
-              <Paperclip className="h-4 w-4" />
-              <span>Attach</span>
+              <Paperclip className="h-[18px] w-[18px]" />
+              <span className="sr-only">Attach</span>
             </button>
             {isComposerAttachmentMenuOpen && (
               <AttachmentSourceMenu
@@ -892,7 +898,10 @@ interface Props {
 
           <textarea
             ref={textareaRef}
-            className="vt-textarea min-h-11 max-h-44 flex-1 resize-none bg-card px-4 py-3 text-sm leading-6 disabled:opacity-60"
+            className={cn(
+              "min-h-10 max-h-44 flex-1 resize-none border-0 bg-transparent px-2 py-[9px] text-[15px] leading-6 text-foreground outline-none",
+              "placeholder:text-muted-foreground/85 disabled:cursor-not-allowed disabled:opacity-60",
+            )}
             data-testid="message-input-textarea"
             placeholder={pendingAttachments.length > 0 ? "Review attachments in dialog" : "Message..."}
             value={content}
@@ -902,18 +911,26 @@ interface Props {
             disabled={disabled || isSending || isUploading || pendingAttachments.length > 0}
             rows={1}
             style={{ overflowY: "hidden" }}
+            aria-label="Message composer"
           />
 
-          <button 
+          <button
+            type="button"
             onClick={handleSend}
             disabled={pendingAttachments.length > 0 || (!content.trim() && pendingAttachments.length === 0) || disabled || isSending || isUploading}
             className={cn(
-              "vt-button min-h-11 shrink-0 px-4 disabled:pointer-events-none disabled:opacity-60",
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              "disabled:pointer-events-none disabled:opacity-60",
               content.trim()
-                ? "vt-button--primary"
-                : "border-border bg-muted text-muted-foreground",
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "text-muted-foreground",
             )}
-          >{isSending ? "Sending..." : "Send"}</button>
+            aria-label={isSending ? "Sending..." : "Send"}
+          >
+            <SendHorizonal className="h-[18px] w-[18px]" />
+            <span className="sr-only">{isSending ? "Sending..." : "Send"}</span>
+          </button>
        </div>
      </div>
      </>

@@ -82,6 +82,29 @@ const MESSAGE_ALBUM_LAYOUT_OPTIONS = {
   wideRatio: 1.25,
 } as const;
 
+function getBubbleCornerClassName(
+  isOwn: boolean,
+  alignmentMode: "split" | "left-column",
+  isConsecutive: boolean,
+  isGroupedWithNext: boolean,
+) {
+  const shouldUseLeftColumnTail = !isOwn || alignmentMode === "left-column";
+
+  if (shouldUseLeftColumnTail) {
+    return cn(
+      "rounded-[15px]",
+      isConsecutive && "rounded-tl-[8px]",
+      isGroupedWithNext ? "rounded-bl-[8px]" : "rounded-bl-[4px]",
+    );
+  }
+
+  return cn(
+    "rounded-[15px]",
+    isConsecutive && "rounded-tr-[8px]",
+    isGroupedWithNext ? "rounded-br-[8px]" : "rounded-br-[4px]",
+  );
+}
+
 function isVisualAttachment(attachment: Attachment): attachment is VisualAttachment {
   return attachment.kind === "photo" || attachment.kind === "video";
 }
@@ -231,22 +254,18 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const isTemporaryVisualLayout =
     hasPendingDecodedVisualDimensions ||
     !hasCompleteAlbumLayout(photoLayout, resolvedVisualAttachments.length);
+  const isOwnLeftColumn = isOwn && alignmentMode === "left-column";
   const showSenderName = isRoom && !isOwn && !isConsecutive;
   const metadataClassName = isOwn
     ? "text-white/60"
     : "text-[color:var(--bubble-incoming-meta)]";
   const overlayMetadataClassName = "h-[18px] rounded-[10px] bg-black/[0.20] py-0 pl-[6px] pr-[5px] text-white";
-  const textGroupRadiusClassName = isOwn
-    ? cn(
-        "rounded-[15px]",
-        isConsecutive && "rounded-tr-[8px]",
-        isGroupedWithNext ? "rounded-br-[8px]" : "rounded-br-[4px]",
-      )
-    : cn(
-        "rounded-[15px]",
-        isConsecutive && "rounded-tl-[8px]",
-        isGroupedWithNext ? "rounded-bl-[8px]" : "rounded-bl-[4px]",
-      );
+  const textGroupRadiusClassName = getBubbleCornerClassName(
+    isOwn,
+    alignmentMode,
+    isConsecutive,
+    isGroupedWithNext,
+  );
 
   React.useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -683,7 +702,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           isSelected && "ring-1 ring-primary",
           isTextOnly
             ? textGroupRadiusClassName
-            : isOwn
+            : isOwnLeftColumn
+              ? cn(
+                  isConsecutive && "rounded-tl-[12px]",
+                  isGroupedWithNext && "rounded-bl-[12px]",
+                )
+              : isOwn
               ? cn(
                   isConsecutive && "rounded-tr-[12px]",
                   isGroupedWithNext && "rounded-br-[12px]",
