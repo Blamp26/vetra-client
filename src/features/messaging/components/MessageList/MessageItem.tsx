@@ -2,14 +2,10 @@ import React from "react";
 import type { Attachment, Message, MessageReactionGroup } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
-import {
-  AuthenticatedImage,
-} from "@/shared/components/AuthenticatedImage";
-import { AuthenticatedVideo } from "@/shared/components/AuthenticatedVideo";
 import { useAppStore } from "@/store";
-import { Film, Play } from "lucide-react";
 import { StatusIcon } from "./StatusIcon";
 import { DocumentAttachmentRow } from "./DocumentAttachmentRow";
+import { VisualAttachmentTile } from "./VisualAttachmentTile";
 import {
   getAttachmentDisplaySrc,
   getAttachmentDisplayName,
@@ -137,29 +133,6 @@ function getResolvedPhotoPackingRatio(width?: number, height?: number) {
     width,
     height,
   }, MESSAGE_ALBUM_LAYOUT_OPTIONS);
-}
-
-function shortenAttachmentId(attachmentId: string) {
-  if (attachmentId.length <= 8) return attachmentId;
-  return `${attachmentId.slice(0, 4)}…${attachmentId.slice(-3)}`;
-}
-
-function formatVideoDuration(durationSeconds: number | null) {
-  if (!durationSeconds || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
-    return null;
-  }
-
-  const totalSeconds = Math.max(0, Math.round(durationSeconds));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  const hours = Math.floor(minutes / 60);
-
-  if (hours > 0) {
-    const displayMinutes = minutes % 60;
-    return `${hours}:${displayMinutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-  }
-
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function toPercent(value: number, total: number) {
@@ -581,96 +554,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     });
   }, [authorName, msg.id, msg.inserted_at, msg.sender?.avatar_url, onLightbox]);
 
-  const renderVisualMedia = React.useCallback(
-    (currentAttachment: ResolvedVisualAttachment, attachmentName: string) => {
-      if (currentAttachment.attachment.kind === "photo" && currentAttachment.displaySrc) {
-        return (
-          <AuthenticatedImage
-            className="block h-full w-full object-cover object-center"
-            src={currentAttachment.displaySrc}
-            alt={attachmentName}
-            crossOrigin="anonymous"
-            onLoad={(event) => handleDecodedVisualDimensions(
-              currentAttachment.attachment.id,
-              event.currentTarget.naturalWidth,
-              event.currentTarget.naturalHeight,
-            )}
-            onMediaDiagnostics={(diagnostics) => handleVisualDiagnostics(
-              currentAttachment.attachment.id,
-              currentAttachment.displaySrc,
-              diagnostics,
-            )}
-          />
-        );
-      }
-
-      if (currentAttachment.attachment.kind === "video" && currentAttachment.displaySrc) {
-        const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
-        const durationLabel = formatVideoDuration(runtimeMetrics?.duration ?? null);
-
-        return (
-          <>
-            <AuthenticatedVideo
-              className="block h-full w-full object-cover object-center bg-black"
-              src={currentAttachment.displaySrc}
-              aria-label={attachmentName}
-              autoPlay
-              loop
-              muted
-              playsInline
-              preload="metadata"
-              data-testid={`message-video-tile-${currentAttachment.attachment.id}`}
-              onMediaDiagnostics={(diagnostics) => {
-                handleDecodedVisualDimensions(
-                  currentAttachment.attachment.id,
-                  diagnostics.naturalWidth,
-                  diagnostics.naturalHeight,
-                );
-                handleVisualDiagnostics(
-                  currentAttachment.attachment.id,
-                  currentAttachment.displaySrc,
-                  diagnostics,
-                );
-              }}
-            />
-            <div className="pointer-events-none absolute left-[3px] top-[3px] z-[1]">
-              {durationLabel ? (
-                <span
-                  className="inline-flex h-[18px] items-center rounded-full bg-black/25 px-[6px] text-[12px] leading-[18px] font-medium text-white"
-                  data-testid={`message-video-duration-${currentAttachment.attachment.id}`}
-                >
-                  {durationLabel}
-                </span>
-              ) : (
-                <span
-                  className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-black/25 text-white"
-                  data-testid={`message-video-badge-${currentAttachment.attachment.id}`}
-                >
-                  <Play className="h-3 w-3 fill-current" />
-                </span>
-              )}
-            </div>
-          </>
-        );
-      }
-
-      return (
-        <div
-          className="flex h-full w-full items-center justify-center bg-black/70 text-white/88"
-          data-testid={`message-video-placeholder-${currentAttachment.attachment.id}`}
-        >
-          <div className="flex flex-col items-center gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white">
-              <Film className="h-5 w-5" />
-            </span>
-            <span className="text-[11px] font-medium">Video unavailable</span>
-          </div>
-        </div>
-      );
-    },
-    [handleDecodedVisualDimensions, handleVisualDiagnostics, visualRuntimeMetrics],
-  );
-
   const renderVisualTile = (
     currentAttachment: ResolvedVisualAttachment,
     tile: MediaAlbumTile,
@@ -689,40 +572,26 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     const computedRatio = getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height);
 
     return (
-      <div
+      <VisualAttachmentTile
         key={currentAttachment.attachment.id}
-        className="absolute overflow-hidden"
-        data-testid={`message-photo-collage-tile-${tile.index}`}
-        style={tileStyle}
-      >
-        <button
-          type="button"
-          className="relative block h-full w-full overflow-hidden"
-          data-testid="message-photo-collage-tile"
-          aria-label={currentAttachment.attachment.kind === "video" ? `Open video ${attachmentName}` : `Open photo ${attachmentName}`}
-          onClick={() => void handleVisualAttachmentOpen(currentAttachment.attachment)}
-        >
-          {renderVisualMedia(currentAttachment, attachmentName)}
-          {isMediaDebugEnabled && (
-            <div
-              className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
-              data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
-            >
-              <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
-              <div>
-                s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
-              </div>
-              <div>
-                n:{runtimeMetrics?.naturalWidth ?? "?"}x{runtimeMetrics?.naturalHeight ?? "?"}
-              </div>
-              <div>
-                r:{runtimeMetrics?.renderedWidth ?? "?"}x{runtimeMetrics?.renderedHeight ?? "?"}
-              </div>
-              <div>ratio:{computedRatio.toFixed(2)}</div>
-            </div>
-          )}
-        </button>
-      </div>
+        attachment={currentAttachment.attachment}
+        attachmentName={attachmentName}
+        displaySrc={currentAttachment.displaySrc}
+        index={tile.index}
+        wrapperClassName="absolute overflow-hidden"
+        wrapperTestId={`message-photo-collage-tile-${tile.index}`}
+        wrapperStyle={tileStyle}
+        buttonClassName="relative block h-full w-full overflow-hidden"
+        buttonTestId="message-photo-collage-tile"
+        isDebugEnabled={isMediaDebugEnabled}
+        serverWidth={currentAttachment.serverWidth}
+        serverHeight={currentAttachment.serverHeight}
+        runtimeMetrics={runtimeMetrics}
+        computedRatio={computedRatio}
+        onOpen={(openedAttachment) => void handleVisualAttachmentOpen(openedAttachment)}
+        onDecodedDimensions={handleDecodedVisualDimensions}
+        onDiagnostics={handleVisualDiagnostics}
+      />
     );
   };
 
@@ -756,42 +625,28 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             data-photo-layout-state="pending"
           >
             <div className="grid h-full w-full grid-cols-2 gap-[2px] overflow-hidden">
-              {resolvedVisualAttachments.map((currentAttachment) => {
+              {resolvedVisualAttachments.map((currentAttachment, index) => {
                 const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
+                const attachmentName = getAttachmentDisplayName(currentAttachment.attachment);
 
                 return (
-                  <button
+                  <VisualAttachmentTile
                     key={currentAttachment.attachment.id}
-                    type="button"
-                    className="relative aspect-square overflow-hidden"
-                    data-testid="message-photo-collage-tile"
-                    aria-label={
-                      currentAttachment.attachment.kind === "video"
-                        ? `Open video ${getAttachmentDisplayName(currentAttachment.attachment)}`
-                        : `Open photo ${getAttachmentDisplayName(currentAttachment.attachment)}`
-                    }
-                    onClick={() => void handleVisualAttachmentOpen(currentAttachment.attachment)}
-                  >
-                    {renderVisualMedia(currentAttachment, getAttachmentDisplayName(currentAttachment.attachment))}
-                    {isMediaDebugEnabled && (
-                      <div
-                        className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
-                        data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
-                      >
-                        <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
-                        <div>
-                          s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
-                        </div>
-                        <div>
-                          n:{runtimeMetrics?.naturalWidth ?? "?"}x{runtimeMetrics?.naturalHeight ?? "?"}
-                        </div>
-                        <div>
-                          r:{runtimeMetrics?.renderedWidth ?? "?"}x{runtimeMetrics?.renderedHeight ?? "?"}
-                        </div>
-                        <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
-                      </div>
-                    )}
-                  </button>
+                    attachment={currentAttachment.attachment}
+                    attachmentName={attachmentName}
+                    displaySrc={currentAttachment.displaySrc}
+                    index={index}
+                    buttonClassName="relative aspect-square overflow-hidden"
+                    buttonTestId="message-photo-collage-tile"
+                    isDebugEnabled={isMediaDebugEnabled}
+                    serverWidth={currentAttachment.serverWidth}
+                    serverHeight={currentAttachment.serverHeight}
+                    runtimeMetrics={runtimeMetrics}
+                    computedRatio={getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height)}
+                    onOpen={(openedAttachment) => void handleVisualAttachmentOpen(openedAttachment)}
+                    onDecodedDimensions={handleDecodedVisualDimensions}
+                    onDiagnostics={handleVisualDiagnostics}
+                  />
                 );
               })}
             </div>
@@ -835,11 +690,25 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           ...mediaFrameOffsetStyle,
         }}
       >
-        <button
-          type="button"
-          className={cn("relative block h-full w-full", !hasText && "overflow-hidden")}
-          data-testid="message-media-shell"
-          onClick={() => onLightbox({
+        <VisualAttachmentTile
+          attachment={currentAttachment.attachment}
+          attachmentName={attachmentName}
+          displaySrc={currentAttachment.displaySrc}
+          index={0}
+          buttonClassName={cn("relative block h-full w-full", !hasText && "overflow-hidden")}
+          buttonTestId="message-media-shell"
+          buttonStyle={{
+            width: !hasText ? `${layout.width}px` : undefined,
+            maxWidth: !hasText ? "100%" : undefined,
+            aspectRatio: !hasText ? `${layout.width} / ${layout.height}` : undefined,
+          }}
+          photoLayoutState={currentAttachment.dimensionSource === "fallback" ? "pending" : "resolved"}
+          isDebugEnabled={isMediaDebugEnabled}
+          serverWidth={currentAttachment.serverWidth}
+          serverHeight={currentAttachment.serverHeight}
+          runtimeMetrics={visualRuntimeMetrics[currentAttachment.attachment.id]}
+          computedRatio={getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height)}
+          onOpen={() => onLightbox({
             kind: currentAttachment.attachment.kind === "video" ? "video" : "image",
             src: currentAttachment.lightboxSrc,
             authorName,
@@ -847,33 +716,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             avatarSrc: msg.sender?.avatar_url ?? null,
             messageId: msg.id,
           })}
-          style={{
-            width: !hasText ? `${layout.width}px` : undefined,
-            maxWidth: !hasText ? "100%" : undefined,
-            aspectRatio: !hasText ? `${layout.width} / ${layout.height}` : undefined,
-          }}
-          data-photo-layout-state={currentAttachment.dimensionSource === "fallback" ? "pending" : "resolved"}
-        >
-          {renderVisualMedia(currentAttachment, attachmentName)}
-          {isMediaDebugEnabled && (
-            <div
-              className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
-              data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
-            >
-              <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
-              <div>
-                s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
-              </div>
-              <div>
-                n:{visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? "?"}x{visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? "?"}
-              </div>
-              <div>
-                r:{visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? "?"}x{visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? "?"}
-              </div>
-              <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
-            </div>
-          )}
-        </button>
+          onDecodedDimensions={handleDecodedVisualDimensions}
+          onDiagnostics={handleVisualDiagnostics}
+        />
       </div>
     );
   };
