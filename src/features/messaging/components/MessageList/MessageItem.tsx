@@ -771,7 +771,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         ? { top: 15, bottom: 0 }
         : { top: 14, bottom: 8 };
     const mediaFrameClassName = hasText
-      ? "mx-[-8px] mb-[6px] mt-[-5px] overflow-hidden rounded-t-[15px] rounded-b-none"
+      ? "relative left-[-8px] mb-[6px] mt-[-5px] overflow-hidden rounded-t-[15px] rounded-b-none"
       : "";
 
     if (resolvedVisualAttachments.length > 1) {
@@ -780,8 +780,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           <div
             className={cn("grid max-w-full grid-cols-2 gap-[2px] overflow-hidden", mediaFrameClassName)}
             style={{
-              width: `min(${MESSAGE_ALBUM_MAX_WIDTH}px, calc(100vw - 6rem))`,
-              maxWidth: "100%",
+              width: hasText
+                ? `min(${MESSAGE_ALBUM_MAX_WIDTH + 16}px, calc(100vw - 5rem))`
+                : `min(${MESSAGE_ALBUM_MAX_WIDTH}px, calc(100vw - 6rem))`,
+              maxWidth: hasText ? "calc(100% + 16px)" : "100%",
             }}
             data-testid="message-photo-collage"
             data-photo-layout-state="pending"
@@ -832,8 +834,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         <div
           className={cn("relative max-w-full overflow-hidden", mediaFrameClassName)}
           style={{
-            width: `${layout.width}px`,
-            maxWidth: "100%",
+            width: hasText ? `${layout.width + 16}px` : `${layout.width}px`,
+            maxWidth: hasText ? "calc(100% + 16px)" : "100%",
             aspectRatio: `${layout.width} / ${layout.height}`,
           }}
           data-testid="message-photo-collage"
@@ -856,7 +858,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     return (
       <button
         type="button"
-        className={cn("relative block h-full w-full overflow-hidden", hasText && "mx-[-8px] mb-[6px] mt-[-5px] rounded-t-[15px] rounded-b-none")}
+        className={cn("relative block h-full w-full overflow-hidden", hasText && "relative left-[-8px] mb-[6px] mt-[-5px] rounded-t-[15px] rounded-b-none")}
         data-testid="message-media-shell"
         onClick={() => onLightbox({
           kind: currentAttachment.attachment.kind === "video" ? "video" : "image",
@@ -867,8 +869,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           messageId: msg.id,
         })}
         style={{
-          width: `${layout.width}px`,
-          maxWidth: "100%",
+          width: hasText ? `${layout.width + 16}px` : `${layout.width}px`,
+          maxWidth: hasText ? "calc(100% + 16px)" : "100%",
           aspectRatio: `${layout.width} / ${layout.height}`,
         }}
         data-photo-layout-state={currentAttachment.dimensionSource === "fallback" ? "pending" : "resolved"}
@@ -933,12 +935,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           >
             <div
               className={cn(
-                "flex h-full w-full items-end justify-center rounded-[6px] px-2 pb-[7px] pt-[14px] text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
+                "flex h-full w-full items-center justify-center rounded-[6px] px-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
                 getAttachmentExtensionTone(attachment),
               )}
               data-testid="message-file-icon"
             >
-              <span className="text-[11px] font-semibold leading-none tracking-[0.08em]">
+              <span className="sr-only text-[11px] font-semibold leading-none tracking-[0.08em]">
                 {attachmentExtension}
               </span>
             </div>
@@ -951,9 +953,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 void handleAttachmentAction("download");
               }}
               disabled={isAttachmentActionPending}
-              className={cn(iconButtonClassName, "absolute bottom-[-2px] right-[-2px]")}
+              className={cn(iconButtonClassName, "absolute inset-0 h-full w-full rounded-[6px] bg-transparent text-white hover:bg-black/10")}
             >
-              <Download className="h-3.5 w-3.5" />
+              <Download className="h-5 w-5" />
             </button>
           </div>
           <div className="min-w-0 flex-1 pt-[2px]">

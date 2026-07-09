@@ -1324,7 +1324,7 @@ describe("MessageItem bubble layout", () => {
 
     expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
     expect(fileRow).toHaveAttribute("role", "button");
-    expect(downloadButton).toHaveClass("rounded-full");
+    expect(downloadButton).toHaveClass("absolute", "inset-0", "rounded-[6px]");
     expect(downloadButton.textContent).toBe("");
     expect(iconContainer).toContainElement(downloadButton);
   });
