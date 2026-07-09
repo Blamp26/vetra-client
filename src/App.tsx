@@ -23,18 +23,10 @@ import type { ActiveChat } from "@/shared/types";
 
 const LEFT_PANE_STORAGE_KEY = "vetra:left-pane-width";
 const LEFT_PANE_MODE_STORAGE_KEY = "vetra:left-pane-mode";
-const LEFT_MINI_RAIL_WIDTH = 72;
-const LEFT_COLLAPSED_CHAT_LIST_WIDTH = 76;
-const LEFT_COLLAPSED_TOTAL_WIDTH = LEFT_MINI_RAIL_WIDTH + LEFT_COLLAPSED_CHAT_LIST_WIDTH;
 const LEFT_TEXT_MIN_WIDTH = 333;
 const LEFT_PANE_DEFAULT_WIDTH = 408;
 const RIGHT_PANE_MIN_WIDTH = 380;
 const LEFT_PANE_KEYBOARD_STEP = 16;
-const LEFT_COLLAPSE_THRESHOLD = Math.round(
-  (LEFT_TEXT_MIN_WIDTH + LEFT_COLLAPSED_TOTAL_WIDTH) / 2,
-);
-
-type LeftPaneMode = "collapsed" | "text";
 
 function getTextPaneMaxWidth(availableWidth: number) {
   return Math.max(LEFT_TEXT_MIN_WIDTH, availableWidth - RIGHT_PANE_MIN_WIDTH);
@@ -45,39 +37,9 @@ function resolveTextPaneWidth(width: number, availableWidth: number) {
   return Math.min(maxWidth, Math.max(LEFT_TEXT_MIN_WIDTH, Math.round(width)));
 }
 
-function resolveLeftPaneState(
-  nextWidth: number,
-  availableWidth: number,
-  currentMode: LeftPaneMode,
-): { mode: LeftPaneMode; width: number } {
-  if (currentMode === "collapsed") {
-    if (nextWidth <= LEFT_COLLAPSE_THRESHOLD) {
-      return { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH };
-    }
-
-    return {
-      mode: "text",
-      width: resolveTextPaneWidth(Math.max(nextWidth, LEFT_TEXT_MIN_WIDTH), availableWidth),
-    };
-  }
-
-  if (nextWidth <= LEFT_COLLAPSE_THRESHOLD) {
-    return { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH };
-  }
-
-  if (nextWidth < LEFT_TEXT_MIN_WIDTH) {
-    return { mode: "text", width: LEFT_TEXT_MIN_WIDTH };
-  }
-
-  return {
-    mode: "text",
-    width: resolveTextPaneWidth(nextWidth, availableWidth),
-  };
-}
-
-function getInitialLeftPaneState(): { mode: LeftPaneMode; width: number } {
+function getInitialLeftPaneWidth(): number {
   if (typeof window === "undefined") {
-    return { mode: "text", width: LEFT_PANE_DEFAULT_WIDTH };
+    return LEFT_PANE_DEFAULT_WIDTH;
   }
 
   const storedMode = window.localStorage.getItem(LEFT_PANE_MODE_STORAGE_KEY);
@@ -86,33 +48,24 @@ function getInitialLeftPaneState(): { mode: LeftPaneMode; width: number } {
   const hasStoredWidth = Number.isFinite(parsedWidth);
 
   if (storedMode === "collapsed") {
-    return { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH };
+    return LEFT_TEXT_MIN_WIDTH;
   }
 
   if (storedMode === "text") {
-    return {
-      mode: "text",
-      width: resolveTextPaneWidth(
-        hasStoredWidth ? parsedWidth : LEFT_PANE_DEFAULT_WIDTH,
-        window.innerWidth,
-      ),
-    };
-  }
-
-  if (
-    hasStoredWidth &&
-    (parsedWidth === LEFT_COLLAPSED_TOTAL_WIDTH || parsedWidth === 139)
-  ) {
-    return { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH };
-  }
-
-  return {
-    mode: "text",
-    width: resolveTextPaneWidth(
-      hasStoredWidth ? Math.max(parsedWidth, LEFT_TEXT_MIN_WIDTH) : LEFT_PANE_DEFAULT_WIDTH,
+    return resolveTextPaneWidth(
+      hasStoredWidth ? parsedWidth : LEFT_PANE_DEFAULT_WIDTH,
       window.innerWidth,
-    ),
-  };
+    );
+  }
+
+  if (hasStoredWidth && (parsedWidth === 148 || parsedWidth === 139)) {
+    return LEFT_TEXT_MIN_WIDTH;
+  }
+
+  return resolveTextPaneWidth(
+    hasStoredWidth ? Math.max(parsedWidth, LEFT_TEXT_MIN_WIDTH) : LEFT_PANE_DEFAULT_WIDTH,
+    window.innerWidth,
+  );
 }
 
 function EmptyState({
@@ -193,15 +146,12 @@ function AppShell() {
   const openModal = useAppStore((s) => s.openModal);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const leftPaneWidthRef = useRef(LEFT_PANE_DEFAULT_WIDTH);
-  const leftPaneModeRef = useRef<LeftPaneMode>("text");
   const isResizingRef = useRef(false);
 
   const [routeHash, setRouteHash] = useState(() =>
     typeof window !== "undefined" ? window.location.hash || "#" : "#",
   );
-  const [{ mode: leftPaneMode, width: leftPaneWidth }, setLeftPaneState] = useState(
-    getInitialLeftPaneState,
-  );
+  const [leftPaneWidth, setLeftPaneWidth] = useState(getInitialLeftPaneWidth);
   const [isResizing, setIsResizing] = useState(false);
   const currentActiveChatKey = activeChatKey(activeChat);
   const currentActiveChatKeyRef = useRef(currentActiveChatKey);
@@ -209,8 +159,7 @@ function AppShell() {
 
   useEffect(() => {
     leftPaneWidthRef.current = leftPaneWidth;
-    leftPaneModeRef.current = leftPaneMode;
-  }, [leftPaneMode, leftPaneWidth]);
+  }, [leftPaneWidth]);
 
   const getAvailableShellWidth = useCallback(() => {
     if (typeof window === "undefined") {
@@ -226,25 +175,13 @@ function AppShell() {
     window.localStorage.setItem(LEFT_PANE_STORAGE_KEY, String(Math.round(width)));
   }, []);
 
-  const persistLeftPaneMode = useCallback((mode: LeftPaneMode) => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(LEFT_PANE_MODE_STORAGE_KEY, mode);
-  }, []);
-
   const updateLeftPaneWidth = useCallback((nextWidth: number) => {
-    const nextState = resolveLeftPaneState(
-      nextWidth,
-      getAvailableShellWidth(),
-      leftPaneModeRef.current,
-    );
-    leftPaneWidthRef.current = nextState.width;
-    leftPaneModeRef.current = nextState.mode;
-    setLeftPaneState((previousState) => (
-      previousState.mode === nextState.mode && previousState.width === nextState.width
-        ? previousState
-        : nextState
+    const resolvedWidth = resolveTextPaneWidth(nextWidth, getAvailableShellWidth());
+    leftPaneWidthRef.current = resolvedWidth;
+    setLeftPaneWidth((previousWidth) => (
+      previousWidth === resolvedWidth ? previousWidth : resolvedWidth
     ));
-    return nextState;
+    return resolvedWidth;
   }, [getAvailableShellWidth]);
 
   const updateLeftPaneFromPointer = useCallback((clientX: number) => {
@@ -258,11 +195,6 @@ function AppShell() {
 
   useEffect(() => {
     const handleWindowResize = () => {
-      if (leftPaneModeRef.current === "collapsed") {
-        updateLeftPaneWidth(LEFT_COLLAPSED_TOTAL_WIDTH);
-        return;
-      }
-
       updateLeftPaneWidth(leftPaneWidthRef.current);
     };
 
@@ -294,7 +226,6 @@ function AppShell() {
       if (!isResizingRef.current) return;
       isResizingRef.current = false;
       setIsResizing(false);
-      persistLeftPaneMode(leftPaneModeRef.current);
       persistLeftPaneWidth(leftPaneWidthRef.current);
     };
 
@@ -308,7 +239,7 @@ function AppShell() {
       window.removeEventListener("pointercancel", stopResizing);
       stopResizing();
     };
-  }, [isResizing, persistLeftPaneMode, persistLeftPaneWidth, updateLeftPaneFromPointer]);
+  }, [isResizing, persistLeftPaneWidth, updateLeftPaneFromPointer]);
 
   const navigateToHash = useCallback((nextHash: string) => {
     const normalizedHash = nextHash || "#";
@@ -585,57 +516,40 @@ function AppShell() {
   }, [updateLeftPaneFromPointer]);
 
   const handleSplitterKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    let nextState: { mode: LeftPaneMode; width: number } | null = null;
+    let nextWidth = leftPaneWidthRef.current;
 
     switch (event.key) {
       case "ArrowLeft":
-        if (leftPaneModeRef.current === "collapsed") {
-          return;
-        }
-        nextState = leftPaneWidthRef.current <= LEFT_TEXT_MIN_WIDTH
-          ? { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH }
-          : updateLeftPaneWidth(
-            Math.max(LEFT_TEXT_MIN_WIDTH, leftPaneWidthRef.current - LEFT_PANE_KEYBOARD_STEP),
-          );
+        nextWidth = Math.max(LEFT_TEXT_MIN_WIDTH, leftPaneWidthRef.current - LEFT_PANE_KEYBOARD_STEP);
         break;
       case "ArrowRight":
-        nextState = leftPaneModeRef.current === "collapsed"
-          ? updateLeftPaneWidth(LEFT_TEXT_MIN_WIDTH)
-          : updateLeftPaneWidth(leftPaneWidthRef.current + LEFT_PANE_KEYBOARD_STEP);
+        nextWidth = leftPaneWidthRef.current + LEFT_PANE_KEYBOARD_STEP;
         break;
       case "Home":
-        nextState = updateLeftPaneWidth(LEFT_COLLAPSED_TOTAL_WIDTH);
+        nextWidth = LEFT_TEXT_MIN_WIDTH;
         break;
       case "End":
-        nextState = updateLeftPaneWidth(getTextPaneMaxWidth(getAvailableShellWidth()));
+        nextWidth = getTextPaneMaxWidth(getAvailableShellWidth());
         break;
       default:
         return;
     }
 
     event.preventDefault();
-    if (!nextState) return;
-    if (nextState.mode === "collapsed") {
-      leftPaneWidthRef.current = LEFT_COLLAPSED_TOTAL_WIDTH;
-      leftPaneModeRef.current = "collapsed";
-      setLeftPaneState({ mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH });
-    }
-    persistLeftPaneMode(leftPaneModeRef.current);
-    persistLeftPaneWidth(leftPaneWidthRef.current);
-  }, [getAvailableShellWidth, persistLeftPaneMode, persistLeftPaneWidth, updateLeftPaneWidth]);
+    const resolvedWidth = updateLeftPaneWidth(nextWidth);
+    persistLeftPaneWidth(resolvedWidth);
+  }, [getAvailableShellWidth, persistLeftPaneWidth, updateLeftPaneWidth]);
 
   const handleSplitterDoubleClick = useCallback(() => {
-    const nextState = updateLeftPaneWidth(LEFT_PANE_DEFAULT_WIDTH);
-    persistLeftPaneMode(nextState.mode);
-    persistLeftPaneWidth(nextState.width);
-  }, [persistLeftPaneMode, persistLeftPaneWidth, updateLeftPaneWidth]);
+    const resolvedWidth = updateLeftPaneWidth(LEFT_PANE_DEFAULT_WIDTH);
+    persistLeftPaneWidth(resolvedWidth);
+  }, [persistLeftPaneWidth, updateLeftPaneWidth]);
 
   const shellStyle = useMemo(() => ({
     "--vetra-left-pane-width": `${leftPaneWidth}px`,
   }) as CSSProperties, [leftPaneWidth]);
 
   const dividerMaxWidth = getTextPaneMaxWidth(getAvailableShellWidth());
-  const isCollapsedPane = leftPaneMode === "collapsed";
 
   return (
     <div className="vt-workspace flex h-[100dvh] w-full flex-col overflow-hidden text-foreground">
@@ -650,12 +564,12 @@ function AppShell() {
         <div
           className="flex h-full w-[var(--vetra-left-pane-width)] flex-shrink-0 flex-col overflow-hidden bg-[var(--vetra-shell-sidebar-bg)]"
           data-testid="app-sidebar-shell"
-          data-pane-mode={leftPaneMode}
+          data-pane-mode="text"
         >
           <div className="flex flex-1 overflow-hidden">
-            <Sidebar isServerMode={showChannelPanel} isCollapsed={isCollapsedPane} />
+            <Sidebar isServerMode={showChannelPanel} />
 
-            {showChannelPanel && persistedServerId !== null && !isCollapsedPane && (
+            {showChannelPanel && persistedServerId !== null && (
               <div className="w-[320px] border-l border-border bg-[var(--vetra-shell-chat-bg)]">
                 <ChannelPanel serverId={persistedServerId} />
               </div>
@@ -677,7 +591,6 @@ function AppShell() {
             onRejectCall={rejectCall}
             onOpenSettings={() => navigateToHash("#/settings")}
             onReturnToCall={handleReturnToActiveCall}
-            isCollapsed={isCollapsedPane}
           />
         </div>
 
@@ -685,7 +598,7 @@ function AppShell() {
           role="separator"
           aria-label="Resize sidebar"
           aria-orientation="vertical"
-          aria-valuemin={LEFT_COLLAPSED_TOTAL_WIDTH}
+          aria-valuemin={LEFT_TEXT_MIN_WIDTH}
           aria-valuemax={dividerMaxWidth}
           aria-valuenow={leftPaneWidth}
           tabIndex={0}
