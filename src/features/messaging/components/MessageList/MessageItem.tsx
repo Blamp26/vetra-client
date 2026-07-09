@@ -5,10 +5,9 @@ import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
 import { useAppStore } from "@/store";
 import { StatusIcon } from "./StatusIcon";
 import { DocumentAttachmentRow } from "./DocumentAttachmentRow";
-import { VisualAttachmentTile } from "./VisualAttachmentTile";
+import { VisualAttachmentGroup, type ResolvedVisualAttachment } from "./VisualAttachmentGroup";
 import {
   getAttachmentDisplaySrc,
-  getAttachmentDisplayName,
   getAttachmentOriginalSrc,
   getMessageAttachment,
   getMessageAttachments,
@@ -25,7 +24,6 @@ import {
 import {
   computeMediaAlbumLayout,
   getMediaAlbumPackingRatio,
-  type MediaAlbumTile,
 } from "../../utils/mediaAlbumLayout";
 
 interface MessageItemProps {
@@ -59,16 +57,6 @@ type AttachmentWithVisualMetadata = Attachment & {
   media_height?: number | null;
   original_width?: number | null;
   original_height?: number | null;
-};
-type ResolvedVisualAttachment = {
-  attachment: VisualAttachment;
-  displaySrc: string | null;
-  lightboxSrc: string | null;
-  serverWidth?: number;
-  serverHeight?: number;
-  width?: number;
-  height?: number;
-  dimensionSource: "server" | "decoded" | "fallback";
 };
 type MediaRuntimeDiagnostics = {
   naturalWidth: number;
@@ -133,23 +121,6 @@ function getResolvedPhotoPackingRatio(width?: number, height?: number) {
     width,
     height,
   }, MESSAGE_ALBUM_LAYOUT_OPTIONS);
-}
-
-function toPercent(value: number, total: number) {
-  if (total <= 0) return "0%";
-  return `${((value / total) * 100).toFixed(4)}%`;
-}
-
-function getTileCornerRadius(
-  tile: MediaAlbumTile,
-  radius: { top: number; bottom: number },
-) {
-  return [
-    tile.outerCorners.topLeft ? `${radius.top}px` : "0px",
-    tile.outerCorners.topRight ? `${radius.top}px` : "0px",
-    tile.outerCorners.bottomRight ? `${radius.bottom}px` : "0px",
-    tile.outerCorners.bottomLeft ? `${radius.bottom}px` : "0px",
-  ].join(" ");
 }
 
 function hasCompleteAlbumLayout(
@@ -554,174 +525,22 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     });
   }, [authorName, msg.id, msg.inserted_at, msg.sender?.avatar_url, onLightbox]);
 
-  const renderVisualTile = (
-    currentAttachment: ResolvedVisualAttachment,
-    tile: MediaAlbumTile,
-    layout: ReturnType<typeof computeMediaAlbumLayout>,
-    radius: { top: number; bottom: number },
-  ) => {
-    const tileStyle = {
-      left: toPercent(tile.x, layout.width),
-      top: toPercent(tile.y, layout.height),
-      width: toPercent(tile.width, layout.width),
-      height: toPercent(tile.height, layout.height),
-      borderRadius: getTileCornerRadius(tile, radius),
-    } as const;
-    const attachmentName = getAttachmentDisplayName(currentAttachment.attachment);
-    const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
-    const computedRatio = getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height);
-
-    return (
-      <VisualAttachmentTile
-        key={currentAttachment.attachment.id}
-        attachment={currentAttachment.attachment}
-        attachmentName={attachmentName}
-        displaySrc={currentAttachment.displaySrc}
-        index={tile.index}
-        wrapperClassName="absolute overflow-hidden"
-        wrapperTestId={`message-photo-collage-tile-${tile.index}`}
-        wrapperStyle={tileStyle}
-        buttonClassName="relative block h-full w-full overflow-hidden"
-        buttonTestId="message-photo-collage-tile"
-        isDebugEnabled={isMediaDebugEnabled}
-        serverWidth={currentAttachment.serverWidth}
-        serverHeight={currentAttachment.serverHeight}
-        runtimeMetrics={runtimeMetrics}
-        computedRatio={computedRatio}
-        onOpen={(openedAttachment) => void handleVisualAttachmentOpen(openedAttachment)}
-        onDecodedDimensions={handleDecodedVisualDimensions}
-        onDiagnostics={handleVisualDiagnostics}
-      />
-    );
-  };
-
-  const renderPhotoMedia = () => {
-    const layout = photoLayout;
-    const tileRadius = isMediaOnly
-      ? { top: 15, bottom: 6 }
-      : hasText
-        ? { top: 15, bottom: 0 }
-        : { top: 14, bottom: 8 };
-    const mediaFrameClassName = hasText
-      ? "mb-[6px] mt-[-5px] overflow-hidden rounded-t-[15px] rounded-b-none"
-      : "";
-    const mediaFrameOffsetStyle = hasText
-      ? { transform: "translateX(-8px)" }
-      : undefined;
-
-    if (resolvedVisualAttachments.length > 1) {
-      if (isTemporaryVisualLayout) {
-        return (
-          <div
-            className={cn("max-w-full", !hasText && "overflow-hidden", mediaFrameClassName)}
-            style={{
-              width: hasText
-                ? `min(${MESSAGE_ALBUM_MAX_WIDTH + 16}px, calc(100vw - 5rem))`
-                : `min(${MESSAGE_ALBUM_MAX_WIDTH}px, calc(100vw - 6rem))`,
-              maxWidth: hasText ? "calc(100% + 16px)" : "100%",
-              ...mediaFrameOffsetStyle,
-            }}
-            data-testid="message-photo-collage"
-            data-photo-layout-state="pending"
-          >
-            <div className="grid h-full w-full grid-cols-2 gap-[2px] overflow-hidden">
-              {resolvedVisualAttachments.map((currentAttachment, index) => {
-                const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
-                const attachmentName = getAttachmentDisplayName(currentAttachment.attachment);
-
-                return (
-                  <VisualAttachmentTile
-                    key={currentAttachment.attachment.id}
-                    attachment={currentAttachment.attachment}
-                    attachmentName={attachmentName}
-                    displaySrc={currentAttachment.displaySrc}
-                    index={index}
-                    buttonClassName="relative aspect-square overflow-hidden"
-                    buttonTestId="message-photo-collage-tile"
-                    isDebugEnabled={isMediaDebugEnabled}
-                    serverWidth={currentAttachment.serverWidth}
-                    serverHeight={currentAttachment.serverHeight}
-                    runtimeMetrics={runtimeMetrics}
-                    computedRatio={getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height)}
-                    onOpen={(openedAttachment) => void handleVisualAttachmentOpen(openedAttachment)}
-                    onDecodedDimensions={handleDecodedVisualDimensions}
-                    onDiagnostics={handleVisualDiagnostics}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div
-          className={cn("relative max-w-full", !hasText && "overflow-hidden", mediaFrameClassName)}
-          style={{
-            width: hasText ? `${layout.width + 16}px` : `${layout.width}px`,
-            maxWidth: hasText ? "calc(100% + 16px)" : "100%",
-            aspectRatio: `${layout.width} / ${layout.height}`,
-            ...mediaFrameOffsetStyle,
-          }}
-          data-testid="message-photo-collage"
-          data-photo-layout-state="resolved"
-        >
-          <div className="relative h-full w-full overflow-hidden" data-testid="message-photo-collage-inner">
-            {resolvedVisualAttachments.map((currentAttachment, index) =>
-              renderVisualTile(currentAttachment, layout.tiles[index], layout, tileRadius),
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    const currentAttachment = resolvedVisualAttachments[0];
-    if (!currentAttachment) return null;
-    const attachmentName = getAttachmentDisplayName(currentAttachment.attachment);
-    if (!currentAttachment.lightboxSrc) return null;
-
-    return (
-      <div
-        className={mediaFrameClassName}
-        style={{
-          width: hasText ? `${layout.width + 16}px` : undefined,
-          maxWidth: hasText ? "calc(100% + 16px)" : undefined,
-          aspectRatio: hasText ? `${layout.width} / ${layout.height}` : undefined,
-          ...mediaFrameOffsetStyle,
-        }}
-      >
-        <VisualAttachmentTile
-          attachment={currentAttachment.attachment}
-          attachmentName={attachmentName}
-          displaySrc={currentAttachment.displaySrc}
-          index={0}
-          buttonClassName={cn("relative block h-full w-full", !hasText && "overflow-hidden")}
-          buttonTestId="message-media-shell"
-          buttonStyle={{
-            width: !hasText ? `${layout.width}px` : undefined,
-            maxWidth: !hasText ? "100%" : undefined,
-            aspectRatio: !hasText ? `${layout.width} / ${layout.height}` : undefined,
-          }}
-          photoLayoutState={currentAttachment.dimensionSource === "fallback" ? "pending" : "resolved"}
-          isDebugEnabled={isMediaDebugEnabled}
-          serverWidth={currentAttachment.serverWidth}
-          serverHeight={currentAttachment.serverHeight}
-          runtimeMetrics={visualRuntimeMetrics[currentAttachment.attachment.id]}
-          computedRatio={getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height)}
-          onOpen={() => onLightbox({
-            kind: currentAttachment.attachment.kind === "video" ? "video" : "image",
-            src: currentAttachment.lightboxSrc,
-            authorName,
-            createdAt: msg.inserted_at,
-            avatarSrc: msg.sender?.avatar_url ?? null,
-            messageId: msg.id,
-          })}
-          onDecodedDimensions={handleDecodedVisualDimensions}
-          onDiagnostics={handleVisualDiagnostics}
-        />
-      </div>
-    );
-  };
+  const renderPhotoMedia = () => (
+    <VisualAttachmentGroup
+      attachments={resolvedVisualAttachments}
+      layout={photoLayout}
+      albumMaxWidth={MESSAGE_ALBUM_MAX_WIDTH}
+      hasCaption={hasText}
+      isMediaOnly={isMediaOnly}
+      isTemporaryLayout={isTemporaryVisualLayout}
+      isDebugEnabled={isMediaDebugEnabled}
+      runtimeMetricsByAttachmentId={visualRuntimeMetrics}
+      getPackingRatio={getResolvedPhotoPackingRatio}
+      onOpen={(openedAttachment) => void handleVisualAttachmentOpen(openedAttachment)}
+      onDecodedDimensions={handleDecodedVisualDimensions}
+      onDiagnostics={handleVisualDiagnostics}
+    />
+  );
 
   const renderDocumentAttachment = () => {
     return (
