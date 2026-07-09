@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MessageList } from "./MessageList";
+import { MessageList, WIDE_CHAT_LEFT_COLUMN_THRESHOLD } from "./MessageList";
 
 const { useAppStoreMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
@@ -154,6 +154,38 @@ vi.mock("../../utils/attachmentDownloads", () => ({
 
 import * as attachmentDownloads from "../../utils/attachmentDownloads";
 
+let mockViewportWidth = 900;
+
+class ResizeObserverMock {
+  private readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+
+  observe(target: Element) {
+    this.callback([
+      {
+        target,
+        contentRect: {
+          width: mockViewportWidth,
+          height: 0,
+          x: 0,
+          y: 0,
+          top: 0,
+          right: mockViewportWidth,
+          bottom: 0,
+          left: 0,
+          toJSON: () => ({}),
+        },
+      } as ResizeObserverEntry,
+    ], this);
+  }
+
+  disconnect() {}
+  unobserve() {}
+}
+
 function makeMessage(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
@@ -194,7 +226,11 @@ function renderMessageList(
 
 describe("MessageList bubble layout", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     Element.prototype.scrollIntoView = vi.fn();
+    mockViewportWidth = 900;
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => mockViewportWidth);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
@@ -247,6 +283,60 @@ describe("MessageList bubble layout", () => {
     expect(screen.getAllByTestId("message-date-group")[0]).toHaveClass("w-full");
     expect(screen.getByText("First day")).toBeInTheDocument();
     expect(screen.getByText("Second day")).toBeInTheDocument();
+  });
+
+  it("keeps split alignment when the chat viewport is at or below the wide threshold", () => {
+    mockViewportWidth = WIDE_CHAT_LEFT_COLUMN_THRESHOLD;
+
+    renderMessageList([
+      makeMessage({
+        id: 1,
+        content: "Incoming",
+      }),
+      makeMessage({
+        id: 2,
+        content: "Outgoing",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+      }),
+    ]);
+
+    const rows = screen.getAllByTestId("message-bubble-row");
+
+    expect(screen.getByTestId("message-list-rail")).toHaveAttribute("data-alignment-mode", "split");
+    expect(rows[0]).toHaveAttribute("data-alignment-mode", "split");
+    expect(rows[0]).toHaveClass("justify-start");
+    expect(rows[1]).toHaveClass("justify-end");
+  });
+
+  it("switches to a left-biased reading column when the chat viewport exceeds the wide threshold", () => {
+    mockViewportWidth = WIDE_CHAT_LEFT_COLUMN_THRESHOLD + 1;
+
+    renderMessageList([
+      makeMessage({
+        id: 1,
+        content: "Incoming",
+      }),
+      makeMessage({
+        id: 2,
+        content: "Outgoing",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+      }),
+    ]);
+
+    const rows = screen.getAllByTestId("message-bubble-row");
+    const rail = screen.getByTestId("message-list-rail");
+
+    expect(rail).toHaveAttribute("data-alignment-mode", "left-column");
+    expect(rail).toHaveClass("mr-auto");
+    expect(rail).not.toHaveClass("mx-auto");
+    expect(rows[0]).toHaveAttribute("data-alignment-mode", "left-column");
+    expect(rows[0]).toHaveClass("justify-start");
+    expect(rows[1]).toHaveClass("justify-start");
+    expect(rows[1]).not.toHaveClass("justify-end");
   });
 
   it("opens the existing context menu from a message bubble", () => {

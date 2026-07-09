@@ -212,6 +212,26 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByLabelText("Sent")).toBeInTheDocument();
   });
 
+  it("keeps own message bubbles in the left reading column when requested by the parent list", () => {
+    renderMessageItem(
+      {
+        content: "Wide column",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+        status: "sent",
+      },
+      { isOwn: true, alignmentMode: "left-column" },
+    );
+
+    const row = screen.getByTestId("message-bubble-row");
+
+    expect(row).toHaveAttribute("data-own-message", "true");
+    expect(row).toHaveAttribute("data-alignment-mode", "left-column");
+    expect(row).toHaveClass("justify-start");
+    expect(row).not.toHaveClass("justify-end");
+  });
+
   it("renders group sender labels only when useful", () => {
     renderMessageItem(
       { content: "Group hello" },

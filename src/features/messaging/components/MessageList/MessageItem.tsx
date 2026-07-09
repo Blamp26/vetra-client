@@ -29,6 +29,7 @@ import {
 interface MessageItemProps {
   msg: Message;
   isOwn: boolean;
+  alignmentMode?: "split" | "left-column";
   isConsecutive: boolean;
   isGroupedWithNext: boolean;
   isSelected: boolean;
@@ -145,6 +146,7 @@ function hasCompleteAlbumLayout(
 export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   msg,
   isOwn,
+  alignmentMode = "split",
   isConsecutive,
   isGroupedWithNext,
   isSelected,
@@ -638,10 +640,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       ref={ref}
       className={cn(
         "flex w-full items-end",
-        isOwn ? "justify-end" : "justify-start",
+        isOwn && alignmentMode === "split" ? "justify-end" : "justify-start",
       )}
       data-testid="message-bubble-row"
       data-own-message={isOwn ? "true" : "false"}
+      data-alignment-mode={alignmentMode}
       onClick={() => selectionMode && onToggleSelection(msg.id)}
     >
       {selectionMode && (

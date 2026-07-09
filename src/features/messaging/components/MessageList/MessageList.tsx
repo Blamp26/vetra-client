@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, useLayoutEffect } from "react";
 import type { Message } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
@@ -57,6 +57,8 @@ interface ContextMenu {
     height: number;
   };
 }
+
+export const WIDE_CHAT_LEFT_COLUMN_THRESHOLD = 1000;
 
 type MediaViewerState =
   | {
@@ -170,6 +172,31 @@ export function MessageList({
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [isPickerExpanded, setIsPickerExpanded] = useState(false);
   const [lightboxData, setLightboxData] = useState<MediaViewerState | null>(null);
+  const [chatViewportWidth, setChatViewportWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const readWidth = () => {
+      const nextWidth = container.clientWidth || container.getBoundingClientRect().width || 0;
+      setChatViewportWidth((currentWidth) => (
+        currentWidth === nextWidth ? currentWidth : nextWidth
+      ));
+    };
+
+    readWidth();
+
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      readWidth();
+    });
+
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, []);
 
   const handleScroll = () => {
     const el = containerRef.current;
@@ -464,6 +491,10 @@ export function MessageList({
     return groups;
   }, [messages]);
 
+  const alignmentMode = chatViewportWidth > WIDE_CHAT_LEFT_COLUMN_THRESHOLD
+    ? "left-column"
+    : "split";
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       <div 
@@ -473,8 +504,12 @@ export function MessageList({
         data-testid="message-list-scroll"
       >
         <div
-          className="mx-auto flex w-full max-w-[900px] flex-col"
+          className={cn(
+            "flex w-full max-w-[900px] flex-col",
+            alignmentMode === "left-column" ? "mr-auto" : "mx-auto",
+          )}
           data-testid="message-list-rail"
+          data-alignment-mode={alignmentMode}
         >
           {hasMore && (
             <div className="flex justify-center p-2">
@@ -529,6 +564,7 @@ export function MessageList({
                       ref={(el) => { messageRefs.current[msg.id] = el; }}
                       msg={msg}
                       isOwn={msg.sender_id === currentUserId}
+                      alignmentMode={alignmentMode}
                       isConsecutive={isConsecutive}
                       isGroupedWithNext={isGroupedWithNext}
                       isSelected={selectedMessageIds.includes(msg.id)}
