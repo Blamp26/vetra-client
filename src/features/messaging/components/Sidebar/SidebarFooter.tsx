@@ -37,6 +37,7 @@ interface SidebarFooterProps {
   onRejectCall: () => void;
   onOpenSettings: () => void;
   onReturnToCall?: () => void;
+  isCollapsed?: boolean;
 }
 
 export function SidebarFooter({
@@ -54,6 +55,7 @@ export function SidebarFooter({
   onRejectCall,
   onOpenSettings,
   onReturnToCall,
+  isCollapsed = false,
 }: SidebarFooterProps) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
@@ -147,12 +149,16 @@ export function SidebarFooter({
   ]);
 
   return (
-    <div className="border-t border-border bg-[var(--vetra-shell-sidebar-bg)] px-4 py-3">
+    <div className={cn(
+      "border-t border-border bg-[var(--vetra-shell-sidebar-bg)]",
+      isCollapsed ? "px-3 py-3" : "px-4 py-3",
+    )}>
       <div className="flex flex-col gap-2">
         {callPanel && (
           <div
             className={cn(
-              "flex items-center justify-between rounded-[12px] border bg-card/90 px-3 py-2.5",
+              "flex items-center justify-between rounded-[12px] border bg-card/90",
+              isCollapsed ? "px-2 py-2" : "px-3 py-2.5",
               callPanel.tone === "error" ? "border-destructive/50" : "border-border",
               callStatus === "active" && "cursor-pointer hover:bg-accent",
             )}
@@ -195,9 +201,11 @@ export function SidebarFooter({
                 >
                   {callPanel.title}
                 </span>
-                <span className="text-xs text-foreground truncate">
-                  {callPanel.subtitle}
-                </span>
+                {!isCollapsed && (
+                  <span className="text-xs text-foreground truncate">
+                    {callPanel.subtitle}
+                  </span>
+                )}
               </div>
             ) : (
               <div className="flex min-w-0 flex-1 flex-col">
@@ -209,9 +217,11 @@ export function SidebarFooter({
                 >
                   {callPanel.title}
                 </span>
-                <span className="text-xs text-foreground truncate">
-                  {callPanel.subtitle}
-                </span>
+                {!isCollapsed && (
+                  <span className="text-xs text-foreground truncate">
+                    {callPanel.subtitle}
+                  </span>
+                )}
               </div>
             )}
             <div className="flex items-center gap-1">
@@ -262,12 +272,16 @@ export function SidebarFooter({
           </div>
         )}
 
-        <div className="flex items-center justify-between rounded-[12px] border border-border bg-card/90 px-3 py-2.5">
+        <div className={cn(
+          "flex items-center rounded-[12px] border border-border bg-card/90",
+          isCollapsed ? "justify-center px-2 py-2" : "justify-between px-3 py-2.5",
+        )}>
           <button
             type="button"
             className="flex min-w-0 items-center gap-2 rounded-[10px] border-0 bg-transparent p-0 text-left text-foreground"
             aria-label={`Open profile for ${displayName}`}
             onClick={() => setShowProfile(true)}
+            title={displayName}
           >
             <Avatar
               name={displayName}
@@ -275,29 +289,31 @@ export function SidebarFooter({
               className="h-7 w-7 text-[10px]"
               status={currentStatus as any}
             />
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-normal truncate">
-                {displayName}
-              </span>
-              <span
-                data-testid="sidebar-footer-status"
-                className={cn(
-                  "text-[10px] truncate",
-                  currentStatus === "online"
-                    ? "text-online"
-                    : currentStatus === "away"
-                      ? "text-away"
-                      : currentStatus === "dnd"
-                        ? "text-busy"
-                        : "text-muted-foreground",
-                )}
-              >
-                {statusText}
-              </span>
-            </div>
+            {!isCollapsed && (
+              <div className="flex min-w-0 flex-col">
+                <span className="text-xs font-normal truncate">
+                  {displayName}
+                </span>
+                <span
+                  data-testid="sidebar-footer-status"
+                  className={cn(
+                    "text-[10px] truncate",
+                    currentStatus === "online"
+                      ? "text-online"
+                      : currentStatus === "away"
+                        ? "text-away"
+                        : currentStatus === "dnd"
+                          ? "text-busy"
+                          : "text-muted-foreground",
+                  )}
+                >
+                  {statusText}
+                </span>
+              </div>
+            )}
           </button>
 
-          <div className="flex items-center gap-1">
+          <div className={cn("flex items-center gap-1", isCollapsed && "ml-2")}>
             <button
               onClick={() => {
                 toggleMic();

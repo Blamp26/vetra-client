@@ -19,6 +19,7 @@ import { getPreviewText } from "../../utils/attachments";
 
 interface SidebarProps {
   isServerMode?: boolean;
+  isCollapsed?: boolean;
 }
 
 type SidebarItem =
@@ -42,7 +43,7 @@ type SidebarItem =
       unread: number;
     };
 
-export function Sidebar({ isServerMode = false }: SidebarProps) {
+export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarProps) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const activeChat = useAppStore((s: RootState) => s.activeChat);
   const conversationPreviews = useAppStore(
@@ -163,7 +164,7 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
         isServerMode && "w-[72px]",
       )}
     >
-      {!isServerMode && (
+      {!isServerMode && !isCollapsed && (
         <div className="border-b border-border px-4 pb-4 pt-4">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="space-y-1">
@@ -181,21 +182,46 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
         </div>
       )}
 
+      {!isServerMode && isCollapsed && (
+        <div className="border-b border-border px-3 py-3">
+          <button
+            onClick={() => openModal("CREATE_PICKER")}
+            className="flex h-12 w-full items-center justify-center rounded-[12px] border border-border bg-card/85 text-lg font-semibold text-foreground hover:bg-accent"
+            aria-label="New conversation"
+            title="New conversation"
+          >
+            +
+          </button>
+        </div>
+      )}
+
       {!isServerMode && serverList.length > 0 && (
-        <div className="border-b border-border px-4 py-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="vt-kicker">
-              Servers
-            </span>
-            <button
-              onClick={() => openModal("CREATE_SERVER")}
-              className="vt-button vt-button--ghost vt-button--icon h-8 w-8 px-0"
-              aria-label="Create server"
-            >
-              +
-            </button>
-          </div>
-          <div className="space-y-1.5">
+        <div className={cn("border-b border-border", isCollapsed ? "px-3 py-3" : "px-4 py-4")}>
+          {!isCollapsed && (
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="vt-kicker">
+                Servers
+              </span>
+              <button
+                onClick={() => openModal("CREATE_SERVER")}
+                className="vt-button vt-button--ghost vt-button--icon h-8 w-8 px-0"
+                aria-label="Create server"
+              >
+                +
+              </button>
+            </div>
+          )}
+          <div className={cn(isCollapsed ? "space-y-2" : "space-y-1.5")}>
+            {isCollapsed && (
+              <button
+                onClick={() => openModal("CREATE_SERVER")}
+                className="flex h-12 w-full items-center justify-center rounded-[12px] border border-dashed border-border text-lg text-muted-foreground hover:bg-card/70 hover:text-foreground"
+                aria-label="Create server"
+                title="Create server"
+              >
+                +
+              </button>
+            )}
             {serverList.map((server) => (
               <button
                 key={server.id}
@@ -203,14 +229,18 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
                   setActiveChat(serverChatForServer(server))
                 }
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-[10px] border px-2.5 py-2 text-left transition-colors",
+                  "flex w-full items-center rounded-[10px] border transition-colors",
+                  isCollapsed
+                    ? "justify-center px-2 py-2.5"
+                    : "gap-2 px-2.5 py-2 text-left",
                   isServerActive(server.id)
                     ? "border-primary/30 bg-accent"
                     : "border-transparent hover:border-border hover:bg-card/75",
                 )}
+                title={server.name}
               >
                 <Avatar name={server.name} size="small" />
-                <span className="truncate text-sm">{server.name}</span>
+                {!isCollapsed && <span className="truncate text-sm">{server.name}</span>}
               </button>
             ))}
           </div>
@@ -219,12 +249,19 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
 
       <div className="flex-1 overflow-y-auto px-3 py-3">
         {allItems.length === 0 && !isServerMode ? (
-          <div className="rounded-[12px] border border-border bg-card/70 px-4 py-5">
+          <div
+            className={cn(
+              "rounded-[12px] border border-border bg-card/70",
+              isCollapsed ? "px-3 py-4 text-center" : "px-4 py-5",
+            )}
+          >
             <div className="space-y-1.5">
               <span className="vt-kicker">No conversations</span>
-              <p className="text-sm text-muted-foreground">
-                Start a direct chat or create a room to begin messaging.
-              </p>
+              {!isCollapsed && (
+                <p className="text-sm text-muted-foreground">
+                  Start a direct chat or create a room to begin messaging.
+                </p>
+              )}
             </div>
           </div>
         ) : (
@@ -236,14 +273,23 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
                   key={`${item.kind}-${item.id}`}
                   onClick={() => handleItemClick(item)}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-[12px] border px-2.5 py-2.5 text-left transition-colors",
+                    "relative flex w-full items-center rounded-[12px] border transition-colors",
+                    isCollapsed
+                      ? "justify-center px-2 py-2.5"
+                      : "gap-2 px-2.5 py-2.5 text-left",
                     isActive
                       ? "border-primary/30 bg-accent"
                       : "border-transparent hover:border-border hover:bg-card/70",
                   )}
                   data-testid={`sidebar-item-${item.kind}-${item.id}`}
                   data-presence-status={item.kind === "direct" ? item.status ?? "offline" : undefined}
-                  title={item.kind === "direct" ? item.presenceText : undefined}
+                  title={
+                    isCollapsed
+                      ? item.name
+                      : item.kind === "direct"
+                        ? item.presenceText
+                        : undefined
+                  }
                 >
                   <Avatar
                     name={item.name}
@@ -254,7 +300,7 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
                         : null
                     }
                   />
-                  {!isServerMode && (
+                  {!isCollapsed && !isServerMode && (
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-sm font-medium">{item.name}</span>
@@ -270,7 +316,12 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
                       </p>
                     </div>
                   )}
-                  {!isServerMode && item.unread > 0 && (
+                  {isCollapsed && item.unread > 0 && (
+                    <span className="absolute right-1.5 top-1.5 rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
+                      {item.unread}
+                    </span>
+                  )}
+                  {!isCollapsed && !isServerMode && item.unread > 0 && (
                     <span className="rounded-full bg-primary px-2 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
                       {item.unread}
                     </span>

@@ -228,6 +228,7 @@ describe("App hash sync", () => {
 
   it("restores a persisted sidebar width from localStorage", () => {
     const state = makeState();
+    window.localStorage.setItem("vetra:left-pane-mode", "text");
     window.localStorage.setItem("vetra:left-pane-width", "512");
 
     useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
@@ -240,7 +241,22 @@ describe("App hash sync", () => {
     expect(screen.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "512");
   });
 
-  it("resizes the shell with pointer drag and persists on pointerup", () => {
+  it("restores collapsed mode from localStorage", () => {
+    const state = makeState();
+    window.localStorage.setItem("vetra:left-pane-mode", "collapsed");
+    window.localStorage.setItem("vetra:left-pane-width", "138");
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    expect(screen.getByTestId("app-shell").style.getPropertyValue("--vetra-left-pane-width")).toBe("138px");
+    expect(screen.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "138");
+  });
+
+  it("snaps to collapsed mode below the text minimum and persists both width and mode", () => {
     const state = makeState();
 
     useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
@@ -255,17 +271,49 @@ describe("App hash sync", () => {
     fireEvent.pointerDown(divider, { button: 0, clientX: 408, pointerId: 1 });
     expect(document.body.dataset.vtShellResizing).toBe("true");
 
-    fireEvent.pointerMove(window, { clientX: 560, pointerId: 1 });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("560px");
-    expect(divider).toHaveAttribute("aria-valuenow", "560");
+    fireEvent.pointerMove(window, { clientX: 320, pointerId: 1 });
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("138px");
+    expect(divider).toHaveAttribute("aria-valuenow", "138");
 
     fireEvent.pointerUp(window, { pointerId: 1 });
     expect(document.body.dataset.vtShellResizing).toBeUndefined();
-    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("560");
+    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("138");
+    expect(window.localStorage.getItem("vetra:left-pane-mode")).toBe("collapsed");
   });
 
-  it("clamps keyboard resizing and persists the updated width", () => {
+  it("jumps from collapsed mode back to text minimum before continuing resize", () => {
     const state = makeState();
+    window.localStorage.setItem("vetra:left-pane-mode", "collapsed");
+    window.localStorage.setItem("vetra:left-pane-width", "138");
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    const shell = screen.getByTestId("app-shell");
+    const divider = screen.getByRole("separator", { name: "Resize sidebar" });
+
+    fireEvent.pointerDown(divider, { button: 0, clientX: 138, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 200, pointerId: 1 });
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("138px");
+
+    fireEvent.pointerMove(window, { clientX: 360, pointerId: 1 });
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("360px");
+
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    expect(window.localStorage.getItem("vetra:left-pane-mode")).toBe("text");
+    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("360");
+  });
+
+  it("clamps keyboard resizing across collapsed, text minimum, and responsive max", () => {
+    const state = makeState();
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1920,
+    });
 
     useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
       selector(state),
@@ -279,16 +327,35 @@ describe("App hash sync", () => {
     fireEvent.keyDown(divider, { key: "ArrowLeft" });
     expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("392px");
     expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("392");
+    expect(window.localStorage.getItem("vetra:left-pane-mode")).toBe("text");
+
+    for (let index = 0; index < 4; index += 1) {
+      fireEvent.keyDown(divider, { key: "ArrowLeft" });
+    }
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
+
+    fireEvent.keyDown(divider, { key: "ArrowLeft" });
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("138px");
+    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("138");
+    expect(window.localStorage.getItem("vetra:left-pane-mode")).toBe("collapsed");
+
+    fireEvent.keyDown(divider, { key: "ArrowRight" });
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
 
     fireEvent.keyDown(divider, { key: "Home" });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("320px");
-    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("320");
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("138px");
 
     fireEvent.keyDown(divider, { key: "End" });
-    const responsiveMaxWidth = String(window.innerWidth - 360);
+    const responsiveMaxWidth = String(window.innerWidth - 380);
     expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(`${responsiveMaxWidth}px`);
     expect(divider).toHaveAttribute("aria-valuemax", responsiveMaxWidth);
     expect(window.localStorage.getItem("vetra:left-pane-width")).toBe(responsiveMaxWidth);
+    expect(window.localStorage.getItem("vetra:left-pane-mode")).toBe("text");
+
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: originalInnerWidth,
+    });
   });
 
   it("does not restore the stale server hash after a channel is selected", async () => {
