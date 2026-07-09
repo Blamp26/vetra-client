@@ -147,7 +147,7 @@ export function SidebarFooter({
   ]);
 
   return (
-    <div className="border-t border-border bg-sidebar/70 px-4 py-3">
+    <div className="border-t border-border bg-[var(--vetra-shell-sidebar-bg)] px-4 py-3">
       <div className="flex flex-col gap-2">
         {callPanel && (
           <div

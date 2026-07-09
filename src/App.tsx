@@ -35,24 +35,19 @@ function EmptyState({
   mode: "channel" | "conversation";
 }) {
   return (
-    <div className="flex flex-1 items-center justify-center p-6">
-      <div className="vt-empty-state w-full max-w-2xl px-8 py-10">
+    <div className="flex flex-1 items-center justify-center px-8 py-10">
+      <div className="vt-empty-state w-full max-w-2xl">
         <div className="space-y-4">
-          <span className="vt-kicker">
-            {eyebrow}
-          </span>
+          <span className="vt-kicker">{eyebrow}</span>
           <div className="max-w-xl space-y-2">
             <h2 className="text-[1.625rem] font-semibold tracking-tight text-foreground">{title}</h2>
             <p className="text-sm leading-6 text-muted-foreground">{description}</p>
           </div>
-          {actionLabel && onAction && (
-            <button
-              onClick={onAction}
-              className="vt-button vt-button--primary"
-            >
+          {actionLabel && onAction ? (
+            <button onClick={onAction} className="vt-button vt-button--primary">
               {actionLabel}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
@@ -382,16 +377,16 @@ function AppShell() {
     <div className="vt-workspace flex h-[100dvh] w-full flex-col overflow-hidden text-foreground">
       <DesktopTitleBar />
 
-      <div className="flex min-h-0 flex-1 gap-3 overflow-hidden px-3 pb-3 pt-2">
+      <div className="vt-messenger-shell flex min-h-0 flex-1 overflow-hidden">
         <div
-          className="vt-pane flex h-full w-[455px] flex-shrink-0 flex-col overflow-hidden bg-sidebar"
+          className="flex h-full w-[var(--vetra-left-pane-width)] flex-shrink-0 flex-col overflow-hidden bg-[var(--vetra-shell-sidebar-bg)]"
           data-testid="app-sidebar-shell"
         >
           <div className="flex flex-1 overflow-hidden">
             <Sidebar isServerMode={showChannelPanel} />
 
             {showChannelPanel && persistedServerId !== null && (
-              <div className="w-[320px] border-l border-border bg-card/70">
+              <div className="w-[320px] border-l border-border bg-[var(--vetra-shell-chat-bg)]">
                 <ChannelPanel serverId={persistedServerId} />
               </div>
             )}
@@ -415,7 +410,7 @@ function AppShell() {
           />
         </div>
 
-        <div className="vt-pane flex min-w-0 flex-1 overflow-hidden">
+        <div className="flex min-w-0 flex-1 overflow-hidden bg-[var(--vetra-shell-chat-bg)]">
           {!isSettingsRoute && chatTarget ? (
             <ChatWindow
               activeChat={chatTarget}

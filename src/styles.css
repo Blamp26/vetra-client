@@ -193,6 +193,10 @@
   --overlay-shadow: 0 16px 38px rgba(18, 24, 20, 0.14);
   --workspace-glow: rgba(47, 107, 91, 0.1);
   --workspace-sheen: rgba(255, 255, 255, 0.58);
+  --vetra-left-pane-width: 25.5rem;
+  --vetra-shell-divider-color: var(--border);
+  --vetra-shell-sidebar-bg: var(--sidebar);
+  --vetra-shell-chat-bg: var(--card);
 
   font-family: var(--font-sans);
 }
@@ -257,6 +261,9 @@
   --overlay-shadow: 0 20px 44px rgba(0, 0, 0, 0.34);
   --workspace-glow: rgba(125, 177, 159, 0.08);
   --workspace-sheen: rgba(255, 255, 255, 0.04);
+  --vetra-shell-divider-color: var(--border);
+  --vetra-shell-sidebar-bg: var(--sidebar);
+  --vetra-shell-chat-bg: var(--card);
 }
 
 * {
@@ -338,6 +345,23 @@ body {
       radial-gradient(circle at top left, var(--workspace-glow), transparent 32%),
       linear-gradient(180deg, var(--workspace-sheen), transparent 18%),
       var(--background);
+  }
+
+  .vt-messenger-shell {
+    position: relative;
+    background: var(--vetra-shell-chat-bg);
+  }
+
+  .vt-messenger-shell::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--vetra-left-pane-width);
+    width: 1px;
+    background: var(--vetra-shell-divider-color);
+    pointer-events: none;
+    z-index: 1;
   }
 
   .vt-pane {
@@ -652,12 +676,7 @@ body {
   }
 
   .vt-empty-state {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.42), transparent 34%),
-      color-mix(in srgb, var(--card) 80%, var(--sidebar) 20%);
-    box-shadow: var(--panel-shadow);
+    background: transparent;
   }
 
   .vt-call-shell {

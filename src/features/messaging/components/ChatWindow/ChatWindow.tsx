@@ -328,7 +328,7 @@ export function ChatWindow({ activeChat, call }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden rounded-[calc(var(--radius-xl)-2px)] bg-card">
+    <div className="flex h-full flex-1 flex-col overflow-hidden bg-[var(--vetra-shell-chat-bg)]">
       {renderHeader()}
 
       {(callStartIssue || (call.status === "idle" && displayCallIssue?.message)) && (
@@ -360,7 +360,10 @@ export function ChatWindow({ activeChat, call }: Props) {
         />
       )}
 
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.26),transparent_12%)] p-3" data-testid="message-list-region">
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.26),transparent_12%)]"
+        data-testid="message-list-region"
+      >
         <MessageList
           key={chatId}
           messages={messages}

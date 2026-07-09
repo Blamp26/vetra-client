@@ -158,10 +158,13 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
 
   return (
     <div
-      className={cn("flex h-full w-full flex-col", isServerMode && "w-[72px]")}
+      className={cn(
+        "flex h-full w-full flex-col bg-[var(--vetra-shell-sidebar-bg)]",
+        isServerMode && "w-[72px]",
+      )}
     >
       {!isServerMode && (
-        <div className="border-b border-border px-4 pb-4 pt-5">
+        <div className="border-b border-border px-4 pb-4 pt-4">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="space-y-1">
               <span className="vt-kicker">Inbox</span>
@@ -216,7 +219,7 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
 
       <div className="flex-1 overflow-y-auto px-3 py-3">
         {allItems.length === 0 && !isServerMode ? (
-          <div className="vt-panel bg-card/70 px-4 py-5">
+          <div className="rounded-[12px] border border-border bg-card/70 px-4 py-5">
             <div className="space-y-1.5">
               <span className="vt-kicker">No conversations</span>
               <p className="text-sm text-muted-foreground">
