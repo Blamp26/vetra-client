@@ -120,6 +120,8 @@ const EXPANDED_REACTIONS = [
 const VIEWPORT_MARGIN = 8;
 const POPUP_REACTION_OFFSET_LEFT = 82;
 const POPUP_REACTION_OFFSET_TOP = 48;
+const POPUP_AVOIDANCE_GAP = 8;
+const REACTION_STRIP_WIDTH = 298;
 
 export interface Rect {
   left: number;
@@ -138,6 +140,10 @@ function intersectionArea(a: Rect, b: Rect): number {
   const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
   const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
   return width * height;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
 export function calculateContextMenuPosition({
@@ -168,6 +174,17 @@ export function calculateContextMenuPosition({
   );
   const minTop = VIEWPORT_MARGIN + POPUP_REACTION_OFFSET_TOP;
   const maxTop = Math.max(VIEWPORT_MARGIN, viewportHeight - menuHeight - VIEWPORT_MARGIN);
+  const popupWidth = Math.max(menuWidth + POPUP_REACTION_OFFSET_LEFT, REACTION_STRIP_WIDTH);
+  const popupHeight = menuHeight + POPUP_REACTION_OFFSET_TOP;
+
+  const buildPopupRect = (left: number, top: number): Rect => ({
+    left: left - POPUP_REACTION_OFFSET_LEFT,
+    top: top - POPUP_REACTION_OFFSET_TOP,
+    right: left - POPUP_REACTION_OFFSET_LEFT + popupWidth,
+    bottom: top - POPUP_REACTION_OFFSET_TOP + popupHeight,
+    width: popupWidth,
+    height: popupHeight,
+  });
 
   if (!bubbleRect && !contentRect) {
     let left = x;
@@ -187,7 +204,7 @@ export function calculateContextMenuPosition({
     };
   }
 
-  const anchorRect = contentRect ?? bubbleRect ?? {
+  const avoidRect = bubbleRect ?? contentRect ?? {
     left: x,
     top: y,
     right: x,
@@ -195,25 +212,61 @@ export function calculateContextMenuPosition({
     width: 0,
     height: 0,
   };
-  const contentAreaRect = contentRect ?? anchorRect;
-  const preferredTop = anchorRect.top + menuHeight <= viewportHeight - VIEWPORT_MARGIN
-    ? anchorRect.top
-    : anchorRect.bottom - menuHeight;
-  const top = Math.min(Math.max(minTop, preferredTop), maxTop);
+  const contentAreaRect = contentRect ?? avoidRect;
   const preferredSide = isOwn ? "left" : "right";
+  const preferredTop = clamp(y - 24, minTop, maxTop);
   const sideOrder = preferredSide === "left" ? ["left", "right"] : ["right", "left"];
+  const candidatePositions = [
+    ...sideOrder.map((side) => ({
+      side,
+      left: clamp(
+        side === "left"
+          ? avoidRect.left - menuWidth - POPUP_AVOIDANCE_GAP
+          : avoidRect.right + POPUP_AVOIDANCE_GAP + POPUP_REACTION_OFFSET_LEFT,
+        minLeft,
+        maxLeft,
+      ),
+      top: preferredTop,
+      clampDelta: Math.abs(
+        (
+          side === "left"
+            ? avoidRect.left - menuWidth - POPUP_AVOIDANCE_GAP
+            : avoidRect.right + POPUP_AVOIDANCE_GAP + POPUP_REACTION_OFFSET_LEFT
+        ) - clamp(
+          side === "left"
+            ? avoidRect.left - menuWidth - POPUP_AVOIDANCE_GAP
+            : avoidRect.right + POPUP_AVOIDANCE_GAP + POPUP_REACTION_OFFSET_LEFT,
+          minLeft,
+          maxLeft,
+        ),
+      ),
+    })),
+    {
+      side: "below",
+      left: clamp(isOwn ? avoidRect.right - menuWidth : avoidRect.left, minLeft, maxLeft),
+      top: clamp(avoidRect.bottom + POPUP_AVOIDANCE_GAP, minTop, maxTop),
+      clampDelta: Math.abs(
+        (avoidRect.bottom + POPUP_AVOIDANCE_GAP) - clamp(avoidRect.bottom + POPUP_AVOIDANCE_GAP, minTop, maxTop),
+      ),
+    },
+    {
+      side: "above",
+      left: clamp(isOwn ? avoidRect.right - menuWidth : avoidRect.left, minLeft, maxLeft),
+      top: clamp(avoidRect.top - menuHeight - POPUP_AVOIDANCE_GAP, minTop, maxTop),
+      clampDelta: Math.abs(
+        (avoidRect.top - menuHeight - POPUP_AVOIDANCE_GAP) - clamp(avoidRect.top - menuHeight - POPUP_AVOIDANCE_GAP, minTop, maxTop),
+      ),
+    },
+    {
+      side: "fallback",
+      left: clamp(x, minLeft, maxLeft),
+      top: clamp(y, minTop, maxTop),
+      clampDelta: 0,
+    },
+  ];
 
-  const candidates = sideOrder.map((side) => {
-    const baseLeft = side === "left" ? anchorRect.left - menuWidth : anchorRect.right;
-    const left = Math.min(Math.max(minLeft, baseLeft), maxLeft);
-    const rect = {
-      left,
-      top,
-      right: left + menuWidth,
-      bottom: top + menuHeight,
-      width: menuWidth,
-      height: menuHeight,
-    };
+  const candidates = candidatePositions.map(({ side, left, top, clampDelta }) => {
+    const rect = buildPopupRect(left, top);
 
     return {
       side,
@@ -221,16 +274,24 @@ export function calculateContextMenuPosition({
       top,
       intersectsText: intersects(rect, contentAreaRect),
       overlapArea: intersectionArea(rect, contentAreaRect),
-      clampDelta: Math.abs(left - baseLeft),
+      bubbleOverlapArea: intersectionArea(rect, avoidRect),
+      distanceToClick: Math.abs(left - x) + Math.abs(top - y),
+      clampDelta,
     };
   });
 
   candidates.sort((a, b) => {
+    if (a.bubbleOverlapArea !== b.bubbleOverlapArea) {
+      return a.bubbleOverlapArea - b.bubbleOverlapArea;
+    }
     if (a.intersectsText !== b.intersectsText) {
       return Number(a.intersectsText) - Number(b.intersectsText);
     }
     if (a.overlapArea !== b.overlapArea) {
       return a.overlapArea - b.overlapArea;
+    }
+    if (a.distanceToClick !== b.distanceToClick) {
+      return a.distanceToClick - b.distanceToClick;
     }
     if (a.side !== b.side) {
       return a.side === preferredSide ? -1 : 1;
@@ -474,14 +535,6 @@ export function MessageContextMenu({
             style={{ transform: "translateY(0)" }}
             data-testid="message-context-reactions-surface"
           >
-            <div
-              className="absolute bottom-[-8px] right-[18px] h-2 w-4 rounded-b-[16px] bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
-              data-testid="message-context-reaction-tail-large"
-            />
-            <div
-              className="absolute bottom-[-20px] right-[18px] h-2 w-2 rounded-full bg-[rgba(33,33,33,0.867)] shadow-[0px_4px_2px_0px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[25px]"
-              data-testid="message-context-reaction-tail-small"
-            />
             <div className="flex h-full w-full items-center px-2" data-testid="message-context-reaction-items">
               {EMOJIS.map((emoji, index) => (
                 <button

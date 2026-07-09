@@ -16,6 +16,17 @@ function menuRect(position: { left: number; top: number }, width = 216, height =
   };
 }
 
+function popupRect(position: { left: number; top: number }, width = 216, height = 248): Rect {
+  return {
+    left: position.left - 82,
+    top: position.top - 48,
+    right: position.left - 82 + Math.max(width + 82, 298),
+    bottom: position.top - 48 + height + 48,
+    width: Math.max(width + 82, 298),
+    height: height + 48,
+  };
+}
+
 function intersects(a: Rect, b: Rect): boolean {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
@@ -124,8 +135,8 @@ describe("MessageContextMenu", () => {
       isOwn: true,
     });
 
-    expect(position.left).toBe(504);
-    expect(intersects(menuRect(position), contentRect)).toBe(false);
+    expect(position.left).toBe(496);
+    expect(intersects(popupRect(position), contentRect)).toBe(false);
   });
 
   it("keeps the incoming message popup off the message text while staying near the bubble", () => {
@@ -148,8 +159,40 @@ describe("MessageContextMenu", () => {
       isOwn: false,
     });
 
-    expect(position.left).toBe(320);
-    expect(intersects(menuRect(position), contentRect)).toBe(false);
+    expect(position.left).toBe(410);
+    expect(intersects(popupRect(position), contentRect)).toBe(false);
+  });
+
+  it("shifts the popup fully outside the clicked bubble rect with a small gap", () => {
+    const bubbleRect = {
+      left: 660,
+      top: 220,
+      right: 940,
+      bottom: 320,
+      width: 280,
+      height: 100,
+    };
+    const position = calculateContextMenuPosition({
+      x: 900,
+      y: 260,
+      menuWidth: 216,
+      menuHeight: 248,
+      viewportWidth: 1200,
+      viewportHeight: 900,
+      bubbleRect,
+      contentRect: {
+        left: 688,
+        top: 232,
+        right: 920,
+        bottom: 300,
+        width: 232,
+        height: 68,
+      },
+      isOwn: true,
+    });
+
+    expect(intersects(popupRect(position), bubbleRect)).toBe(false);
+    expect(position.left + 216).toBeLessThanOrEqual(bubbleRect.left - 8);
   });
 
   it("keeps the full popup inside the viewport near the bottom edge", () => {
@@ -188,8 +231,8 @@ describe("MessageContextMenu", () => {
     expect(screen.getAllByTestId("message-context-reaction-button")).toHaveLength(7);
     expect(screen.getByRole("button", { name: "React with 👍" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "React with 🔥" })).toBeInTheDocument();
-    expect(screen.getByTestId("message-context-reaction-tail-large")).toBeInTheDocument();
-    expect(screen.getByTestId("message-context-reaction-tail-small")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-context-reaction-tail-large")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-context-reaction-tail-small")).not.toBeInTheDocument();
   });
 
   it("renders a down arrow button instead of the three-dots more glyph", () => {
@@ -245,7 +288,6 @@ describe("MessageContextMenu", () => {
     expect(screen.getByTestId("message-context-reactions")).toHaveClass("w-[298px]");
     expect(screen.getByTestId("message-context-expanded-picker")).toHaveClass("w-[298px]");
     expect(screen.queryByTestId("message-context-reactions-surface")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("message-context-reaction-tail-large")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-context-reaction-more")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-context-expanded-picker-search")).toBeInTheDocument();
   });

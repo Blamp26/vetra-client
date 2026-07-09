@@ -258,6 +258,72 @@ describe("MessageList bubble layout", () => {
     expect(screen.getByRole("menuitem", { name: "Copy Text" })).toBeInTheDocument();
   });
 
+  it("positions the context popup outside the clicked own-message bubble", () => {
+    renderMessageList([
+      makeMessage({
+        id: 1,
+        content: "Context menu message",
+        sender_id: 1,
+        sender_username: "tester",
+        sender_display_name: "Tester",
+      }),
+    ]);
+
+    const bubble = screen.getByTestId("message-bubble") as HTMLDivElement;
+    const contentRect = bubble.querySelector("[data-message-content-rect]") as HTMLElement;
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function getBoundingClientRect() {
+      if (this === bubble) {
+        return {
+          x: 660,
+          y: 220,
+          left: 660,
+          top: 220,
+          right: 940,
+          bottom: 320,
+          width: 280,
+          height: 100,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+
+      if (this === contentRect) {
+        return {
+          x: 688,
+          y: 232,
+          left: 688,
+          top: 232,
+          right: 920,
+          bottom: 300,
+          width: 232,
+          height: 68,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+
+      if ((this as HTMLElement).dataset.testid === "message-context-menu") {
+        return {
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          right: 216,
+          bottom: 248,
+          width: 216,
+          height: 248,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+
+      return originalGetBoundingClientRect.call(this);
+    });
+
+    fireEvent.contextMenu(bubble, { clientX: 900, clientY: 260 });
+
+    const menu = screen.getByTestId("message-context-menu");
+    expect(menu).toHaveStyle({ left: "436px" });
+  });
+
   it("prevents the native context menu on right-click", () => {
     renderMessageList([makeMessage({ content: "Context menu message" })]);
 
