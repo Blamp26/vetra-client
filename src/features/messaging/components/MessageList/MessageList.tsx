@@ -472,79 +472,84 @@ export function MessageList({
         className="flex-1 overflow-y-auto px-3 py-4 scrollbar-hide sm:px-4"
         data-testid="message-list-scroll"
       >
-        {hasMore && (
-          <div className="flex justify-center p-2">
-            <button onClick={onLoadMore} disabled={isLoading} className="vt-button">
-              {isLoading ? "Loading..." : "Older messages"}
-            </button>
-          </div>
-        )}
-        {messages.length === 0 && !isLoading && (
-          <div className="vt-panel mx-auto max-w-md px-5 py-6 text-center">
-            <div className="space-y-1.5">
-              <span className="vt-kicker">No messages yet</span>
-              <p className="text-sm text-muted-foreground">Start the conversation with a message or file.</p>
+        <div
+          className="mx-auto flex w-full max-w-[900px] flex-col"
+          data-testid="message-list-rail"
+        >
+          {hasMore && (
+            <div className="flex justify-center p-2">
+              <button onClick={onLoadMore} disabled={isLoading} className="vt-button">
+                {isLoading ? "Loading..." : "Older messages"}
+              </button>
             </div>
-          </div>
-        )}
-        {groupedMessages.map(({ date, messages: dayMessages }) => (
-          <div key={date} className="mx-auto w-full max-w-[980px]" data-testid="message-date-group">
-            <div className="my-3 flex items-center gap-3">
-              <div className="h-px flex-1 bg-border" />
-              <span className="rounded-full border border-border bg-card px-3 py-1 text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
-                {date}
-              </span>
-              <div className="h-px flex-1 bg-border" />
+          )}
+          {messages.length === 0 && !isLoading && (
+            <div className="vt-panel mx-auto max-w-md px-5 py-6 text-center">
+              <div className="space-y-1.5">
+                <span className="vt-kicker">No messages yet</span>
+                <p className="text-sm text-muted-foreground">Start the conversation with a message or file.</p>
+              </div>
             </div>
-            {dayMessages.map((msg, idx) => {
-              const prevMsg = dayMessages[idx - 1];
-              const nextMsg = dayMessages[idx + 1];
-              const isConsecutive = prevMsg?.sender_id === msg.sender_id;
-              const isGroupedWithNext = nextMsg?.sender_id === msg.sender_id;
-              const hasAttachment = getMessageAttachment(msg) != null;
-              const prevHasAttachment = prevMsg ? getMessageAttachment(prevMsg) != null : false;
-              const isAttachmentRun = isConsecutive && hasAttachment && prevHasAttachment;
-              return (
-                <div
-                  key={msg.id}
-                  data-testid="message-row-spacing"
-                  data-attachment-run={isAttachmentRun ? "true" : "false"}
-                  data-grouped-with-previous={isConsecutive ? "true" : "false"}
-                  data-grouped-with-next={isGroupedWithNext ? "true" : "false"}
-                  className={cn(
-                    idx === 0
-                      ? "mt-0"
-                      : isAttachmentRun
-                        ? "mt-0.5"
-                        : isConsecutive
+          )}
+          {groupedMessages.map(({ date, messages: dayMessages }) => (
+            <div key={date} className="w-full" data-testid="message-date-group">
+              <div className="my-3 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="rounded-full border border-border bg-card px-3 py-1 text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                  {date}
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              {dayMessages.map((msg, idx) => {
+                const prevMsg = dayMessages[idx - 1];
+                const nextMsg = dayMessages[idx + 1];
+                const isConsecutive = prevMsg?.sender_id === msg.sender_id;
+                const isGroupedWithNext = nextMsg?.sender_id === msg.sender_id;
+                const hasAttachment = getMessageAttachment(msg) != null;
+                const prevHasAttachment = prevMsg ? getMessageAttachment(prevMsg) != null : false;
+                const isAttachmentRun = isConsecutive && hasAttachment && prevHasAttachment;
+                return (
+                  <div
+                    key={msg.id}
+                    data-testid="message-row-spacing"
+                    data-attachment-run={isAttachmentRun ? "true" : "false"}
+                    data-grouped-with-previous={isConsecutive ? "true" : "false"}
+                    data-grouped-with-next={isGroupedWithNext ? "true" : "false"}
+                    className={cn(
+                      idx === 0
+                        ? "mt-0"
+                        : isAttachmentRun
                           ? "mt-0.5"
-                          : "mt-2.5",
-                  )}
-                >
-                  <MessageItem
-                    ref={(el) => { messageRefs.current[msg.id] = el; }}
-                    msg={msg}
-                    isOwn={msg.sender_id === currentUserId}
-                    isConsecutive={isConsecutive}
-                    isGroupedWithNext={isGroupedWithNext}
-                    isSelected={selectedMessageIds.includes(msg.id)}
-                    selectionMode={selectionMode}
-                    isRoom={chatContext.type === "room"}
-                    messageReactions={messageReactions[msg.id] || msg.reactions || []}
-                    currentUserId={currentUserId}
-                    onContextMenu={handleContextMenu}
-                    onToggleSelection={toggleMessageSelection}
-                    onToggleReaction={toggleReaction}
-                    onLightbox={setLightboxData}
-                    renderReplyPreview={renderReplyPreview}
-                    formatTime={formatTime}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        ))}
-        <div ref={bottomRef} className="h-3" data-testid="message-list-bottom-spacer" />
+                          : isConsecutive
+                            ? "mt-0.5"
+                            : "mt-2.5",
+                    )}
+                  >
+                    <MessageItem
+                      ref={(el) => { messageRefs.current[msg.id] = el; }}
+                      msg={msg}
+                      isOwn={msg.sender_id === currentUserId}
+                      isConsecutive={isConsecutive}
+                      isGroupedWithNext={isGroupedWithNext}
+                      isSelected={selectedMessageIds.includes(msg.id)}
+                      selectionMode={selectionMode}
+                      isRoom={chatContext.type === "room"}
+                      messageReactions={messageReactions[msg.id] || msg.reactions || []}
+                      currentUserId={currentUserId}
+                      onContextMenu={handleContextMenu}
+                      onToggleSelection={toggleMessageSelection}
+                      onToggleReaction={toggleReaction}
+                      onLightbox={setLightboxData}
+                      renderReplyPreview={renderReplyPreview}
+                      formatTime={formatTime}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <div ref={bottomRef} className="h-3" data-testid="message-list-bottom-spacer" />
+        </div>
       </div>
 
       {showScrollBottom && (

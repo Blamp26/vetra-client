@@ -243,7 +243,8 @@ describe("MessageList bubble layout", () => {
     expect(screen.getAllByTestId("message-bubble-row")).toHaveLength(2);
     expect(screen.getByTestId("message-list-scroll")).toHaveClass("px-3");
     expect(screen.getByTestId("message-list-scroll")).toHaveClass("py-4");
-    expect(screen.getAllByTestId("message-date-group")[0]).toHaveClass("max-w-[980px]");
+    expect(screen.getByTestId("message-list-rail")).toHaveClass("max-w-[900px]");
+    expect(screen.getAllByTestId("message-date-group")[0]).toHaveClass("w-full");
     expect(screen.getByText("First day")).toBeInTheDocument();
     expect(screen.getByText("Second day")).toBeInTheDocument();
   });
