@@ -402,7 +402,7 @@ export function MessageContextMenu({
     >
       <div
         className={cn(
-          "absolute left-[-82px] top-[-48px] z-[2] w-[298px] overflow-hidden bg-transparent transition-[height] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none",
+          "absolute left-[-82px] top-[-48px] z-[2] w-[298px] overflow-visible bg-transparent transition-[height] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none",
           isPickerExpanded ? "h-[358px]" : "h-10",
         )}
         style={{ transformOrigin: "top center" }}
@@ -410,60 +410,62 @@ export function MessageContextMenu({
       >
         {isPickerExpanded ? (
           <div
-            className="h-[358px] min-w-[216px] w-[298px] overflow-visible rounded-[20px] border-0 bg-[rgba(33,33,33,0.867)] opacity-100 shadow-[0px_12px_24px_-14px_rgba(0,0,0,0.72)] outline-none transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none supports-[backdrop-filter]:backdrop-blur-[25px]"
+            className="h-[358px] min-w-[216px] w-[298px] overflow-visible rounded-[20px] border-0 bg-transparent opacity-100 shadow-[0px_12px_24px_-14px_rgba(0,0,0,0.72)] outline-none transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none"
             style={{ transform: "translateY(0)" }}
             data-testid="message-context-expanded-picker"
           >
-            <div
-              className="px-2 pb-2 pt-2"
-              data-testid="message-context-expanded-picker-search-wrap"
-            >
-              <label className="flex h-9 w-full items-center gap-2 rounded-[18px] border-0 bg-black/20 px-3 text-[#aaaaaa] shadow-none outline-none ring-0 transition-colors duration-150 focus-within:bg-black/28 focus-within:shadow-none focus-within:outline-none focus-within:ring-0">
-                <Search className="h-4 w-4 shrink-0" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Escape") {
-                      event.stopPropagation();
-                    }
-                  }}
-                  placeholder="Search"
-                  className="h-full w-full appearance-none border-0 bg-transparent px-0 text-sm text-white shadow-none outline-none ring-0 placeholder:text-[#aaaaaa] focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-                  data-testid="message-context-expanded-picker-search"
-                />
-              </label>
-            </div>
-            <div
-              className="grid h-[calc(358px-52px)] grid-cols-[repeat(auto-fit,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              data-testid="message-context-expanded-picker-grid"
-            >
-              {filteredReactions.length > 0 ? (
-                filteredReactions.map((reaction, index) => (
-                  <button
-                    key={`${reaction.emoji}-${index}`}
-                    type="button"
-                    onClick={() => {
-                      onToggleReaction(data.msgId, reaction.emoji);
-                      onClose();
+            <div className="h-full w-full overflow-hidden rounded-[20px] bg-[rgba(33,33,33,0.867)] supports-[backdrop-filter]:backdrop-blur-[25px]">
+              <div
+                className="px-2 pb-2 pt-2"
+                data-testid="message-context-expanded-picker-search-wrap"
+              >
+                <label className="flex h-9 w-full items-center gap-2 rounded-[18px] border-0 bg-black/20 px-3 text-[#aaaaaa] shadow-none outline-none ring-0 transition-colors duration-150 focus-within:bg-black/28 focus-within:shadow-none focus-within:outline-none focus-within:ring-0">
+                  <Search className="h-4 w-4 shrink-0" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Escape") {
+                        event.stopPropagation();
+                      }
                     }}
-                    className="inline-grid h-9 w-9 place-items-center rounded-[8px] text-[20px] text-white transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                    aria-label={`React with ${reaction.emoji}`}
-                    data-testid="message-context-expanded-picker-button"
+                    placeholder="Search"
+                    className="h-full w-full appearance-none border-0 bg-transparent px-0 text-sm text-white shadow-none outline-none ring-0 placeholder:text-[#aaaaaa] focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+                    data-testid="message-context-expanded-picker-search"
+                  />
+                </label>
+              </div>
+              <div
+                className="grid h-[calc(358px-52px)] grid-cols-[repeat(auto-fit,minmax(36px,1fr))] content-start gap-2 overflow-y-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                data-testid="message-context-expanded-picker-grid"
+              >
+                {filteredReactions.length > 0 ? (
+                  filteredReactions.map((reaction, index) => (
+                    <button
+                      key={`${reaction.emoji}-${index}`}
+                      type="button"
+                      onClick={() => {
+                        onToggleReaction(data.msgId, reaction.emoji);
+                        onClose();
+                      }}
+                      className="inline-grid h-9 w-9 place-items-center rounded-[8px] text-[20px] text-white transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      aria-label={`React with ${reaction.emoji}`}
+                      data-testid="message-context-expanded-picker-button"
+                    >
+                      <Emoji emoji={reaction.emoji} size={20} />
+                    </button>
+                  ))
+                ) : (
+                  <div
+                    className="col-span-full px-2 py-4 text-center text-sm text-white/55"
+                    data-testid="message-context-expanded-picker-empty"
                   >
-                    <Emoji emoji={reaction.emoji} size={20} />
-                  </button>
-                ))
-              ) : (
-                <div
-                  className="col-span-full px-2 py-4 text-center text-sm text-white/55"
-                  data-testid="message-context-expanded-picker-empty"
-                >
-                  No reactions found
-                </div>
-              )}
+                    No reactions found
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ) : (
