@@ -23,11 +23,16 @@ import type { ActiveChat } from "@/shared/types";
 
 const LEFT_PANE_STORAGE_KEY = "vetra:left-pane-width";
 const LEFT_PANE_MODE_STORAGE_KEY = "vetra:left-pane-mode";
-const LEFT_COLLAPSED_WIDTH = 138;
+const LEFT_MINI_RAIL_WIDTH = 72;
+const LEFT_COLLAPSED_CHAT_LIST_WIDTH = 67;
+const LEFT_COLLAPSED_TOTAL_WIDTH = LEFT_MINI_RAIL_WIDTH + LEFT_COLLAPSED_CHAT_LIST_WIDTH;
 const LEFT_TEXT_MIN_WIDTH = 333;
 const LEFT_PANE_DEFAULT_WIDTH = 408;
 const RIGHT_PANE_MIN_WIDTH = 380;
 const LEFT_PANE_KEYBOARD_STEP = 16;
+const LEFT_COLLAPSE_THRESHOLD = Math.round(
+  (LEFT_TEXT_MIN_WIDTH + LEFT_COLLAPSED_TOTAL_WIDTH) / 2,
+);
 
 type LeftPaneMode = "collapsed" | "text";
 
@@ -43,9 +48,25 @@ function resolveTextPaneWidth(width: number, availableWidth: number) {
 function resolveLeftPaneState(
   nextWidth: number,
   availableWidth: number,
+  currentMode: LeftPaneMode,
 ): { mode: LeftPaneMode; width: number } {
+  if (currentMode === "collapsed") {
+    if (nextWidth <= LEFT_COLLAPSE_THRESHOLD) {
+      return { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH };
+    }
+
+    return {
+      mode: "text",
+      width: resolveTextPaneWidth(Math.max(nextWidth, LEFT_TEXT_MIN_WIDTH), availableWidth),
+    };
+  }
+
+  if (nextWidth <= LEFT_COLLAPSE_THRESHOLD) {
+    return { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH };
+  }
+
   if (nextWidth < LEFT_TEXT_MIN_WIDTH) {
-    return { mode: "collapsed", width: LEFT_COLLAPSED_WIDTH };
+    return { mode: "text", width: LEFT_TEXT_MIN_WIDTH };
   }
 
   return {
@@ -65,7 +86,7 @@ function getInitialLeftPaneState(): { mode: LeftPaneMode; width: number } {
   const hasStoredWidth = Number.isFinite(parsedWidth);
 
   if (storedMode === "collapsed") {
-    return { mode: "collapsed", width: LEFT_COLLAPSED_WIDTH };
+    return { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH };
   }
 
   if (storedMode === "text") {
@@ -78,8 +99,8 @@ function getInitialLeftPaneState(): { mode: LeftPaneMode; width: number } {
     };
   }
 
-  if (hasStoredWidth && parsedWidth === LEFT_COLLAPSED_WIDTH) {
-    return { mode: "collapsed", width: LEFT_COLLAPSED_WIDTH };
+  if (hasStoredWidth && parsedWidth === LEFT_COLLAPSED_TOTAL_WIDTH) {
+    return { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH };
   }
 
   return {
@@ -208,7 +229,11 @@ function AppShell() {
   }, []);
 
   const updateLeftPaneWidth = useCallback((nextWidth: number) => {
-    const nextState = resolveLeftPaneState(nextWidth, getAvailableShellWidth());
+    const nextState = resolveLeftPaneState(
+      nextWidth,
+      getAvailableShellWidth(),
+      leftPaneModeRef.current,
+    );
     leftPaneWidthRef.current = nextState.width;
     leftPaneModeRef.current = nextState.mode;
     setLeftPaneState((previousState) => (
@@ -231,7 +256,7 @@ function AppShell() {
   useEffect(() => {
     const handleWindowResize = () => {
       if (leftPaneModeRef.current === "collapsed") {
-        updateLeftPaneWidth(LEFT_COLLAPSED_WIDTH);
+        updateLeftPaneWidth(LEFT_COLLAPSED_TOTAL_WIDTH);
         return;
       }
 
@@ -565,7 +590,7 @@ function AppShell() {
           return;
         }
         nextState = leftPaneWidthRef.current <= LEFT_TEXT_MIN_WIDTH
-          ? { mode: "collapsed", width: LEFT_COLLAPSED_WIDTH }
+          ? { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH }
           : updateLeftPaneWidth(
             Math.max(LEFT_TEXT_MIN_WIDTH, leftPaneWidthRef.current - LEFT_PANE_KEYBOARD_STEP),
           );
@@ -576,7 +601,7 @@ function AppShell() {
           : updateLeftPaneWidth(leftPaneWidthRef.current + LEFT_PANE_KEYBOARD_STEP);
         break;
       case "Home":
-        nextState = updateLeftPaneWidth(LEFT_COLLAPSED_WIDTH);
+        nextState = updateLeftPaneWidth(LEFT_COLLAPSED_TOTAL_WIDTH);
         break;
       case "End":
         nextState = updateLeftPaneWidth(getTextPaneMaxWidth(getAvailableShellWidth()));
@@ -588,9 +613,9 @@ function AppShell() {
     event.preventDefault();
     if (!nextState) return;
     if (nextState.mode === "collapsed") {
-      leftPaneWidthRef.current = LEFT_COLLAPSED_WIDTH;
+      leftPaneWidthRef.current = LEFT_COLLAPSED_TOTAL_WIDTH;
       leftPaneModeRef.current = "collapsed";
-      setLeftPaneState({ mode: "collapsed", width: LEFT_COLLAPSED_WIDTH });
+      setLeftPaneState({ mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH });
     }
     persistLeftPaneMode(leftPaneModeRef.current);
     persistLeftPaneWidth(leftPaneWidthRef.current);
@@ -657,7 +682,7 @@ function AppShell() {
           role="separator"
           aria-label="Resize sidebar"
           aria-orientation="vertical"
-          aria-valuemin={LEFT_COLLAPSED_WIDTH}
+          aria-valuemin={LEFT_COLLAPSED_TOTAL_WIDTH}
           aria-valuemax={dividerMaxWidth}
           aria-valuenow={leftPaneWidth}
           tabIndex={0}
