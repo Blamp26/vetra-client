@@ -317,8 +317,8 @@ export function SidebarFooter({
             </button>
             <button
               onClick={() => toggleSound()}
-              title="Sound"
-              aria-label="Toggle sound"
+              title={callStatus === "active" ? (soundEnabled ? "Mute call audio output" : "Restore call audio output") : (soundEnabled ? "Mute sound" : "Restore sound")}
+              aria-label={callStatus === "active" ? (soundEnabled ? "Mute call audio output" : "Restore call audio output") : "Toggle sound"}
               className="flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-accent"
             >
               {soundEnabled ? (

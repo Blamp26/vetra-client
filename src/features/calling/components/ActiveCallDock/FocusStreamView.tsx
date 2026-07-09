@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
+import { useAppStore } from "@/store";
 import { detachVideo, safelyPlayVideo } from "./mediaVideo";
 import type { CallGridParticipant } from "./CallGridView";
 
@@ -49,7 +50,14 @@ export function FocusStreamView({
   onEnterFullscreen,
 }: FocusStreamViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const volumePanelRef = useRef<HTMLDivElement>(null);
   const [isVideoReady, setIsVideoReady] = useState(false);
+  const [isVolumePanelOpen, setIsVolumePanelOpen] = useState(false);
+  const soundEnabled = useAppStore((s) => s.soundEnabled);
+  const outputVolume = useAppStore((s) => s.outputVolume);
+  const setOutputVolume = useAppStore((s) => s.setOutputVolume);
+  const toggleSound = useAppStore((s) => s.toggleSound);
+  const outputVolumePercent = Math.round(outputVolume * 100);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -63,6 +71,29 @@ export function FocusStreamView({
       detachVideo(video);
     };
   }, [stream]);
+
+  useEffect(() => {
+    if (!isVolumePanelOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!volumePanelRef.current?.contains(event.target as Node)) {
+        setIsVolumePanelOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsVolumePanelOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isVolumePanelOpen]);
 
   const stripParticipants = participants;
 
@@ -177,13 +208,55 @@ export function FocusStreamView({
         </div>
 
         <div className="cluster flex items-center gap-2.5">
-          <button
-            type="button"
-            className="vt-call-control icon-only h-10 w-10 p-0 text-muted-foreground"
-            aria-label="Stream volume"
-          >
-            <Volume2 className="h-4 w-4" />
-          </button>
+          <div className="relative" ref={volumePanelRef}>
+            <button
+              type="button"
+              className="vt-call-control icon-only h-10 w-10 p-0 text-muted-foreground"
+              aria-label="Call output volume"
+              aria-expanded={isVolumePanelOpen}
+              aria-haspopup="dialog"
+              onClick={() => setIsVolumePanelOpen((current) => !current)}
+            >
+              <Volume2 className="h-4 w-4" />
+            </button>
+            {isVolumePanelOpen && (
+              <div
+                className="absolute bottom-[calc(100%+10px)] right-0 z-20 w-56 rounded-[12px] border border-border bg-card px-3 py-3 shadow-[var(--overlay-shadow)]"
+                data-testid="call-volume-panel"
+                role="dialog"
+                aria-label="Call output volume"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-foreground">Call output volume</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {soundEnabled ? `${outputVolumePercent}%` : "Muted"}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={outputVolumePercent}
+                  onChange={(event) => setOutputVolume(Number(event.currentTarget.value) / 100)}
+                  className="w-full accent-[var(--primary)]"
+                  aria-label="Call output volume slider"
+                />
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">
+                    Controls remote call playback for the active call.
+                  </span>
+                  <button
+                    type="button"
+                    className="vt-button h-8 px-2.5 text-xs"
+                    onClick={() => toggleSound()}
+                  >
+                    {soundEnabled ? "Mute" : "Unmute"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             className="vt-call-control icon-only h-10 w-10 p-0 text-muted-foreground"

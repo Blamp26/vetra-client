@@ -204,7 +204,7 @@ describe("SidebarFooter call UX", () => {
     renderFooter();
 
     expect(screen.getByTitle("Mic")).toHaveClass("h-8");
-    expect(screen.getByTitle("Sound")).toHaveClass("h-8");
+    expect(screen.getByTitle("Mute sound")).toHaveClass("h-8");
     expect(screen.getByTitle("Settings")).toHaveClass("h-8");
   });
 });

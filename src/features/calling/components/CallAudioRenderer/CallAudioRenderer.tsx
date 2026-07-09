@@ -4,6 +4,8 @@ import { debugCall } from '../../utils/callDebug';
 interface CallAudioRendererProps {
   remoteStream: MediaStream | null;
   selectedOutputDeviceId: string;
+  soundEnabled: boolean;
+  outputVolume: number;
   onOutputDeviceFallback?: (missingDeviceId: string) => void;
 }
 
@@ -46,6 +48,8 @@ function isOutputDeviceSecurityError(error: unknown): boolean {
 export function CallAudioRenderer({
   remoteStream,
   selectedOutputDeviceId,
+  soundEnabled,
+  outputVolume,
   onOutputDeviceFallback,
 }: CallAudioRendererProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -62,6 +66,18 @@ export function CallAudioRenderer({
       audio.srcObject = null;
     };
   }, [remoteStream]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const normalizedVolume = Math.min(
+      1,
+      Math.max(0, Number.isFinite(outputVolume) ? outputVolume : 1),
+    );
+    audio.volume = normalizedVolume;
+    audio.muted = !soundEnabled || normalizedVolume === 0;
+  }, [outputVolume, soundEnabled]);
 
   useEffect(() => {
     const audio = audioRef.current as (HTMLAudioElement & {

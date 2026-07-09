@@ -14,6 +14,8 @@ interface CallProviderProps {
 export function CallProvider({ currentUserId, children }: CallProviderProps) {
   const call = useCall(currentUserId);
   const selectedOutputDeviceId = useAppStore((s) => s.selectedOutputDeviceId);
+  const soundEnabled = useAppStore((s) => s.soundEnabled);
+  const outputVolume = useAppStore((s) => s.outputVolume);
   const setOutputDevice = useAppStore((s) => s.setOutputDevice);
   const lastOutputDeviceFallbackRef = useRef<string | null>(null);
 
@@ -47,6 +49,8 @@ export function CallProvider({ currentUserId, children }: CallProviderProps) {
       <CallAudioRenderer
         remoteStream={call.remoteStream}
         selectedOutputDeviceId={selectedOutputDeviceId}
+        soundEnabled={soundEnabled}
+        outputVolume={outputVolume}
         onOutputDeviceFallback={handleOutputDeviceFallback}
       />
       {children}

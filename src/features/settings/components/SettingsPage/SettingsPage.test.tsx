@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 const { useAppStoreMock } = vi.hoisted(() => ({
@@ -98,7 +98,12 @@ describe("SettingsPage audio settings", () => {
       setNoiseSuppression: vi.fn(),
       setEchoCancellation: vi.fn(),
       setAutoGainControl: vi.fn(),
-      refreshDevices: vi.fn(),
+      refreshDevices: vi.fn().mockResolvedValue({
+        permissionState: "not-requested",
+        labelsAvailable: true,
+        inputCount: 1,
+        outputCount: 1,
+      }),
     };
 
     useAppStoreMock.mockImplementation((selector: (state: typeof storeState) => unknown) =>
@@ -120,6 +125,53 @@ describe("SettingsPage audio settings", () => {
     expect(
       screen.getByText(/speaker routing depends on browser support/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/input device changes apply to the next call/i),
+    ).toBeInTheDocument();
+  });
+
+  it("does not request microphone access just by opening audio settings", async () => {
+    render(<SettingsPage onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Audio & Video" }));
+
+    await waitFor(() => {
+      expect(storeState.refreshDevices).toHaveBeenCalledWith();
+    });
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it("shows device-label help when browser enumeration stays limited", async () => {
+    storeState.refreshDevices.mockResolvedValue({
+      permissionState: "not-requested",
+      labelsAvailable: false,
+      inputCount: 1,
+      outputCount: 1,
+    });
+
+    render(<SettingsPage onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Audio & Video" }));
+
+    expect(await screen.findByTestId("settings-audio-feedback")).toHaveTextContent(
+      /device names may stay hidden until you explicitly allow microphone access/i,
+    );
+  });
+
+  it("surfaces microphone permission errors from explicit actions", async () => {
+    storeState.refreshDevices.mockResolvedValue({
+      permissionState: "denied",
+      labelsAvailable: false,
+      inputCount: 0,
+      outputCount: 1,
+    });
+
+    render(<SettingsPage onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Audio & Video" }));
+    fireEvent.click(screen.getByRole("button", { name: "Allow microphone" }));
+
+    expect(await screen.findByTestId("settings-audio-feedback")).toHaveTextContent(
+      /microphone permission denied/i,
+    );
   });
 
   it("calls store setters when microphone processing toggles change", () => {

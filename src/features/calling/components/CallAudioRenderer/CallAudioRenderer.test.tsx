@@ -32,7 +32,14 @@ describe('CallAudioRenderer', () => {
   it('attaches the remote stream to the audio element', () => {
     const remoteStream = new MediaStream();
 
-    render(<CallAudioRenderer remoteStream={remoteStream} selectedOutputDeviceId="default" />);
+    render(
+      <CallAudioRenderer
+        remoteStream={remoteStream}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />,
+    );
 
     const audio = screen.getByTestId('call-audio-renderer') as HTMLAudioElement;
     expect(audio.srcObject).toBe(remoteStream);
@@ -41,10 +48,22 @@ describe('CallAudioRenderer', () => {
   it('clears srcObject when the remote stream becomes null', () => {
     const remoteStream = new MediaStream();
     const { rerender } = render(
-      <CallAudioRenderer remoteStream={remoteStream} selectedOutputDeviceId="default" />
+      <CallAudioRenderer
+        remoteStream={remoteStream}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />
     );
 
-    rerender(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" />);
+    rerender(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />,
+    );
 
     const audio = screen.getByTestId('call-audio-renderer') as HTMLAudioElement;
     expect(audio.srcObject).toBeNull();
@@ -53,7 +72,12 @@ describe('CallAudioRenderer', () => {
   it('clears srcObject on unmount', () => {
     const remoteStream = new MediaStream();
     const { unmount } = render(
-      <CallAudioRenderer remoteStream={remoteStream} selectedOutputDeviceId="default" />
+      <CallAudioRenderer
+        remoteStream={remoteStream}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />
     );
     const audio = screen.getByTestId('call-audio-renderer') as HTMLAudioElement;
 
@@ -74,10 +98,22 @@ describe('CallAudioRenderer', () => {
     const remoteStream = new MediaStream();
 
     const { rerender, unmount } = render(
-      <CallAudioRenderer remoteStream={remoteStream} selectedOutputDeviceId="default" />
+      <CallAudioRenderer
+        remoteStream={remoteStream}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />
     );
 
-    rerender(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" />);
+    rerender(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />,
+    );
     unmount();
 
     expect(externalPause).not.toHaveBeenCalled();
@@ -85,7 +121,14 @@ describe('CallAudioRenderer', () => {
   });
 
   it('calls setSinkId with the selected output device when supported', async () => {
-    render(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="speaker-123" />);
+    render(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="speaker-123"
+        soundEnabled
+        outputVolume={1}
+      />,
+    );
 
     await waitFor(() => {
       expect(setSinkIdMock).toHaveBeenCalledWith('speaker-123');
@@ -96,7 +139,14 @@ describe('CallAudioRenderer', () => {
     Reflect.deleteProperty(HTMLMediaElement.prototype, 'setSinkId');
 
     expect(() => {
-      render(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="speaker-123" />);
+      render(
+        <CallAudioRenderer
+          remoteStream={null}
+          selectedOutputDeviceId="speaker-123"
+          soundEnabled
+          outputVolume={1}
+        />,
+      );
     }).not.toThrow();
   });
 
@@ -104,7 +154,14 @@ describe('CallAudioRenderer', () => {
     const error = new Error('sink failed');
     setSinkIdMock.mockRejectedValueOnce(error);
 
-    render(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="speaker-123" />);
+    render(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="speaker-123"
+        soundEnabled
+        outputVolume={1}
+      />,
+    );
 
     await waitFor(() => {
       expect(consoleWarnSpy).toHaveBeenCalledWith(
@@ -124,6 +181,8 @@ describe('CallAudioRenderer', () => {
       <CallAudioRenderer
         remoteStream={null}
         selectedOutputDeviceId="speaker-123"
+        soundEnabled
+        outputVolume={1}
         onOutputDeviceFallback={onOutputDeviceFallback}
       />
     );
@@ -151,6 +210,8 @@ describe('CallAudioRenderer', () => {
       <CallAudioRenderer
         remoteStream={null}
         selectedOutputDeviceId="speaker-123"
+        soundEnabled
+        outputVolume={1}
         onOutputDeviceFallback={onOutputDeviceFallback}
       />
     );
@@ -163,6 +224,8 @@ describe('CallAudioRenderer', () => {
       <CallAudioRenderer
         remoteStream={null}
         selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
         onOutputDeviceFallback={onOutputDeviceFallback}
       />
     );
@@ -175,6 +238,8 @@ describe('CallAudioRenderer', () => {
       <CallAudioRenderer
         remoteStream={null}
         selectedOutputDeviceId="speaker-123"
+        soundEnabled
+        outputVolume={1}
         onOutputDeviceFallback={onOutputDeviceFallback}
       />
     );
@@ -194,6 +259,8 @@ describe('CallAudioRenderer', () => {
       <CallAudioRenderer
         remoteStream={null}
         selectedOutputDeviceId="speaker-123"
+        soundEnabled
+        outputVolume={1}
         onOutputDeviceFallback={onOutputDeviceFallback}
       />
     );
@@ -212,14 +279,26 @@ describe('CallAudioRenderer', () => {
     );
 
     const { rerender } = render(
-      <CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" />
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />
     );
 
     await waitFor(() => {
       expect(setSinkIdMock).toHaveBeenCalledWith('default');
     });
 
-    rerender(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" />);
+    rerender(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />,
+    );
 
     await waitFor(() => {
       expect(setSinkIdMock).toHaveBeenCalledTimes(1);
@@ -238,6 +317,8 @@ describe('CallAudioRenderer', () => {
       <CallAudioRenderer
         remoteStream={null}
         selectedOutputDeviceId="speaker-123"
+        soundEnabled
+        outputVolume={1}
         onOutputDeviceFallback={onOutputDeviceFallback}
       />
     );
@@ -249,5 +330,44 @@ describe('CallAudioRenderer', () => {
     });
 
     expect(consoleWarnSpy).not.toHaveBeenCalled();
+  });
+
+  it('applies soundEnabled and outputVolume to remote playback', () => {
+    const { rerender } = render(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={0.4}
+      />,
+    );
+
+    const audio = screen.getByTestId('call-audio-renderer') as HTMLAudioElement;
+    expect(audio.muted).toBe(false);
+    expect(audio.volume).toBeCloseTo(0.4);
+
+    rerender(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="default"
+        soundEnabled={false}
+        outputVolume={0.4}
+      />,
+    );
+
+    expect(audio.muted).toBe(true);
+    expect(audio.volume).toBeCloseTo(0.4);
+
+    rerender(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={0}
+      />,
+    );
+
+    expect(audio.muted).toBe(true);
+    expect(audio.volume).toBe(0);
   });
 });

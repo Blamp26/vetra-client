@@ -1,5 +1,5 @@
 // client/src/features/settings/components/SettingsPage/SettingsPage.tsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppStore, type RootState } from '@/store';
 import { ProfileModal } from '@/features/profile/components/ProfileModal/ProfileModal';
 import { ConfirmModal } from '@/shared/components/ConfirmModal/ConfirmModal';
@@ -43,54 +43,145 @@ function AudioVideoSettings() {
   }));
 
   const [micLevel, setMicLevel] = useState(0);
+  const [audioFeedback, setAudioFeedback] = useState<{
+    tone: "default" | "error";
+    message: string;
+  } | null>(null);
+  const [isMicTestActive, setIsMicTestActive] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    refreshDevices();
+  const stopMicTest = useCallback(() => {
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (audioContextRef.current) {
+      void audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    setMicLevel(0);
+    setIsMicTestActive(false);
+  }, []);
+
+  const applyDeviceRefreshFeedback = useCallback((result: Awaited<ReturnType<typeof refreshDevices>>) => {
+    if (result.permissionState === "denied") {
+      setAudioFeedback({
+        tone: "error",
+        message: "Microphone permission denied. Allow microphone access in your browser or system settings to test input devices.",
+      });
+      return;
+    }
+
+    if (result.inputCount === 0) {
+      setAudioFeedback({
+        tone: "error",
+        message: "No input devices found. Connect a microphone or verify that your OS is exposing one to the browser.",
+      });
+      return;
+    }
+
+    if (!result.labelsAvailable) {
+      setAudioFeedback({
+        tone: "default",
+        message: "Device names may stay hidden until you explicitly allow microphone access. Use Allow microphone or Test microphone to unlock labels when supported.",
+      });
+      return;
+    }
+
+    setAudioFeedback(null);
   }, [refreshDevices]);
 
   useEffect(() => {
-    let audioContext: AudioContext;
-    let analyser: AnalyserNode;
-    let microphone: MediaStreamAudioSourceNode;
-    let animationId: number;
-    let stream: MediaStream;
+    void refreshDevices().then(applyDeviceRefreshFeedback);
+  }, [applyDeviceRefreshFeedback, refreshDevices]);
 
-    const startVisualizer = async () => {
-      try {
-        const constraints = {
-          audio: {
-            deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined,
-            noiseSuppression,
-            echoCancellation,
-            autoGainControl,
-          }
-        };
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        microphone = audioContext.createMediaStreamSource(stream);
-        analyser.fftSize = 256;
-        microphone.connect(analyser);
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        const updateLevel = () => {
-          analyser.getByteFrequencyData(dataArray);
-          const sum = dataArray.reduce((a, b) => a + b, 0);
-          const average = sum / dataArray.length;
-          setMicLevel(average);
-          animationId = requestAnimationFrame(updateLevel);
-        };
-        updateLevel();
-      } catch (err) {
-        console.error("Visualizer error:", err);
+  useEffect(() => stopMicTest, [stopMicTest]);
+
+  const handleAllowMicrophone = useCallback(async () => {
+    const result = await refreshDevices({ requestPermission: true });
+    applyDeviceRefreshFeedback(result);
+  }, [applyDeviceRefreshFeedback, refreshDevices]);
+
+  const handleMicTestToggle = useCallback(async () => {
+    if (isMicTestActive) {
+      stopMicTest();
+      return;
+    }
+
+    try {
+      const constraints = {
+        audio: {
+          deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined,
+          noiseSuppression,
+          echoCancellation,
+          autoGainControl,
+        }
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const audioContext = new (window.AudioContext || (window as Window & typeof globalThis & {
+        webkitAudioContext?: typeof AudioContext;
+      }).webkitAudioContext)();
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(stream);
+      analyser.fftSize = 256;
+      microphone.connect(analyser);
+
+      stopMicTest();
+      audioContextRef.current = audioContext;
+      streamRef.current = stream;
+      setIsMicTestActive(true);
+      setAudioFeedback(null);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateLevel = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const sum = dataArray.reduce((accumulator, value) => accumulator + value, 0);
+        const average = sum / dataArray.length;
+        setMicLevel(average);
+        animationFrameRef.current = requestAnimationFrame(updateLevel);
+      };
+      updateLevel();
+
+      const result = await refreshDevices({ requestPermission: true });
+      applyDeviceRefreshFeedback(result);
+      setAudioFeedback(null);
+    } catch (err) {
+      stopMicTest();
+      if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "SecurityError")) {
+        setAudioFeedback({
+          tone: "error",
+          message: "Microphone permission denied. Allow microphone access to test your input device.",
+        });
+        return;
       }
-    };
-    startVisualizer();
-    return () => {
-      if (animationId) cancelAnimationFrame(animationId);
-      if (audioContext) audioContext.close();
-      if (stream) stream.getTracks().forEach(t => t.stop());
-    };
-  }, [selectedInputDeviceId, noiseSuppression, echoCancellation, autoGainControl]);
+
+      if (err instanceof DOMException && (err.name === "NotFoundError" || err.name === "OverconstrainedError")) {
+        setAudioFeedback({
+          tone: "error",
+          message: "The selected microphone is unavailable. Choose another input device and try again.",
+        });
+        return;
+      }
+
+      setAudioFeedback({
+        tone: "error",
+        message: "Microphone test could not start in this browser or device environment.",
+      });
+    }
+  }, [
+    applyDeviceRefreshFeedback,
+    autoGainControl,
+    echoCancellation,
+    isMicTestActive,
+    noiseSuppression,
+    refreshDevices,
+    selectedInputDeviceId,
+    stopMicTest,
+  ]);
 
   return (
     <div className="max-w-xl">
@@ -108,12 +199,36 @@ function AudioVideoSettings() {
               <option key={device.deviceId} value={device.deviceId}>{device.label || `Mic (${device.deviceId.slice(0, 5)})`}</option>
             ))}
           </select>
+          <p className="text-xs text-muted-foreground">
+            Input device changes apply to the next call. Live microphone switching is not enabled in the current direct-call demo.
+          </p>
           <div className="mt-2">
             <div className="text-[10px] text-muted-foreground mb-1">Input Level: {Math.round((micLevel / 128) * 100)}%</div>
             <div className="h-1 w-full bg-muted">
               <div className="h-full bg-primary" style={{ width: `${(micLevel / 128) * 100}%` }} />
             </div>
           </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button onClick={() => { void handleAllowMicrophone(); }} className="vt-button" type="button">
+              Allow microphone
+            </button>
+            <button onClick={() => { void handleMicTestToggle(); }} className="vt-button" type="button">
+              {isMicTestActive ? "Stop microphone test" : "Test microphone"}
+            </button>
+          </div>
+          {audioFeedback && (
+            <div
+              className={cn(
+                "rounded-[12px] border px-3 py-2 text-xs leading-5",
+                audioFeedback.tone === "error"
+                  ? "border-destructive/35 bg-destructive/10 text-foreground"
+                  : "border-border bg-card text-muted-foreground",
+              )}
+              data-testid="settings-audio-feedback"
+            >
+              {audioFeedback.message}
+            </div>
+          )}
         </div>
         <div className="space-y-1">
           <label className="vt-label" htmlFor="settings-audio-output">Output Device</label>
@@ -169,7 +284,7 @@ function AudioVideoSettings() {
             />
           </label>
         </div>
-        <button onClick={() => refreshDevices()} className="vt-button">Refresh devices</button>
+        <button onClick={() => { void refreshDevices().then(applyDeviceRefreshFeedback); }} className="vt-button">Refresh devices</button>
       </div>
     </div>
   );

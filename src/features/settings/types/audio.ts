@@ -5,5 +5,5 @@ export interface AudioConstraints {
   soundEnabled: boolean;
   micCascaded: boolean;
   lastVoluntaryMic: boolean;
+  outputVolume?: number;
 }
-

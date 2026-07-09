@@ -1,8 +1,22 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ActiveCallDock } from "./ActiveCallDock";
+
+const {
+  useAppStoreMock,
+  setOutputVolumeMock,
+  toggleSoundMock,
+} = vi.hoisted(() => ({
+  useAppStoreMock: vi.fn(),
+  setOutputVolumeMock: vi.fn(),
+  toggleSoundMock: vi.fn(),
+}));
+
+vi.mock("@/store", () => ({
+  useAppStore: (selector: (state: unknown) => unknown) => useAppStoreMock(selector),
+}));
 
 function makeStream(id: string): MediaStream {
   return { id } as MediaStream;
@@ -90,6 +104,16 @@ function mockFullscreenApi() {
 
 describe("ActiveCallDock", () => {
   beforeEach(() => {
+    useAppStoreMock.mockImplementation((selector: (state: any) => unknown) =>
+      selector({
+        soundEnabled: true,
+        outputVolume: 0.7,
+        setOutputVolume: setOutputVolumeMock,
+        toggleSound: toggleSoundMock,
+      }),
+    );
+    setOutputVolumeMock.mockReset();
+    toggleSoundMock.mockReset();
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
@@ -385,6 +409,26 @@ describe("ActiveCallDock", () => {
       "watchingInline",
     );
     expect(screen.getByTestId("participant-screen-video")).toBeInTheDocument();
+  });
+
+  it("opens a real call output volume panel in focused stream view", () => {
+    renderDock({ remoteScreenStream: makeStream("remote-screen") });
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Call output volume" }));
+
+    const panel = screen.getByTestId("call-volume-panel");
+    expect(panel).toBeInTheDocument();
+    expect(within(panel).getByText("Call output volume")).toBeInTheDocument();
+
+    fireEvent.change(within(panel).getByLabelText("Call output volume slider"), {
+      target: { value: "35" },
+    });
+    fireEvent.click(within(panel).getByRole("button", { name: "Mute" }));
+
+    expect(setOutputVolumeMock).toHaveBeenCalledWith(0.35);
+    expect(toggleSoundMock).toHaveBeenCalledTimes(1);
   });
 
   it("renders local sharing as a grid tile without a Watch stream action or auto-opened stage", () => {

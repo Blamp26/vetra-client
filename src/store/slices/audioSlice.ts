@@ -6,6 +6,7 @@ export interface AudioSlice {
   soundEnabled: boolean;
   micCascaded: boolean;
   lastVoluntaryMic: boolean;
+  outputVolume: number;
   
   // Device Selection
   selectedInputDeviceId: string;
@@ -18,12 +19,20 @@ export interface AudioSlice {
 
   toggleMic: () => void;
   toggleSound: () => void;
+  setOutputVolume: (volume: number) => void;
   setInputDevice: (deviceId: string) => void;
   setOutputDevice: (deviceId: string) => void;
   setNoiseSuppression: (enabled: boolean) => void;
   setEchoCancellation: (enabled: boolean) => void;
   setAutoGainControl: (enabled: boolean) => void;
-  refreshDevices: () => Promise<void>;
+  refreshDevices: (options?: {
+    requestPermission?: boolean;
+  }) => Promise<{
+    permissionState: "granted" | "denied" | "not-requested" | "unavailable";
+    labelsAvailable: boolean;
+    inputCount: number;
+    outputCount: number;
+  }>;
 }
 
 const CASCADE_TOAST_KEY = "vetra_cascade_toast_shown";
@@ -33,6 +42,7 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
   soundEnabled: true,
   micCascaded: false,
   lastVoluntaryMic: true,
+  outputVolume: 1,
   
   selectedInputDeviceId: 'default',
   selectedOutputDeviceId: 'default',
@@ -106,30 +116,73 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
     }
   },
 
+  setOutputVolume: (volume: number) => set({
+    outputVolume: Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : 1)),
+  }),
   setInputDevice: (deviceId: string) => set({ selectedInputDeviceId: deviceId }),
   setOutputDevice: (deviceId: string) => set({ selectedOutputDeviceId: deviceId }),
   setNoiseSuppression: (enabled: boolean) => set({ noiseSuppression: enabled }),
   setEchoCancellation: (enabled: boolean) => set({ echoCancellation: enabled }),
   setAutoGainControl: (enabled: boolean) => set({ autoGainControl: enabled }),
 
-  refreshDevices: async () => {
-    try {
-      // Request permission if not already granted to get labels
-      // We don't store the stream here, just use it to unlock labels
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
+  refreshDevices: async (options) => {
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices?.enumerateDevices) {
+      return {
+        permissionState: "unavailable" as const,
+        labelsAvailable: false,
+        inputCount: 0,
+        outputCount: 0,
+      };
+    }
 
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      
-      const inputs = devices.filter(d => d.kind === 'audioinput');
-      const outputs = devices.filter(d => d.kind === 'audiooutput');
-      
-      set({ 
+    let permissionState: "granted" | "denied" | "not-requested" | "unavailable" = "not-requested";
+
+    try {
+      if (options?.requestPermission) {
+        const stream = await mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        permissionState = "granted";
+      }
+
+      const devices = await mediaDevices.enumerateDevices();
+      const inputs = devices.filter((device) => device.kind === "audioinput");
+      const outputs = devices.filter((device) => device.kind === "audiooutput");
+      const labelsAvailable = devices.some((device) => device.label.trim().length > 0);
+
+      set({
         availableInputDevices: inputs,
-        availableOutputDevices: outputs 
+        availableOutputDevices: outputs,
       });
+
+      return {
+        permissionState,
+        labelsAvailable,
+        inputCount: inputs.length,
+        outputCount: outputs.length,
+      };
     } catch (err) {
       console.error("Failed to enumerate audio devices:", err);
+      set({
+        availableInputDevices: [],
+        availableOutputDevices: [],
+      });
+
+      if (
+        err instanceof DOMException &&
+        (err.name === "NotAllowedError" || err.name === "SecurityError")
+      ) {
+        permissionState = "denied";
+      } else if (!mediaDevices.getUserMedia) {
+        permissionState = "unavailable";
+      }
+
+      return {
+        permissionState,
+        labelsAvailable: false,
+        inputCount: 0,
+        outputCount: 0,
+      };
     }
   },
 });
