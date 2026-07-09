@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { UserSearch } from "../UserSearch/UserSearch";
 import { CreateRoomModal } from "../CreateRoomModal/CreateRoomModal";
@@ -16,6 +16,7 @@ import {
 } from "@/shared/utils/chatRoutes";
 import { getPresenceText, resolvePresenceStatus } from "@/shared/utils/presence";
 import { getPreviewText } from "../../utils/attachments";
+import { Menu, MessageSquarePlus, Plus } from "lucide-react";
 
 interface SidebarProps {
   isServerMode?: boolean;
@@ -61,6 +62,8 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
   const closeModal = useAppStore((s: RootState) => s.closeModal);
 
   const [showProfile, setShowProfile] = useState(false);
+  const [isRailMenuOpen, setIsRailMenuOpen] = useState(false);
+  const railMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -69,6 +72,28 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
       .then(setServers)
       .catch((err) => console.error("Failed to load servers:", err));
   }, [currentUser, setServers]);
+
+  useEffect(() => {
+    if (!isRailMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (railMenuRef.current?.contains(event.target as Node)) return;
+      setIsRailMenuOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsRailMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isRailMenuOpen]);
 
   const directItems: SidebarItem[] = useMemo(
     () =>
@@ -157,102 +182,99 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
     }
   };
 
+  const railMenu = (
+    <div className="relative flex h-full w-[72px] flex-shrink-0 flex-col border-r border-border bg-[var(--vetra-shell-sidebar-bg)]">
+      <div className="relative flex h-[54px] items-center justify-center" ref={railMenuRef}>
+        <button
+          type="button"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          aria-label="Open sidebar menu"
+          aria-expanded={isRailMenuOpen}
+          aria-haspopup="menu"
+          onClick={() => setIsRailMenuOpen((current) => !current)}
+        >
+          <Menu className="h-[18px] w-[18px]" />
+        </button>
+        {isRailMenuOpen && (
+          <div
+            className="absolute left-[60px] top-[8px] z-20 min-w-[176px] rounded-[12px] border border-border bg-popover p-1.5 shadow-[var(--overlay-shadow)]"
+            data-testid="sidebar-rail-menu"
+            role="menu"
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left text-sm hover:bg-accent"
+              role="menuitem"
+              onClick={() => {
+                setIsRailMenuOpen(false);
+                openModal("CREATE_PICKER");
+              }}
+            >
+              <MessageSquarePlus className="h-4 w-4" />
+              <span>New</span>
+            </button>
+            <button
+              type="button"
+              className="mt-0.5 flex w-full items-center gap-3 rounded-[10px] px-3 py-2 text-left text-sm hover:bg-accent"
+              role="menuitem"
+              onClick={() => {
+                setIsRailMenuOpen(false);
+                openModal("CREATE_SERVER");
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              <span>Create server</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-2 py-2">
+        <div className="space-y-2">
+          {serverList.map((server) => (
+            <button
+              key={server.id}
+              onClick={() => setActiveChat(serverChatForServer(server))}
+              className={cn(
+                "flex h-12 w-12 items-center justify-center rounded-[14px] border transition-colors",
+                isServerActive(server.id)
+                  ? "border-primary/30 bg-accent"
+                  : "border-transparent hover:border-border hover:bg-card/75",
+              )}
+              title={server.name}
+              aria-label={server.name}
+            >
+              <Avatar name={server.name} size="small" className="h-8 w-8 text-sm" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div
       className={cn(
-        "flex h-full w-full flex-col bg-[var(--vetra-shell-sidebar-bg)]",
+        "flex h-full w-full overflow-hidden bg-[var(--vetra-shell-sidebar-bg)]",
         isServerMode && "w-[72px]",
       )}
     >
-      {!isServerMode && !isCollapsed && (
-        <div className="border-b border-border px-4 pb-4 pt-4">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <span className="vt-kicker">Inbox</span>
-              <h1 className="text-xl font-semibold tracking-tight">Messages</h1>
+      {railMenu}
+
+      {!isServerMode && (
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="h-[54px] border-b border-border px-[11px] pt-[9px]">
+            <div className="[&_input]:h-[35px] [&_input]:w-full [&_input]:rounded-[18px] [&_input]:border-0 [&_input]:bg-card/80 [&_input]:px-9 [&_input]:pr-10 [&_input]:text-sm [&_input]:shadow-none">
+              <UserSearch />
             </div>
-            <button
-              onClick={() => openModal("CREATE_PICKER")}
-              className="vt-button vt-button--primary shrink-0 rounded-md"
-            >
-              New
-            </button>
           </div>
-          <UserSearch />
-        </div>
-      )}
 
-      {!isServerMode && isCollapsed && (
-        <div className="border-b border-border px-3 py-3">
-          <button
-            onClick={() => openModal("CREATE_PICKER")}
-            className="flex h-12 w-full items-center justify-center rounded-[12px] border border-border bg-card/85 text-lg font-semibold text-foreground hover:bg-accent"
-            aria-label="New conversation"
-            title="New conversation"
-          >
-            +
-          </button>
-        </div>
-      )}
-
-      {!isServerMode && serverList.length > 0 && (
-        <div className={cn("border-b border-border", isCollapsed ? "px-3 py-3" : "px-4 py-4")}>
-          {!isCollapsed && (
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="vt-kicker">
-                Servers
-              </span>
-              <button
-                onClick={() => openModal("CREATE_SERVER")}
-                className="vt-button vt-button--ghost vt-button--icon h-8 w-8 px-0"
-                aria-label="Create server"
-              >
-                +
-              </button>
-            </div>
-          )}
-          <div className={cn(isCollapsed ? "space-y-2" : "space-y-1.5")}>
-            {isCollapsed && (
-              <button
-                onClick={() => openModal("CREATE_SERVER")}
-                className="flex h-12 w-full items-center justify-center rounded-[12px] border border-dashed border-border text-lg text-muted-foreground hover:bg-card/70 hover:text-foreground"
-                aria-label="Create server"
-                title="Create server"
-              >
-                +
-              </button>
-            )}
-            {serverList.map((server) => (
-              <button
-                key={server.id}
-                onClick={() =>
-                  setActiveChat(serverChatForServer(server))
-                }
-                className={cn(
-                  "flex w-full items-center rounded-[10px] border transition-colors",
-                  isCollapsed
-                    ? "justify-center px-2 py-2.5"
-                    : "gap-2 px-2.5 py-2 text-left",
-                  isServerActive(server.id)
-                    ? "border-primary/30 bg-accent"
-                    : "border-transparent hover:border-border hover:bg-card/75",
-                )}
-                title={server.name}
-              >
-                <Avatar name={server.name} size="small" />
-                {!isCollapsed && <span className="truncate text-sm">{server.name}</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+          <div className="flex-1 overflow-y-auto py-1">
         {allItems.length === 0 && !isServerMode ? (
           <div
             className={cn(
-              "rounded-[12px] border border-border bg-card/70",
-              isCollapsed ? "px-3 py-4 text-center" : "px-4 py-5",
+              "mx-3 rounded-[12px] border border-border bg-card/70 px-4 py-5",
+              isCollapsed && "text-center",
             )}
           >
             <div className="space-y-1.5">
@@ -265,7 +287,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
             </div>
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div>
             {allItems.map((item) => {
               const isActive = isItemActive(item);
               return (
@@ -273,13 +295,10 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                   key={`${item.kind}-${item.id}`}
                   onClick={() => handleItemClick(item)}
                   className={cn(
-                    "relative flex w-full items-center rounded-[12px] border transition-colors",
-                    isCollapsed
-                      ? "justify-center px-2 py-2.5"
-                      : "gap-2 px-2.5 py-2.5 text-left",
+                    "relative flex h-[62px] w-full items-center gap-[11px] border-b border-transparent px-[10px] text-left transition-colors",
                     isActive
-                      ? "border-primary/30 bg-accent"
-                      : "border-transparent hover:border-border hover:bg-card/70",
+                      ? "bg-accent"
+                      : "hover:bg-card/70",
                   )}
                   data-testid={`sidebar-item-${item.kind}-${item.id}`}
                   data-presence-status={item.kind === "direct" ? item.status ?? "offline" : undefined}
@@ -294,13 +313,14 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                   <Avatar
                     name={item.name}
                     size="medium"
+                    className="h-[46px] w-[46px] text-base"
                     status={
                       item.kind === "direct"
                         ? item.status || (item.isOnline ? "online" : "offline")
                         : null
                     }
                   />
-                  {!isCollapsed && !isServerMode && (
+                  {!isCollapsed && (
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-sm font-medium">{item.name}</span>
@@ -316,12 +336,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                       </p>
                     </div>
                   )}
-                  {isCollapsed && item.unread > 0 && (
-                    <span className="absolute right-1.5 top-1.5 rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
-                      {item.unread}
-                    </span>
-                  )}
-                  {!isCollapsed && !isServerMode && item.unread > 0 && (
+                  {!isCollapsed && item.unread > 0 && (
                     <span className="rounded-full bg-primary px-2 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
                       {item.unread}
                     </span>
@@ -331,7 +346,9 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
             })}
           </div>
         )}
-      </div>
+          </div>
+        </div>
+      )}
 
       {activeModal === "CREATE_ROOM" && (
         <CreateRoomModal onClose={closeModal} />
