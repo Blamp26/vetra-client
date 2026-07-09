@@ -218,7 +218,7 @@ export function ChatWindow({ activeChat, call }: Props) {
       if (!partner)
         return (
           <div
-            className="flex min-h-14 min-h-[72px] items-center border-b border-border px-5 py-3 text-sm text-muted-foreground"
+            className="flex min-h-[72px] items-center border-b border-border px-5 py-3 text-sm text-muted-foreground"
             data-testid="chat-header"
           >
             Loading...
@@ -242,7 +242,7 @@ export function ChatWindow({ activeChat, call }: Props) {
 
       return (
         <div
-          className="flex min-h-14 min-h-[72px] items-center justify-between gap-3 border-b border-border px-5 py-3"
+          className="flex min-h-[72px] items-center justify-between gap-3 border-b border-border px-5 py-3"
           data-testid="chat-header"
         >
           <div className="flex min-w-0 items-center gap-3">
@@ -301,7 +301,7 @@ export function ChatWindow({ activeChat, call }: Props) {
       const roomPreview = roomPreviews[roomId];
       return (
         <div
-          className="flex min-h-14 min-h-[72px] items-center justify-between gap-3 border-b border-border px-5 py-3"
+          className="flex min-h-[72px] items-center justify-between gap-3 border-b border-border px-5 py-3"
           data-testid="chat-header"
         >
           <div className="flex min-w-0 items-center gap-3">

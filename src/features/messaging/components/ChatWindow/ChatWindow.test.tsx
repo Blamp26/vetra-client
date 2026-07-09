@@ -216,7 +216,7 @@ describe("ChatWindow presence rendering", () => {
     const header = await screen.findByTestId("chat-header");
     const actions = screen.getByTestId("chat-header-actions");
 
-    expect(header).toHaveClass("min-h-14");
+    expect(header).toHaveClass("min-h-[72px]");
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getByTestId("chat-header-status")).toHaveTextContent("Online");
     expect(actions).toContainElement(screen.getByRole("button", { name: "Call Alice" }));

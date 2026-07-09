@@ -152,7 +152,7 @@ export function SidebarFooter({
         {callPanel && (
           <div
             className={cn(
-              "flex items-center justify-between rounded-md rounded-[12px] border bg-card/90 px-3 py-2.5",
+              "flex items-center justify-between rounded-[12px] border bg-card/90 px-3 py-2.5",
               callPanel.tone === "error" ? "border-destructive/50" : "border-border",
               callStatus === "active" && "cursor-pointer hover:bg-accent",
             )}
@@ -223,6 +223,7 @@ export function SidebarFooter({
                       onAcceptCall();
                     }}
                     title="Accept call"
+                    aria-label="Accept call"
                     className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-online text-white disabled:pointer-events-none disabled:opacity-60"
                     disabled={isIncomingActionPending}
                   >
@@ -234,6 +235,7 @@ export function SidebarFooter({
                       onRejectCall();
                     }}
                     title="Decline call"
+                    aria-label="Decline call"
                     className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-destructive text-destructive-foreground disabled:pointer-events-none disabled:opacity-60"
                     disabled={isIncomingActionPending}
                   >
@@ -250,6 +252,7 @@ export function SidebarFooter({
                       : setConfirmHangUp(true);
                   }}
                   title="Hang up"
+                  aria-label="Hang up"
                   className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-destructive text-destructive-foreground"
                 >
                   <PhoneOff className="h-4 w-4" />
@@ -260,8 +263,10 @@ export function SidebarFooter({
         )}
 
         <div className="flex items-center justify-between rounded-[12px] border border-border bg-card/90 px-3 py-2.5">
-          <div
-            className="flex min-w-0 cursor-pointer items-center gap-2"
+          <button
+            type="button"
+            className="flex min-w-0 items-center gap-2 rounded-[10px] border-0 bg-transparent p-0 text-left text-foreground"
+            aria-label={`Open profile for ${displayName}`}
             onClick={() => setShowProfile(true)}
           >
             <Avatar
@@ -290,7 +295,7 @@ export function SidebarFooter({
                 {statusText}
               </span>
             </div>
-          </div>
+          </button>
 
           <div className="flex items-center gap-1">
             <button
@@ -301,6 +306,7 @@ export function SidebarFooter({
                 }
               }}
               title="Mic"
+              aria-label="Toggle microphone"
               className="flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-accent"
             >
               {isMicMuted ? (
@@ -312,6 +318,7 @@ export function SidebarFooter({
             <button
               onClick={() => toggleSound()}
               title="Sound"
+              aria-label="Toggle sound"
               className="flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-accent"
             >
               {soundEnabled ? (
@@ -323,6 +330,7 @@ export function SidebarFooter({
             <button
               onClick={onOpenSettings}
               title="Settings"
+              aria-label="Open settings"
               className="flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-accent"
             >
               <Settings className="h-3.5 w-3.5" />

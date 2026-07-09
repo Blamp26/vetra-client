@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { UserSearch } from "../UserSearch/UserSearch";
 import { CreateRoomModal } from "../CreateRoomModal/CreateRoomModal";
@@ -69,49 +69,61 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
       .catch((err) => console.error("Failed to load servers:", err));
   }, [currentUser, setServers]);
 
-  const directItems: SidebarItem[] = Object.values(conversationPreviews).map((p) => {
-    const partnerId = Number(p.partner_id);
-    const status = resolvePresenceStatus({
-      userId: partnerId,
-      onlineUserIds,
-      userStatuses,
-      lastSeenAt: lastSeenAt[partnerId],
-    });
+  const directItems: SidebarItem[] = useMemo(
+    () =>
+      Object.values(conversationPreviews).map((p) => {
+        const partnerId = Number(p.partner_id);
+        const status = resolvePresenceStatus({
+          userId: partnerId,
+          onlineUserIds,
+          userStatuses,
+          lastSeenAt: lastSeenAt[partnerId],
+        });
 
-    return {
-      kind: "direct",
-      id: p.partner_id,
-      name: p.partner_display_name ?? p.partner_username,
-      time: p.last_message.inserted_at,
-      preview: getPreviewText(p.last_message, "No messages yet"),
-      unread: p.unread_count,
-      isOnline: onlineUserIds.has(partnerId),
-      status,
-      presenceText: getPresenceText({
-        status,
-        lastSeenAt: lastSeenAt[partnerId],
+        return {
+          kind: "direct",
+          id: p.partner_id,
+          name: p.partner_display_name ?? p.partner_username,
+          time: p.last_message.inserted_at,
+          preview: getPreviewText(p.last_message, "No messages yet"),
+          unread: p.unread_count,
+          isOnline: onlineUserIds.has(partnerId),
+          status,
+          presenceText: getPresenceText({
+            status,
+            lastSeenAt: lastSeenAt[partnerId],
+          }),
+        };
       }),
-    };
-  });
-
-  const roomItems: SidebarItem[] = Object.values(roomPreviews)
-    .filter((r) => r.server_id == null)
-    .map((r) => ({
-      kind: "room",
-      id: r.id,
-      name: r.name,
-      time: r.last_message_at ?? r.inserted_at,
-      preview: r.last_message
-        ? getPreviewText(r.last_message, "No messages yet")
-        : "No messages yet",
-      unread: r.unread_count,
-    }));
-
-  const allItems = [...directItems, ...roomItems].sort(
-    (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
+    [conversationPreviews, lastSeenAt, onlineUserIds, userStatuses],
   );
 
-  const serverList = Object.values(servers);
+  const roomItems: SidebarItem[] = useMemo(
+    () =>
+      Object.values(roomPreviews)
+        .filter((r) => r.server_id == null)
+        .map((r) => ({
+          kind: "room",
+          id: r.id,
+          name: r.name,
+          time: r.last_message_at ?? r.inserted_at,
+          preview: r.last_message
+            ? getPreviewText(r.last_message, "No messages yet")
+            : "No messages yet",
+          unread: r.unread_count,
+        })),
+    [roomPreviews],
+  );
+
+  const allItems = useMemo(
+    () =>
+      [...directItems, ...roomItems].sort(
+        (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
+      ),
+    [directItems, roomItems],
+  );
+
+  const serverList = useMemo(() => Object.values(servers), [servers]);
 
   const isItemActive = (item: SidebarItem): boolean => {
     if (!activeChat) return false;
@@ -221,9 +233,9 @@ export function Sidebar({ isServerMode = false }: SidebarProps) {
                   key={`${item.kind}-${item.id}`}
                   onClick={() => handleItemClick(item)}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-md rounded-[12px] border px-2.5 py-2.5 text-left transition-colors",
+                    "flex w-full items-center gap-2 rounded-[12px] border px-2.5 py-2.5 text-left transition-colors",
                     isActive
-                      ? "border-primary/30 bg-card bg-accent"
+                      ? "border-primary/30 bg-accent"
                       : "border-transparent hover:border-border hover:bg-card/70",
                   )}
                   data-testid={`sidebar-item-${item.kind}-${item.id}`}

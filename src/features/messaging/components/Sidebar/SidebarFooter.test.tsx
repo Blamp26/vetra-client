@@ -102,6 +102,7 @@ describe("SidebarFooter call UX", () => {
   it("renders the current user presence status in the footer", () => {
     renderFooter();
 
+    expect(screen.getByRole("button", { name: "Open profile for Tester" })).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-footer-status")).toHaveTextContent("Online");
   });
 
