@@ -157,6 +157,17 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
     }
   };
 
+  const listRowClass = (isActive: boolean, collapsed: boolean) =>
+    cn(
+      "relative flex w-full items-center transition-colors",
+      collapsed
+        ? "justify-center rounded-[12px] px-2 py-2.5"
+        : "h-[62px] gap-[11px] border-b border-transparent px-[10px] text-left",
+      isActive ? "bg-accent" : "hover:bg-card/70",
+    );
+
+  const hasListContent = serverList.length > 0 || allItems.length > 0;
+
   return (
     <div
       className={cn(
@@ -165,94 +176,19 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
       )}
     >
       {!isServerMode && !isCollapsed && (
-        <div className="border-b border-border px-4 pb-4 pt-4">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <span className="vt-kicker">Inbox</span>
-              <h1 className="text-xl font-semibold tracking-tight">Messages</h1>
-            </div>
-            <button
-              onClick={() => openModal("CREATE_PICKER")}
-              className="vt-button vt-button--primary shrink-0 rounded-md"
-            >
-              New
-            </button>
-          </div>
-          <UserSearch />
-        </div>
-      )}
-
-      {!isServerMode && isCollapsed && (
-        <div className="border-b border-border px-3 py-3">
-          <button
-            onClick={() => openModal("CREATE_PICKER")}
-            className="flex h-12 w-full items-center justify-center rounded-[12px] border border-border bg-card/85 text-lg font-semibold text-foreground hover:bg-accent"
-            aria-label="New conversation"
-            title="New conversation"
-          >
-            +
-          </button>
-        </div>
-      )}
-
-      {!isServerMode && serverList.length > 0 && (
-        <div className={cn("border-b border-border", isCollapsed ? "px-3 py-3" : "px-4 py-4")}>
-          {!isCollapsed && (
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="vt-kicker">
-                Servers
-              </span>
-              <button
-                onClick={() => openModal("CREATE_SERVER")}
-                className="vt-button vt-button--ghost vt-button--icon h-8 w-8 px-0"
-                aria-label="Create server"
-              >
-                +
-              </button>
-            </div>
-          )}
-          <div className={cn(isCollapsed ? "space-y-2" : "space-y-1.5")}>
-            {isCollapsed && (
-              <button
-                onClick={() => openModal("CREATE_SERVER")}
-                className="flex h-12 w-full items-center justify-center rounded-[12px] border border-dashed border-border text-lg text-muted-foreground hover:bg-card/70 hover:text-foreground"
-                aria-label="Create server"
-                title="Create server"
-              >
-                +
-              </button>
-            )}
-            {serverList.map((server) => (
-              <button
-                key={server.id}
-                onClick={() =>
-                  setActiveChat(serverChatForServer(server))
-                }
-                className={cn(
-                  "flex w-full items-center rounded-[10px] border transition-colors",
-                  isCollapsed
-                    ? "justify-center px-2 py-2.5"
-                    : "gap-2 px-2.5 py-2 text-left",
-                  isServerActive(server.id)
-                    ? "border-primary/30 bg-accent"
-                    : "border-transparent hover:border-border hover:bg-card/75",
-                )}
-                title={server.name}
-              >
-                <Avatar name={server.name} size="small" />
-                {!isCollapsed && <span className="truncate text-sm">{server.name}</span>}
-              </button>
-            ))}
+        <div className="h-[54px] px-[11px] pt-[9px]">
+          <div className="[&_input]:h-[35px] [&_input]:w-full [&_input]:rounded-[18px] [&_input]:border-0 [&_input]:bg-card/80 [&_input]:px-9 [&_input]:pr-10 [&_input]:text-sm [&_input]:shadow-none">
+            <UserSearch />
           </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-3 py-3">
-        {allItems.length === 0 && !isServerMode ? (
+      <div className={cn("flex-1 overflow-y-auto", !isServerMode && !isCollapsed ? "py-1" : "px-3 py-3")}>
+        {!hasListContent && !isServerMode ? (
           <div
             className={cn(
-              "rounded-[12px] border border-border bg-card/70",
-              isCollapsed ? "px-3 py-4 text-center" : "px-4 py-5",
+              "mx-3 rounded-[12px] border border-border bg-card/70 px-4 py-5",
+              isCollapsed && "text-center",
             )}
           >
             <div className="space-y-1.5">
@@ -265,26 +201,42 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
             </div>
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className={isServerMode || isCollapsed ? "space-y-1.5" : undefined}>
+            {!isServerMode &&
+              serverList.map((server) => {
+                const isActive = isServerActive(server.id);
+                return (
+                  <button
+                    key={server.id}
+                    onClick={() => setActiveChat(serverChatForServer(server))}
+                    className={listRowClass(isActive, isCollapsed)}
+                    data-testid={`sidebar-item-server-${server.id}`}
+                    title={server.name}
+                  >
+                    <Avatar
+                      name={server.name}
+                      size="medium"
+                      className={isCollapsed ? undefined : "h-[46px] w-[46px] text-base"}
+                    />
+                    {!isCollapsed && (
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {server.name}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             {allItems.map((item) => {
               const isActive = isItemActive(item);
               return (
                 <button
                   key={`${item.kind}-${item.id}`}
                   onClick={() => handleItemClick(item)}
-                  className={cn(
-                    "relative flex w-full items-center rounded-[12px] border transition-colors",
-                    isCollapsed
-                      ? "justify-center px-2 py-2.5"
-                      : "gap-2 px-2.5 py-2.5 text-left",
-                    isActive
-                      ? "border-primary/30 bg-accent"
-                      : "border-transparent hover:border-border hover:bg-card/70",
-                  )}
+                  className={listRowClass(isActive, isServerMode || isCollapsed)}
                   data-testid={`sidebar-item-${item.kind}-${item.id}`}
                   data-presence-status={item.kind === "direct" ? item.status ?? "offline" : undefined}
                   title={
-                    isCollapsed
+                    isServerMode || isCollapsed
                       ? item.name
                       : item.kind === "direct"
                         ? item.presenceText
@@ -294,6 +246,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                   <Avatar
                     name={item.name}
                     size="medium"
+                    className={isServerMode || isCollapsed ? undefined : "h-[46px] w-[46px] text-base"}
                     status={
                       item.kind === "direct"
                         ? item.status || (item.isOnline ? "online" : "offline")
@@ -316,7 +269,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                       </p>
                     </div>
                   )}
-                  {isCollapsed && item.unread > 0 && (
+                  {(isServerMode || isCollapsed) && item.unread > 0 && (
                     <span className="absolute right-1.5 top-1.5 rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
                       {item.unread}
                     </span>

@@ -137,7 +137,7 @@ describe("Sidebar attachment previews", () => {
     expect(screen.getByText("File: report.pdf")).toBeInTheDocument();
   });
 
-  it("renders cleaned sidebar header controls without changing behavior", async () => {
+  it("renders Telegram-like sidebar chrome without inbox header or hamburger menu", async () => {
     const state = makeState();
 
     useAppStoreMock.mockImplementation(
@@ -151,13 +151,11 @@ describe("Sidebar attachment previews", () => {
       expect(getListMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(screen.getByText("Messages")).toBeInTheDocument();
     expect(screen.getByTestId("user-search")).toBeInTheDocument();
-
-    const newButton = screen.getByRole("button", { name: "New" });
-    expect(newButton).toHaveClass("rounded-md");
-    fireEvent.click(newButton);
-    expect(state.openModal).toHaveBeenCalledWith("CREATE_PICKER");
+    expect(screen.queryByText("Messages")).not.toBeInTheDocument();
+    expect(screen.queryByText("Inbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open sidebar menu" })).not.toBeInTheDocument();
   });
 
   it("keeps DM rows selectable with selected and unread indicators", async () => {
@@ -174,7 +172,7 @@ describe("Sidebar attachment previews", () => {
     render(<Sidebar />);
 
     const directRow = await screen.findByTestId("sidebar-item-direct-2");
-    expect(directRow).toHaveClass("rounded-[12px]");
+    expect(directRow).toHaveClass("h-[62px]");
     expect(directRow).toHaveClass("bg-accent");
     expect(directRow).toHaveAttribute("data-presence-status", "online");
     expect(directRow).toHaveAttribute("title", "Online");
@@ -189,7 +187,7 @@ describe("Sidebar attachment previews", () => {
     });
   });
 
-  it("renders server section controls and preserves server navigation", async () => {
+  it("renders servers as chat-like rows and preserves server navigation", async () => {
     const state = makeState();
     state.servers = {
       5: {
@@ -207,15 +205,37 @@ describe("Sidebar attachment previews", () => {
 
     render(<Sidebar />);
 
-    expect(await screen.findByText("Servers")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Create server" }));
-    expect(state.openModal).toHaveBeenCalledWith("CREATE_SERVER");
+    expect(screen.queryByText("Servers")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create server" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Workspace/ }));
+    const serverRow = await screen.findByTestId("sidebar-item-server-5");
+    expect(serverRow).toHaveClass("h-[62px]");
+    expect(serverRow).not.toHaveTextContent("No messages");
+
+    fireEvent.click(serverRow);
     expect(state.setActiveChat).toHaveBeenCalledWith({
       type: "server",
       serverId: 5,
       serverRef: 5,
     });
+  });
+
+  it("uses the compact Telegram-like search row and avatar sizing", async () => {
+    const state = makeState();
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+
+    render(<Sidebar />);
+
+    const directRow = await screen.findByTestId("sidebar-item-direct-2");
+    const search = screen.getByTestId("user-search");
+
+    expect(search.parentElement?.parentElement).toHaveClass("h-[54px]", "px-[11px]", "pt-[9px]");
+    expect(search.parentElement?.parentElement).not.toHaveClass("border-b");
+    expect(directRow).toHaveClass("px-[10px]", "gap-[11px]");
+    expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
   });
 });
