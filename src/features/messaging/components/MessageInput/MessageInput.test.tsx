@@ -173,10 +173,10 @@ describe("MessageInput attachments", () => {
     render(<MessageInput onSend={vi.fn()} />);
 
     expect(screen.getByTestId("message-composer-shell")).toHaveClass("border-t", "bg-[color:var(--vetra-shell-chat-bg,var(--color-card))]");
-    expect(screen.getByTestId("message-composer-bar")).toHaveClass("items-end", "px-3", "py-2.5");
-    expect(screen.getByRole("button", { name: "Attach" })).toHaveClass("h-10", "w-10");
-    expect(screen.getByPlaceholderText("Message...")).toHaveClass("min-h-10", "bg-transparent", "border-0");
-    expect(screen.getByRole("button", { name: "Send" })).toHaveClass("h-10", "w-10");
+    expect(screen.getByTestId("message-composer-bar")).toHaveClass("min-h-[46px]", "items-center", "px-2", "py-0.5");
+    expect(screen.getByRole("button", { name: "Attach" })).toHaveClass("h-8", "w-8");
+    expect(screen.getByPlaceholderText("Message...")).toHaveClass("min-h-8", "bg-transparent", "border-0", "shadow-none", "ring-0");
+    expect(screen.getByRole("button", { name: "Send" })).toHaveClass("h-8", "w-8");
   });
 
   it("hides the textarea internal scrollbar while keeping the composer compact", () => {
@@ -185,7 +185,7 @@ describe("MessageInput attachments", () => {
     const textarea = screen.getByTestId("message-input-textarea");
 
     expect(textarea).toHaveStyle({ overflowY: "hidden" });
-    expect(textarea).toHaveClass("min-h-10", "max-h-44", "resize-none");
+    expect(textarea).toHaveClass("min-h-8", "max-h-44", "resize-none");
   });
 
   it("auto-resizes the textarea from scrollHeight without changing keyboard send behavior", async () => {

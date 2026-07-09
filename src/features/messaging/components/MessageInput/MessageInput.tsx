@@ -847,7 +847,7 @@ interface Props {
        )}
  
        <div
-         className="flex items-end gap-1.5 px-3 py-2.5 sm:px-4"
+         className="flex min-h-[46px] items-center gap-1 px-2 py-0.5 sm:px-3"
          data-testid="message-composer-bar"
        >
           <div className="relative shrink-0">
@@ -856,8 +856,8 @@ interface Props {
               onClick={handleAttachClick}
               disabled={disabled || isSending || isEditing || isUploading}
               className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors",
-                "hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                "flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors",
+                "hover:bg-accent hover:text-foreground focus-visible:outline-none",
                 "disabled:pointer-events-none disabled:opacity-60",
                 isComposerAttachmentMenuOpen && "bg-accent text-foreground",
               )}
@@ -899,7 +899,8 @@ interface Props {
           <textarea
             ref={textareaRef}
             className={cn(
-              "min-h-10 max-h-44 flex-1 resize-none border-0 bg-transparent px-2 py-[9px] text-[15px] leading-6 text-foreground outline-none",
+              "min-h-8 max-h-44 flex-1 resize-none border-0 bg-transparent px-1 py-[6px] text-[15px] leading-5 text-foreground shadow-none outline-none ring-0",
+              "focus:border-0 focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
               "placeholder:text-muted-foreground/85 disabled:cursor-not-allowed disabled:opacity-60",
             )}
             data-testid="message-input-textarea"
@@ -919,11 +920,11 @@ interface Props {
             onClick={handleSend}
             disabled={pendingAttachments.length > 0 || (!content.trim() && pendingAttachments.length === 0) || disabled || isSending || isUploading}
             className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+              "hover:bg-accent focus-visible:outline-none",
               "disabled:pointer-events-none disabled:opacity-60",
               content.trim()
-                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                ? "text-primary"
                 : "text-muted-foreground",
             )}
             aria-label={isSending ? "Sending..." : "Send"}
