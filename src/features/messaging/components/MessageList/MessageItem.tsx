@@ -7,7 +7,7 @@ import {
 } from "@/shared/components/AuthenticatedImage";
 import { AuthenticatedVideo } from "@/shared/components/AuthenticatedVideo";
 import { useAppStore } from "@/store";
-import { Download, ExternalLink, Film, Play } from "lucide-react";
+import { Download, Film, Play } from "lucide-react";
 import { StatusIcon } from "./StatusIcon";
 import {
   type Attachment,
@@ -908,14 +908,25 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50",
       isOwn ? "bg-black/20 text-white hover:bg-black/30" : "bg-white text-[#1f2421] hover:bg-white/90",
     );
-    const actionButtonClassName = cn(
-      "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current transition-colors disabled:opacity-50",
-      isOwn ? "hover:bg-white/12" : "hover:bg-accent",
-    );
-
     return (
       <>
-        <div className="flex min-w-0 items-start gap-3" data-testid="message-file-row">
+        <div
+          className={cn("flex min-w-0 items-start gap-3", canOpenInline && "cursor-pointer")}
+          data-testid="message-file-row"
+          onClick={() => {
+            if (canOpenInline) {
+              void handleAttachmentAction("open");
+            }
+          }}
+          onKeyDown={(event) => {
+            if (!canOpenInline) return;
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            void handleAttachmentAction("open");
+          }}
+          role={canOpenInline ? "button" : undefined}
+          tabIndex={canOpenInline ? 0 : undefined}
+        >
           <div
             className="relative h-[54px] w-[54px] shrink-0"
             data-testid="message-file-icon-container"
@@ -935,7 +946,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               type="button"
               aria-label="Download"
               title="Download"
-              onClick={() => handleAttachmentAction("download")}
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleAttachmentAction("download");
+              }}
               disabled={isAttachmentActionPending}
               className={cn(iconButtonClassName, "absolute bottom-[-2px] right-[-2px]")}
             >
@@ -957,20 +971,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             >
               {[attachmentTypeLabel || attachmentKindLabel, formatAttachmentSize(attachment?.file_size)].join(" · ")}
             </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1 pt-[15px]" data-testid="message-file-actions">
-            {canOpenInline && (
-              <button
-                type="button"
-                aria-label="Open"
-                title="Open"
-                onClick={() => handleAttachmentAction("open")}
-                disabled={isAttachmentActionPending}
-                className={actionButtonClassName}
-              >
-                <ExternalLink className="h-4 w-4" />
-              </button>
-            )}
           </div>
         </div>
 
@@ -1003,7 +1003,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           isVisualMediaMessage ? (
             <div className="relative text-[15px] leading-[21px]" data-testid="message-text-content">
               <span
-                className="pointer-events-none relative float-right mb-[-4px] ml-[7px] mr-[-4px] mt-[1px] inline-flex items-center px-[4px]"
+                className="pointer-events-none relative float-right mb-0 ml-[7px] mr-0 mt-[2px] inline-flex items-center rounded-[10px] px-[4px]"
                 data-testid="message-text-inline-metadata"
               >
                 {renderMetadata()}

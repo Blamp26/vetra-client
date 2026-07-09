@@ -1271,10 +1271,10 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-file-row")).toBeInTheDocument();
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(screen.getByText("PDF · 5.5 KB")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("message-file-row")).toHaveAttribute("role", "button");
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(bubble).toContainElement(screen.getByTestId("message-metadata"));
   });
@@ -1304,7 +1304,7 @@ describe("MessageItem bubble layout", () => {
     expect(bubble).not.toHaveClass("bg-bubble-outgoing/12");
   });
 
-  it("renders compact icon-only file actions with accessible names instead of labeled buttons", () => {
+  it("keeps download inside the file tile and uses the row itself as the inline-open target", () => {
     renderMessageItem({
       media_file_id: "media-file-compact",
       media_mime_type: "application/pdf",
@@ -1318,16 +1318,37 @@ describe("MessageItem bubble layout", () => {
       },
     });
 
-    const openButton = screen.getByRole("button", { name: "Open" });
     const downloadButton = screen.getByRole("button", { name: "Download" });
+    const fileRow = screen.getByTestId("message-file-row");
+    const iconContainer = screen.getByTestId("message-file-icon-container");
 
-    expect(screen.getByTestId("message-file-actions")).toBeInTheDocument();
-    expect(openButton).toHaveClass("rounded-full");
+    expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
+    expect(fileRow).toHaveAttribute("role", "button");
     expect(downloadButton).toHaveClass("rounded-full");
-    // Compact actions carry no separate visible text label; the accessible
-    // name comes entirely from aria-label so the icon can stay minimal.
-    expect(openButton.textContent).toBe("");
     expect(downloadButton.textContent).toBe("");
+    expect(iconContainer).toContainElement(downloadButton);
+  });
+
+  it("opens inline documents from the file row without a separate right-side action button", async () => {
+    renderMessageItem({
+      media_file_id: "media-file-open-row",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "media-file-open-row",
+        url: "/api/v1/media/media-file-open-row",
+        mime_type: "application/pdf",
+        original_name: "readme.pdf",
+        file_size: 4096,
+        kind: "file",
+      },
+    });
+
+    fireEvent.click(screen.getByTestId("message-file-row"));
+
+    expect(attachmentDownloads.openAttachmentWithAuth).toHaveBeenCalledWith({
+      attachment: expect.objectContaining({ id: "media-file-open-row" }),
+      authToken: "secret-token",
+    });
   });
 
   it("renders legacy photo attachments without an attachment object", () => {
