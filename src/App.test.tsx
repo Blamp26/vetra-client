@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -182,6 +183,7 @@ describe("App hash sync", () => {
     audioMounts.current = 0;
     audioUnmounts.current = 0;
     window.location.hash = "#";
+    window.localStorage.clear();
   });
 
   it("resolves a channel hash to a channel active chat directly", async () => {
@@ -211,7 +213,7 @@ describe("App hash sync", () => {
     );
   });
 
-  it("uses a 455px sidebar shell width", () => {
+  it("uses the default persisted shell width token on first render", () => {
     const state = makeState();
 
     useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
@@ -220,7 +222,73 @@ describe("App hash sync", () => {
 
     render(<App />);
 
-    expect(screen.getByTestId("app-sidebar-shell").className).toContain("w-[455px]");
+    expect(screen.getByTestId("app-shell").style.getPropertyValue("--vetra-left-pane-width")).toBe("408px");
+    expect(screen.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "408");
+  });
+
+  it("restores a persisted sidebar width from localStorage", () => {
+    const state = makeState();
+    window.localStorage.setItem("vetra:left-pane-width", "512");
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    expect(screen.getByTestId("app-shell").style.getPropertyValue("--vetra-left-pane-width")).toBe("512px");
+    expect(screen.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "512");
+  });
+
+  it("resizes the shell with pointer drag and persists on pointerup", () => {
+    const state = makeState();
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    const shell = screen.getByTestId("app-shell");
+    const divider = screen.getByRole("separator", { name: "Resize sidebar" });
+
+    fireEvent.pointerDown(divider, { button: 0, clientX: 408, pointerId: 1 });
+    expect(document.body.dataset.vtShellResizing).toBe("true");
+
+    fireEvent.pointerMove(window, { clientX: 560, pointerId: 1 });
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("560px");
+    expect(divider).toHaveAttribute("aria-valuenow", "560");
+
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    expect(document.body.dataset.vtShellResizing).toBeUndefined();
+    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("560");
+  });
+
+  it("clamps keyboard resizing and persists the updated width", () => {
+    const state = makeState();
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    render(<App />);
+
+    const shell = screen.getByTestId("app-shell");
+    const divider = screen.getByRole("separator", { name: "Resize sidebar" });
+
+    fireEvent.keyDown(divider, { key: "ArrowLeft" });
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("392px");
+    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("392");
+
+    fireEvent.keyDown(divider, { key: "Home" });
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("320px");
+    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("320");
+
+    fireEvent.keyDown(divider, { key: "End" });
+    const responsiveMaxWidth = String(window.innerWidth - 360);
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(`${responsiveMaxWidth}px`);
+    expect(divider).toHaveAttribute("aria-valuemax", responsiveMaxWidth);
+    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe(responsiveMaxWidth);
   });
 
   it("does not restore the stale server hash after a channel is selected", async () => {

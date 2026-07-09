@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useAppStore } from "@/store";
 import { AuthPage } from "@/features/registration/AuthPage";
 import { Sidebar } from "@/features/messaging/components/Sidebar";
@@ -19,6 +20,25 @@ import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitl
 import { CallProvider, useCallContext } from "@/features/calling/context";
 import { debugCall } from "@/features/calling/utils/callDebug";
 import type { ActiveChat } from "@/shared/types";
+
+const LEFT_PANE_STORAGE_KEY = "vetra:left-pane-width";
+const LEFT_PANE_MIN_WIDTH = 320;
+const LEFT_PANE_DEFAULT_WIDTH = 408;
+const LEFT_PANE_MAX_WIDTH = 720;
+const RIGHT_PANE_MIN_WIDTH = 360;
+const LEFT_PANE_KEYBOARD_STEP = 16;
+
+function getLeftPaneMaxWidth(availableWidth: number) {
+  return Math.min(
+    LEFT_PANE_MAX_WIDTH,
+    Math.max(LEFT_PANE_MIN_WIDTH, availableWidth - RIGHT_PANE_MIN_WIDTH),
+  );
+}
+
+function clampLeftPaneWidth(width: number, availableWidth: number) {
+  const maxWidth = getLeftPaneMaxWidth(availableWidth);
+  return Math.min(maxWidth, Math.max(LEFT_PANE_MIN_WIDTH, Math.round(width)));
+}
 
 function EmptyState({
   eyebrow,
@@ -96,17 +116,106 @@ function AppShell() {
   const searchResults = useAppStore((s) => s.searchResults);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const leftPaneWidthRef = useRef(LEFT_PANE_DEFAULT_WIDTH);
+  const isResizingRef = useRef(false);
 
   const [routeHash, setRouteHash] = useState(() =>
     typeof window !== "undefined" ? window.location.hash || "#" : "#",
   );
+  const [leftPaneWidth, setLeftPaneWidth] = useState(() => {
+    if (typeof window === "undefined") return LEFT_PANE_DEFAULT_WIDTH;
+
+    const storedValue = window.localStorage.getItem(LEFT_PANE_STORAGE_KEY);
+    const parsedWidth = storedValue ? Number.parseInt(storedValue, 10) : Number.NaN;
+    return clampLeftPaneWidth(
+      Number.isFinite(parsedWidth) ? parsedWidth : LEFT_PANE_DEFAULT_WIDTH,
+      window.innerWidth,
+    );
+  });
+  const [isResizing, setIsResizing] = useState(false);
   const currentActiveChatKey = activeChatKey(activeChat);
   const currentActiveChatKeyRef = useRef(currentActiveChatKey);
   const activeCallDirectChatRef = useRef<Extract<ActiveChat, { type: "direct" }> | null>(null);
 
   useEffect(() => {
+    leftPaneWidthRef.current = leftPaneWidth;
+  }, [leftPaneWidth]);
+
+  const getAvailableShellWidth = useCallback(() => {
+    if (typeof window === "undefined") {
+      return LEFT_PANE_DEFAULT_WIDTH + RIGHT_PANE_MIN_WIDTH;
+    }
+
+    const shellWidth = shellRef.current?.clientWidth ?? 0;
+    return shellWidth > 0 ? shellWidth : window.innerWidth;
+  }, []);
+
+  const persistLeftPaneWidth = useCallback((width: number) => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(LEFT_PANE_STORAGE_KEY, String(Math.round(width)));
+  }, []);
+
+  const updateLeftPaneWidth = useCallback((nextWidth: number) => {
+    const clampedWidth = clampLeftPaneWidth(nextWidth, getAvailableShellWidth());
+    leftPaneWidthRef.current = clampedWidth;
+    setLeftPaneWidth((previousWidth) => (
+      previousWidth === clampedWidth ? previousWidth : clampedWidth
+    ));
+    return clampedWidth;
+  }, [getAvailableShellWidth]);
+
+  useEffect(() => {
     currentActiveChatKeyRef.current = currentActiveChatKey;
   }, [currentActiveChatKey]);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      updateLeftPaneWidth(leftPaneWidthRef.current);
+    };
+
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, [updateLeftPaneWidth]);
+
+  useEffect(() => {
+    if (!isResizing) {
+      delete document.body.dataset.vtShellResizing;
+      return;
+    }
+
+    document.body.dataset.vtShellResizing = "true";
+    return () => {
+      delete document.body.dataset.vtShellResizing;
+    };
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      event.preventDefault();
+      updateLeftPaneWidth(event.clientX);
+    };
+
+    const stopResizing = () => {
+      if (!isResizingRef.current) return;
+      isResizingRef.current = false;
+      setIsResizing(false);
+      persistLeftPaneWidth(leftPaneWidthRef.current);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+      stopResizing();
+    };
+  }, [isResizing, persistLeftPaneWidth, updateLeftPaneWidth]);
 
   const navigateToHash = useCallback((nextHash: string) => {
     const normalizedHash = nextHash || "#";
@@ -373,11 +482,61 @@ function AppShell() {
     return activeChat;
   }, [activeChat]);
 
+  const handleSplitterPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    isResizingRef.current = true;
+    setIsResizing(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    updateLeftPaneWidth(event.clientX);
+  }, [updateLeftPaneWidth]);
+
+  const handleSplitterKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    let nextWidth = leftPaneWidthRef.current;
+
+    switch (event.key) {
+      case "ArrowLeft":
+        nextWidth -= LEFT_PANE_KEYBOARD_STEP;
+        break;
+      case "ArrowRight":
+        nextWidth += LEFT_PANE_KEYBOARD_STEP;
+        break;
+      case "Home":
+        nextWidth = LEFT_PANE_MIN_WIDTH;
+        break;
+      case "End":
+        nextWidth = getLeftPaneMaxWidth(getAvailableShellWidth());
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    const clampedWidth = updateLeftPaneWidth(nextWidth);
+    persistLeftPaneWidth(clampedWidth);
+  }, [getAvailableShellWidth, persistLeftPaneWidth, updateLeftPaneWidth]);
+
+  const handleSplitterDoubleClick = useCallback(() => {
+    const clampedWidth = updateLeftPaneWidth(LEFT_PANE_DEFAULT_WIDTH);
+    persistLeftPaneWidth(clampedWidth);
+  }, [persistLeftPaneWidth, updateLeftPaneWidth]);
+
+  const shellStyle = useMemo(() => ({
+    "--vetra-left-pane-width": `${leftPaneWidth}px`,
+  }) as CSSProperties, [leftPaneWidth]);
+
+  const dividerMaxWidth = getLeftPaneMaxWidth(getAvailableShellWidth());
+
   return (
     <div className="vt-workspace flex h-[100dvh] w-full flex-col overflow-hidden text-foreground">
       <DesktopTitleBar />
 
-      <div className="vt-messenger-shell flex min-h-0 flex-1 overflow-hidden">
+      <div
+        ref={shellRef}
+        className="vt-messenger-shell flex min-h-0 flex-1 overflow-hidden"
+        style={shellStyle}
+        data-testid="app-shell"
+      >
         <div
           className="flex h-full w-[var(--vetra-left-pane-width)] flex-shrink-0 flex-col overflow-hidden bg-[var(--vetra-shell-sidebar-bg)]"
           data-testid="app-sidebar-shell"
@@ -409,6 +568,22 @@ function AppShell() {
             onReturnToCall={handleReturnToActiveCall}
           />
         </div>
+
+        <div
+          role="separator"
+          aria-label="Resize sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={LEFT_PANE_MIN_WIDTH}
+          aria-valuemax={dividerMaxWidth}
+          aria-valuenow={leftPaneWidth}
+          tabIndex={0}
+          className="vt-shell-divider"
+          data-active={isResizing ? "true" : "false"}
+          data-testid="app-shell-divider"
+          onPointerDown={handleSplitterPointerDown}
+          onKeyDown={handleSplitterKeyDown}
+          onDoubleClick={handleSplitterDoubleClick}
+        />
 
         <div className="flex min-w-0 flex-1 overflow-hidden bg-[var(--vetra-shell-chat-bg)]">
           {!isSettingsRoute && chatTarget ? (

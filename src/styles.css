@@ -282,6 +282,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+body[data-vt-shell-resizing="true"] {
+  cursor: col-resize;
+  user-select: none;
+}
+
 #root {
   min-height: 100dvh;
   isolation: isolate;
@@ -352,16 +357,51 @@ body {
     background: var(--vetra-shell-chat-bg);
   }
 
-  .vt-messenger-shell::before {
-    content: "";
+  .vt-shell-divider {
     position: absolute;
     top: 0;
     bottom: 0;
     left: var(--vetra-left-pane-width);
+    z-index: 2;
+    width: 0.75rem;
+    transform: translateX(-50%);
+    cursor: col-resize;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    touch-action: none;
+  }
+
+  .vt-shell-divider::before,
+  .vt-shell-divider::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .vt-shell-divider::before {
+    top: 0;
+    bottom: 0;
     width: 1px;
     background: var(--vetra-shell-divider-color);
-    pointer-events: none;
-    z-index: 1;
+  }
+
+  .vt-shell-divider::after {
+    top: 0.75rem;
+    bottom: 0.75rem;
+    width: 0.1875rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary) 24%, transparent 76%);
+    opacity: 0;
+    transition: opacity 180ms cubic-bezier(0.2, 1, 0.3, 1);
+  }
+
+  .vt-shell-divider:hover::after,
+  .vt-shell-divider[data-active="true"]::after,
+  .vt-shell-divider:focus-visible::after {
+    opacity: 1;
   }
 
   .vt-pane {
