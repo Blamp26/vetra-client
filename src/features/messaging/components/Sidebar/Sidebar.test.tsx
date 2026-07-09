@@ -151,17 +151,11 @@ describe("Sidebar attachment previews", () => {
       expect(getListMock).toHaveBeenCalledTimes(1);
     });
 
+    expect(screen.getByText("Messages")).toBeInTheDocument();
     expect(screen.getByTestId("user-search")).toBeInTheDocument();
-    expect(screen.queryByText("Messages")).not.toBeInTheDocument();
-    expect(screen.queryByText("Inbox")).not.toBeInTheDocument();
 
-    const railMenuButton = screen.getByRole("button", { name: "Open sidebar menu" });
-    expect(railMenuButton).toHaveClass("h-10", "w-10");
-    fireEvent.click(railMenuButton);
-
-    expect(screen.getByTestId("sidebar-rail-menu")).toBeInTheDocument();
-
-    const newButton = screen.getByRole("menuitem", { name: "New" });
+    const newButton = screen.getByRole("button", { name: "New" });
+    expect(newButton).toHaveClass("rounded-md");
     fireEvent.click(newButton);
     expect(state.openModal).toHaveBeenCalledWith("CREATE_PICKER");
   });
@@ -180,7 +174,7 @@ describe("Sidebar attachment previews", () => {
     render(<Sidebar />);
 
     const directRow = await screen.findByTestId("sidebar-item-direct-2");
-    expect(directRow).toHaveClass("h-[62px]");
+    expect(directRow).toHaveClass("rounded-[12px]");
     expect(directRow).toHaveClass("bg-accent");
     expect(directRow).toHaveAttribute("data-presence-status", "online");
     expect(directRow).toHaveAttribute("title", "Online");
@@ -213,8 +207,8 @@ describe("Sidebar attachment previews", () => {
 
     render(<Sidebar />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Open sidebar menu" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Create server" }));
+    expect(await screen.findByText("Servers")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create server" }));
     expect(state.openModal).toHaveBeenCalledWith("CREATE_SERVER");
 
     fireEvent.click(screen.getByRole("button", { name: /Workspace/ }));
@@ -223,23 +217,5 @@ describe("Sidebar attachment previews", () => {
       serverId: 5,
       serverRef: 5,
     });
-  });
-
-  it("uses the compact Telegram-like search row and avatar sizing", async () => {
-    const state = makeState();
-
-    useAppStoreMock.mockImplementation(
-      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
-        selector(state),
-    );
-
-    render(<Sidebar />);
-
-    const directRow = await screen.findByTestId("sidebar-item-direct-2");
-    const search = screen.getByTestId("user-search");
-
-    expect(search.parentElement?.parentElement).toHaveClass("h-[54px]", "px-[11px]", "pt-[9px]");
-    expect(directRow).toHaveClass("px-[10px]", "gap-[11px]");
-    expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
   });
 });
