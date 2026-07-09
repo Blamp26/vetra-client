@@ -24,7 +24,7 @@ import type { ActiveChat } from "@/shared/types";
 const LEFT_PANE_STORAGE_KEY = "vetra:left-pane-width";
 const LEFT_PANE_MODE_STORAGE_KEY = "vetra:left-pane-mode";
 const LEFT_MINI_RAIL_WIDTH = 72;
-const LEFT_COLLAPSED_CHAT_LIST_WIDTH = 67;
+const LEFT_COLLAPSED_CHAT_LIST_WIDTH = 76;
 const LEFT_COLLAPSED_TOTAL_WIDTH = LEFT_MINI_RAIL_WIDTH + LEFT_COLLAPSED_CHAT_LIST_WIDTH;
 const LEFT_TEXT_MIN_WIDTH = 333;
 const LEFT_PANE_DEFAULT_WIDTH = 408;
@@ -99,7 +99,10 @@ function getInitialLeftPaneState(): { mode: LeftPaneMode; width: number } {
     };
   }
 
-  if (hasStoredWidth && parsedWidth === LEFT_COLLAPSED_TOTAL_WIDTH) {
+  if (
+    hasStoredWidth &&
+    (parsedWidth === LEFT_COLLAPSED_TOTAL_WIDTH || parsedWidth === 139)
+  ) {
     return { mode: "collapsed", width: LEFT_COLLAPSED_TOTAL_WIDTH };
   }
 
