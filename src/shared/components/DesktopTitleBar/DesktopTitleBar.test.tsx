@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DesktopTitleBar } from "./DesktopTitleBar";
+import { APP_TITLE_BAR_HEIGHT, DesktopTitleBar } from "./DesktopTitleBar";
 
 const {
   mockWindowApi,
@@ -42,6 +42,7 @@ describe("DesktopTitleBar", () => {
     render(<DesktopTitleBar />);
 
     expect(screen.getByTestId("desktop-title-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("desktop-title-bar")).toHaveStyle({ height: `${APP_TITLE_BAR_HEIGHT}px` });
     await waitFor(() => {
       expect(getCurrentWindowMock).toHaveBeenCalledTimes(1);
     });
