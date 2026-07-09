@@ -1112,9 +1112,13 @@ describe("MessageItem bubble layout", () => {
     const contentRect = screen.getByTestId("message-bubble").querySelector("[data-message-content-rect]");
     const mediaShell = screen.getByTestId("message-media-shell");
     const textContent = screen.getByTestId("message-text-content");
+    const mediaFrame = mediaShell.parentElement;
 
     expect(contentRect).toContain(mediaShell);
     expect(contentRect).toContain(textContent);
+    expect(mediaFrame).toHaveClass("overflow-hidden", "rounded-t-[15px]", "rounded-b-none");
+    expect(mediaShell).toHaveClass("block", "h-full", "w-full");
+    expect(mediaShell).not.toHaveClass("overflow-hidden", "rounded-t-[15px]");
     expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
     expect(screen.getByText("A short caption")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();

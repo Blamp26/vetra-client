@@ -771,77 +771,84 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         ? { top: 15, bottom: 0 }
         : { top: 14, bottom: 8 };
     const mediaFrameClassName = hasText
-      ? "relative left-[-8px] mb-[6px] mt-[-5px] overflow-hidden rounded-t-[15px] rounded-b-none"
+      ? "mb-[6px] mt-[-5px] overflow-hidden rounded-t-[15px] rounded-b-none"
       : "";
+    const mediaFrameOffsetStyle = hasText
+      ? { transform: "translateX(-8px)" }
+      : undefined;
 
     if (resolvedVisualAttachments.length > 1) {
       if (isTemporaryVisualLayout) {
         return (
           <div
-            className={cn("grid max-w-full grid-cols-2 gap-[2px] overflow-hidden", mediaFrameClassName)}
+            className={cn("max-w-full", !hasText && "overflow-hidden", mediaFrameClassName)}
             style={{
               width: hasText
                 ? `min(${MESSAGE_ALBUM_MAX_WIDTH + 16}px, calc(100vw - 5rem))`
                 : `min(${MESSAGE_ALBUM_MAX_WIDTH}px, calc(100vw - 6rem))`,
               maxWidth: hasText ? "calc(100% + 16px)" : "100%",
+              ...mediaFrameOffsetStyle,
             }}
             data-testid="message-photo-collage"
             data-photo-layout-state="pending"
           >
-            {resolvedVisualAttachments.map((currentAttachment) => {
-              const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
+            <div className="grid h-full w-full grid-cols-2 gap-[2px] overflow-hidden">
+              {resolvedVisualAttachments.map((currentAttachment) => {
+                const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
 
-              return (
-                <button
-                  key={currentAttachment.attachment.id}
-                  type="button"
-                  className="relative aspect-square overflow-hidden"
-                  data-testid="message-photo-collage-tile"
-                  aria-label={
-                    currentAttachment.attachment.kind === "video"
-                      ? `Open video ${getAttachmentDisplayName(currentAttachment.attachment)}`
-                      : `Open photo ${getAttachmentDisplayName(currentAttachment.attachment)}`
-                  }
-                  onClick={() => void handleVisualAttachmentOpen(currentAttachment.attachment)}
-                >
-                  {renderVisualMedia(currentAttachment, getAttachmentDisplayName(currentAttachment.attachment))}
-                  {isMediaDebugEnabled && (
-                    <div
-                      className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
-                      data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
-                    >
-                      <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
-                      <div>
-                        s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
+                return (
+                  <button
+                    key={currentAttachment.attachment.id}
+                    type="button"
+                    className="relative aspect-square overflow-hidden"
+                    data-testid="message-photo-collage-tile"
+                    aria-label={
+                      currentAttachment.attachment.kind === "video"
+                        ? `Open video ${getAttachmentDisplayName(currentAttachment.attachment)}`
+                        : `Open photo ${getAttachmentDisplayName(currentAttachment.attachment)}`
+                    }
+                    onClick={() => void handleVisualAttachmentOpen(currentAttachment.attachment)}
+                  >
+                    {renderVisualMedia(currentAttachment, getAttachmentDisplayName(currentAttachment.attachment))}
+                    {isMediaDebugEnabled && (
+                      <div
+                        className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
+                        data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
+                      >
+                        <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
+                        <div>
+                          s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
+                        </div>
+                        <div>
+                          n:{runtimeMetrics?.naturalWidth ?? "?"}x{runtimeMetrics?.naturalHeight ?? "?"}
+                        </div>
+                        <div>
+                          r:{runtimeMetrics?.renderedWidth ?? "?"}x{runtimeMetrics?.renderedHeight ?? "?"}
+                        </div>
+                        <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
                       </div>
-                      <div>
-                        n:{runtimeMetrics?.naturalWidth ?? "?"}x{runtimeMetrics?.naturalHeight ?? "?"}
-                      </div>
-                      <div>
-                        r:{runtimeMetrics?.renderedWidth ?? "?"}x{runtimeMetrics?.renderedHeight ?? "?"}
-                      </div>
-                      <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
-                    </div>
-                  )}
-                </button>
-              );
-            })}
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         );
       }
 
       return (
         <div
-          className={cn("relative max-w-full overflow-hidden", mediaFrameClassName)}
+          className={cn("relative max-w-full", !hasText && "overflow-hidden", mediaFrameClassName)}
           style={{
             width: hasText ? `${layout.width + 16}px` : `${layout.width}px`,
             maxWidth: hasText ? "calc(100% + 16px)" : "100%",
             aspectRatio: `${layout.width} / ${layout.height}`,
+            ...mediaFrameOffsetStyle,
           }}
           data-testid="message-photo-collage"
           data-photo-layout-state="resolved"
         >
-          <div className="relative h-full w-full" data-testid="message-photo-collage-inner">
+          <div className="relative h-full w-full overflow-hidden" data-testid="message-photo-collage-inner">
             {resolvedVisualAttachments.map((currentAttachment, index) =>
               renderVisualTile(currentAttachment, layout.tiles[index], layout, tileRadius),
             )}
@@ -856,45 +863,55 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     if (!currentAttachment.lightboxSrc) return null;
 
     return (
-      <button
-        type="button"
-        className={cn("relative block h-full w-full overflow-hidden", hasText && "relative left-[-8px] mb-[6px] mt-[-5px] rounded-t-[15px] rounded-b-none")}
-        data-testid="message-media-shell"
-        onClick={() => onLightbox({
-          kind: currentAttachment.attachment.kind === "video" ? "video" : "image",
-          src: currentAttachment.lightboxSrc,
-          authorName,
-          createdAt: msg.inserted_at,
-          avatarSrc: msg.sender?.avatar_url ?? null,
-          messageId: msg.id,
-        })}
+      <div
+        className={mediaFrameClassName}
         style={{
-          width: hasText ? `${layout.width + 16}px` : `${layout.width}px`,
-          maxWidth: hasText ? "calc(100% + 16px)" : "100%",
-          aspectRatio: `${layout.width} / ${layout.height}`,
+          width: hasText ? `${layout.width + 16}px` : undefined,
+          maxWidth: hasText ? "calc(100% + 16px)" : undefined,
+          aspectRatio: hasText ? `${layout.width} / ${layout.height}` : undefined,
+          ...mediaFrameOffsetStyle,
         }}
-        data-photo-layout-state={currentAttachment.dimensionSource === "fallback" ? "pending" : "resolved"}
       >
-        {renderVisualMedia(currentAttachment, attachmentName)}
-        {isMediaDebugEnabled && (
-          <div
-            className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
-            data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
-          >
-            <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
-            <div>
-              s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
+        <button
+          type="button"
+          className={cn("relative block h-full w-full", !hasText && "overflow-hidden")}
+          data-testid="message-media-shell"
+          onClick={() => onLightbox({
+            kind: currentAttachment.attachment.kind === "video" ? "video" : "image",
+            src: currentAttachment.lightboxSrc,
+            authorName,
+            createdAt: msg.inserted_at,
+            avatarSrc: msg.sender?.avatar_url ?? null,
+            messageId: msg.id,
+          })}
+          style={{
+            width: !hasText ? `${layout.width}px` : undefined,
+            maxWidth: !hasText ? "100%" : undefined,
+            aspectRatio: !hasText ? `${layout.width} / ${layout.height}` : undefined,
+          }}
+          data-photo-layout-state={currentAttachment.dimensionSource === "fallback" ? "pending" : "resolved"}
+        >
+          {renderVisualMedia(currentAttachment, attachmentName)}
+          {isMediaDebugEnabled && (
+            <div
+              className="pointer-events-none absolute left-1 top-1 z-10 rounded-md bg-black/72 px-1.5 py-1 text-[10px] font-medium leading-tight text-white"
+              data-testid={`message-media-debug-${currentAttachment.attachment.id}`}
+            >
+              <div>{shortenAttachmentId(currentAttachment.attachment.id)}</div>
+              <div>
+                s:{currentAttachment.serverWidth ?? "?"}x{currentAttachment.serverHeight ?? "?"}
+              </div>
+              <div>
+                n:{visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? "?"}x{visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? "?"}
+              </div>
+              <div>
+                r:{visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? "?"}x{visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? "?"}
+              </div>
+              <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
             </div>
-            <div>
-              n:{visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? "?"}x{visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? "?"}
-            </div>
-            <div>
-              r:{visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? "?"}x{visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? "?"}
-            </div>
-            <div>ratio:{getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height).toFixed(2)}</div>
-          </div>
-        )}
-      </button>
+          )}
+        </button>
+      </div>
     );
   };
 
