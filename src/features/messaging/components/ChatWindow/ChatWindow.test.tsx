@@ -216,13 +216,13 @@ describe("ChatWindow presence rendering", () => {
     const header = await screen.findByTestId("chat-header");
     const actions = screen.getByTestId("chat-header-actions");
 
-    expect(header).toHaveClass("min-h-[72px]");
+    expect(header).toHaveClass("h-[54px]");
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getByTestId("chat-header-status")).toHaveTextContent("Online");
     expect(actions).toContainElement(screen.getByRole("button", { name: "Call Alice" }));
 
     const searchButton = screen.getByRole("button", { name: "Search" });
-    expect(searchButton).toHaveClass("vt-button");
+    expect(searchButton).toHaveClass("h-10", "w-10");
     fireEvent.click(searchButton);
     expect(screen.getByTestId("message-search")).toBeInTheDocument();
   });
@@ -266,7 +266,7 @@ describe("ChatWindow presence rendering", () => {
     );
 
     const callButton = await screen.findByRole("button", { name: "Call Alice" });
-    expect(callButton).toHaveClass("border");
+    expect(callButton).toHaveClass("h-10", "w-10");
     expect(callButton).not.toBeDisabled();
 
     fireEvent.click(callButton);

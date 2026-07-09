@@ -20,6 +20,7 @@ import {
   getPresenceText,
   resolvePresenceStatus,
 } from "@/shared/utils/presence";
+import { Search } from "lucide-react";
 
 interface Props {
   activeChat: ActiveChat;
@@ -218,7 +219,7 @@ export function ChatWindow({ activeChat, call }: Props) {
       if (!partner)
         return (
           <div
-            className="flex min-h-[72px] items-center border-b border-border px-5 py-3 text-sm text-muted-foreground"
+            className="flex h-[54px] items-center border-b border-border px-4 text-sm text-muted-foreground"
             data-testid="chat-header"
           >
             Loading...
@@ -242,24 +243,24 @@ export function ChatWindow({ activeChat, call }: Props) {
 
       return (
         <div
-          className="flex min-h-[72px] items-center justify-between gap-3 border-b border-border px-5 py-3"
+          className="flex h-[54px] items-center justify-between border-b border-border px-4"
           data-testid="chat-header"
         >
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3 pr-2">
             <Avatar
               name={partner.display_name || partner.username}
               src={partner.avatar_url}
               size="medium"
               status={currentStatus as any}
             />
-            <div className="min-w-0">
-              <h3 className="truncate text-base font-semibold leading-5">
+            <div className="flex min-w-0 flex-col justify-center self-stretch pt-2">
+              <h3 className="truncate text-[15px] font-semibold leading-5">
                 {partner.display_name || partner.username}
               </h3>
               <p
                 data-testid="chat-header-status"
                 className={cn(
-                  "truncate text-xs leading-4",
+                  "mt-[4px] truncate text-[12px] leading-[14px]",
                   currentStatus === "online"
                     ? "text-online"
                     : currentStatus === "away"
@@ -273,7 +274,7 @@ export function ChatWindow({ activeChat, call }: Props) {
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2" data-testid="chat-header-actions">
+          <div className="flex h-full shrink-0 items-center" data-testid="chat-header-actions">
             <CallButton
               targetUserId={
                 partner?.public_id ??
@@ -285,13 +286,15 @@ export function ChatWindow({ activeChat, call }: Props) {
               callServiceStatus={call.callServiceStatus}
               onCall={handleStartCall}
               onUnavailable={handleCallUnavailable}
-              className="rounded-[12px] border border-border bg-card hover:bg-accent"
+              className="h-10 w-10 rounded-full border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-0"
             />
             <button
+              type="button"
               onClick={() => setIsSearchOpen(true)}
-              className="vt-button text-muted-foreground hover:text-foreground"
+              aria-label="Search"
+              className="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-0"
             >
-              Search
+              <Search className="h-[18px] w-[18px]" />
             </button>
           </div>
         </div>
@@ -301,24 +304,26 @@ export function ChatWindow({ activeChat, call }: Props) {
       const roomPreview = roomPreviews[roomId];
       return (
         <div
-          className="flex min-h-[72px] items-center justify-between gap-3 border-b border-border px-5 py-3"
+          className="flex h-[54px] items-center justify-between border-b border-border px-4"
           data-testid="chat-header"
         >
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3 pr-2">
             <Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />
-            <div className="min-w-0">
-              <h3 className="truncate text-base font-semibold leading-5">
+            <div className="flex min-w-0 flex-col justify-center self-stretch pt-2">
+              <h3 className="truncate text-[15px] font-semibold leading-5">
                 {roomPreview?.name || `Room #${roomId}`}
               </h3>
-              <p className="truncate text-xs leading-4 text-muted-foreground">Group chat</p>
+              <p className="mt-[4px] truncate text-[12px] leading-[14px] text-muted-foreground">Group chat</p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2" data-testid="chat-header-actions">
+          <div className="flex h-full shrink-0 items-center" data-testid="chat-header-actions">
             <button
+              type="button"
               onClick={() => setIsSearchOpen(true)}
-              className="vt-button text-muted-foreground hover:text-foreground"
+              aria-label="Search"
+              className="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-0"
             >
-              Search
+              <Search className="h-[18px] w-[18px]" />
             </button>
           </div>
         </div>
