@@ -7,7 +7,7 @@ import {
 } from "@/shared/components/AuthenticatedImage";
 import { AuthenticatedVideo } from "@/shared/components/AuthenticatedVideo";
 import { useAppStore } from "@/store";
-import { Download, ExternalLink, FileText, Film, Play } from "lucide-react";
+import { Download, ExternalLink, Film, Play } from "lucide-react";
 import { StatusIcon } from "./StatusIcon";
 import {
   type Attachment,
@@ -163,6 +163,40 @@ function formatVideoDuration(durationSeconds: number | null) {
   }
 
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function getAttachmentExtensionBadge(attachment: Attachment | null) {
+  if (!attachment) return "FILE";
+
+  const rawName = attachment.original_name ?? "";
+  const extensionMatch = rawName.match(/\.([a-z0-9]{1,5})$/i);
+  if (extensionMatch) {
+    return extensionMatch[1].toUpperCase();
+  }
+
+  const typeLabel = getAttachmentTypeLabel(attachment);
+  if (typeLabel) return typeLabel.toUpperCase();
+
+  return getAttachmentKindLabel(attachment.kind).slice(0, 4).toUpperCase();
+}
+
+function getAttachmentExtensionTone(attachment: Attachment | null) {
+  const mimeType = attachment?.mime_type ?? "";
+  const extension = getAttachmentExtensionBadge(attachment);
+
+  if (mimeType === "application/pdf" || extension === "PDF") {
+    return "bg-[#e53935] text-white";
+  }
+
+  if (mimeType.includes("zip") || extension === "ZIP") {
+    return "bg-[#f2994a] text-white";
+  }
+
+  if (attachment?.kind === "video") {
+    return "bg-[#4c6fff] text-white";
+  }
+
+  return "bg-[#5d6a62] text-white";
 }
 
 function toPercent(value: number, total: number) {
@@ -733,13 +767,18 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     const layout = photoLayout;
     const tileRadius = isMediaOnly
       ? { top: 15, bottom: 6 }
-      : { top: 14, bottom: 8 };
+      : hasText
+        ? { top: 15, bottom: 0 }
+        : { top: 14, bottom: 8 };
+    const mediaFrameClassName = hasText
+      ? "mx-[-8px] mb-[6px] mt-[-5px] overflow-hidden rounded-t-[15px] rounded-b-none"
+      : "";
 
     if (resolvedVisualAttachments.length > 1) {
       if (isTemporaryVisualLayout) {
         return (
           <div
-            className="grid max-w-full grid-cols-2 gap-[2px] overflow-hidden"
+            className={cn("grid max-w-full grid-cols-2 gap-[2px] overflow-hidden", mediaFrameClassName)}
             style={{
               width: `min(${MESSAGE_ALBUM_MAX_WIDTH}px, calc(100vw - 6rem))`,
               maxWidth: "100%",
@@ -791,7 +830,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
       return (
         <div
-          className="relative max-w-full overflow-hidden"
+          className={cn("relative max-w-full overflow-hidden", mediaFrameClassName)}
           style={{
             width: `${layout.width}px`,
             maxWidth: "100%",
@@ -817,7 +856,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     return (
       <button
         type="button"
-        className="relative block h-full w-full overflow-hidden"
+        className={cn("relative block h-full w-full overflow-hidden", hasText && "mx-[-8px] mb-[6px] mt-[-5px] rounded-t-[15px] rounded-b-none")}
         data-testid="message-media-shell"
         onClick={() => onLightbox({
           kind: currentAttachment.attachment.kind === "video" ? "video" : "image",
@@ -863,46 +902,63 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     const attachmentKindLabel = attachment
       ? getAttachmentKindLabel(attachment.kind)
       : "Attachment";
+    const attachmentExtension = getAttachmentExtensionBadge(attachment);
     const canOpenInline = attachment?.mime_type === "application/pdf" || attachment?.kind === "video";
+    const iconButtonClassName = cn(
+      "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50",
+      isOwn ? "bg-black/20 text-white hover:bg-black/30" : "bg-white text-[#1f2421] hover:bg-white/90",
+    );
     const actionButtonClassName = cn(
-      "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-current transition-colors disabled:opacity-50",
-      isOwn ? "hover:bg-white/16" : "hover:bg-accent",
+      "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-current transition-colors disabled:opacity-50",
+      isOwn ? "hover:bg-white/12" : "hover:bg-accent",
     );
 
     return (
       <>
-        <div className="flex min-w-0 items-center gap-2.5" data-testid="message-file-row">
+        <div className="flex min-w-0 items-start gap-3" data-testid="message-file-row">
           <div
-            className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px]",
-              isOwn
-                ? "bg-white/16 text-current"
-                : "bg-foreground/8 text-muted-foreground",
-            )}
+            className="relative h-[54px] w-[54px] shrink-0"
+            data-testid="message-file-icon-container"
           >
-            {attachment?.kind === "video" ? (
-              <Film className="h-5 w-5" />
-            ) : (
-              <FileText className="h-5 w-5" />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
             <div
-              className="truncate text-sm font-medium leading-[1.2] text-current"
+              className={cn(
+                "flex h-full w-full items-end justify-center rounded-[6px] px-2 pb-[7px] pt-[14px] text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
+                getAttachmentExtensionTone(attachment),
+              )}
+              data-testid="message-file-icon"
+            >
+              <span className="text-[11px] font-semibold leading-none tracking-[0.08em]">
+                {attachmentExtension}
+              </span>
+            </div>
+            <button
+              type="button"
+              aria-label="Download"
+              title="Download"
+              onClick={() => handleAttachmentAction("download")}
+              disabled={isAttachmentActionPending}
+              className={cn(iconButtonClassName, "absolute bottom-[-2px] right-[-2px]")}
+            >
+              <Download className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="min-w-0 flex-1 pt-[2px]">
+            <div
+              className="truncate text-[14px] font-medium leading-[18px] text-current"
               data-testid="message-file-name"
             >
               {attachmentName}
             </div>
             <div
               className={cn(
-                "mt-0.5 truncate text-[11.5px] leading-tight",
+                "mt-1 truncate text-[12px] leading-[16px]",
                 isOwn ? "text-[color:var(--bubble-outgoing-meta)]" : "text-muted-foreground",
               )}
             >
               {[attachmentTypeLabel || attachmentKindLabel, formatAttachmentSize(attachment?.file_size)].join(" · ")}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-0.5" data-testid="message-file-actions">
+          <div className="flex shrink-0 items-center gap-1 pt-[15px]" data-testid="message-file-actions">
             {canOpenInline && (
               <button
                 type="button"
@@ -915,16 +971,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 <ExternalLink className="h-4 w-4" />
               </button>
             )}
-            <button
-              type="button"
-              aria-label="Download"
-              title="Download"
-              onClick={() => handleAttachmentAction("download")}
-              disabled={isAttachmentActionPending}
-              className={actionButtonClassName}
-            >
-              <Download className="h-4 w-4" />
-            </button>
           </div>
         </div>
 
@@ -954,24 +1000,26 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </>
         )}
         {hasText && !isDocumentAttachment && (
-          <div
-            className={cn(
-              "whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]",
-              isVisualMediaMessage && "px-2.5 pt-2",
-              isVisualMediaMessage &&
-                !isTextOnly &&
-                (isOwn
-                  ? msg.edited_at
-                    ? "pr-[7.7rem]"
-                    : "pr-[5.9rem]"
-                  : msg.edited_at
-                    ? "pr-[6.25rem]"
-                    : "pr-[3.85rem]"),
-            )}
-            data-testid="message-text-content"
-          >
-            <EmojiText text={msg.content || ""} />
-          </div>
+          isVisualMediaMessage ? (
+            <div className="relative text-[15px] leading-[21px]" data-testid="message-text-content">
+              <span
+                className="pointer-events-none relative float-right mb-[-4px] ml-[7px] mr-[-4px] mt-[1px] inline-flex items-center px-[4px]"
+                data-testid="message-text-inline-metadata"
+              >
+                {renderMetadata()}
+              </span>
+              <span className="relative whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                <EmojiText text={msg.content || ""} />
+              </span>
+            </div>
+          ) : (
+            <div
+              className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]"
+              data-testid="message-text-content"
+            >
+              <EmojiText text={msg.content || ""} />
+            </div>
+          )
         )}
       </>
     );
@@ -1042,7 +1090,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               )
             : isVisualMediaMessage
               ? cn(
-                  "min-w-[11rem] overflow-hidden rounded-[18px] border border-border/85 px-1.5 pb-2.5 pt-1.5",
+                  "min-w-[11rem] overflow-hidden rounded-[15px] px-2 pb-[6px] pt-[5px] shadow-[0px_1px_2px_0px_rgba(16,16,16,0.61)]",
                   isVisualAlbum
                     ? "max-w-[min(480px,calc(100vw-6rem))]"
                     : "max-w-[min(28rem,calc(100vw-6rem))]",
@@ -1112,12 +1160,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             data-testid="message-media-only-overlay"
           >
             {renderMetadata("overlay")}
-          </div>
-        )}
-
-        {isVisualMediaMessage && hasText && (
-          <div className="pointer-events-none absolute bottom-2.5 right-3.5">
-            {renderMetadata()}
           </div>
         )}
 
