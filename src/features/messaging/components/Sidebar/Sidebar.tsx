@@ -159,10 +159,10 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
 
   const listRowClass = (isActive: boolean, collapsed: boolean) =>
     cn(
-      "relative w-full transition-colors",
+      "relative flex w-full items-center transition-colors",
       collapsed
-        ? "flex items-center justify-center rounded-[12px] px-2 py-2.5"
-        : "h-[62px] pl-[10px] text-left",
+        ? "justify-center rounded-[12px] px-2 py-2.5"
+        : "h-[62px] gap-[11px] border-b border-transparent px-[10px] text-left",
       isActive ? "bg-accent" : "hover:bg-card/70",
     );
 
@@ -183,7 +183,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
         </div>
       )}
 
-      <div className={cn("flex-1 overflow-y-auto", isServerMode || isCollapsed ? "px-3 py-3" : undefined)}>
+      <div className={cn("flex-1 overflow-y-auto", !isServerMode && !isCollapsed ? "py-1" : "px-3 py-3")}>
         {!hasListContent && !isServerMode ? (
           <div
             className={cn(
@@ -216,14 +216,10 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                     <Avatar
                       name={server.name}
                       size="medium"
-                      className={
-                        isCollapsed
-                          ? undefined
-                          : "absolute left-[10px] top-[8px] h-[46px] w-[46px] text-base"
-                      }
+                      className={isCollapsed ? undefined : "h-[46px] w-[46px] text-base"}
                     />
                     {!isCollapsed && (
-                      <span className="absolute left-[71px] right-[10px] top-1/2 -translate-y-1/2 truncate text-sm font-medium">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
                         {server.name}
                       </span>
                     )}
@@ -250,11 +246,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                   <Avatar
                     name={item.name}
                     size="medium"
-                    className={
-                      isServerMode || isCollapsed
-                        ? undefined
-                        : "absolute left-[10px] top-[8px] h-[46px] w-[46px] text-base"
-                    }
+                    className={isServerMode || isCollapsed ? undefined : "h-[46px] w-[46px] text-base"}
                     status={
                       item.kind === "direct"
                         ? item.status || (item.isOnline ? "online" : "offline")
@@ -262,17 +254,17 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                     }
                   />
                   {!isCollapsed && !isServerMode && (
-                    <div className="absolute inset-y-0 left-[71px] right-[10px]">
-                      <span className="absolute left-0 right-12 top-[14px] truncate text-sm font-medium">
-                        {item.name}
-                      </span>
-                      <span className="absolute right-0 top-[14px] text-[11px] text-muted-foreground">
-                        {formatPreviewTime(item.time)}
-                      </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-medium">{item.name}</span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
+                          {formatPreviewTime(item.time)}
+                        </span>
+                      </div>
                       {item.kind === "direct" && item.presenceText && (
                         <span className="sr-only">{item.presenceText}</span>
                       )}
-                      <p className="absolute left-0 right-0 top-[40px] truncate text-xs text-muted-foreground">
+                      <p className="truncate pt-0.5 text-xs text-muted-foreground">
                         <EmojiText text={item.preview} size={12} />
                       </p>
                     </div>
