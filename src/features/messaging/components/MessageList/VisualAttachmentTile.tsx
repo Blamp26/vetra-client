@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { Film, Play } from "lucide-react";
 import type { Attachment } from "@/shared/types";
+import { cn } from "@/shared/utils/cn";
 import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
 import { AuthenticatedVideo } from "@/shared/components/AuthenticatedVideo";
 
@@ -32,6 +33,7 @@ interface VisualAttachmentTileProps {
   serverHeight?: number;
   runtimeMetrics?: VisualTileRuntimeMetrics;
   computedRatio: number;
+  centerVideoPlayControl?: boolean;
   onOpen: (attachment: VisualTileAttachment, index: number) => void;
   onDecodedDimensions: (attachmentId: string, naturalWidth: number, naturalHeight: number) => void;
   onDiagnostics: (
@@ -81,6 +83,7 @@ export function VisualAttachmentTile({
   serverHeight,
   runtimeMetrics,
   computedRatio,
+  centerVideoPlayControl = false,
   onOpen,
   onDecodedDimensions,
   onDiagnostics,
@@ -140,23 +143,29 @@ export function VisualAttachmentTile({
               );
             }}
           />
-          <div className="pointer-events-none absolute left-[3px] top-[3px] z-[1]">
-            {durationLabel ? (
-              <span
-                className="inline-flex h-[18px] items-center rounded-full bg-black/25 px-[6px] text-[12px] leading-[18px] font-medium text-white"
-                data-testid={`message-video-duration-${attachment.id}`}
-              >
-                {durationLabel}
-              </span>
-            ) : (
-              <span
-                className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-black/25 text-white"
-                data-testid={`message-video-badge-${attachment.id}`}
-              >
-                <Play className="h-3 w-3 fill-current" />
-              </span>
-            )}
-          </div>
+          {durationLabel ? (
+            <span
+              className={cn(
+                "pointer-events-none absolute left-[3px] top-[3px] z-[1] inline-flex h-[18px] items-center bg-black/25 px-[6px] text-[12px] leading-[18px] font-medium text-white",
+                centerVideoPlayControl ? "rounded-[12px]" : "rounded-full",
+              )}
+              data-testid={`message-video-duration-${attachment.id}`}
+            >
+              {durationLabel}
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "pointer-events-none z-[1] inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-black/25 text-white",
+                centerVideoPlayControl
+                  ? "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+                  : "absolute left-[3px] top-[3px]",
+              )}
+              data-testid={`message-video-badge-${attachment.id}`}
+            >
+              <Play className="h-3 w-3 fill-current" />
+            </span>
+          )}
         </>
       ) : (
         <div

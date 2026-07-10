@@ -370,7 +370,7 @@ describe("MessageItem bubble layout", () => {
           file_size: 2048,
           kind: "photo",
           width: 900,
-          height: 1600,
+          height: 1200,
         },
         sender_id: 1,
         sender_username: "tester",
@@ -387,8 +387,9 @@ describe("MessageItem bubble layout", () => {
 
     expect(bubble).not.toHaveClass("bg-bubble-outgoing");
     expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
-    expect(mediaShell).toHaveStyle({ width: "270px", aspectRatio: "270 / 480" });
+    expect(mediaShell).toHaveStyle({ width: "324px", aspectRatio: "324 / 432" });
     expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
+    expect(screen.getByTestId("message-media-tail")).toHaveClass("right-[-8.8px]");
     expect(metadata).toHaveClass("h-[18px]", "rounded-[10px]", "bg-black/[0.20]", "py-0", "pl-[6px]", "pr-[5px]", "text-white");
     expect(metadata).not.toHaveClass("bg-black/40", "bg-black/60", "rounded-full", "backdrop-blur-[2px]", "shadow-[0_2px_10px_rgba(0,0,0,0.24)]");
     expect(screen.getByText("12:00")).toHaveClass("mr-[4px]", "text-[12px]", "leading-[12px]", "font-normal");
@@ -418,9 +419,10 @@ describe("MessageItem bubble layout", () => {
     const mediaShell = screen.getByTestId("message-media-shell");
     const image = screen.getByTestId("authenticated-image");
 
-    expect(bubble).toHaveClass("overflow-hidden", "bg-transparent", "p-0");
+    expect(bubble).toHaveClass("bg-transparent", "p-0");
+    expect(bubble).not.toHaveClass("overflow-hidden");
     expect(bubble).not.toHaveClass("bg-[#111]");
-    expect(mediaShell).toHaveClass("block", "h-full", "w-full", "overflow-hidden");
+    expect(mediaShell).toHaveClass("relative", "flex", "h-full", "w-full", "items-center", "justify-center", "overflow-hidden");
     expect(mediaShell).not.toHaveClass("rounded-[16px]");
     expect(image).toHaveClass("block", "h-full", "w-full", "object-cover");
   });
@@ -1169,10 +1171,12 @@ describe("MessageItem bubble layout", () => {
 
     expect(contentRect).toContain(mediaShell);
     expect(contentRect).toContain(textContent);
-    expect(mediaFrame).toHaveClass("overflow-hidden", "rounded-t-[15px]", "rounded-b-none");
-    expect(mediaShell).toHaveClass("block", "h-full", "w-full");
-    expect(mediaShell).not.toHaveClass("overflow-hidden", "rounded-t-[15px]");
+    expect(mediaFrame).toHaveClass("overflow-hidden", "rounded-[15px]", "rounded-tr-[15px]", "rounded-bl-[0px]", "rounded-br-[0px]");
+    expect(mediaFrame).toHaveStyle({ width: "480px", aspectRatio: "480 / 270" });
+    expect(mediaShell).toHaveClass("relative", "flex", "h-full", "w-full", "items-center", "justify-center", "overflow-hidden");
+    expect(mediaShell).not.toHaveClass("rounded-t-[15px]");
     expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-media-tail")).toBeInTheDocument();
     expect(screen.getByText("A short caption")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Delivered")).toBeInTheDocument();
@@ -1274,7 +1278,54 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-media-shell")).toBeInTheDocument();
     expect(screen.getByTestId("message-video-tile-media-video-1")).toBeInTheDocument();
+    expect(screen.getByTestId("message-media-shell")).toHaveStyle({ width: "480px", aspectRatio: "480 / 270" });
     expect(screen.getByTestId("message-media-only-overlay")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-media-tail")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-video-badge-media-video-1")).toHaveClass("left-1/2", "top-1/2", "-translate-x-1/2", "-translate-y-1/2");
+  });
+
+  it("renders a portrait video caption with inline metadata and media sizing", () => {
+    renderMessageItem(
+      {
+        content: "First line\nSecond line\nThird line",
+        sender_id: 1,
+        status: "delivered",
+        media_file_id: "media-video-caption",
+        media_mime_type: "video/mp4",
+        attachment: {
+          id: "media-video-caption",
+          url: "/api/v1/media/media-video-caption",
+          mime_type: "video/mp4",
+          original_name: "portrait.mp4",
+          file_size: 4096,
+          kind: "video",
+          width: 900,
+          height: 1200,
+        },
+      },
+      { isOwn: true },
+    );
+
+    const mediaFrame = screen.getByTestId("message-media-shell").parentElement;
+
+    expect(mediaFrame).toHaveStyle({ width: "324px", aspectRatio: "324 / 432" });
+    expect(screen.getByTestId("message-text-inline-metadata")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-media-tail")).toBeInTheDocument();
+    expect(screen.getByTestId("message-text-content")).toHaveTextContent("First line Second line Third line");
+    expect(screen.getByTestId("message-video-badge-media-video-caption")).toHaveClass("left-1/2", "top-1/2");
+
+    const video = screen.getByTestId("message-video-tile-media-video-caption");
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 900 },
+      videoHeight: { configurable: true, value: 1200 },
+      clientWidth: { configurable: true, value: 324 },
+      clientHeight: { configurable: true, value: 432 },
+      duration: { configurable: true, value: 42 },
+    });
+    fireEvent(video, new Event("loadedmetadata"));
+
+    expect(screen.getByTestId("message-video-duration-media-video-caption")).toHaveClass("left-[3px]", "top-[3px]", "rounded-[12px]");
   });
 
   it("opens single video visual bubbles in the in-app video viewer", () => {

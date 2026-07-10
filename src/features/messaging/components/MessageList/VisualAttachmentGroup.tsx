@@ -35,6 +35,7 @@ interface VisualAttachmentGroupProps {
   getPackingRatio: (width?: number, height?: number) => number;
   onOpen: (attachment: VisualTileAttachment, index: number) => void;
   onDecodedDimensions: (attachmentId: string, naturalWidth: number, naturalHeight: number) => void;
+  singleMediaCornerClassName?: string;
   onDiagnostics: (
     attachmentId: string,
     chosenImageSource: string | null,
@@ -72,16 +73,20 @@ export function VisualAttachmentGroup({
   onOpen,
   onDecodedDimensions,
   onDiagnostics,
+  singleMediaCornerClassName,
 }: VisualAttachmentGroupProps) {
+  const isAlbum = attachments.length > 1;
   const tileRadius = isMediaOnly
     ? { top: 15, bottom: 6 }
     : hasCaption
       ? { top: 15, bottom: 0 }
       : { top: 14, bottom: 8 };
   const mediaFrameClassName = hasCaption
-    ? "mb-[6px] mt-[-5px] overflow-hidden rounded-t-[15px] rounded-b-none"
+    ? isAlbum
+      ? "mb-[6px] mt-[-5px] overflow-hidden rounded-t-[15px] rounded-b-none"
+      : "mb-[6px] mt-[-5px] ml-[-8px] mr-[-8px] overflow-hidden rounded-t-[15px] rounded-b-none"
     : "";
-  const mediaFrameOffsetStyle: CSSProperties | undefined = hasCaption
+  const mediaFrameOffsetStyle: CSSProperties | undefined = hasCaption && isAlbum
     ? { transform: "translateX(-8px)" }
     : undefined;
 
@@ -190,9 +195,9 @@ export function VisualAttachmentGroup({
 
   return (
     <div
-      className={mediaFrameClassName}
+      className={cn(mediaFrameClassName, !isAlbum && singleMediaCornerClassName)}
       style={{
-        width: hasCaption ? `${layout.width + 16}px` : undefined,
+        width: hasCaption ? `${layout.width}px` : undefined,
         maxWidth: hasCaption ? "calc(100% + 16px)" : undefined,
         aspectRatio: hasCaption ? `${layout.width} / ${layout.height}` : undefined,
         ...mediaFrameOffsetStyle,
@@ -203,7 +208,10 @@ export function VisualAttachmentGroup({
         attachmentName={attachmentName}
         displaySrc={currentAttachment.displaySrc}
         index={0}
-        buttonClassName={cn("relative block h-full w-full", !hasCaption && "overflow-hidden")}
+        buttonClassName={cn(
+          "relative flex h-full w-full items-center justify-center overflow-hidden",
+          singleMediaCornerClassName,
+        )}
         buttonTestId="message-media-shell"
         buttonStyle={{
           width: !hasCaption ? `${layout.width}px` : undefined,
@@ -216,6 +224,7 @@ export function VisualAttachmentGroup({
         serverHeight={currentAttachment.serverHeight}
         runtimeMetrics={runtimeMetricsByAttachmentId[currentAttachment.attachment.id]}
         computedRatio={getPackingRatio(currentAttachment.width, currentAttachment.height)}
+        centerVideoPlayControl
         onOpen={onOpen}
         onDecodedDimensions={onDecodedDimensions}
         onDiagnostics={onDiagnostics}

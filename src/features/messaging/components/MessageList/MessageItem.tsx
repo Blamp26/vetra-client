@@ -73,6 +73,7 @@ type VisualRuntimeMetrics = MediaRuntimeDiagnostics & {
 };
 
 const MESSAGE_ALBUM_MAX_WIDTH = 480;
+const SINGLE_MEDIA_MAX_HEIGHT = 432;
 const MESSAGE_ALBUM_LAYOUT_OPTIONS = {
   maxWidth: MESSAGE_ALBUM_MAX_WIDTH,
   spacing: 2,
@@ -211,6 +212,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     isVisualMediaMessage &&
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id;
+  const shouldRenderMediaTail =
+    isVisualMediaMessage &&
+    !isVisualAlbum &&
+    (hasText || visualAttachments[0]?.kind === "photo");
   const isTextOnly = hasText && !hasMedia;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
   const resolvedVisualAttachments = React.useMemo<ResolvedVisualAttachment[]>(() => (
@@ -243,8 +248,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       height: currentAttachment.height,
       kind: currentAttachment.attachment.kind === "video" ? "video" as const : "image" as const,
     })),
-    MESSAGE_ALBUM_LAYOUT_OPTIONS,
-  ), [resolvedVisualAttachments]);
+    isVisualAlbum
+      ? MESSAGE_ALBUM_LAYOUT_OPTIONS
+      : { ...MESSAGE_ALBUM_LAYOUT_OPTIONS, maxHeight: SINGLE_MEDIA_MAX_HEIGHT },
+  ), [isVisualAlbum, resolvedVisualAttachments]);
   const hasPendingDecodedVisualDimensions = resolvedVisualAttachments.some(
     (currentAttachment) => currentAttachment.dimensionSource === "fallback",
   );
@@ -526,7 +533,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     </span>
   );
 
-  const renderTextTail = () => {
+  const renderBubbleTail = (testId: string) => {
     if (isGroupedWithNext) return null;
 
     const isLeftFacing = !isOwn || alignmentMode === "left-column";
@@ -542,7 +549,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         fill="none"
         viewBox="0 0 9 18"
         xmlns="http://www.w3.org/2000/svg"
-        data-testid="message-text-tail"
+        data-testid={testId}
       >
         <path
           d="M6 17H0V0c.193 2.84.876 5.767 2.05 8.782.904 2.325 2.446 4.485 4.625 6.48A1 1 0 0 1 6 17Z"
@@ -583,6 +590,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       onOpen={(openedAttachment) => void handleVisualAttachmentOpen(openedAttachment)}
       onDecodedDimensions={handleDecodedVisualDimensions}
       onDiagnostics={handleVisualDiagnostics}
+      singleMediaCornerClassName={
+        isVisualAlbum
+          ? undefined
+          : hasText
+            ? cn(textGroupRadiusClassName, "rounded-bl-[0px] rounded-br-[0px]")
+            : textGroupRadiusClassName
+      }
     />
   );
 
@@ -614,6 +628,41 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     );
   };
 
+  const renderVisualCaption = () => {
+    if (isVisualAlbum) {
+      return (
+        <div className="relative text-[15px] leading-[21px]" data-testid="message-text-content">
+          <span
+            className="pointer-events-none relative float-right mb-0 ml-[7px] mr-0 mt-[2px] inline-flex items-center rounded-[10px] px-[4px]"
+            data-testid="message-text-inline-metadata"
+          >
+            {renderMetadata()}
+          </span>
+          <span className="relative whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            <EmojiText text={msg.content || ""} />
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="relative text-[16px] font-normal leading-[21px] tracking-normal" data-testid="message-text-content">
+        <span
+          className="relative whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:normal]"
+          data-message-content-rect
+        >
+          <EmojiText text={msg.content || ""} />
+        </span>
+        <span
+          className="pointer-events-none relative float-right ml-[7px] mr-[-6px] inline-flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px] top-[6px]"
+          data-testid="message-text-inline-metadata"
+        >
+          {renderMetadata()}
+        </span>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     return (
       <>
@@ -623,26 +672,16 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </>
         )}
         {hasText && !isDocumentAttachment && (
-          isVisualMediaMessage ? (
-            <div className="relative text-[15px] leading-[21px]" data-testid="message-text-content">
-              <span
-                className="pointer-events-none relative float-right mb-0 ml-[7px] mr-0 mt-[2px] inline-flex items-center rounded-[10px] px-[4px]"
-                data-testid="message-text-inline-metadata"
+          isVisualMediaMessage
+            ? renderVisualCaption()
+            : (
+              <div
+                className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]"
+                data-testid="message-text-content"
               >
-                {renderMetadata()}
-              </span>
-              <span className="relative whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                 <EmojiText text={msg.content || ""} />
-              </span>
-            </div>
-          ) : (
-            <div
-              className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]"
-              data-testid="message-text-content"
-            >
-              <EmojiText text={msg.content || ""} />
-            </div>
-          )
+              </div>
+            )
         )}
       </>
     );
@@ -700,7 +739,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           "relative box-border w-fit text-[16px] font-normal leading-[21px] tracking-normal",
           isMediaOnly
             ? cn(
-                "min-w-0 overflow-hidden p-0",
+                "min-w-0 p-0",
+                isVisualAlbum && "overflow-hidden",
                 isVisualAlbum
                   ? "bg-[#111]"
                   : "bg-transparent",
@@ -709,20 +749,23 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   : "rounded-[18px]",
                 isVisualAlbum
                   ? "max-w-[min(480px,calc(100vw-6rem))]"
-                  : "max-w-[min(28rem,calc(100vw-6rem))]",
+                  : "max-w-[min(480px,calc(100vw-6rem))]",
               )
             : isVisualMediaMessage
               ? cn(
-                  "min-w-[11rem] overflow-hidden rounded-[15px] px-2 pb-[6px] pt-[5px]",
+                  isVisualAlbum
+                    ? "min-w-[11rem]"
+                    : "min-w-0",
+                  "rounded-[15px] px-2 pb-[6px] pt-[5px]",
                   isVisualAlbum
                     ? "max-w-[min(480px,calc(100vw-6rem))]"
-                    : "max-w-[min(28rem,calc(100vw-6rem))]",
+                    : "max-w-[min(480px,calc(100vw-6rem))]",
                 )
               : isDocumentAttachment
                 ? "min-w-[13rem] max-w-[min(22rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-2.5"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
-          isTextOnly
+          isTextOnly || (isVisualMediaMessage && !isVisualAlbum)
             ? textGroupRadiusClassName
             : isOwnLeftColumn
               ? cn(
@@ -791,7 +834,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {isTextOnly && renderTextTail()}
+        {isTextOnly && renderBubbleTail("message-text-tail")}
+
+        {shouldRenderMediaTail && renderBubbleTail("message-media-tail")}
 
         {!isTextOnly && !isMediaOnly && !isVisualMediaMessage && !isDocumentAttachment && (
           <div className="mt-1.5 flex justify-end">
