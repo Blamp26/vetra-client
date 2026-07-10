@@ -406,7 +406,7 @@ describe("MessageItem bubble layout", () => {
     const metadata = screen.getByTestId("message-metadata");
     const mediaShell = screen.getByTestId("message-media-shell");
 
-    expect(bubble).not.toHaveClass("bg-bubble-outgoing");
+    expect(bubble).toHaveClass("bg-bubble-outgoing", "overflow-visible");
     expect(bubble).toHaveStyle({ width: "324px" });
     expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
     expect(mediaShell).toHaveStyle({ width: "324px", aspectRatio: "324 / 432" });
@@ -444,7 +444,7 @@ describe("MessageItem bubble layout", () => {
     const mediaShell = screen.getByTestId("message-media-shell");
     const image = screen.getByTestId("authenticated-image");
 
-    expect(bubble).toHaveClass("bg-transparent", "p-0");
+    expect(bubble).toHaveClass("bg-bubble-incoming", "p-0", "overflow-visible");
     expect(bubble).not.toHaveClass("overflow-hidden");
     expect(bubble).not.toHaveClass("bg-[#111]");
     expect(mediaShell).toHaveClass("relative", "flex", "h-full", "w-full", "items-center", "justify-center", "overflow-hidden");
@@ -1362,7 +1362,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-media-shell")).toHaveStyle({ width: "480px", aspectRatio: "480 / 270" });
     expect(screen.getByTestId("message-bubble")).toHaveStyle({ width: "480px" });
     expect(screen.getByTestId("message-media-only-overlay")).toBeInTheDocument();
-    expect(screen.queryByTestId("message-media-tail")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-media-tail")).toBeInTheDocument();
     expect(screen.getByTestId("message-video-badge-media-video-1")).toHaveClass("left-1/2", "top-1/2", "-translate-x-1/2", "-translate-y-1/2");
   });
 
@@ -1468,6 +1468,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-file-row")).toHaveAttribute("role", "button");
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(bubble).toContainElement(screen.getByTestId("message-metadata"));
+    expect(screen.getByTestId("message-text-tail")).toBeInTheDocument();
   });
 
   it("renders outgoing document bubbles with the same solid color as text bubbles, not a pale tint", () => {

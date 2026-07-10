@@ -89,12 +89,13 @@ function getBubbleCornerClassName(
   alignmentMode: "split" | "left-column",
   isConsecutive: boolean,
   isGroupedWithNext: boolean,
+  hasTail: boolean,
 ) {
   const isLeftFacing = !isOwn || alignmentMode === "left-column";
-  const topTailRadius = isGroupedWithNext && isConsecutive ? "rounded-tl-[6px]" : "rounded-tl-[15px]";
-  const bottomTailRadius = isGroupedWithNext ? "rounded-bl-[6px]" : "rounded-bl-[0px]";
-  const rightTopTailRadius = isGroupedWithNext && isConsecutive ? "rounded-tr-[6px]" : "rounded-tr-[15px]";
-  const rightBottomTailRadius = isGroupedWithNext ? "rounded-br-[6px]" : "rounded-br-[0px]";
+  const topTailRadius = !hasTail && isGroupedWithNext && isConsecutive ? "rounded-tl-[6px]" : "rounded-tl-[15px]";
+  const bottomTailRadius = hasTail ? "rounded-bl-[0px]" : isGroupedWithNext ? "rounded-bl-[6px]" : "rounded-bl-[15px]";
+  const rightTopTailRadius = !hasTail && isGroupedWithNext && isConsecutive ? "rounded-tr-[6px]" : "rounded-tr-[15px]";
+  const rightBottomTailRadius = hasTail ? "rounded-br-[0px]" : isGroupedWithNext ? "rounded-br-[6px]" : "rounded-br-[15px]";
 
   return cn(
     "rounded-[15px]",
@@ -213,12 +214,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     isVisualMediaMessage &&
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id;
-  const shouldRenderMediaTail =
-    isVisualMediaMessage &&
-    !isGroupedWithNext &&
-    (isVisualAlbum || hasText || visualAttachments[0]?.kind === "photo");
   const isTextOnly = hasText && !hasMedia;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
+  const shouldRenderTail =
+    !isGroupedWithNext && (isTextOnly || isDocumentAttachment || isVisualMediaMessage);
   const resolvedVisualAttachments = React.useMemo<ResolvedVisualAttachment[]>(() => (
     visualAttachments.map((currentAttachment) => {
       const serverDimensions = getAttachmentIntrinsicSize(currentAttachment);
@@ -270,6 +269,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     alignmentMode,
     isConsecutive,
     isGroupedWithNext,
+    shouldRenderTail,
   );
 
   React.useEffect(() => {
@@ -714,7 +714,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "relative box-border w-fit text-[16px] font-normal leading-[21px] tracking-normal",
+          "relative box-border w-fit overflow-visible text-[16px] font-normal leading-[21px] tracking-normal",
           isMediaOnly
             ? cn(
                 "min-w-0 p-0",
@@ -758,7 +758,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           isMediaOnly
             ? isVisualAlbum
               ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
-              : "bg-transparent text-white"
+              : isVisualMediaMessage
+                ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
+                : "bg-transparent text-white"
             : isVisualMediaMessage
               ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
               : isDocumentAttachment
@@ -806,9 +808,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {isTextOnly && renderBubbleTail("message-text-tail")}
+        {(isTextOnly || isDocumentAttachment) && renderBubbleTail("message-text-tail")}
 
-        {shouldRenderMediaTail && renderBubbleTail("message-media-tail")}
+        {isVisualMediaMessage && renderBubbleTail("message-media-tail")}
 
         {!isTextOnly && !isMediaOnly && !isVisualMediaMessage && !isDocumentAttachment && (
           <div className="mt-1.5 flex justify-end">
