@@ -741,7 +741,7 @@ describe("MessageItem bubble layout", () => {
 
     expect(album).toBeInTheDocument();
     expect(album).toHaveClass("relative", "overflow-hidden", "border-0", "p-0", "rounded-[15px]", "rounded-br-[0px]");
-    expect(screen.getByTestId("message-bubble")).toHaveClass("bg-transparent", "p-0", "rounded-none");
+    expect(screen.getByTestId("message-bubble")).toHaveClass("bg-bubble-outgoing", "p-0", "rounded-br-[0px]");
     expect(screen.getByTestId("message-bubble").className).not.toMatch(/shadow|filter/);
     expect(album.getAttribute("style")).toContain("aspect-ratio");
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(9);
@@ -755,6 +755,50 @@ describe("MessageItem bubble layout", () => {
     expect(tile0).toHaveClass("border-0", "p-0", "overflow-hidden");
     expect(screen.getByTestId("message-media-tail")).toBeInTheDocument();
     expect(screen.getByTestId("message-media-tail").parentElement).toBe(screen.getByTestId("message-bubble"));
+  });
+
+  it("restores the visible incoming album bubble surface", () => {
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "incoming-album-1",
+            url: "/api/v1/media/incoming-album-1",
+            mime_type: "image/jpeg",
+            original_name: "incoming-album-1.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 1600,
+            height: 900,
+          },
+          {
+            id: "incoming-album-2",
+            url: "/api/v1/media/incoming-album-2",
+            mime_type: "image/jpeg",
+            original_name: "incoming-album-2.jpg",
+            file_size: 2048,
+            kind: "photo",
+            width: 900,
+            height: 1200,
+          },
+        ],
+        media_file_ids: ["incoming-album-1", "incoming-album-2"],
+        media_mime_types: ["image/jpeg", "image/jpeg"],
+        sender_id: 2,
+        sender_username: "alice",
+        sender_display_name: "Alice",
+        status: "read",
+      },
+      { isOwn: false },
+    );
+
+    const bubble = screen.getByTestId("message-bubble");
+    const album = screen.getByTestId("message-photo-collage");
+
+    expect(bubble).toHaveClass("bg-bubble-incoming", "p-0");
+    expect(bubble).not.toHaveClass("bg-transparent", "rounded-none");
+    expect(album).toHaveClass("overflow-hidden", "rounded-[15px]");
+    expect(screen.getByTestId("message-media-tail")).toBeInTheDocument();
   });
 
   it("renders grouped photo and video attachments as one visual album", () => {

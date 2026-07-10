@@ -730,9 +730,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           isMediaOnly
             ? cn(
                 "min-w-0 p-0",
-                "bg-transparent",
                 isVisualAlbum
-                  ? "rounded-none"
+                  ? "rounded-[15px]"
                   : "rounded-[18px]",
                 isVisualAlbum
                   ? "max-w-[min(480px,calc(100vw-6rem))]"
@@ -752,7 +751,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 ? "min-w-[13rem] max-w-[min(22rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-2.5"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
-          isTextOnly || (isVisualMediaMessage && (!isVisualAlbum || hasText))
+          isTextOnly || isVisualMediaMessage
             ? textGroupRadiusClassName
             : isOwnLeftColumn
               ? cn(
@@ -769,7 +768,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   isGroupedWithNext && "rounded-bl-[12px]",
                 ),
           isMediaOnly
-            ? "text-white"
+            ? isVisualAlbum
+              ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
+              : "bg-transparent text-white"
             : isVisualMediaMessage
               ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
               : isDocumentAttachment
