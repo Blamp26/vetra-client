@@ -370,7 +370,7 @@ export function ChatWindow({ activeChat, call }: Props) {
         data-testid="message-list-region"
       >
         <MessageList
-          key={chatId}
+          key={`${activeChat.type}:${chatId}`}
           messages={messages}
           currentUserId={currentUser.id}
           isLoading={isLoading}

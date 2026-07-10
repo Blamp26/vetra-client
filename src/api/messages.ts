@@ -4,6 +4,7 @@ import { Message, ConversationPreview, ResourceRef } from '@/shared/types';
 export interface ConversationParams {
   limit?:    number;
   beforeId?: number;
+  signal?: AbortSignal;
 }
 
 export const messagesApi = {
@@ -15,7 +16,9 @@ export const messagesApi = {
     if (params.beforeId !== undefined) {
       searchParams.set("before_id", String(params.beforeId));
     }
-    return get<Message[]>(`/conversations/${otherUserRef}?${searchParams}`);
+    return get<Message[]>(`/conversations/${otherUserRef}?${searchParams}`, {
+      signal: params.signal,
+    });
   },
 
   getList(): Promise<ConversationPreview[]> {

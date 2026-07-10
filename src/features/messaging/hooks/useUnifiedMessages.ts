@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo } from "react";
+import { useEffect, useCallback, useMemo, useRef } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { messagesApi } from "@/api/messages";
 import { roomsApi } from "@/api/rooms";
@@ -125,16 +125,17 @@ export function useUnifiedMessages(context: ChatContext | null) {
   }, [contextType, roomId, directPartnerId, roomConversations, conversations]);
 
   const fetchPage = useCallback(
-    (limit: number, beforeId?: number) => {
+    (limit: number, beforeId?: number, signal?: AbortSignal) => {
       if (!id || !currentUser || !contextType) return Promise.resolve([]);
       if (contextType === "room" && roomId !== null) {
-        return roomsApi.getMessages(roomTargetRef ?? roomId, limit, beforeId);
+        return roomsApi.getMessages(roomTargetRef ?? roomId, limit, beforeId, signal);
       } else {
         return messagesApi.getConversation(
           directTargetRef ?? directPartnerId!,
           {
             limit,
             beforeId,
+            signal,
           },
         );
       }
@@ -198,11 +199,28 @@ export function useUnifiedMessages(context: ChatContext | null) {
     conversationKey,
   );
 
+  const markedReadKeysRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (contextType !== "direct" || directPartnerId === null) return;
+    const readKey = `direct:${directPartnerId}`;
+
+    return () => {
+      markedReadKeysRef.current.delete(readKey);
+    };
+  }, [contextType, directPartnerId]);
+
   // Effect for read status and joining room channels
   useEffect(() => {
     if (!id || !socketManager || !contextType) return;
 
     if (contextType === "direct" && directPartnerId !== null) {
+      const readKey = `direct:${directPartnerId}`;
+      if (isLoading || messages.length === 0 || markedReadKeysRef.current.has(readKey)) {
+        return;
+      }
+
+      markedReadKeysRef.current.add(readKey);
       markReadViaChannel(
         socketManager.userChannel,
         directTargetRef ?? directPartnerId,
@@ -259,6 +277,8 @@ export function useUnifiedMessages(context: ChatContext | null) {
     directPartnerId,
     roomId,
     directTargetRef,
+    isLoading,
+    messages.length,
     roomTargetRef,
     roomIsServer,
     resetUnread,

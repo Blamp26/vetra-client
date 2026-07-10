@@ -14,11 +14,11 @@ export const roomsApi = {
     return get<RoomPreview[]>("/rooms");
   },
 
-  getMessages(roomRef: ResourceRef, limit?: number, beforeId?: number): Promise<Message[]> {
+  getMessages(roomRef: ResourceRef, limit?: number, beforeId?: number, signal?: AbortSignal): Promise<Message[]> {
     const params = new URLSearchParams();
     if (limit !== undefined) params.set("limit", String(limit));
     if (beforeId !== undefined) params.set("before_id", String(beforeId));
-    return get<Message[]>(`/rooms/${roomRef}/messages?${params}`);
+    return get<Message[]>(`/rooms/${roomRef}/messages?${params}`, { signal });
   },
 
   search(roomRef: ResourceRef, query: string): Promise<Message[]> {

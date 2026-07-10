@@ -1,10 +1,16 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useAppStoreMock, markReadViaChannelMock, sendMessageViaChannelMock } = vi.hoisted(() => ({
+const {
+  useAppStoreMock,
+  markReadViaChannelMock,
+  sendMessageViaChannelMock,
+  useMessagePaginationMock,
+} = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
   markReadViaChannelMock: vi.fn(),
   sendMessageViaChannelMock: vi.fn(),
+  useMessagePaginationMock: vi.fn(),
 }));
 
 vi.mock("@/store", () => ({
@@ -30,12 +36,7 @@ vi.mock("@/services/socket", () => ({
 }));
 
 vi.mock("@/shared/hooks/useMessagePagination", () => ({
-  useMessagePagination: () => ({
-    messages: [],
-    isLoading: false,
-    hasMore: false,
-    loadMore: vi.fn(),
-  }),
+  useMessagePagination: useMessagePaginationMock,
 }));
 
 import { useUnifiedMessages } from "./useUnifiedMessages";
@@ -104,6 +105,13 @@ describe("useUnifiedMessages", () => {
     useAppStoreMock.mockReset();
     markReadViaChannelMock.mockReset();
     sendMessageViaChannelMock.mockReset();
+    useMessagePaginationMock.mockReset();
+    useMessagePaginationMock.mockReturnValue({
+      messages: [{ id: 10, content: "loaded" }],
+      isLoading: false,
+      hasMore: false,
+      loadMore: vi.fn(),
+    });
   });
 
   it("does not re-run direct chat read reset when preview unread_count changes only", () => {
@@ -135,6 +143,38 @@ describe("useUnifiedMessages", () => {
     };
 
     rerender({ context: { type: "direct" as const, partnerId: 2 } });
+
+    expect(markReadViaChannelMock).toHaveBeenCalledTimes(1);
+    expect(state.resetUnread).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a direct conversation read once after its initial messages load", () => {
+    const state = makeState();
+    const paginationState = {
+      messages: [] as Array<{ id: number; content: string }>,
+      isLoading: true,
+      hasMore: false,
+      loadMore: vi.fn(),
+    };
+    useMessagePaginationMock.mockImplementation(() => paginationState);
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    const { rerender } = renderHook(() =>
+      useUnifiedMessages({ type: "direct", partnerId: 2, partnerRef: "user-public-id" }),
+    );
+
+    expect(markReadViaChannelMock).not.toHaveBeenCalled();
+
+    paginationState.messages = [{ id: 10, content: "loaded" }];
+    paginationState.isLoading = false;
+    rerender();
+
+    expect(markReadViaChannelMock).toHaveBeenCalledTimes(1);
+    expect(state.resetUnread).toHaveBeenCalledTimes(1);
+
+    rerender();
 
     expect(markReadViaChannelMock).toHaveBeenCalledTimes(1);
     expect(state.resetUnread).toHaveBeenCalledTimes(1);

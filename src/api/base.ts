@@ -109,8 +109,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return unwrapApiResponse<T>(data);
 }
 
-export function get<T>(path: string): Promise<T> {
-  return request<T>(path, { method: "GET" });
+export function get<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return request<T>(path, { method: "GET", ...options });
 }
 
 export function post<T>(path: string, body: unknown): Promise<T> {
