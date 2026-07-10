@@ -742,6 +742,9 @@ describe("MessageList bubble layout", () => {
     const rows = screen.getAllByTestId("message-row-spacing");
     expect(rows[1]).toHaveAttribute("data-attachment-run", "true");
     expect(rows[1]).toHaveClass("mt-0.5");
+    const bubbles = screen.getAllByTestId("message-bubble");
+    expect(within(bubbles[0]).queryByTestId("message-text-tail")).not.toBeInTheDocument();
+    expect(within(bubbles[1]).getByTestId("message-text-tail")).toBeInTheDocument();
   });
 
   it("uses six-pixel grouped spacing when a consecutive message has no attachment", () => {

@@ -1487,7 +1487,7 @@ describe("MessageItem bubble layout", () => {
     expect(attachmentDownloads.openAttachmentWithAuth).not.toHaveBeenCalled();
   });
 
-  it("renders PDF attachments as a compact file row with in-bubble metadata", () => {
+  it("matches Telegram's compact outgoing PDF document geometry", () => {
     renderMessageItem({
       media_file_id: "media-file-1",
       media_mime_type: "application/pdf",
@@ -1495,24 +1495,69 @@ describe("MessageItem bubble layout", () => {
         id: "media-file-1",
         url: "/api/v1/media/media-file-1",
         mime_type: "application/pdf",
-        original_name: "report.pdf",
-        file_size: 5678,
+        original_name: "Lection 3. JS (1).pdf",
+        file_size: 12 * 1024 * 1024,
+        kind: "file",
+      },
+      sender_id: 1,
+      status: "sent",
+    }, { isOwn: true });
+
+    const bubble = screen.getByTestId("message-bubble");
+    const fileRow = screen.getByTestId("message-file-row");
+    const iconContainer = screen.getByTestId("message-file-icon-container");
+    const fileIcon = screen.getByTestId("message-file-icon");
+    const fileInfo = screen.getByTestId("message-file-info");
+    const metadata = screen.getByTestId("message-document-inline-metadata");
+
+    expect(bubble).toHaveClass("w-fit", "max-w-[min(480px,calc(100vw-6rem))]", "px-2", "pt-[5px]", "pb-[6px]");
+    expect(bubble).toHaveClass("rounded-[15px]", "rounded-tr-[15px]", "rounded-br-[0px]");
+    expect(bubble).not.toHaveClass("border", "border-transparent", "border-border");
+    expect(bubble).toHaveStyle({
+      "--message-surface-color": "var(--bubble-outgoing)",
+      backgroundColor: "var(--message-surface-color)",
+    });
+    expect(fileRow).toHaveClass("relative", "flex", "items-center", "w-[224px]", "min-w-[224px]", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
+    expect(fileRow).not.toHaveClass("border", "rounded-full", "rounded-[6px]");
+    expect(iconContainer).toHaveClass("relative", "w-[54px]", "h-[54px]", "mr-[12px]", "shrink-0");
+    expect(fileIcon).toHaveClass("w-[54px]", "h-[54px]", "flex", "items-end", "justify-center", "px-[12px]", "pt-[16px]", "pb-[8px]", "rounded-[6px]");
+    expect(screen.getByText("pdf")).toHaveClass("text-[16px]", "font-medium", "leading-[24px]", "text-white");
+    expect(screen.getByText("Lection 3. JS (1).pdf")).toHaveAttribute("title", "Lection 3. JS (1).pdf");
+    expect(fileInfo).toHaveClass("flex-1", "min-w-0", "h-[39px]", "mt-[3px]", "mr-[2px]", "overflow-hidden", "whitespace-nowrap");
+    expect(screen.getByTestId("message-file-name")).toHaveClass("truncate", "text-[16px]", "font-medium", "leading-[24px]");
+    expect(screen.getByTestId("message-file-size")).toHaveTextContent("12.0MB");
+    expect(screen.getByTestId("message-file-size")).toHaveClass("truncate", "text-[14px]", "font-normal", "leading-[15px]");
+    const downloadButton = screen.getByRole("button", { name: "Download" });
+    expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "opacity-0", "bg-transparent");
+    expect(downloadButton.querySelector("svg")).toHaveClass("h-6", "w-6");
+    expect(fileRow).toHaveAttribute("role", "button");
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(bubble).toContainElement(screen.getByTestId("message-metadata"));
+    expect(metadata).toHaveClass("relative", "flex", "items-center", "h-[20px]", "top-[8px]", "mt-[-20px]", "mr-[-6px]", "mb-0", "ml-[7px]", "px-[4px]", "bg-transparent");
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+    expect(screen.getByTestId("message-text-tail")).toBeInTheDocument();
+  });
+
+  it("uses the same compact document geometry for incoming files without outgoing status", () => {
+    renderMessageItem({
+      media_file_id: "incoming-document",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "incoming-document",
+        url: "/api/v1/media/incoming-document",
+        mime_type: "application/pdf",
+        original_name: "incoming.pdf",
+        file_size: 12 * 1024 * 1024,
         kind: "file",
       },
     });
 
     const bubble = screen.getByTestId("message-bubble");
-
-    expect(screen.getByTestId("message-file-row")).toBeInTheDocument();
-    expect(screen.getByText("report.pdf")).toBeInTheDocument();
-    expect(screen.getByText("PDF · 5.5 KB")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Download" }),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("message-file-row")).toHaveAttribute("role", "button");
-    expect(screen.getByText("12:00")).toBeInTheDocument();
-    expect(bubble).toContainElement(screen.getByTestId("message-metadata"));
-    expect(screen.getByTestId("message-text-tail")).toBeInTheDocument();
+    expect(bubble).toHaveClass("bg-bubble-incoming", "px-2", "pt-[5px]", "pb-[6px]");
+    expect(screen.getByTestId("message-file-row")).toHaveClass("w-[224px]", "min-w-[224px]", "h-[54px]");
+    expect(screen.getByTestId("message-file-size")).toHaveTextContent("12.0MB");
+    expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-text-tail")).toHaveClass("left-[-9px]", "bottom-[-1px]");
   });
 
   it("renders outgoing document bubbles with the same solid color as text bubbles, not a pale tint", () => {
@@ -1560,7 +1605,7 @@ describe("MessageItem bubble layout", () => {
 
     expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
     expect(fileRow).toHaveAttribute("role", "button");
-    expect(downloadButton).toHaveClass("absolute", "inset-0", "rounded-[6px]");
+    expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "opacity-0");
     expect(downloadButton.textContent).toBe("");
     expect(iconContainer).toContainElement(downloadButton);
   });
@@ -1607,7 +1652,7 @@ describe("MessageItem bubble layout", () => {
     });
 
     expect(screen.getByText("File")).toBeInTheDocument();
-    expect(screen.getByText("PDF · Unknown size")).toBeInTheDocument();
+    expect(screen.getByText("Unknown size")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Download" }),
     ).toBeInTheDocument();
@@ -1628,7 +1673,11 @@ describe("MessageItem bubble layout", () => {
       },
     });
 
-    expect(screen.getByTestId("message-file-name")).toHaveClass("truncate");
+    expect(screen.getByTestId("message-file-name")).toHaveClass("truncate", "whitespace-nowrap");
+    expect(screen.getByTestId("message-file-name")).toHaveAttribute(
+      "title",
+      "very-long-quarterly-financial-report-final-final-approved-version-2026.pdf",
+    );
   });
 
   it("keeps timestamp and status visible for long outgoing text messages", () => {

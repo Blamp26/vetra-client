@@ -210,6 +210,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const isVisualMediaMessage = visualAttachments.length > 0;
   const isVisualAlbum = visualAttachments.length > 1;
   const isDocumentAttachment = attachments.length > 0 && !isVisualMediaMessage;
+  const isSingleDocumentAttachment = attachments.length === 1 && isDocumentAttachment;
   const isMediaOnly =
     isVisualMediaMessage &&
     (!msg.content || msg.content.trim().length === 0) &&
@@ -604,6 +605,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         <DocumentAttachmentRow
           attachment={attachment}
           isOwn={isOwn}
+          isCompact={isSingleDocumentAttachment}
           isActionPending={isAttachmentActionPending}
           onOpen={() => void handleAttachmentAction("open")}
           onDownload={() => void handleAttachmentAction("download")}
@@ -615,7 +617,16 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        <div className="mt-1 flex justify-end">{renderMetadata()}</div>
+        {isSingleDocumentAttachment && !hasText && (
+          <span
+            className="relative float-right top-[8px] mt-[-20px] mr-[-6px] mb-0 ml-[7px] flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px]"
+            data-testid="message-document-inline-metadata"
+          >
+            {renderMetadata()}
+          </span>
+        )}
+
+        {(!isSingleDocumentAttachment || hasText) && <div className="mt-1 flex justify-end">{renderMetadata()}</div>}
 
         {attachmentActionError && (
           <div className="mt-1.5 text-[10px] text-destructive">
@@ -734,11 +745,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                     ? "max-w-[min(480px,calc(100vw-6rem))]"
                     : "max-w-[min(480px,calc(100vw-6rem))]",
                 )
-              : isDocumentAttachment
-                ? "min-w-[13rem] max-w-[min(22rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-2.5"
+              : isSingleDocumentAttachment
+                ? "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
-          isTextOnly || isVisualMediaMessage
+          isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment
             ? textGroupRadiusClassName
             : isOwnLeftColumn
               ? cn(
@@ -765,8 +776,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               : isDocumentAttachment
                 ? (
                     isOwn
-                      ? "border-transparent bg-bubble-outgoing text-bubble-outgoing-text"
-                      : "border-border bg-bubble-incoming text-bubble-incoming-text"
+                      ? "bg-bubble-outgoing text-bubble-outgoing-text"
+                      : "bg-bubble-incoming text-bubble-incoming-text"
                   )
                 : (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text"),
         )}
