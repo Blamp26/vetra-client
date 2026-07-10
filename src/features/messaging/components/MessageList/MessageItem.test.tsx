@@ -170,6 +170,11 @@ describe("MessageItem bubble layout", () => {
     expect(bubble).toHaveClass("pt-[5px]");
     expect(bubble).toHaveClass("pb-[6px]");
     expect(bubble).toHaveClass("bg-bubble-incoming");
+    expect(bubble).toHaveClass("relative", "overflow-visible");
+    expect(bubble).toHaveStyle({
+      "--message-surface-color": "var(--bubble-incoming)",
+      backgroundColor: "var(--message-surface-color)",
+    });
     expect(bubble).not.toHaveClass("flex-1");
     expect(bubble.className).not.toMatch(/shadow|drop-shadow|filter/);
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
@@ -177,15 +182,46 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
     const tail = screen.getByTestId("message-text-tail");
-    expect(tail).toHaveClass("left-[-9px]", "bottom-[-1px]", "block", "h-[18px]", "w-[9px]", "overflow-hidden");
+    expect(tail).toHaveClass(
+      "left-[-9px]",
+      "right-auto",
+      "bottom-[-1px]",
+      "block",
+      "box-border",
+      "h-[18px]",
+      "w-[9px]",
+      "m-0",
+      "p-0",
+      "overflow-hidden",
+      "border-0",
+      "rounded-none",
+      "transform-none",
+      "opacity-100",
+    );
+    expect(tail.parentElement).toBe(bubble);
     expect(tail).toHaveAttribute("width", "9");
     expect(tail).toHaveAttribute("height", "20");
-    expect(tail).toHaveAttribute("viewBox", "0 0 9 20");
-    expect(tail.querySelector("path")).toHaveAttribute("d", "M3 17h6V0c-.193 2.84-.876 5.767-2.05 8.782-.904 2.325-2.446 4.485-4.625 6.48A1 1 0 003 17z");
-    expect(tail.querySelector("path")).toHaveAttribute("fill", "var(--bubble-incoming)");
-    expect(tail.querySelector("polygon, filter")).toBeNull();
-    expect(tail.getAttribute("class") ?? "").not.toMatch(/shadow|drop-shadow|filter|transform|scale/);
-    expect(tail).not.toHaveAttribute("filter");
+    expect(tail).not.toHaveAttribute("viewBox");
+    const paths = tail.querySelectorAll("path");
+    expect(paths).toHaveLength(2);
+    expect(paths[0]).toHaveAttribute("d", "M3 17h6V0c-.193 2.84-.876 5.767-2.05 8.782-.904 2.325-2.446 4.485-4.625 6.48A1 1 0 003 17z");
+    expect(paths[0]).toHaveAttribute("fill", "#000");
+    expect(paths[0]).toHaveAttribute("filter");
+    expect(tail.querySelector("filter")).toMatchObject({
+      id: expect.any(String),
+    });
+    expect(tail.querySelector("filter")).toHaveAttribute("x", "-50%");
+    expect(tail.querySelector("filter")).toHaveAttribute("y", "-14.7%");
+    expect(tail.querySelector("filter")).toHaveAttribute("width", "200%");
+    expect(tail.querySelector("filter")).toHaveAttribute("height", "141.2%");
+    expect(tail.querySelector("filter")).toHaveAttribute("filterUnits", "objectBoundingBox");
+    expect(tail.querySelector("feOffset")).toHaveAttribute("dy", "1");
+    expect(tail.querySelector("feGaussianBlur")).toHaveAttribute("stdDeviation", "1");
+    expect(tail.querySelector("feColorMatrix")).toHaveAttribute("values", "0 0 0 0 0.0621962482 0 0 0 0 0.138574144 0 0 0 0 0.185037364 0 0 0 0.15 0");
+    expect(paths[1]).toHaveAttribute("d", "M3 17h6V0c-.193 2.84-.876 5.767-2.05 8.782-.904 2.325-2.446 4.485-4.625 6.48A1 1 0 003 17z");
+    expect(paths[1]).toHaveClass("corner");
+    expect(paths[1]).toHaveAttribute("fill", "var(--message-surface-color)");
+    expect(paths[1]).not.toHaveAttribute("fill", "currentColor");
     expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
   });
@@ -213,6 +249,11 @@ describe("MessageItem bubble layout", () => {
     expect(bubble).toHaveClass("min-w-0");
     expect(bubble).toHaveClass("max-w-[min(480px,calc(100vw-6rem))]");
     expect(bubble).toHaveClass("bg-bubble-outgoing");
+    expect(bubble).toHaveClass("relative", "overflow-visible");
+    expect(bubble).toHaveStyle({
+      "--message-surface-color": "var(--bubble-outgoing)",
+      backgroundColor: "var(--message-surface-color)",
+    });
     expect(bubble).toHaveClass("rounded-br-[0px]");
     expect(bubble).not.toHaveClass("flex-1");
     expect(bubble.className).not.toMatch(/shadow|drop-shadow|filter/);
@@ -226,15 +267,19 @@ describe("MessageItem bubble layout", () => {
     expect(sentIcon).toHaveAttribute("viewBox", "0 0 19 19");
     expect(sentIcon.querySelectorAll("path")).toHaveLength(1);
     const tail = screen.getByTestId("message-text-tail");
-    expect(tail).toHaveClass("right-[-9px]", "bottom-[-1px]", "block", "h-[18px]", "w-[9px]", "overflow-hidden");
+    expect(tail).toHaveClass("right-[-9px]", "left-auto", "bottom-[-1px]", "block", "box-border", "h-[18px]", "w-[9px]", "m-0", "p-0", "overflow-hidden", "border-0", "rounded-none", "transform-none", "opacity-100");
+    expect(tail.parentElement).toBe(bubble);
     expect(tail).toHaveAttribute("width", "9");
     expect(tail).toHaveAttribute("height", "20");
-    expect(tail).toHaveAttribute("viewBox", "0 0 9 20");
-    expect(tail.querySelector("path")).toHaveAttribute("d", "M6 17H0V0c.193 2.84.876 5.767 2.05 8.782.904 2.325 2.446 4.485 4.625 6.48A1 1 0 016 17z");
-    expect(tail.querySelector("path")).toHaveAttribute("fill", "var(--bubble-outgoing)");
-    expect(tail.querySelector("polygon, filter")).toBeNull();
-    expect(tail.getAttribute("class") ?? "").not.toMatch(/shadow|drop-shadow|filter|transform|scale/);
-    expect(tail).not.toHaveAttribute("filter");
+    expect(tail).not.toHaveAttribute("viewBox");
+    const paths = tail.querySelectorAll("path");
+    expect(paths).toHaveLength(2);
+    expect(paths[0]).toHaveAttribute("d", "M6 17H0V0c.193 2.84.876 5.767 2.05 8.782.904 2.325 2.446 4.485 4.625 6.48A1 1 0 016 17z");
+    expect(paths[0]).toHaveAttribute("fill", "#000");
+    expect(paths[0]).toHaveAttribute("filter");
+    expect(paths[1]).toHaveAttribute("d", "M6 17H0V0c.193 2.84.876 5.767 2.05 8.782.904 2.325 2.446 4.485 4.625 6.48A1 1 0 016 17z");
+    expect(paths[1]).toHaveAttribute("fill", "var(--message-surface-color)");
+    expect(paths[1]).not.toHaveAttribute("fill", "currentColor");
     expect(screen.getByLabelText("Sent")).toBeInTheDocument();
   });
 
@@ -351,7 +396,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[6px]", "rounded-br-[6px]");
   });
 
-  it("uses full external corners on the last outgoing text bubble in a group", () => {
+  it("keeps the grouped top corner on the last outgoing text bubble while opening its tail corner", () => {
     renderMessageItem(
       {
         content: "Last",
@@ -363,8 +408,7 @@ describe("MessageItem bubble layout", () => {
       { isOwn: true, isConsecutive: true, isGroupedWithNext: false },
     );
 
-    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[15px]", "rounded-br-[0px]");
-    expect(screen.getByTestId("message-bubble")).not.toHaveClass("rounded-tr-[6px]");
+    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[6px]", "rounded-br-[0px]");
   });
 
   it("applies mirrored grouped corner geometry to incoming text bubbles", () => {

@@ -765,8 +765,7 @@ describe("MessageList bubble layout", () => {
 
     const bubbles = screen.getAllByTestId("message-bubble");
     expect(bubbles[0]).toHaveClass("rounded-bl-[6px]");
-    expect(bubbles[1]).toHaveClass("rounded-tl-[15px]", "rounded-bl-[0px]");
-    expect(bubbles[1]).not.toHaveClass("rounded-tl-[6px]");
+    expect(bubbles[1]).toHaveClass("rounded-tl-[6px]", "rounded-bl-[0px]");
   });
 
   it("keeps grouped corners on the middle outgoing bubble and full corners on its tail bubble", () => {
@@ -777,8 +776,7 @@ describe("MessageList bubble layout", () => {
 
     const bubbles = screen.getAllByTestId("message-bubble");
     expect(bubbles[0]).toHaveClass("rounded-br-[6px]");
-    expect(bubbles[1]).toHaveClass("rounded-tr-[15px]", "rounded-br-[0px]");
-    expect(bubbles[1]).not.toHaveClass("rounded-tr-[6px]");
+    expect(bubbles[1]).toHaveClass("rounded-tr-[6px]", "rounded-br-[0px]");
   });
 
   it("uses middle group corners without rendering a tail", () => {

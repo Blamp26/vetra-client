@@ -92,9 +92,9 @@ function getBubbleCornerClassName(
   hasTail: boolean,
 ) {
   const isLeftFacing = !isOwn || alignmentMode === "left-column";
-  const topTailRadius = !hasTail && isGroupedWithNext && isConsecutive ? "rounded-tl-[6px]" : "rounded-tl-[15px]";
+  const topTailRadius = isConsecutive ? "rounded-tl-[6px]" : "rounded-tl-[15px]";
   const bottomTailRadius = hasTail ? "rounded-bl-[0px]" : isGroupedWithNext ? "rounded-bl-[6px]" : "rounded-bl-[15px]";
-  const rightTopTailRadius = !hasTail && isGroupedWithNext && isConsecutive ? "rounded-tr-[6px]" : "rounded-tr-[15px]";
+  const rightTopTailRadius = isConsecutive ? "rounded-tr-[6px]" : "rounded-tr-[15px]";
   const rightBottomTailRadius = hasTail ? "rounded-br-[0px]" : isGroupedWithNext ? "rounded-br-[6px]" : "rounded-br-[15px]";
 
   return cn(
@@ -547,9 +547,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     if (isGroupedWithNext) return null;
 
     const isLeftFacing = !isOwn || alignmentMode === "left-column";
-    const bubbleColor = isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)";
 
-    return <MessageTail side={isLeftFacing ? "left" : "right"} color={bubbleColor} testId={testId} />;
+    return <MessageTail side={isLeftFacing ? "left" : "right"} testId={testId} />;
   };
 
   const handleVisualAttachmentOpen = React.useCallback(async (currentAttachment: VisualAttachment) => {
@@ -711,7 +710,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           <input type="checkbox" checked={isSelected} readOnly />
         </div>
       )}
-      <div 
+      <div
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
           "relative box-border w-fit overflow-visible text-[16px] font-normal leading-[21px] tracking-normal",
@@ -772,7 +771,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 : (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text"),
         )}
         data-testid="message-bubble"
-        style={isSingleVisualMessage ? { width: `${photoLayout.width}px` } : undefined}
+        style={{
+          "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
+          backgroundColor: "var(--message-surface-color)",
+          ...(isSingleVisualMessage ? { width: `${photoLayout.width}px` } : {}),
+        } as React.CSSProperties}
       >
         {showSenderName && (
           <div className="mb-1.5 text-[11px] font-semibold tracking-[0.01em] text-primary">
