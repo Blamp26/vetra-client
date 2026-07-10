@@ -794,6 +794,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 : (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text"),
         )}
         data-testid="message-bubble"
+        style={isSingleVisualMessage ? { width: `${photoLayout.width}px` } : undefined}
       >
         {showSenderName && (
           <div className="mb-1.5 text-[11px] font-semibold tracking-[0.01em] text-primary">

@@ -386,6 +386,7 @@ describe("MessageItem bubble layout", () => {
     const mediaShell = screen.getByTestId("message-media-shell");
 
     expect(bubble).not.toHaveClass("bg-bubble-outgoing");
+    expect(bubble).toHaveStyle({ width: "324px" });
     expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
     expect(mediaShell).toHaveStyle({ width: "324px", aspectRatio: "324 / 432" });
     expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
@@ -1173,6 +1174,7 @@ describe("MessageItem bubble layout", () => {
     expect(contentRect).toContain(textContent);
     expect(mediaFrame).toHaveClass("overflow-hidden", "rounded-[15px]", "rounded-tr-[15px]", "rounded-bl-[0px]", "rounded-br-[0px]");
     expect(mediaFrame).toHaveStyle({ width: "480px", aspectRatio: "480 / 270" });
+    expect(screen.getByTestId("message-bubble")).toHaveStyle({ width: "480px" });
     expect(mediaShell).toHaveClass("relative", "flex", "h-full", "w-full", "items-center", "justify-center", "overflow-hidden");
     expect(mediaShell).not.toHaveClass("rounded-t-[15px]");
     expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
@@ -1279,6 +1281,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-media-shell")).toBeInTheDocument();
     expect(screen.getByTestId("message-video-tile-media-video-1")).toBeInTheDocument();
     expect(screen.getByTestId("message-media-shell")).toHaveStyle({ width: "480px", aspectRatio: "480 / 270" });
+    expect(screen.getByTestId("message-bubble")).toHaveStyle({ width: "480px" });
     expect(screen.getByTestId("message-media-only-overlay")).toBeInTheDocument();
     expect(screen.queryByTestId("message-media-tail")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-video-badge-media-video-1")).toHaveClass("left-1/2", "top-1/2", "-translate-x-1/2", "-translate-y-1/2");
@@ -1309,6 +1312,7 @@ describe("MessageItem bubble layout", () => {
     const mediaFrame = screen.getByTestId("message-media-shell").parentElement;
 
     expect(mediaFrame).toHaveStyle({ width: "324px", aspectRatio: "324 / 432" });
+    expect(screen.getByTestId("message-bubble")).toHaveStyle({ width: "324px" });
     expect(screen.getByTestId("message-text-inline-metadata")).toBeInTheDocument();
     expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-media-tail")).toBeInTheDocument();
