@@ -238,4 +238,30 @@ describe("Sidebar attachment previews", () => {
     expect(directRow).toHaveClass("px-[10px]", "gap-[11px]");
     expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
   });
+
+  it("uses measured geometry for regular conversation content", async () => {
+    const state = makeState();
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+
+    render(<Sidebar />);
+
+    const directRow = await screen.findByTestId("sidebar-item-direct-2");
+    const textColumn = directRow.querySelector(".relative.h-full.min-w-0.flex-1");
+
+    expect(directRow).toHaveClass("h-[62px]", "gap-[11px]", "px-[10px]");
+    expect(directRow).not.toHaveClass("absolute");
+    expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
+    expect(textColumn).toBeInTheDocument();
+    expect(textColumn).toHaveClass("relative", "h-full", "min-w-0", "flex-1");
+    expect(textColumn?.querySelector(".top-\\[10px\\]"))
+      .toHaveClass("left-0", "right-12");
+    expect(textColumn?.querySelector(".top-\\[15px\\]"))
+      .toHaveClass("right-[10px]");
+    expect(textColumn?.querySelector(".top-\\[34px\\]"))
+      .toHaveClass("left-0", "right-[10px]", "h-[18px]");
+  });
 });

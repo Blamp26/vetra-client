@@ -254,17 +254,17 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                     }
                   />
                   {!isCollapsed && !isServerMode && (
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-sm font-medium">{item.name}</span>
-                        <span className="shrink-0 text-[11px] text-muted-foreground">
-                          {formatPreviewTime(item.time)}
-                        </span>
-                      </div>
+                    <div className="relative h-full min-w-0 flex-1">
+                      <span className="absolute left-0 right-12 top-[10px] truncate text-sm font-medium">
+                        {item.name}
+                      </span>
+                      <span className="absolute right-[10px] top-[15px] text-[11px] text-muted-foreground">
+                        {formatPreviewTime(item.time)}
+                      </span>
                       {item.kind === "direct" && item.presenceText && (
                         <span className="sr-only">{item.presenceText}</span>
                       )}
-                      <p className="truncate pt-0.5 text-xs text-muted-foreground">
+                      <p className="absolute left-0 right-[10px] top-[34px] h-[18px] truncate text-xs text-muted-foreground">
                         <EmojiText text={item.preview} size={12} />
                       </p>
                     </div>
