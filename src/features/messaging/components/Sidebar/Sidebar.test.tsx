@@ -257,9 +257,9 @@ describe("Sidebar attachment previews", () => {
     expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
     expect(textColumn).toBeInTheDocument();
     expect(textColumn).toHaveClass("relative", "h-full", "min-w-0", "flex-1");
-    expect(textColumn?.querySelector(".top-\\[10px\\]"))
+    expect(textColumn?.querySelector(".top-\\[14px\\].truncate"))
       .toHaveClass("left-0", "right-12");
-    expect(textColumn?.querySelector(".top-\\[15px\\]"))
+    expect(textColumn?.querySelector(".top-\\[14px\\].text-\\[11px\\]"))
       .toHaveClass("right-[10px]");
     expect(textColumn?.querySelector(".top-\\[34px\\]"))
       .toHaveClass("left-0", "right-[10px]", "h-[18px]");
