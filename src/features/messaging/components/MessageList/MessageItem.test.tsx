@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -1525,7 +1525,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("Lection 3. JS (1).pdf")).toHaveAttribute("title", "Lection 3. JS (1).pdf");
     expect(fileInfo).toHaveClass("flex-1", "min-w-0", "h-[39px]", "mt-[3px]", "mr-[2px]", "overflow-hidden", "whitespace-nowrap");
     expect(screen.getByTestId("message-file-name")).toHaveClass("truncate", "text-[16px]", "font-medium", "leading-[24px]");
-    expect(screen.getByTestId("message-file-size")).toHaveTextContent("12.0MB");
+    expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.getByTestId("message-file-size")).toHaveClass("truncate", "text-[14px]", "font-normal", "leading-[15px]");
     const downloadButton = screen.getByRole("button", { name: "Download" });
     expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "opacity-0", "bg-transparent");
@@ -1555,9 +1555,110 @@ describe("MessageItem bubble layout", () => {
     const bubble = screen.getByTestId("message-bubble");
     expect(bubble).toHaveClass("bg-bubble-incoming", "px-2", "pt-[5px]", "pb-[6px]");
     expect(screen.getByTestId("message-file-row")).toHaveClass("w-[224px]", "min-w-[224px]", "h-[54px]");
-    expect(screen.getByTestId("message-file-size")).toHaveTextContent("12.0MB");
+    expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
     expect(screen.getByTestId("message-text-tail")).toHaveClass("left-[-9px]", "bottom-[-1px]");
+  });
+
+  it("renders outgoing documents as connected first and last segments with attachment-specific downloads", async () => {
+    const documents = [
+      {
+        id: "group-document-1",
+        url: "/api/v1/media/group-document-1",
+        mime_type: "application/pdf",
+        original_name: "first-document.pdf",
+        file_size: 12 * 1024 * 1024,
+        kind: "file" as const,
+      },
+      {
+        id: "group-document-2",
+        url: "/api/v1/media/group-document-2",
+        mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        original_name: "second-document-with-a-very-long-filename-that-must-truncate.docx",
+        file_size: 8 * 1024 * 1024,
+        kind: "file" as const,
+      },
+    ];
+
+    renderMessageItem({ attachments: documents, sender_id: 1, status: "sent" }, { isOwn: true });
+
+    const group = screen.getByTestId("message-document-group");
+    const first = screen.getByTestId("message-document-segment-first");
+    const last = screen.getByTestId("message-document-segment-last");
+    const rows = screen.getAllByTestId("message-file-row");
+    const downloadButtons = screen.getAllByRole("button", { name: "Download" });
+
+    expect(group).toHaveClass("flex", "w-[275px]", "gap-0", "row-gap-0", "p-0", "bg-transparent");
+    expect(first).toHaveClass("w-[275px]", "h-[70px]", "px-2", "pt-[6px]", "pb-[4px]", "rounded-tl-[15px]", "rounded-tr-[15px]", "rounded-bl-[0px]", "rounded-br-[0px]");
+    expect(last).toHaveClass("w-[275px]", "h-[72px]", "px-2", "pt-[4px]", "pb-[8px]", "rounded-tl-[0px]", "rounded-tr-[0px]", "rounded-bl-[15px]", "rounded-br-[0px]");
+    expect(first.nextElementSibling).toBe(last);
+    expect(group).not.toHaveClass("gap-1", "gap-2", "shadow", "rounded-[15px]");
+    expect(rows).toHaveLength(2);
+    rows.forEach((row) => {
+      expect(row).toHaveClass("w-[259px]", "min-w-[224px]", "h-[54px]", "my-[3px]");
+    });
+    expect(screen.getByText("first-document.pdf")).toBeInTheDocument();
+    expect(screen.getByText("second-document-with-a-very-long-filename-that-must-truncate.docx")).toBeInTheDocument();
+    expect(screen.getByText("pdf")).toBeInTheDocument();
+    expect(screen.getByText("docx")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
+    expect(screen.getAllByTestId("message-file-size")[1]).toHaveTextContent("8.0MB");
+    expect(screen.getAllByTestId("message-file-name")[1]).toHaveClass("truncate", "whitespace-nowrap");
+    expect(screen.getAllByTestId("message-file-name")[1]).toHaveAttribute("title", "second-document-with-a-very-long-filename-that-must-truncate.docx");
+    expect(within(first).queryByTestId("message-document-inline-metadata")).not.toBeInTheDocument();
+    expect(within(first).queryByTestId("message-inline-status")).not.toBeInTheDocument();
+    expect(within(first).queryByTestId("message-text-tail")).not.toBeInTheDocument();
+    expect(within(last).getByTestId("message-document-inline-metadata")).toBeInTheDocument();
+    expect(within(last).getByTestId("message-inline-status")).toBeInTheDocument();
+    expect(within(last).getByTestId("message-text-tail")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(downloadButtons[0]);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(downloadButtons[1]);
+      await Promise.resolve();
+    });
+
+    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenNthCalledWith(1, {
+      attachment: expect.objectContaining({ id: "group-document-1" }),
+      authToken: "secret-token",
+    });
+    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenNthCalledWith(2, {
+      attachment: expect.objectContaining({ id: "group-document-2" }),
+      authToken: "secret-token",
+    });
+  });
+
+  it("renders incoming three-document groups with square middle segments and time-only metadata", () => {
+    renderMessageItem({
+      attachments: [1, 2, 3].map((index) => ({
+        id: `incoming-document-${index}`,
+        url: `/api/v1/media/incoming-document-${index}`,
+        mime_type: "application/pdf",
+        original_name: `incoming-document-${index}.pdf`,
+        file_size: index * 1024 * 1024,
+        kind: "file" as const,
+      })),
+    });
+
+    const group = screen.getByTestId("message-document-group");
+    const first = screen.getByTestId("message-document-segment-first");
+    const middle = screen.getByTestId("message-document-segment-middle");
+    const last = screen.getByTestId("message-document-segment-last");
+
+    expect(group).toHaveClass("w-[275px]", "gap-0", "row-gap-0");
+    expect(first).toHaveClass("h-[70px]", "rounded-tl-[15px]", "rounded-tr-[15px]", "rounded-bl-[0px]", "rounded-br-[0px]");
+    expect(middle).toHaveClass("rounded-none", "px-2", "py-[4px]");
+    expect(last).toHaveClass("h-[72px]", "rounded-tl-[0px]", "rounded-tr-[0px]", "rounded-bl-[0px]", "rounded-br-[15px]");
+    expect(within(first).queryByTestId("message-document-inline-metadata")).not.toBeInTheDocument();
+    expect(within(middle).queryByTestId("message-document-inline-metadata")).not.toBeInTheDocument();
+    expect(within(middle).queryByTestId("message-text-tail")).not.toBeInTheDocument();
+    expect(within(last).getByTestId("message-document-inline-metadata")).toBeInTheDocument();
+    expect(within(last).getByTestId("message-metadata")).toHaveTextContent("12:00");
+    expect(within(last).queryByTestId("message-inline-status")).not.toBeInTheDocument();
+    expect(within(last).getByTestId("message-text-tail")).toHaveClass("left-[-9px]", "bottom-[-1px]");
   });
 
   it("renders outgoing document bubbles with the same solid color as text bubbles, not a pale tint", () => {

@@ -13,6 +13,7 @@ interface DocumentAttachmentRowProps {
   attachment: Attachment | null;
   isOwn: boolean;
   isCompact: boolean;
+  isGrouped: boolean;
   isActionPending: boolean;
   onOpen: () => void;
   onDownload: () => void;
@@ -36,7 +37,7 @@ function getAttachmentExtensionBadge(attachment: Attachment | null, lowercase: b
 
 function getAttachmentExtensionTone(attachment: Attachment | null) {
   const mimeType = attachment?.mime_type ?? "";
-  const extension = getAttachmentExtensionBadge(attachment);
+  const extension = getAttachmentExtensionBadge(attachment, false);
 
   if (mimeType === "application/pdf" || extension === "PDF") {
     return "bg-[#e53935] text-white";
@@ -57,6 +58,7 @@ export function DocumentAttachmentRow({
   attachment,
   isOwn,
   isCompact,
+  isGrouped,
   isActionPending,
   onOpen,
   onDownload,
@@ -89,7 +91,10 @@ export function DocumentAttachmentRow({
     <div
       className={cn(
         isCompact
-          ? "relative my-[3px] flex h-[54px] w-[224px] min-w-[224px] items-center bg-transparent p-0"
+          ? cn(
+              "relative my-[3px] flex h-[54px] min-w-[224px] items-center bg-transparent p-0",
+              isGrouped ? "w-[259px]" : "w-[224px]",
+            )
           : "flex min-w-0 items-start gap-3",
         canOpenInline && "cursor-pointer",
       )}

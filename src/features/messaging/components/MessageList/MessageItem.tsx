@@ -211,6 +211,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const isVisualAlbum = visualAttachments.length > 1;
   const isDocumentAttachment = attachments.length > 0 && !isVisualMediaMessage;
   const isSingleDocumentAttachment = attachments.length === 1 && isDocumentAttachment;
+  const isDocumentGroup = attachments.length >= 2 && attachments.every((currentAttachment) => currentAttachment.kind === "file");
   const isMediaOnly =
     isVisualMediaMessage &&
     (!msg.content || msg.content.trim().length === 0) &&
@@ -447,16 +448,19 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     [],
   );
 
-  const handleAttachmentAction = async (action: "download" | "open") => {
-    if (!attachment || isAttachmentActionPending) return;
+  const handleAttachmentAction = async (
+    action: "download" | "open",
+    currentAttachment: Attachment | null = attachment,
+  ) => {
+    if (!currentAttachment || isAttachmentActionPending) return;
 
     setIsAttachmentActionPending(true);
     setAttachmentActionError(null);
 
     try {
       if (action === "open") {
-        if (attachment.kind === "video") {
-          const videoSrc = getAttachmentOriginalSrc(attachment);
+        if (currentAttachment.kind === "video") {
+          const videoSrc = getAttachmentOriginalSrc(currentAttachment);
           if (!videoSrc) {
             setAttachmentActionError("Attachment unavailable");
             return;
@@ -473,9 +477,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           return;
         }
 
-        await openAttachmentWithAuth({ attachment, authToken });
+        await openAttachmentWithAuth({ attachment: currentAttachment, authToken });
       } else {
-        await downloadAttachmentWithAuth({ attachment, authToken });
+        await downloadAttachmentWithAuth({ attachment: currentAttachment, authToken });
       }
     } catch (error) {
       console.error("Attachment action failed:", error);
@@ -600,12 +604,85 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   );
 
   const renderDocumentAttachment = () => {
+    if (isDocumentGroup) {
+      return (
+        <div
+          className="m-0 flex w-[275px] max-w-full flex-col gap-0 row-gap-0 bg-transparent p-0"
+          data-testid="message-document-group"
+        >
+          {attachments.map((currentAttachment, index) => {
+            const role = index === 0
+              ? "first"
+              : index === attachments.length - 1
+                ? "last"
+                : "middle";
+            const isLast = role === "last";
+            const hasTail = isLast && !isGroupedWithNext;
+            const isLeftFacing = !isOwn || alignmentMode === "left-column";
+            const bottomRadiusClassName = isLeftFacing
+              ? hasTail
+                ? "rounded-bl-[0px] rounded-br-[15px]"
+                : isGroupedWithNext
+                  ? "rounded-bl-[6px] rounded-br-[15px]"
+                  : "rounded-bl-[15px] rounded-br-[15px]"
+              : hasTail
+                ? "rounded-bl-[15px] rounded-br-[0px]"
+                : isGroupedWithNext
+                  ? "rounded-bl-[15px] rounded-br-[6px]"
+                  : "rounded-bl-[15px] rounded-br-[15px]";
+
+            return (
+              <div
+                key={currentAttachment.id}
+                className={cn(
+                  "relative box-border w-[275px] max-w-full bg-[var(--message-surface-color)]",
+                  role === "first" && "h-[70px] rounded-tl-[15px] rounded-tr-[15px] rounded-bl-[0px] rounded-br-[0px] px-2 pt-[6px] pb-[4px]",
+                  role === "middle" && "rounded-none px-2 py-[4px]",
+                  role === "last" && cn("h-[72px] rounded-tl-[0px] rounded-tr-[0px] px-2 pt-[4px] pb-[8px]", bottomRadiusClassName),
+                )}
+                data-testid={`message-document-segment-${role}`}
+                data-document-role={role}
+                style={{
+                  "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
+                } as React.CSSProperties}
+              >
+                <DocumentAttachmentRow
+                  attachment={currentAttachment}
+                  isOwn={isOwn}
+                  isCompact
+                  isGrouped
+                  isActionPending={isAttachmentActionPending}
+                  onOpen={() => void handleAttachmentAction("open", currentAttachment)}
+                  onDownload={() => void handleAttachmentAction("download", currentAttachment)}
+                />
+                {isLast && hasText && (
+                  <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
+                    <EmojiText text={msg.content || ""} />
+                  </div>
+                )}
+                {isLast && (
+                  <span
+                    className="relative float-right top-[8px] mt-[-20px] mr-[-6px] mb-0 ml-[7px] flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px]"
+                    data-testid="message-document-inline-metadata"
+                  >
+                    {renderMetadata()}
+                  </span>
+                )}
+                {isLast && hasTail && renderBubbleTail("message-text-tail")}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
     return (
       <>
         <DocumentAttachmentRow
           attachment={attachment}
           isOwn={isOwn}
           isCompact={isSingleDocumentAttachment}
+          isGrouped={false}
           isActionPending={isAttachmentActionPending}
           onOpen={() => void handleAttachmentAction("open")}
           onDownload={() => void handleAttachmentAction("download")}
@@ -725,7 +802,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
           "relative box-border w-fit overflow-visible text-[16px] font-normal leading-[21px] tracking-normal",
-          isMediaOnly
+          isDocumentGroup
+            ? "min-w-0 w-[275px] max-w-[min(480px,calc(100vw-6rem))] rounded-none p-0"
+            : isMediaOnly
             ? cn(
                 "min-w-0 p-0",
                 isVisualAlbum
@@ -749,7 +828,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 ? "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
-          isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment
+          isDocumentGroup
+            ? "rounded-none"
+            : isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment
             ? textGroupRadiusClassName
             : isOwnLeftColumn
               ? cn(
@@ -765,7 +846,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   isConsecutive && "rounded-tl-[12px]",
                   isGroupedWithNext && "rounded-bl-[12px]",
                 ),
-          isMediaOnly
+          isDocumentGroup
+            ? (isOwn ? "bg-transparent text-bubble-outgoing-text" : "bg-transparent text-bubble-incoming-text")
+            : isMediaOnly
             ? isVisualAlbum
               ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
               : isVisualMediaMessage
@@ -784,7 +867,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         data-testid="message-bubble"
         style={{
           "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
-          backgroundColor: "var(--message-surface-color)",
+          backgroundColor: isDocumentGroup ? "transparent" : "var(--message-surface-color)",
           ...(isSingleVisualMessage ? { width: `${photoLayout.width}px` } : {}),
         } as React.CSSProperties}
       >
@@ -822,7 +905,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {(isTextOnly || isDocumentAttachment) && renderBubbleTail("message-text-tail")}
+        {(isTextOnly || isDocumentAttachment) && !isDocumentGroup && renderBubbleTail("message-text-tail")}
 
         {isVisualMediaMessage && renderBubbleTail("message-media-tail")}
 
