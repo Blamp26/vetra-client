@@ -220,7 +220,7 @@ describe("Sidebar attachment previews", () => {
     });
   });
 
-  it("uses the compact Telegram-like search row and avatar sizing", async () => {
+  it("uses Telegram row, avatar, text, and search measurements", async () => {
     const state = makeState();
 
     useAppStoreMock.mockImplementation(
@@ -233,9 +233,19 @@ describe("Sidebar attachment previews", () => {
     const directRow = await screen.findByTestId("sidebar-item-direct-2");
     const search = screen.getByTestId("user-search");
 
-    expect(search.parentElement?.parentElement).toHaveClass("h-[54px]", "px-[11px]", "pt-[9px]");
-    expect(search.parentElement?.parentElement).not.toHaveClass("border-b");
-    expect(directRow).toHaveClass("px-[10px]", "gap-[11px]");
-    expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
+    const searchRow = search.parentElement?.parentElement;
+    const avatar = directRow.querySelector('[data-slot="avatar"]');
+    const textColumn = directRow.querySelector(".absolute.inset-y-0.left-\\[71px\\]");
+
+    expect(searchRow).toHaveClass("h-[54px]", "px-[11px]", "pt-[9px]");
+    expect(searchRow).not.toHaveClass("border-b");
+    expect(directRow).toHaveClass("h-[62px]", "pl-[10px]");
+    expect(directRow).not.toHaveClass("border-b");
+    expect(avatar).toHaveClass("left-[10px]", "top-[8px]", "h-[46px]", "w-[46px]");
+    expect(textColumn).toHaveClass("left-[71px]", "right-[10px]");
+
+    expect(directRow.querySelector(".top-\\[14px\\].truncate")).toHaveTextContent("Alice");
+    expect(directRow.querySelector(".top-\\[14px\\].text-\\[11px\\]")).toBeInTheDocument();
+    expect(directRow.querySelector(".top-\\[40px\\]")).toHaveTextContent("Photo");
   });
 });
