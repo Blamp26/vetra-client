@@ -543,6 +543,7 @@ export function MessageList({
                 const hasAttachment = getMessageAttachment(msg) != null;
                 const prevHasAttachment = prevMsg ? getMessageAttachment(prevMsg) != null : false;
                 const isAttachmentRun = isConsecutive && hasAttachment && prevHasAttachment;
+                const isPlainTextGroup = isConsecutive && !hasAttachment && !prevHasAttachment;
                 return (
                   <div
                     key={msg.id}
@@ -555,8 +556,10 @@ export function MessageList({
                         ? "mt-0"
                         : isAttachmentRun
                           ? "mt-0.5"
-                          : isConsecutive
-                            ? "mt-0.5"
+                          : isPlainTextGroup
+                            ? "mt-1.5"
+                            : isConsecutive
+                              ? "mt-0.5"
                             : "mt-2.5",
                     )}
                   >

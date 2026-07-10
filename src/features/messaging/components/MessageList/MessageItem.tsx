@@ -88,20 +88,17 @@ function getBubbleCornerClassName(
   isConsecutive: boolean,
   isGroupedWithNext: boolean,
 ) {
-  const shouldUseLeftColumnTail = !isOwn || alignmentMode === "left-column";
-
-  if (shouldUseLeftColumnTail) {
-    return cn(
-      "rounded-[15px]",
-      isConsecutive && "rounded-tl-[8px]",
-      isGroupedWithNext ? "rounded-bl-[8px]" : "rounded-bl-[4px]",
-    );
-  }
+  const isLeftFacing = !isOwn || alignmentMode === "left-column";
+  const topTailRadius = isConsecutive ? "rounded-tl-[6px]" : "rounded-tl-[15px]";
+  const bottomTailRadius = isGroupedWithNext ? "rounded-bl-[6px]" : "rounded-bl-[0px]";
+  const rightTopTailRadius = isConsecutive ? "rounded-tr-[6px]" : "rounded-tr-[15px]";
+  const rightBottomTailRadius = isGroupedWithNext ? "rounded-br-[6px]" : "rounded-br-[0px]";
 
   return cn(
     "rounded-[15px]",
-    isConsecutive && "rounded-tr-[8px]",
-    isGroupedWithNext ? "rounded-br-[8px]" : "rounded-br-[4px]",
+    isLeftFacing
+      ? [topTailRadius, bottomTailRadius]
+      : [rightTopTailRadius, rightBottomTailRadius],
   );
 }
 
@@ -480,7 +477,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   };
 
   const renderMetadata = (variant: "inline" | "overlay" = "inline") => (
-    <div
+    <span
       className={cn(
         "inline-flex max-w-full items-center whitespace-nowrap",
         variant === "overlay"
@@ -510,24 +507,50 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         </span>
       )}
       {isOwn && !isRoom && (
-        variant === "overlay" ? (
+          variant === "overlay" ? (
           <span
-            className="ml-[-3px] flex h-[19px] w-[19px] items-center justify-center text-white"
+            className="ml-[-3px] flex h-[19px] w-[19px] items-center justify-center leading-[19px] text-white"
             data-testid="message-media-only-status"
           >
             <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
           </span>
         ) : (
           <span
-            className="ml-[-3px] flex h-[19px] w-[19px] items-center justify-center text-white"
+            className="ml-[-3px] flex h-[19px] w-[19px] items-center justify-center leading-[19px] text-white"
             data-testid="message-inline-status"
           >
             <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
           </span>
         )
       )}
-    </div>
+    </span>
   );
+
+  const renderTextTail = () => {
+    if (isGroupedWithNext) return null;
+
+    const isLeftFacing = !isOwn || alignmentMode === "left-column";
+    const bubbleColor = isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)";
+
+    return (
+      <svg
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute bottom-[-1px] h-[18px] w-[9px]",
+          isLeftFacing ? "left-[-8.8px] scale-x-[-1]" : "right-[-8.8px]",
+        )}
+        fill="none"
+        viewBox="0 0 9 18"
+        xmlns="http://www.w3.org/2000/svg"
+        data-testid="message-text-tail"
+      >
+        <path
+          d="M6 17H0V0c.193 2.84.876 5.767 2.05 8.782.904 2.325 2.446 4.485 4.625 6.48A1 1 0 0 1 6 17Z"
+          fill={bubbleColor}
+        />
+      </svg>
+    );
+  };
 
   const handleVisualAttachmentOpen = React.useCallback(async (currentAttachment: VisualAttachment) => {
     const viewerSrc = getAttachmentOriginalSrc(currentAttachment);
@@ -674,8 +697,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div 
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "relative w-fit text-sm",
-          !isVisualMediaMessage && "shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
+          "relative box-border w-fit text-[16px] font-normal leading-[21px] tracking-normal",
+          !isVisualMediaMessage && !isTextOnly && "shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
           isMediaOnly
             ? cn(
                 "min-w-0 overflow-hidden p-0",
@@ -698,7 +721,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 )
               : isDocumentAttachment
                 ? "min-w-[13rem] max-w-[min(22rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-2.5"
-                : "min-w-[3.75rem] max-w-[min(30rem,calc(100vw-6rem))] border border-border/85 px-2 pt-[5px] pb-[6px]",
+                : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px] shadow-[0_1px_2px_0_rgba(16,16,16,0.61)]",
           isSelected && "ring-1 ring-primary",
           isTextOnly
             ? textGroupRadiusClassName
@@ -741,12 +764,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             <div className="relative text-[16px] leading-[21px]" data-testid="message-text-flow">
               <span
                 data-message-content-rect
-                className="relative whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]"
+                className="relative whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:normal] text-[16px] leading-[21px]"
               >
                 <EmojiText text={msg.content || ""} />
               </span>
               <span
-                className="pointer-events-none relative float-right mb-[-6px] ml-[7px] mr-[-6px] mt-0 inline-flex items-center px-[4px] pt-0 top-[6px]"
+                className="pointer-events-none relative float-right ml-[7px] mr-[-6px] inline-flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px] top-[6px]"
                 data-testid="message-text-inline-metadata"
               >
                 {renderMetadata()}
@@ -768,6 +791,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             {renderMetadata("overlay")}
           </div>
         )}
+
+        {isTextOnly && renderTextTail()}
 
         {!isTextOnly && !isMediaOnly && !isVisualMediaMessage && !isDocumentAttachment && (
           <div className="mt-1.5 flex justify-end">

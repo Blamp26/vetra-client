@@ -163,9 +163,9 @@ describe("MessageItem bubble layout", () => {
     expect(row).toHaveClass("justify-start");
     expect(row).not.toHaveClass("justify-end");
     expect(bubble).toHaveClass("w-fit");
-    expect(bubble).toHaveClass("max-w-[min(30rem,calc(100vw-6rem))]");
+    expect(bubble).toHaveClass("max-w-[min(480px,calc(100vw-6rem))]");
     expect(bubble).toHaveClass("rounded-[15px]");
-    expect(bubble).toHaveClass("rounded-bl-[4px]");
+    expect(bubble).toHaveClass("rounded-bl-[0px]");
     expect(bubble).toHaveClass("px-2");
     expect(bubble).toHaveClass("pt-[5px]");
     expect(bubble).toHaveClass("pb-[6px]");
@@ -175,6 +175,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
+    expect(screen.getByTestId("message-text-tail")).toHaveClass("left-[-8.8px]");
     expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
   });
@@ -199,16 +200,17 @@ describe("MessageItem bubble layout", () => {
     expect(row).toHaveClass("justify-end");
     expect(row).not.toHaveClass("justify-start");
     expect(bubble).toHaveClass("w-fit");
-    expect(bubble).toHaveClass("min-w-[3.75rem]");
-    expect(bubble).toHaveClass("max-w-[min(30rem,calc(100vw-6rem))]");
+    expect(bubble).toHaveClass("min-w-0");
+    expect(bubble).toHaveClass("max-w-[min(480px,calc(100vw-6rem))]");
     expect(bubble).toHaveClass("bg-bubble-outgoing");
-    expect(bubble).toHaveClass("rounded-br-[4px]");
+    expect(bubble).toHaveClass("rounded-br-[0px]");
     expect(bubble).not.toHaveClass("flex-1");
     expect(screen.queryByText("Tester")).not.toBeInTheDocument();
     expect(screen.getByText("23")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(screen.getByTestId("message-inline-status")).toHaveClass("ml-[-3px]", "h-[19px]", "w-[19px]");
+    expect(screen.getByTestId("message-text-tail")).toHaveClass("right-[-8.8px]");
     expect(screen.getByLabelText("Sent")).toBeInTheDocument();
   });
 
@@ -231,8 +233,28 @@ describe("MessageItem bubble layout", () => {
     expect(row).toHaveAttribute("data-alignment-mode", "left-column");
     expect(row).toHaveClass("justify-start");
     expect(row).not.toHaveClass("justify-end");
-    expect(bubble).toHaveClass("rounded-bl-[4px]");
-    expect(bubble).not.toHaveClass("rounded-br-[4px]");
+    expect(bubble).toHaveClass("rounded-bl-[0px]");
+    expect(bubble).not.toHaveClass("rounded-br-[0px]");
+  });
+
+  it("keeps multiline plain text and metadata in one flow", () => {
+    renderMessageItem(
+      {
+        content: "First line\nSecond line\nThird line with a longer ending",
+        sender_id: 1,
+        status: "read",
+      },
+      { isOwn: true },
+    );
+
+    const bubble = screen.getByTestId("message-bubble");
+    const textFlow = screen.getByTestId("message-text-flow");
+
+    expect(bubble).toHaveClass("min-w-0", "max-w-[min(480px,calc(100vw-6rem))]");
+    expect(textFlow).toHaveClass("text-[16px]", "leading-[21px]");
+    expect(textFlow).toHaveClass("relative");
+    expect(textFlow).toContainElement(screen.getByTestId("message-text-inline-metadata"));
+    expect(screen.getByLabelText("Read")).toBeInTheDocument();
   });
 
   it("renders group sender labels only when useful", () => {
@@ -299,7 +321,7 @@ describe("MessageItem bubble layout", () => {
       { isOwn: true, isConsecutive: true, isGroupedWithNext: true },
     );
 
-    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[8px]", "rounded-br-[8px]");
+    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[6px]", "rounded-br-[6px]");
   });
 
   it("uses a reduced tail-side corner on the last outgoing text bubble in a group", () => {
@@ -314,7 +336,7 @@ describe("MessageItem bubble layout", () => {
       { isOwn: true, isConsecutive: true, isGroupedWithNext: false },
     );
 
-    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[8px]", "rounded-br-[4px]");
+    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[6px]", "rounded-br-[0px]");
   });
 
   it("applies mirrored grouped corner geometry to incoming text bubbles", () => {
@@ -323,7 +345,7 @@ describe("MessageItem bubble layout", () => {
       { isConsecutive: true, isGroupedWithNext: true },
     );
 
-    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tl-[8px]", "rounded-bl-[8px]");
+    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tl-[6px]", "rounded-bl-[6px]");
     expect(screen.queryByTestId("message-inline-status")).not.toBeInTheDocument();
   });
 

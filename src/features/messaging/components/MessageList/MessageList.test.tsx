@@ -724,7 +724,7 @@ describe("MessageList bubble layout", () => {
     expect(rows[1]).toHaveClass("mt-0.5");
   });
 
-  it("uses the normal grouped spacing when a consecutive message has no attachment", () => {
+  it("uses six-pixel grouped spacing when a consecutive message has no attachment", () => {
     renderMessageList([
       makeMessage({ id: 1, sender_id: 2, content: "First" }),
       makeMessage({ id: 2, sender_id: 2, content: "Second" }),
@@ -734,7 +734,7 @@ describe("MessageList bubble layout", () => {
     expect(rows[1]).toHaveAttribute("data-attachment-run", "false");
     expect(rows[1]).toHaveAttribute("data-grouped-with-previous", "true");
     expect(rows[0]).toHaveAttribute("data-grouped-with-next", "true");
-    expect(rows[1]).toHaveClass("mt-0.5");
+    expect(rows[1]).toHaveClass("mt-1.5");
   });
 
   it("applies mirrored group corners to consecutive incoming text bubbles", () => {
@@ -744,8 +744,8 @@ describe("MessageList bubble layout", () => {
     ]);
 
     const bubbles = screen.getAllByTestId("message-bubble");
-    expect(bubbles[0]).toHaveClass("rounded-bl-[8px]");
-    expect(bubbles[1]).toHaveClass("rounded-tl-[8px]", "rounded-bl-[4px]");
+    expect(bubbles[0]).toHaveClass("rounded-bl-[6px]");
+    expect(bubbles[1]).toHaveClass("rounded-tl-[6px]", "rounded-bl-[0px]");
   });
 
   it("applies outgoing group corners to consecutive own text bubbles", () => {
@@ -755,8 +755,21 @@ describe("MessageList bubble layout", () => {
     ]);
 
     const bubbles = screen.getAllByTestId("message-bubble");
-    expect(bubbles[0]).toHaveClass("rounded-br-[8px]");
-    expect(bubbles[1]).toHaveClass("rounded-tr-[8px]", "rounded-br-[4px]");
+    expect(bubbles[0]).toHaveClass("rounded-br-[6px]");
+    expect(bubbles[1]).toHaveClass("rounded-tr-[6px]", "rounded-br-[0px]");
+  });
+
+  it("uses middle group corners without rendering a tail", () => {
+    renderMessageList([
+      makeMessage({ id: 1, sender_id: 1, content: "One" }),
+      makeMessage({ id: 2, sender_id: 1, content: "Two" }),
+      makeMessage({ id: 3, sender_id: 1, content: "Three" }),
+    ]);
+
+    const bubbles = screen.getAllByTestId("message-bubble");
+    expect(bubbles[1]).toHaveClass("rounded-tr-[6px]", "rounded-br-[6px]");
+    expect(within(bubbles[1]).queryByTestId("message-text-tail")).not.toBeInTheDocument();
+    expect(within(bubbles[2]).getByTestId("message-text-tail")).toBeInTheDocument();
   });
 
   it("keeps inline text metadata inside the bubble without turning it into a footer capsule", () => {
@@ -765,7 +778,7 @@ describe("MessageList bubble layout", () => {
     const bubble = screen.getByTestId("message-bubble");
     const inlineMeta = within(bubble).getByTestId("message-text-inline-metadata");
 
-    expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
+    expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "h-[20px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(within(bubble).getByTestId("message-metadata")).not.toHaveClass("rounded-full", "bg-black/[0.20]");
   });
 
