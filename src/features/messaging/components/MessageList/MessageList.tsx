@@ -10,6 +10,7 @@ import { cn } from "@/shared/utils/cn";
 import { roomChatForPreview } from "@/shared/utils/chatRoutes";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
+  getMessageAttachments,
   getMessageAttachment,
   getPreviewText,
   isMessageForwardable,
@@ -540,9 +541,14 @@ export function MessageList({
                 const nextMsg = dayMessages[idx + 1];
                 const isConsecutive = prevMsg?.sender_id === msg.sender_id;
                 const isGroupedWithNext = nextMsg?.sender_id === msg.sender_id;
-                const hasAttachment = getMessageAttachment(msg) != null;
-                const prevHasAttachment = prevMsg ? getMessageAttachment(prevMsg) != null : false;
-                const isAttachmentRun = isConsecutive && hasAttachment && prevHasAttachment;
+                const messageAttachments = getMessageAttachments(msg);
+                const previousMessageAttachments = prevMsg ? getMessageAttachments(prevMsg) : [];
+                const hasAttachment = messageAttachments.length > 0;
+                const prevHasAttachment = previousMessageAttachments.length > 0;
+                const isAlbum = messageAttachments.length > 1;
+                const prevIsAlbum = previousMessageAttachments.length > 1;
+                const isAlbumBoundary = isAlbum || prevIsAlbum;
+                const isAttachmentRun = isConsecutive && hasAttachment && prevHasAttachment && !isAlbumBoundary;
                 const isPlainTextGroup = isConsecutive && !hasAttachment && !prevHasAttachment;
                 return (
                   <div
@@ -554,6 +560,10 @@ export function MessageList({
                     className={cn(
                       idx === 0
                         ? "mt-0"
+                        : isAlbumBoundary
+                          ? isConsecutive
+                            ? "mt-1.5"
+                            : "mt-2.5"
                         : isAttachmentRun
                           ? "mt-0.5"
                           : isPlainTextGroup

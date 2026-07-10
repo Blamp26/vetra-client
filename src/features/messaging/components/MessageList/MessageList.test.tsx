@@ -206,6 +206,26 @@ function makeMessage(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeAlbumMessage(id: number, content: string | null) {
+  const mediaFileIds = [`album-${id}-1`, `album-${id}-2`];
+  return makeMessage({
+    id,
+    content,
+    media_file_ids: mediaFileIds,
+    media_mime_types: ["image/jpeg", "image/jpeg"],
+    attachments: mediaFileIds.map((mediaFileId) => ({
+      id: mediaFileId,
+      url: `/api/v1/media/${mediaFileId}`,
+      mime_type: "image/jpeg",
+      original_name: `${mediaFileId}.jpg`,
+      file_size: 1024,
+      kind: "photo" as const,
+      width: 1600,
+      height: 900,
+    })),
+  });
+}
+
 function renderMessageList(
   messages = [makeMessage()],
   propOverrides: Partial<ComponentProps<typeof MessageList>> = {},
@@ -809,6 +829,28 @@ describe("MessageList bubble layout", () => {
     expect(album.getAttribute("style")).toContain("aspect-ratio");
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(9);
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+  });
+
+  it("keeps normal spacing after a captioned album before the next album", () => {
+    renderMessageList([
+      makeAlbumMessage(1, "Album caption"),
+      makeAlbumMessage(2, null),
+    ]);
+
+    const rows = screen.getAllByTestId("message-row-spacing");
+    expect(rows[1]).toHaveAttribute("data-attachment-run", "false");
+    expect(rows[1]).toHaveClass("mt-1.5");
+  });
+
+  it("keeps normal spacing after an album before the next captioned album", () => {
+    renderMessageList([
+      makeAlbumMessage(1, null),
+      makeAlbumMessage(2, "Album caption"),
+    ]);
+
+    const rows = screen.getAllByTestId("message-row-spacing");
+    expect(rows[1]).toHaveAttribute("data-attachment-run", "false");
+    expect(rows[1]).toHaveClass("mt-1.5");
   });
 
   it("keeps grouped albums intact when history reload returns media_file_id plus media_file_ids", () => {
