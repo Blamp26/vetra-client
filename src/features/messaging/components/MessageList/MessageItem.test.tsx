@@ -177,8 +177,14 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
     const tail = screen.getByTestId("message-text-tail");
-    expect(tail).toHaveClass("left-[-8.8px]");
-    expect(tail.getAttribute("class") ?? "").not.toMatch(/shadow|drop-shadow|filter/);
+    expect(tail).toHaveClass("left-[-9px]", "bottom-[-1px]", "block", "h-[18px]", "w-[9px]", "overflow-hidden");
+    expect(tail).toHaveAttribute("width", "9");
+    expect(tail).toHaveAttribute("height", "20");
+    expect(tail).toHaveAttribute("viewBox", "0 0 9 20");
+    expect(tail.querySelector("path")).toHaveAttribute("d", "M3 17h6V0c-.193 2.84-.876 5.767-2.05 8.782-.904 2.325-2.446 4.485-4.625 6.48A1 1 0 003 17z");
+    expect(tail.querySelector("path")).toHaveAttribute("fill", "var(--bubble-incoming)");
+    expect(tail.querySelector("polygon, filter")).toBeNull();
+    expect(tail.getAttribute("class") ?? "").not.toMatch(/shadow|drop-shadow|filter|transform|scale/);
     expect(tail).not.toHaveAttribute("filter");
     expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
@@ -220,8 +226,14 @@ describe("MessageItem bubble layout", () => {
     expect(sentIcon).toHaveAttribute("viewBox", "0 0 19 19");
     expect(sentIcon.querySelectorAll("path")).toHaveLength(1);
     const tail = screen.getByTestId("message-text-tail");
-    expect(tail).toHaveClass("right-[-8.8px]");
-    expect(tail.getAttribute("class") ?? "").not.toMatch(/shadow|drop-shadow|filter/);
+    expect(tail).toHaveClass("right-[-9px]", "bottom-[-1px]", "block", "h-[18px]", "w-[9px]", "overflow-hidden");
+    expect(tail).toHaveAttribute("width", "9");
+    expect(tail).toHaveAttribute("height", "20");
+    expect(tail).toHaveAttribute("viewBox", "0 0 9 20");
+    expect(tail.querySelector("path")).toHaveAttribute("d", "M6 17H0V0c.193 2.84.876 5.767 2.05 8.782.904 2.325 2.446 4.485 4.625 6.48A1 1 0 016 17z");
+    expect(tail.querySelector("path")).toHaveAttribute("fill", "var(--bubble-outgoing)");
+    expect(tail.querySelector("polygon, filter")).toBeNull();
+    expect(tail.getAttribute("class") ?? "").not.toMatch(/shadow|drop-shadow|filter|transform|scale/);
     expect(tail).not.toHaveAttribute("filter");
     expect(screen.getByLabelText("Sent")).toBeInTheDocument();
   });
@@ -339,7 +351,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[6px]", "rounded-br-[6px]");
   });
 
-  it("uses a reduced tail-side corner on the last outgoing text bubble in a group", () => {
+  it("uses full external corners on the last outgoing text bubble in a group", () => {
     renderMessageItem(
       {
         content: "Last",
@@ -351,7 +363,8 @@ describe("MessageItem bubble layout", () => {
       { isOwn: true, isConsecutive: true, isGroupedWithNext: false },
     );
 
-    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[6px]", "rounded-br-[0px]");
+    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tr-[15px]", "rounded-br-[0px]");
+    expect(screen.getByTestId("message-bubble")).not.toHaveClass("rounded-tr-[6px]");
   });
 
   it("applies mirrored grouped corner geometry to incoming text bubbles", () => {
@@ -362,6 +375,7 @@ describe("MessageItem bubble layout", () => {
 
     expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-tl-[6px]", "rounded-bl-[6px]");
     expect(screen.queryByTestId("message-inline-status")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-text-tail")).not.toBeInTheDocument();
   });
 
   it("renders outgoing media-only messages as media-sized bubbles with overlay metadata", () => {
@@ -397,7 +411,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
     expect(mediaShell).toHaveStyle({ width: "324px", aspectRatio: "324 / 432" });
     expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
-    expect(screen.getByTestId("message-media-tail")).toHaveClass("right-[-8.8px]");
+    expect(screen.getByTestId("message-media-tail")).toHaveClass("right-[-9px]", "bottom-[-1px]");
     expect(metadata).toHaveClass("h-[18px]", "rounded-[10px]", "bg-black/[0.20]", "py-0", "pl-[6px]", "pr-[5px]", "text-white");
     expect(metadata).not.toHaveClass("bg-black/40", "bg-black/60", "rounded-full", "backdrop-blur-[2px]", "shadow-[0_2px_10px_rgba(0,0,0,0.24)]");
     expect(screen.getByText("12:00")).toHaveClass("mr-[4px]", "text-[12px]", "leading-[12px]", "font-normal");

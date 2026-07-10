@@ -4,6 +4,7 @@ import { cn } from "@/shared/utils/cn";
 import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
 import { useAppStore } from "@/store";
 import { StatusIcon } from "./StatusIcon";
+import { MessageTail } from "./MessageTail";
 import { DocumentAttachmentRow } from "./DocumentAttachmentRow";
 import { VisualAttachmentGroup, type ResolvedVisualAttachment } from "./VisualAttachmentGroup";
 import {
@@ -90,9 +91,9 @@ function getBubbleCornerClassName(
   isGroupedWithNext: boolean,
 ) {
   const isLeftFacing = !isOwn || alignmentMode === "left-column";
-  const topTailRadius = isConsecutive ? "rounded-tl-[6px]" : "rounded-tl-[15px]";
+  const topTailRadius = isGroupedWithNext && isConsecutive ? "rounded-tl-[6px]" : "rounded-tl-[15px]";
   const bottomTailRadius = isGroupedWithNext ? "rounded-bl-[6px]" : "rounded-bl-[0px]";
-  const rightTopTailRadius = isConsecutive ? "rounded-tr-[6px]" : "rounded-tr-[15px]";
+  const rightTopTailRadius = isGroupedWithNext && isConsecutive ? "rounded-tr-[6px]" : "rounded-tr-[15px]";
   const rightBottomTailRadius = isGroupedWithNext ? "rounded-br-[6px]" : "rounded-br-[0px]";
 
   return cn(
@@ -548,24 +549,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     const isLeftFacing = !isOwn || alignmentMode === "left-column";
     const bubbleColor = isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)";
 
-    return (
-      <svg
-        aria-hidden="true"
-        className={cn(
-          "pointer-events-none absolute bottom-[-1px] h-[18px] w-[9px]",
-          isLeftFacing ? "left-[-8.8px] scale-x-[-1]" : "right-[-8.8px]",
-        )}
-        fill="none"
-        viewBox="0 0 9 18"
-        xmlns="http://www.w3.org/2000/svg"
-        data-testid={testId}
-      >
-        <path
-          d="M6 17H0V0c.193 2.84.876 5.767 2.05 8.782.904 2.325 2.446 4.485 4.625 6.48A1 1 0 0 1 6 17Z"
-          fill={bubbleColor}
-        />
-      </svg>
-    );
+    return <MessageTail side={isLeftFacing ? "left" : "right"} color={bubbleColor} testId={testId} />;
   };
 
   const handleVisualAttachmentOpen = React.useCallback(async (currentAttachment: VisualAttachment) => {

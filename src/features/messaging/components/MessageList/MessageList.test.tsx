@@ -757,7 +757,7 @@ describe("MessageList bubble layout", () => {
     expect(rows[1]).toHaveClass("mt-1.5");
   });
 
-  it("applies mirrored group corners to consecutive incoming text bubbles", () => {
+  it("keeps grouped corners on the middle incoming bubble and full corners on its tail bubble", () => {
     renderMessageList([
       makeMessage({ id: 1, sender_id: 2, content: "First incoming" }),
       makeMessage({ id: 2, sender_id: 2, content: "Second incoming" }),
@@ -765,10 +765,11 @@ describe("MessageList bubble layout", () => {
 
     const bubbles = screen.getAllByTestId("message-bubble");
     expect(bubbles[0]).toHaveClass("rounded-bl-[6px]");
-    expect(bubbles[1]).toHaveClass("rounded-tl-[6px]", "rounded-bl-[0px]");
+    expect(bubbles[1]).toHaveClass("rounded-tl-[15px]", "rounded-bl-[0px]");
+    expect(bubbles[1]).not.toHaveClass("rounded-tl-[6px]");
   });
 
-  it("applies outgoing group corners to consecutive own text bubbles", () => {
+  it("keeps grouped corners on the middle outgoing bubble and full corners on its tail bubble", () => {
     renderMessageList([
       makeMessage({ id: 1, sender_id: 1, content: "One" }),
       makeMessage({ id: 2, sender_id: 1, content: "Two" }),
@@ -776,7 +777,8 @@ describe("MessageList bubble layout", () => {
 
     const bubbles = screen.getAllByTestId("message-bubble");
     expect(bubbles[0]).toHaveClass("rounded-br-[6px]");
-    expect(bubbles[1]).toHaveClass("rounded-tr-[6px]", "rounded-br-[0px]");
+    expect(bubbles[1]).toHaveClass("rounded-tr-[15px]", "rounded-br-[0px]");
+    expect(bubbles[1]).not.toHaveClass("rounded-tr-[6px]");
   });
 
   it("uses middle group corners without rendering a tail", () => {
