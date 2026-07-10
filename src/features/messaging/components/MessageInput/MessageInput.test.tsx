@@ -22,9 +22,15 @@ class MockXMLHttpRequest {
   status = 0;
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
 
   open = vi.fn();
   setRequestHeader = vi.fn();
+  getResponseHeader = vi.fn(() => null);
+
+  abort = vi.fn(() => {
+    this.onabort?.();
+  });
 
   send(formData: FormData) {
     uploadSendMock({ formData, xhr: this });
@@ -608,7 +614,7 @@ describe("MessageInput attachments", () => {
     );
   });
 
-  it("sends text with the first grouped photo message only", async () => {
+  it("sends text with the final generated attachment message only", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);
     const mediaInput = getMediaInput(container);
@@ -634,7 +640,7 @@ describe("MessageInput attachments", () => {
 
     expect(onSend.mock.calls).toEqual([
       [{
-        content: "Album caption",
+        content: null,
         mediaFileId: "media-photo-1.png",
         mediaFileIds: ["media-photo-1.png", "media-photo-2.png"],
       }, undefined],
@@ -644,7 +650,7 @@ describe("MessageInput attachments", () => {
         mediaFileIds: null,
       }, undefined],
       [{
-        content: null,
+        content: "Album caption",
         mediaFileId: "media-photo-3.png",
         mediaFileIds: ["media-photo-3.png", "media-photo-4.png"],
       }, undefined],
@@ -746,7 +752,7 @@ describe("MessageInput attachments", () => {
     );
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
-    expect(uploadSendMock).toHaveBeenCalledTimes(9);
+    expect(uploadSendMock).toHaveBeenCalledTimes(10);
 
     releaseFirstSend();
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));

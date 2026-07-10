@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAttachmentSendUnits,
+  chunkVisualAttachments,
   getAttachmentReviewTitle,
   type PendingAttachment,
 } from "./attachmentQueue";
@@ -27,6 +28,20 @@ function makeAttachment(
 }
 
 describe("attachmentQueue helpers", () => {
+  it.each([
+    [0, []],
+    [1, [1]],
+    [9, [9]],
+    [10, [9, 1]],
+    [12, [9, 3]],
+    [18, [9, 9]],
+    [20, [9, 9, 2]],
+  ])("chunks %i visual attachments as %j", (count, expected) => {
+    const chunks = chunkVisualAttachments(Array.from({ length: count }, (_, index) => index + 1));
+    expect(chunks.map((chunk) => chunk.length)).toEqual(expected);
+    expect(chunks.flat()).toEqual(Array.from({ length: count }, (_, index) => index + 1));
+  });
+
   it("builds exactly one photo album unit for two photos", () => {
     const units = buildAttachmentSendUnits([
       makeAttachment("photo-1", "photo"),

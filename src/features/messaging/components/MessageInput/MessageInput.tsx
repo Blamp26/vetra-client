@@ -14,8 +14,11 @@ import {
 } from "../../utils/attachments";
 import { AttachmentReviewModal } from "./AttachmentReviewModal";
 import {
+  AttachmentUploadError,
   buildAttachmentSendUnits,
   getAttachmentSendUnitType,
+  parseRetryAfterMs,
+  uploadAttachmentsBounded,
   type PendingAttachment,
 } from "./attachmentQueue";
 import {
@@ -146,6 +149,8 @@ interface Props {
   const pendingAttachmentsRef = useRef<PendingAttachment[]>([]);
   const sendLockRef = useRef(false);
   const attachmentBatchIdRef = useRef<string | null>(null);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
+  const uploadedMediaFileIdsRef = useRef(new Map<string, string>());
  
    const editingMessage = useAppStore((s: RootState) => s.editingMessage); 
    const cancelEditing = useAppStore((s: RootState) => s.cancelEditing); 
@@ -213,6 +218,7 @@ interface Props {
 
   useEffect(() => {
     return () => {
+      uploadAbortControllerRef.current?.abort();
       pendingAttachmentsRef.current.forEach((attachment) => {
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
       });
@@ -258,6 +264,7 @@ interface Props {
       table: attachments.map((attachment) => summarizeAttachmentLike(attachment)),
     });
     attachments.forEach(revokeAttachmentPreview);
+    uploadedMediaFileIdsRef.current.clear();
     pendingAttachmentsRef.current = [];
     attachmentBatchIdRef.current = null;
     setIsComposerAttachmentMenuOpen(false);
@@ -271,6 +278,7 @@ interface Props {
       const next: PendingAttachment[] = [];
       for (const attachment of current) {
         if (attachment.id === id) {
+          uploadedMediaFileIdsRef.current.delete(attachment.id);
           revokeAttachmentPreview(attachment);
           continue;
         }
@@ -397,6 +405,7 @@ interface Props {
       const next: PendingAttachment[] = [];
       for (const attachment of current) {
         if (attachmentIdSet.has(attachment.id)) {
+          uploadedMediaFileIdsRef.current.delete(attachment.id);
           revokeAttachmentPreview(attachment);
           continue;
         }
@@ -490,23 +499,55 @@ interface Props {
         const visualSelectionCount = attachmentsToSend.filter(
           (attachment) => attachment.kind === "photo" || attachment.kind === "video",
         ).length;
-        const reserveContentForVisualUnit = visualSelectionCount > 1;
-        let contentConsumed = false;
-        let uploadPosition = 0;
         const totalUploads = attachmentsToSend.length;
+        const uploadController = new AbortController();
+        uploadAbortControllerRef.current = uploadController;
 
         logAttachmentDebug("send.click", {
           queueCount: attachmentsToSend.length,
           visualSelectionCount,
           documentSelectionCount: attachmentsToSend.length - visualSelectionCount,
-          classification: reserveContentForVisualUnit ? "album-capable" : "single-or-mixed",
+          classification: visualSelectionCount > 1 ? "album-capable" : "single-or-mixed",
         }, {
           batchId,
           table: attachmentsToSend.map((attachment) => summarizeAttachmentLike(attachment)),
         });
 
+        const attachmentsToUpload = attachmentsToSend.filter(
+          (attachment) => !uploadedMediaFileIdsRef.current.has(attachment.id),
+        );
+        const cachedUploadCount = totalUploads - attachmentsToUpload.length;
+
+        if (attachmentsToUpload.length > 0) {
+          const uploadedIds = await uploadAttachmentsBounded(
+            attachmentsToUpload,
+            (attachment, index, signal) => performUpload(
+              attachment,
+              cachedUploadCount + index + 1,
+              totalUploads,
+              batchId,
+              `${batchId}:upload`,
+              signal,
+            ),
+            {
+              signal: uploadController.signal,
+              onProgress: (completed) => {
+                setUploadProgress(Math.round(((cachedUploadCount + completed) / totalUploads) * 100));
+              },
+            },
+          );
+
+          attachmentsToUpload.forEach((attachment, index) => {
+            uploadedMediaFileIdsRef.current.set(attachment.id, uploadedIds[index]);
+          });
+        }
+
         for (const [unitIndex, unit] of sendUnits.entries()) {
-          const uploadedMediaFileIds: string[] = [];
+          const uploadedMediaFileIds = unit.attachments.map((attachment) => {
+            const mediaFileId = uploadedMediaFileIdsRef.current.get(attachment.id);
+            if (!mediaFileId) throw new Error("Missing uploaded attachment");
+            return mediaFileId;
+          });
           const sendUnitId = createAttachmentSendUnitId(batchId, unitIndex);
           const debugMeta: AttachmentDebugMeta = {
             batchId,
@@ -528,39 +569,9 @@ interface Props {
             table: unit.attachments.map((attachment) => summarizeAttachmentLike(attachment)),
           });
 
-          for (const attachment of unit.attachments) {
-            uploadPosition += 1;
-            const mediaFileId = await performUpload(
-              attachment,
-              uploadPosition,
-              totalUploads,
-              batchId,
-              sendUnitId,
-            );
-            if (!mediaFileId) return;
-            uploadedMediaFileIds.push(mediaFileId);
-          }
-
-          if (unit.kind === "visual" && unit.attachments.length > 1 && uploadedMediaFileIds.length === 1) {
-            logAttachmentDebug("warning.album-collapsed-before-send", {
-              selectedVisualMediaCount: unit.attachments.length,
-              uploadedMediaFileIds,
-              localAttachmentIds: debugMeta.localAttachmentIds,
-            }, {
-              batchId,
-              sendUnitId,
-              level: "warn",
-            });
-          }
-
           const shouldUseContent =
-            !contentConsumed &&
             trimmed.length > 0 &&
-            (
-              reserveContentForVisualUnit
-                ? unit.kind === "visual"
-                : true
-            );
+            unitIndex === sendUnits.length - 1;
 
           sendFailureMessage =
             unit.kind === "visual" && uploadedMediaFileIds.length > 1
@@ -588,7 +599,7 @@ interface Props {
 
           await onSend(
             outgoingPayload,
-            !contentConsumed && shouldUseContent ? replyTo?.id : undefined,
+            shouldUseContent ? replyTo?.id : undefined,
           );
 
           logAttachmentDebug("send.result", {
@@ -602,22 +613,28 @@ interface Props {
 
           removeQueuedAttachments(unit.attachments.map((attachment) => attachment.id));
 
-          if (shouldUseContent) {
-            contentConsumed = true;
-            setContent("");
-          }
-        }
-
-        if (!contentConsumed && trimmed.length > 0) {
-          setContent("");
+          if (shouldUseContent) setContent("");
         }
 
         resetUploadState();
-       } 
+        uploadAbortControllerRef.current = null;
+      }
      } catch (err) { 
+       if (err instanceof DOMException && err.name === "AbortError") {
+         setUploadStatus("idle");
+         setUploadError(null);
+         setUploadLabel(null);
+         return;
+       }
        console.error("Failed to send/edit:", err); 
        setUploadStatus("error");
-       setUploadError(sendFailureMessage);
+       setUploadError(
+         err instanceof AttachmentUploadError
+           ? err.status === 429
+             ? "Upload rate limit exceeded. Please try again."
+             : "Upload failed"
+           : sendFailureMessage,
+       );
        setUploadLabel(null);
      } finally { 
        sendLockRef.current = false;
@@ -631,13 +648,11 @@ interface Props {
     total = 1,
     batchId?: string | null,
     sendUnitId?: string | null,
-  ): Promise<string | null> => {
-    return new Promise((resolve) => {
+    signal?: AbortSignal,
+  ): Promise<string> => {
+    return new Promise((resolve, reject) => {
       if (!currentUser || !authToken) {
-        setUploadStatus("error");
-        setUploadError("Login required");
-        setUploadLabel(null);
-        resolve(null);
+        reject(new AttachmentUploadError("Login required"));
         return;
       }
 
@@ -659,6 +674,18 @@ interface Props {
       xhr.open("POST", `${API_BASE_URL}/media`);
       xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
       xhr.responseType = "json";
+      let settled = false;
+
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        signal?.removeEventListener("abort", abortRequest);
+        callback();
+      };
+
+      const abortRequest = () => {
+        xhr.abort();
+      };
 
       xhr.upload.onprogress = (event) => {
         if (!event.lengthComputable) return;
@@ -668,9 +695,6 @@ interface Props {
 
       xhr.onload = () => {
         if (xhr.status < 200 || xhr.status >= 300) {
-          setUploadStatus("error");
-          setUploadError("Upload failed");
-          setUploadLabel(attachment.file.name);
           logAttachmentDebug("upload.failure", {
             statusCode: xhr.status,
             ...summarizeAttachmentLike(attachment),
@@ -680,7 +704,12 @@ interface Props {
             sendUnitId,
             level: "warn",
           });
-          resolve(null);
+          const retryAfter = parseRetryAfterMs(
+            typeof xhr.getResponseHeader === "function"
+              ? xhr.getResponseHeader("Retry-After")
+              : null,
+          );
+          finish(() => reject(new AttachmentUploadError("Upload failed", xhr.status, retryAfter)));
           return;
         }
         const response = xhr.response ?? {};
@@ -693,13 +722,14 @@ interface Props {
           batchId,
           sendUnitId,
         });
-        resolve(mediaFileId || null);
+        if (!mediaFileId) {
+          finish(() => reject(new AttachmentUploadError("Upload response missing media id")));
+          return;
+        }
+        finish(() => resolve(mediaFileId));
       };
 
       xhr.onerror = () => {
-        setUploadStatus("error");
-        setUploadError("Upload failed");
-        setUploadLabel(attachment.file.name);
         logAttachmentDebug("upload.failure", {
           statusCode: xhr.status || null,
           ...summarizeAttachmentLike(attachment),
@@ -709,8 +739,18 @@ interface Props {
           sendUnitId,
           level: "warn",
         });
-        resolve(null);
+        finish(() => reject(new AttachmentUploadError("Upload failed", xhr.status || null)));
       };
+
+      xhr.onabort = () => {
+        finish(() => reject(new DOMException("Upload cancelled", "AbortError")));
+      };
+
+      if (signal?.aborted) {
+        abortRequest();
+        return;
+      }
+      signal?.addEventListener("abort", abortRequest, { once: true });
 
       const formData = new FormData();
       formData.append("file", attachment.file);
