@@ -214,8 +214,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     !msg.reply_to_id;
   const shouldRenderMediaTail =
     isVisualMediaMessage &&
-    !isVisualAlbum &&
-    (hasText || visualAttachments[0]?.kind === "photo");
+    !isGroupedWithNext &&
+    (isVisualAlbum || hasText || visualAttachments[0]?.kind === "photo");
   const isTextOnly = hasText && !hasMedia;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
   const resolvedVisualAttachments = React.useMemo<ResolvedVisualAttachment[]>(() => (
@@ -582,7 +582,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       layout={photoLayout}
       albumMaxWidth={MESSAGE_ALBUM_MAX_WIDTH}
       hasCaption={hasText}
-      isMediaOnly={isMediaOnly}
       isTemporaryLayout={isTemporaryVisualLayout}
       isDebugEnabled={isMediaDebugEnabled}
       runtimeMetricsByAttachmentId={visualRuntimeMetrics}
@@ -596,6 +595,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           : hasText
             ? cn(textGroupRadiusClassName, "rounded-bl-[0px] rounded-br-[0px]")
             : textGroupRadiusClassName
+      }
+      albumShellCornerClassName={
+        isVisualAlbum
+          ? hasText
+            ? cn(textGroupRadiusClassName, "rounded-bl-[0px] rounded-br-[0px]")
+            : textGroupRadiusClassName
+          : undefined
       }
     />
   );
@@ -629,22 +635,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   };
 
   const renderVisualCaption = () => {
-    if (isVisualAlbum) {
-      return (
-        <div className="relative text-[15px] leading-[21px]" data-testid="message-text-content">
-          <span
-            className="pointer-events-none relative float-right mb-0 ml-[7px] mr-0 mt-[2px] inline-flex items-center rounded-[10px] px-[4px]"
-            data-testid="message-text-inline-metadata"
-          >
-            {renderMetadata()}
-          </span>
-          <span className="relative whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-            <EmojiText text={msg.content || ""} />
-          </span>
-        </div>
-      );
-    }
-
     return (
       <div className="relative text-[16px] font-normal leading-[21px] tracking-normal" data-testid="message-text-content">
         <span
@@ -740,12 +730,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           isMediaOnly
             ? cn(
                 "min-w-0 p-0",
-                isVisualAlbum && "overflow-hidden",
+                "bg-transparent",
                 isVisualAlbum
-                  ? "bg-[#111]"
-                  : "bg-transparent",
-                isVisualAlbum
-                  ? "rounded-t-[15px] rounded-bl-[6px] rounded-br-[6px]"
+                  ? "rounded-none"
                   : "rounded-[18px]",
                 isVisualAlbum
                   ? "max-w-[min(480px,calc(100vw-6rem))]"
@@ -765,7 +752,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 ? "min-w-[13rem] max-w-[min(22rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-2.5"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
-          isTextOnly || (isVisualMediaMessage && !isVisualAlbum)
+          isTextOnly || (isVisualMediaMessage && (!isVisualAlbum || hasText))
             ? textGroupRadiusClassName
             : isOwnLeftColumn
               ? cn(

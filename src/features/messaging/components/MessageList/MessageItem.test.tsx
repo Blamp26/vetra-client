@@ -740,6 +740,9 @@ describe("MessageItem bubble layout", () => {
     const tile7 = screen.getByTestId("message-photo-collage-tile-7");
 
     expect(album).toBeInTheDocument();
+    expect(album).toHaveClass("relative", "overflow-hidden", "border-0", "p-0", "rounded-[15px]", "rounded-br-[0px]");
+    expect(screen.getByTestId("message-bubble")).toHaveClass("bg-transparent", "p-0", "rounded-none");
+    expect(screen.getByTestId("message-bubble").className).not.toMatch(/shadow|filter/);
     expect(album.getAttribute("style")).toContain("aspect-ratio");
     expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(9);
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
@@ -748,6 +751,10 @@ describe("MessageItem bubble layout", () => {
     expect(tile0.getAttribute("style")).toContain("left:");
     expect(tile4.getAttribute("style")).toContain("top:");
     expect(tile7.getAttribute("style")).toContain("width:");
+    expect(tile0).toHaveStyle({ borderRadius: "0px" });
+    expect(tile0).toHaveClass("border-0", "p-0", "overflow-hidden");
+    expect(screen.getByTestId("message-media-tail")).toBeInTheDocument();
+    expect(screen.getByTestId("message-media-tail").parentElement).toBe(screen.getByTestId("message-bubble"));
   });
 
   it("renders grouped photo and video attachments as one visual album", () => {
@@ -1224,6 +1231,10 @@ describe("MessageItem bubble layout", () => {
     expect(contentRect).toContainElement(screen.getByTestId("message-photo-collage"));
     expect(screen.getByText("Album caption")).toBeInTheDocument();
     expect(screen.queryByTestId("message-media-only-overlay")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-photo-collage")).toHaveClass("relative", "overflow-hidden", "border-0", "rounded-[15px]");
+    expect(screen.getByTestId("message-photo-collage")).toHaveClass("ml-[-8px]", "mr-[-8px]", "mt-[-5px]", "mb-[6px]");
+    expect(screen.getByTestId("message-text-inline-metadata")).toHaveClass("float-right", "h-[20px]", "ml-[7px]", "mr-[-6px]");
+    expect(screen.getByTestId("message-media-tail")).toBeInTheDocument();
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
 
