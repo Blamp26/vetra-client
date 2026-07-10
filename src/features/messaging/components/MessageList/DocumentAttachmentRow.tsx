@@ -101,7 +101,7 @@ export function DocumentAttachmentRow({
       >
         <div
           className={cn(
-            "flex h-full w-full items-center justify-center rounded-[6px] px-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
+            "flex h-full w-full items-center justify-center rounded-[6px] px-2 text-center",
             getAttachmentExtensionTone(attachment),
           )}
           data-testid="message-file-icon"

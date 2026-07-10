@@ -171,11 +171,15 @@ describe("MessageItem bubble layout", () => {
     expect(bubble).toHaveClass("pb-[6px]");
     expect(bubble).toHaveClass("bg-bubble-incoming");
     expect(bubble).not.toHaveClass("flex-1");
+    expect(bubble.className).not.toMatch(/shadow|drop-shadow|filter/);
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
     expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
-    expect(screen.getByTestId("message-text-tail")).toHaveClass("left-[-8.8px]");
+    const tail = screen.getByTestId("message-text-tail");
+    expect(tail).toHaveClass("left-[-8.8px]");
+    expect(tail.getAttribute("class") ?? "").not.toMatch(/shadow|drop-shadow|filter/);
+    expect(tail).not.toHaveAttribute("filter");
     expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
   });
@@ -205,12 +209,16 @@ describe("MessageItem bubble layout", () => {
     expect(bubble).toHaveClass("bg-bubble-outgoing");
     expect(bubble).toHaveClass("rounded-br-[0px]");
     expect(bubble).not.toHaveClass("flex-1");
+    expect(bubble.className).not.toMatch(/shadow|drop-shadow|filter/);
     expect(screen.queryByText("Tester")).not.toBeInTheDocument();
     expect(screen.getByText("23")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(screen.getByTestId("message-inline-status")).toHaveClass("ml-[-3px]", "h-[19px]", "w-[19px]");
-    expect(screen.getByTestId("message-text-tail")).toHaveClass("right-[-8.8px]");
+    const tail = screen.getByTestId("message-text-tail");
+    expect(tail).toHaveClass("right-[-8.8px]");
+    expect(tail.getAttribute("class") ?? "").not.toMatch(/shadow|drop-shadow|filter/);
+    expect(tail).not.toHaveAttribute("filter");
     expect(screen.getByLabelText("Sent")).toBeInTheDocument();
   });
 

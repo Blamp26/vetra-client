@@ -698,7 +698,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
           "relative box-border w-fit text-[16px] font-normal leading-[21px] tracking-normal",
-          !isVisualMediaMessage && !isTextOnly && "shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]",
           isMediaOnly
             ? cn(
                 "min-w-0 overflow-hidden p-0",
@@ -714,14 +713,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               )
             : isVisualMediaMessage
               ? cn(
-                  "min-w-[11rem] overflow-hidden rounded-[15px] px-2 pb-[6px] pt-[5px] shadow-[0px_1px_2px_0px_rgba(16,16,16,0.61)]",
+                  "min-w-[11rem] overflow-hidden rounded-[15px] px-2 pb-[6px] pt-[5px]",
                   isVisualAlbum
                     ? "max-w-[min(480px,calc(100vw-6rem))]"
                     : "max-w-[min(28rem,calc(100vw-6rem))]",
                 )
               : isDocumentAttachment
                 ? "min-w-[13rem] max-w-[min(22rem,calc(100vw-6rem))] rounded-[18px] border px-3 py-2.5"
-                : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px] shadow-[0_1px_2px_0_rgba(16,16,16,0.61)]",
+                : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
           isTextOnly
             ? textGroupRadiusClassName
