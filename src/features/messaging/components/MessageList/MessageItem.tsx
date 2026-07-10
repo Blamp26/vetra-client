@@ -515,21 +515,30 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       )}
       {isOwn && !isRoom && (
           variant === "overlay" ? (
-          <span
-            className="ml-[-3px] flex h-[19px] w-[19px] items-center justify-center leading-[19px] text-white"
-            data-testid="message-media-only-status"
-          >
-            <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
-          </span>
-        ) : (
-          <span
-            className="ml-[-3px] flex h-[19px] w-[19px] items-center justify-center leading-[19px] text-white"
-            data-testid="message-inline-status"
-          >
-            <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
-          </span>
-        )
+            <span
+              className="ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center leading-[19px] text-current"
+              data-testid="message-media-only-status"
+            >
+              <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
+            </span>
+          ) : (
+            <span
+              className="ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center leading-[19px] text-current"
+              data-testid="message-inline-status"
+            >
+              <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
+            </span>
+          )
       )}
+    </span>
+  );
+
+  const renderInlineMetadata = () => (
+    <span
+      className="pointer-events-none relative top-[6px] float-right ml-[7px] mr-[-6px] inline-flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px]"
+      data-testid="message-text-inline-metadata"
+    >
+      {renderMetadata()}
     </span>
   );
 
@@ -643,12 +652,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         >
           <EmojiText text={msg.content || ""} />
         </span>
-        <span
-          className="pointer-events-none relative float-right ml-[7px] mr-[-6px] inline-flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px] top-[6px]"
-          data-testid="message-text-inline-metadata"
-        >
-          {renderMetadata()}
-        </span>
+        {renderInlineMetadata()}
       </div>
     );
   };
@@ -799,12 +803,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               >
                 <EmojiText text={msg.content || ""} />
               </span>
-              <span
-                className="pointer-events-none relative float-right ml-[7px] mr-[-6px] inline-flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px] top-[6px]"
-                data-testid="message-text-inline-metadata"
-              >
-                {renderMetadata()}
-              </span>
+              {renderInlineMetadata()}
             </div>
           </>
         ) : (

@@ -212,9 +212,13 @@ describe("MessageItem bubble layout", () => {
     expect(bubble.className).not.toMatch(/shadow|drop-shadow|filter/);
     expect(screen.queryByText("Tester")).not.toBeInTheDocument();
     expect(screen.getByText("23")).toBeInTheDocument();
-    expect(screen.getByText("12:00")).toBeInTheDocument();
-    expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
+    expect(screen.getByText("12:00")).toHaveClass("mr-[4px]", "text-[12px]", "leading-[16.2px]", "font-normal");
+    expect(inlineMeta).toHaveClass("relative", "float-right", "top-[6px]", "h-[20px]", "ml-[7px]", "mr-[-6px]", "px-[4px]", "bg-transparent");
     expect(screen.getByTestId("message-inline-status")).toHaveClass("ml-[-3px]", "h-[19px]", "w-[19px]");
+    const sentIcon = screen.getByLabelText("Sent");
+    expect(sentIcon).toHaveClass("h-[19px]", "w-[19px]", "shrink-0");
+    expect(sentIcon).toHaveAttribute("viewBox", "0 0 19 19");
+    expect(sentIcon.querySelectorAll("path")).toHaveLength(1);
     const tail = screen.getByTestId("message-text-tail");
     expect(tail).toHaveClass("right-[-8.8px]");
     expect(tail.getAttribute("class") ?? "").not.toMatch(/shadow|drop-shadow|filter/);
@@ -262,7 +266,10 @@ describe("MessageItem bubble layout", () => {
     expect(textFlow).toHaveClass("text-[16px]", "leading-[21px]");
     expect(textFlow).toHaveClass("relative");
     expect(textFlow).toContainElement(screen.getByTestId("message-text-inline-metadata"));
-    expect(screen.getByLabelText("Read")).toBeInTheDocument();
+    const readIcon = screen.getByLabelText("Read");
+    expect(readIcon).toHaveAttribute("viewBox", "0 0 19 19");
+    expect(readIcon).toHaveClass("h-[19px]", "w-[19px]", "shrink-0");
+    expect(readIcon.querySelectorAll("path")).toHaveLength(2);
   });
 
   it("renders group sender labels only when useful", () => {
@@ -395,6 +402,9 @@ describe("MessageItem bubble layout", () => {
     expect(metadata).not.toHaveClass("bg-black/40", "bg-black/60", "rounded-full", "backdrop-blur-[2px]", "shadow-[0_2px_10px_rgba(0,0,0,0.24)]");
     expect(screen.getByText("12:00")).toHaveClass("mr-[4px]", "text-[12px]", "leading-[12px]", "font-normal");
     expect(screen.getByTestId("message-media-only-status")).toHaveClass("ml-[-3px]", "h-[19px]", "w-[19px]");
+    const overlayReadIcon = screen.getByLabelText("Read");
+    expect(overlayReadIcon).toHaveClass("h-[19px]", "w-[19px]", "shrink-0");
+    expect(overlayReadIcon.querySelectorAll("path")).toHaveLength(2);
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Read")).toBeInTheDocument();
     expect(screen.queryByText("Download")).not.toBeInTheDocument();
@@ -1598,6 +1608,11 @@ describe("MessageItem bubble layout", () => {
       { isOwn: true },
     );
 
-    expect(screen.getByLabelText(label)).toBeInTheDocument();
+    const icon = screen.getByLabelText(label);
+    expect(icon).toHaveAttribute("viewBox", "0 0 19 19");
+    expect(icon).toHaveClass("h-[19px]", "w-[19px]", "shrink-0");
+    if (status === "error") {
+      expect(icon.querySelector("circle")).toBeNull();
+    }
   });
 });
