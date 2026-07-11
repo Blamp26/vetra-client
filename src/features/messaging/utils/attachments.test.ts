@@ -6,6 +6,7 @@ import {
   getAttachmentDisplaySrc,
   getMessageAttachment,
   getMessageAttachments,
+  normalizeMessageAttachments,
   getAttachmentOriginalSrc,
   getPreviewText,
   isMessageForwardable,
@@ -13,6 +14,90 @@ import {
 } from "./attachments";
 
 describe("attachments utils", () => {
+  it("hydrates document messages from the persisted history shape", () => {
+    const message = normalizeMessageAttachments({
+      id: 901,
+      content: null,
+      sender_id: 7,
+      recipient_id: 8,
+      room_id: null,
+      status: "sent",
+      inserted_at: "2026-07-11T08:00:00Z",
+      media_file_id: "document-1",
+      media_file_ids: ["document-1", "document-2", "document-3"],
+      attachment: {
+        id: "document-1",
+        url: "/api/v1/media/document-1",
+        mime_type: "application/pdf",
+        original_name: "first.pdf",
+        file_size: 1200,
+        kind: "file",
+      },
+      attachments: [
+        {
+          id: "document-1",
+          url: "/api/v1/media/document-1",
+          mime_type: "application/pdf",
+          original_name: "first.pdf",
+          file_size: 1200,
+          kind: "file",
+        },
+        {
+          id: "document-2",
+          url: "/api/v1/media/document-2",
+          mime_type: "application/zip",
+          original_name: "second.zip",
+          file_size: 2400,
+          kind: "file",
+        },
+        {
+          id: "document-3",
+          url: "/api/v1/media/document-3",
+          mime_type: "text/plain",
+          original_name: "third.txt",
+          file_size: 3600,
+          kind: "file",
+        },
+      ],
+    });
+
+    expect(message.content).toBeNull();
+    expect(message.attachments?.map((attachment) => attachment.id)).toEqual([
+      "document-1",
+      "document-2",
+      "document-3",
+    ]);
+    expect(message.media_file_ids).toEqual([
+      "document-1",
+      "document-2",
+      "document-3",
+    ]);
+  });
+
+  it("retains a single persisted document when the response only has its id and attachment", () => {
+    const message = normalizeMessageAttachments({
+      id: 902,
+      content: null,
+      sender_id: 7,
+      recipient_id: 8,
+      room_id: null,
+      status: "sent",
+      inserted_at: "2026-07-11T08:01:00Z",
+      media_file_id: "document-only",
+      attachment: {
+        id: "document-only",
+        url: "/api/v1/media/document-only",
+        mime_type: "application/pdf",
+        original_name: "only.pdf",
+        file_size: 1200,
+        kind: "file",
+      },
+    });
+
+    expect(message.attachments).toHaveLength(1);
+    expect(message.attachments?.[0].original_name).toBe("only.pdf");
+  });
+
   it("uses useful labels for attachment-only reply/search previews", () => {
     expect(
       getPreviewText({

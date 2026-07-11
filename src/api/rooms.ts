@@ -1,5 +1,6 @@
 import { get, post, del } from './base';
 import { Message, Room, RoomPreview, ResourceRef } from '@/shared/types';
+import { normalizeMessageAttachments } from '@/features/messaging/utils/attachments';
 
 export const roomsApi = {
   create(name: string, memberIds: ResourceRef[]): Promise<Room> {
@@ -18,12 +19,14 @@ export const roomsApi = {
     const params = new URLSearchParams();
     if (limit !== undefined) params.set("limit", String(limit));
     if (beforeId !== undefined) params.set("before_id", String(beforeId));
-    return get<Message[]>(`/rooms/${roomRef}/messages?${params}`, { signal });
+    return get<Message[]>(`/rooms/${roomRef}/messages?${params}`, { signal })
+      .then((messages) => messages.map(normalizeMessageAttachments));
   },
 
   search(roomRef: ResourceRef, query: string): Promise<Message[]> {
     const params = new URLSearchParams({ q: query });
-    return get<Message[]>(`/rooms/${roomRef}/search?${params}`);
+    return get<Message[]>(`/rooms/${roomRef}/search?${params}`)
+      .then((messages) => messages.map(normalizeMessageAttachments));
   },
 
   delete(roomRef: ResourceRef): Promise<void> {

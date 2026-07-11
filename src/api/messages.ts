@@ -1,5 +1,6 @@
 import { get } from './base';
 import { Message, ConversationPreview, ResourceRef } from '@/shared/types';
+import { normalizeMessageAttachments } from '@/features/messaging/utils/attachments';
 
 export interface ConversationParams {
   limit?:    number;
@@ -18,7 +19,7 @@ export const messagesApi = {
     }
     return get<Message[]>(`/conversations/${otherUserRef}?${searchParams}`, {
       signal: params.signal,
-    });
+    }).then((messages) => messages.map(normalizeMessageAttachments));
   },
 
   getList(): Promise<ConversationPreview[]> {
@@ -27,6 +28,7 @@ export const messagesApi = {
 
   search(otherUserRef: ResourceRef, query: string): Promise<Message[]> {
     const params = new URLSearchParams({ q: query });
-    return get<Message[]>(`/conversations/${otherUserRef}/search?${params}`);
+    return get<Message[]>(`/conversations/${otherUserRef}/search?${params}`)
+      .then((messages) => messages.map(normalizeMessageAttachments));
   },
 };

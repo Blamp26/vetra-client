@@ -330,6 +330,24 @@ export function getMessageAttachments(source: AttachmentLike): Attachment[] {
   }], "legacy-single");
 }
 
+/** Normalize persisted attachment fields before history enters the store. */
+export function normalizeMessageAttachments(message: Message): Message {
+  const attachments = getMessageAttachments(message);
+  if (attachments.length === 0) return message;
+
+  return {
+    ...message,
+    attachment: attachments[0],
+    attachments,
+    media_file_id: message.media_file_id ?? attachments[0].id,
+    media_file_ids: message.media_file_ids?.length
+      ? message.media_file_ids
+      : attachments.length > 1
+        ? attachments.map((attachment) => attachment.id)
+        : null,
+  };
+}
+
 export function getMessageAttachment(source: AttachmentLike): Attachment | null {
   return getMessageAttachments(source)[0] ?? null;
 }
