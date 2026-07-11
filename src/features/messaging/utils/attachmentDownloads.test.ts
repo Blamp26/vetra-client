@@ -86,6 +86,8 @@ describe("attachmentDownloads", () => {
         headers: { Authorization: "Bearer secret-token" },
       },
     );
+    expect(anchor.download).toBe("report.pdf");
+    expect(anchor.parentElement).toBeNull();
     expect(click).toHaveBeenCalledTimes(1);
   });
 });

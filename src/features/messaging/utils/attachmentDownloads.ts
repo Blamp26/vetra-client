@@ -49,9 +49,14 @@ export async function downloadAttachmentWithAuth({
   link.href = objectUrl;
   link.download = getAttachmentDisplayName(attachment);
   link.rel = "noopener noreferrer";
-  link.click();
-
-  revokeObjectUrlLater(objectUrl);
+  link.style.display = "none";
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    revokeObjectUrlLater(objectUrl);
+  }
 }
 
 export async function openAttachmentWithAuth({

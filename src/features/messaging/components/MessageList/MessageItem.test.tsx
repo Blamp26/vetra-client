@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -146,6 +146,8 @@ function renderMessageItem(
 describe("MessageItem bubble layout", () => {
   beforeEach(() => {
     useAppStoreMock.mockReset();
+    vi.mocked(attachmentDownloads.downloadAttachmentWithAuth).mockReset();
+    vi.mocked(attachmentDownloads.openAttachmentWithAuth).mockReset();
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
       selector({ authToken: "secret-token" }),
     );
@@ -1527,8 +1529,9 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-file-name")).toHaveClass("truncate", "text-[16px]", "font-medium", "leading-[24px]");
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.getByTestId("message-file-size")).toHaveClass("truncate", "text-[14px]", "font-normal", "leading-[15px]");
-    const downloadButton = screen.getByRole("button", { name: "Download" });
-    expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "opacity-0", "bg-transparent");
+    const downloadButton = screen.getByRole("button", { name: /Download/ });
+    expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "opacity-0", "bg-transparent", "group-hover:opacity-100", "group-focus-within:opacity-100");
+    expect(downloadButton).toHaveAccessibleName("Download Lection 3. JS (1).pdf");
     expect(downloadButton.querySelector("svg")).toHaveClass("h-6", "w-6");
     expect(fileRow).toHaveAttribute("role", "button");
     expect(screen.getByText("12:00")).toBeInTheDocument();
@@ -1560,6 +1563,109 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-text-tail")).toHaveClass("left-[-9px]", "bottom-[-1px]");
   });
 
+  it("downloads the clicked document through its own attachment and stops message selection", async () => {
+    const onToggleSelection = vi.fn();
+
+    renderMessageItem(
+      {
+        media_file_id: "download-document",
+        media_mime_type: "application/pdf",
+        attachment: {
+          id: "download-document",
+          url: "/api/v1/media/download-document",
+          mime_type: "application/pdf",
+          original_name: "download-me.pdf",
+          file_size: 1024,
+          kind: "file",
+        },
+      },
+      { selectionMode: true, onToggleSelection },
+    );
+
+    const downloadButton = screen.getByRole("button", { name: "Download download-me.pdf" });
+    const extension = screen.getByText("pdf");
+
+    expect(extension).toHaveClass("group-hover:opacity-0", "group-focus-within:opacity-0");
+    expect(downloadButton).toHaveClass("group-hover:opacity-100", "group-focus-within:opacity-100");
+    act(() => downloadButton.focus());
+    expect(downloadButton).toHaveFocus();
+    fireEvent.click(downloadButton);
+
+    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith({
+      attachment: expect.objectContaining({
+        id: "download-document",
+        url: expect.stringContaining("/api/v1/media/download-document"),
+        original_name: "download-me.pdf",
+      }),
+      authToken: "secret-token",
+    }));
+    expect(onToggleSelection).not.toHaveBeenCalled();
+  });
+
+  it("blocks duplicate downloads and shows a local spinner for the active document", async () => {
+    let resolveDownload: (() => void) | undefined;
+    vi.mocked(attachmentDownloads.downloadAttachmentWithAuth).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveDownload = resolve;
+      }),
+    );
+
+    renderMessageItem({
+      media_file_id: "pending-document",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "pending-document",
+        url: "/api/v1/media/pending-document",
+        mime_type: "application/pdf",
+        original_name: "pending.pdf",
+        file_size: 1024,
+        kind: "file",
+      },
+    });
+
+    const downloadButton = screen.getByRole("button", { name: "Download pending.pdf" });
+    fireEvent.click(downloadButton);
+    fireEvent.click(downloadButton);
+
+    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledTimes(1);
+    expect(downloadButton).toBeDisabled();
+    expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "downloading");
+    expect(downloadButton.querySelector(".animate-spin")).toBeInTheDocument();
+
+    resolveDownload?.();
+    await waitFor(() => expect(downloadButton).not.toBeDisabled());
+    expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "idle");
+  });
+
+  it("restores a failed document download to a retryable state", async () => {
+    vi.mocked(attachmentDownloads.downloadAttachmentWithAuth).mockRejectedValueOnce(new Error("network"));
+
+    renderMessageItem({
+      media_file_id: "failed-document",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "failed-document",
+        url: "/api/v1/media/failed-document",
+        mime_type: "application/pdf",
+        original_name: "failed.pdf",
+        file_size: 1024,
+        kind: "file",
+      },
+    });
+
+    const downloadButton = screen.getByRole("button", { name: "Download failed.pdf" });
+    fireEvent.click(downloadButton);
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Download failed for failed.pdf"));
+    expect(downloadButton).not.toBeDisabled();
+    expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "failed");
+    expect(downloadButton.querySelector(".lucide-download")).toBeInTheDocument();
+
+    vi.mocked(attachmentDownloads.downloadAttachmentWithAuth).mockResolvedValueOnce(undefined);
+    fireEvent.click(downloadButton);
+    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledTimes(2));
+  });
+
   it("renders outgoing documents as connected first and last segments with attachment-specific downloads", async () => {
     const documents = [
       {
@@ -1586,7 +1692,7 @@ describe("MessageItem bubble layout", () => {
     const first = screen.getByTestId("message-document-segment-first");
     const last = screen.getByTestId("message-document-segment-last");
     const rows = screen.getAllByTestId("message-file-row");
-    const downloadButtons = screen.getAllByRole("button", { name: "Download" });
+    const downloadButtons = screen.getAllByRole("button", { name: /Download/ });
 
     expect(group).toHaveClass("flex", "w-[275px]", "gap-0", "row-gap-0", "p-0", "bg-transparent");
     expect(first).toHaveClass("w-[275px]", "h-[70px]", "px-2", "pt-[6px]", "pb-[4px]", "rounded-tl-[15px]", "rounded-tr-[15px]", "rounded-bl-[0px]", "rounded-br-[0px]");
@@ -1700,7 +1806,7 @@ describe("MessageItem bubble layout", () => {
       },
     });
 
-    const downloadButton = screen.getByRole("button", { name: "Download" });
+    const downloadButton = screen.getByRole("button", { name: /Download/ });
     const fileRow = screen.getByTestId("message-file-row");
     const iconContainer = screen.getByTestId("message-file-icon-container");
 
@@ -1755,7 +1861,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("File")).toBeInTheDocument();
     expect(screen.getByText("Unknown size")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Download" }),
+      screen.getByRole("button", { name: /Download/ }),
     ).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
   });

@@ -185,7 +185,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   formatTime,
 }, ref) => {
   const authToken = useAppStore((s) => s.authToken);
-  const [isAttachmentActionPending, setIsAttachmentActionPending] = React.useState(false);
   const [attachmentActionError, setAttachmentActionError] = React.useState<string | null>(null);
   const [decodedVisualDimensions, setDecodedVisualDimensions] = React.useState<
     Record<string, { width: number; height: number }>
@@ -451,10 +450,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const handleAttachmentAction = async (
     action: "download" | "open",
     currentAttachment: Attachment | null = attachment,
-  ) => {
-    if (!currentAttachment || isAttachmentActionPending) return;
+  ): Promise<boolean> => {
+    if (!currentAttachment) return false;
 
-    setIsAttachmentActionPending(true);
     setAttachmentActionError(null);
 
     try {
@@ -463,7 +461,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           const videoSrc = getAttachmentOriginalSrc(currentAttachment);
           if (!videoSrc) {
             setAttachmentActionError("Attachment unavailable");
-            return;
+            return false;
           }
 
           onLightbox({
@@ -474,18 +472,18 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             avatarSrc: msg.sender?.avatar_url ?? null,
             messageId: msg.id,
           });
-          return;
+          return true;
         }
 
         await openAttachmentWithAuth({ attachment: currentAttachment, authToken });
       } else {
         await downloadAttachmentWithAuth({ attachment: currentAttachment, authToken });
       }
+      return true;
     } catch (error) {
       console.error("Attachment action failed:", error);
       setAttachmentActionError("Attachment unavailable");
-    } finally {
-      setIsAttachmentActionPending(false);
+      return false;
     }
   };
 
@@ -651,9 +649,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   isOwn={isOwn}
                   isCompact
                   isGrouped
-                  isActionPending={isAttachmentActionPending}
                   onOpen={() => void handleAttachmentAction("open", currentAttachment)}
-                  onDownload={() => void handleAttachmentAction("download", currentAttachment)}
+                  onDownload={() => handleAttachmentAction("download", currentAttachment)}
                 />
                 {isLast && hasText && (
                   <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
@@ -683,9 +680,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           isOwn={isOwn}
           isCompact={isSingleDocumentAttachment}
           isGrouped={false}
-          isActionPending={isAttachmentActionPending}
           onOpen={() => void handleAttachmentAction("open")}
-          onDownload={() => void handleAttachmentAction("download")}
+          onDownload={() => handleAttachmentAction("download")}
         />
 
         {hasText && (

@@ -1,5 +1,5 @@
-import type { KeyboardEvent, MouseEvent } from "react";
-import { Download } from "lucide-react";
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { Download, LoaderCircle } from "lucide-react";
 import type { Attachment } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import {
@@ -14,9 +14,8 @@ interface DocumentAttachmentRowProps {
   isOwn: boolean;
   isCompact: boolean;
   isGrouped: boolean;
-  isActionPending: boolean;
   onOpen: () => void;
-  onDownload: () => void;
+  onDownload: () => Promise<boolean>;
 }
 
 function getAttachmentExtensionBadge(attachment: Attachment | null, lowercase: boolean) {
@@ -59,10 +58,11 @@ export function DocumentAttachmentRow({
   isOwn,
   isCompact,
   isGrouped,
-  isActionPending,
   onOpen,
   onDownload,
 }: DocumentAttachmentRowProps) {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadFailed, setDownloadFailed] = useState(false);
   const attachmentName = getAttachmentDisplayName(attachment);
   const attachmentExtension = getAttachmentExtensionBadge(attachment, isCompact);
   const canOpenInline = attachment?.mime_type === "application/pdf" || attachment?.kind === "video";
@@ -84,7 +84,15 @@ export function DocumentAttachmentRow({
 
   const handleDownloadClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    onDownload();
+    if (isDownloading) return;
+
+    setIsDownloading(true);
+    setDownloadFailed(false);
+    void onDownload().then((succeeded) => {
+      setDownloadFailed(!succeeded);
+    }).finally(() => {
+      setIsDownloading(false);
+    });
   };
 
   return (
@@ -109,10 +117,11 @@ export function DocumentAttachmentRow({
       tabIndex={canOpenInline ? 0 : undefined}
     >
       <div
-        className={isCompact
+        className={cn("group", isCompact
           ? "relative mr-[12px] h-[54px] w-[54px] shrink-0 cursor-pointer"
-          : "relative h-[54px] w-[54px] shrink-0"}
+          : "relative h-[54px] w-[54px] shrink-0")}
         data-testid="message-file-icon-container"
+        data-download-state={isDownloading ? "downloading" : downloadFailed ? "failed" : "idle"}
       >
         <div
           className={cn(
@@ -124,22 +133,26 @@ export function DocumentAttachmentRow({
           data-testid="message-file-icon"
         >
           <span className={isCompact
-            ? "text-[16px] font-medium leading-[24px] text-white lowercase"
+            ? "text-[16px] font-medium leading-[24px] text-white lowercase transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
             : "sr-only text-[11px] font-semibold leading-none tracking-[0.08em]"}>
             {attachmentExtension}
           </span>
         </div>
-        <button
+          <button
           type="button"
-          aria-label="Download"
-          title="Download"
+          aria-label={`Download ${attachmentName}`}
+          title={`Download ${attachmentName}`}
           onClick={handleDownloadClick}
-          disabled={isActionPending}
+          disabled={isDownloading}
           className={isCompact
-            ? "absolute inset-0 flex h-[54px] w-[54px] items-center justify-center bg-transparent text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 disabled:opacity-100"
+            ? "absolute inset-0 flex h-[54px] w-[54px] items-center justify-center bg-transparent text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-100"
             : cn(iconButtonClassName, "absolute inset-0 h-full w-full rounded-[6px] bg-transparent text-white hover:bg-black/10")}
         >
-          <Download className={isCompact ? "h-6 w-6" : "h-5 w-5"} />
+          {isDownloading ? (
+            <LoaderCircle className="h-6 w-6 animate-spin" aria-hidden="true" />
+          ) : (
+            <Download className={isCompact ? "h-6 w-6" : "h-5 w-5"} aria-hidden="true" />
+          )}
         </button>
       </div>
       <div
@@ -171,6 +184,11 @@ export function DocumentAttachmentRow({
             : [getAttachmentTypeLabel(attachment) || getAttachmentKindLabel(attachment?.kind ?? "file"), formattedSize].join(" · ")}
         </div>
       </div>
+      {downloadFailed && (
+        <span className="sr-only" role="status" aria-live="polite">
+          Download failed for {attachmentName}. Activate the download button to retry.
+        </span>
+      )}
     </div>
   );
 }
