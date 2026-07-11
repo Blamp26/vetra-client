@@ -186,8 +186,12 @@ export function buildAttachmentSendUnits(
   for (let index = 0; index < attachments.length; ) {
     const current = attachments[index];
     if (!isVisualAttachment(current.kind)) {
-      units.push({ kind: "file", attachments: [current] });
-      index += 1;
+      const fileRun: PendingAttachment[] = [];
+      while (index < attachments.length && !isVisualAttachment(attachments[index].kind)) {
+        fileRun.push(attachments[index]);
+        index += 1;
+      }
+      units.push({ kind: "file", attachments: fileRun });
       continue;
     }
 

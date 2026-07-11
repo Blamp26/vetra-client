@@ -360,6 +360,103 @@ describe("MessageInput attachments", () => {
     expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
   });
 
+  it.each([2, 3])("sends %i selected documents as one ordered grouped message", async (documentCount) => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const input = getFileInput(container);
+    const documents = Array.from({ length: documentCount }, (_, index) =>
+      new File([`pdf-${index + 1}`], `document-${index + 1}.pdf`, { type: "application/pdf" }),
+    );
+
+    fireEvent.change(input, { target: { files: documents } });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      {
+        content: null,
+        mediaFileId: "media-document-1.pdf",
+        mediaFileIds: documents.map((document) => `media-${document.name}`),
+      },
+      undefined,
+    );
+    expect(uploadSendMock).toHaveBeenCalledTimes(documentCount);
+  });
+
+  it("includes document text once and waits for every document upload before sending", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const pendingUploads: Array<{ fileName: string; xhr: MockXMLHttpRequest }> = [];
+    uploadSendMock.mockImplementation(
+      ({ formData, xhr }: { formData: FormData; xhr: MockXMLHttpRequest }) => {
+        pendingUploads.push({
+          fileName: (formData.get("file") as File).name,
+          xhr,
+        });
+      },
+    );
+
+    const { container } = render(<MessageInput onSend={onSend} />);
+    fireEvent.change(screen.getByPlaceholderText("Message..."), {
+      target: { value: "Document batch caption" },
+    });
+    fireEvent.change(getFileInput(container), {
+      target: {
+        files: [
+          new File(["first"], "first.pdf", { type: "application/pdf" }),
+          new File(["second"], "second.pdf", { type: "application/pdf" }),
+        ],
+      },
+    });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(pendingUploads).toHaveLength(2));
+    expect(onSend).not.toHaveBeenCalled();
+
+    for (const upload of pendingUploads) {
+      upload.xhr.status = 200;
+      upload.xhr.response = { data: { media_file_id: `uploaded-${upload.fileName}` } };
+      upload.xhr.onload?.();
+    }
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      {
+        content: "Document batch caption",
+        mediaFileId: "uploaded-first.pdf",
+        mediaFileIds: ["uploaded-first.pdf", "uploaded-second.pdf"],
+      },
+      undefined,
+    );
+  });
+
+  it("does not send a partial document group when one upload fails", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    uploadSendMock.mockImplementation(
+      ({ formData, xhr }: { formData: FormData; xhr: MockXMLHttpRequest }) => {
+        const file = formData.get("file") as File;
+        xhr.status = file.name === "failed.pdf" ? 500 : 200;
+        xhr.response = xhr.status === 200
+          ? { data: { media_file_id: `uploaded-${file.name}` } }
+          : { errors: { content: ["upload failed"] } };
+        xhr.onload?.();
+      },
+    );
+
+    const { container } = render(<MessageInput onSend={onSend} />);
+    fireEvent.change(getFileInput(container), {
+      target: {
+        files: [
+          new File(["ok"], "ok.pdf", { type: "application/pdf" }),
+          new File(["failed"], "failed.pdf", { type: "application/pdf" }),
+        ],
+      },
+    });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(screen.getByText("Upload failed")).toBeInTheDocument());
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it("sends a single photo with the existing single-media behavior", async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = render(<MessageInput onSend={onSend} />);

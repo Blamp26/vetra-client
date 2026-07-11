@@ -138,7 +138,7 @@ describe("attachmentQueue helpers", () => {
     expect(units[1].attachments.map((attachment) => attachment.id)).toEqual(["video-10"]);
   });
 
-  it("keeps documents separate while preserving photo runs", () => {
+  it("groups contiguous documents while preserving separate photo runs", () => {
     const units = buildAttachmentSendUnits([
       makeAttachment("file-1", "file"),
       makeAttachment("photo-1", "photo"),
@@ -155,6 +155,22 @@ describe("attachmentQueue helpers", () => {
       { kind: "visual", ids: ["photo-1", "video-2"] },
       { kind: "file", ids: ["file-2"] },
       { kind: "visual", ids: ["photo-3"] },
+    ]);
+  });
+
+  it("groups two or more ordinary documents into one ordered file unit", () => {
+    const units = buildAttachmentSendUnits([
+      makeAttachment("file-1", "file"),
+      makeAttachment("file-2", "file"),
+      makeAttachment("file-3", "file"),
+    ]);
+
+    expect(units).toHaveLength(1);
+    expect(units[0]).toMatchObject({ kind: "file" });
+    expect(units[0].attachments.map((attachment) => attachment.id)).toEqual([
+      "file-1",
+      "file-2",
+      "file-3",
     ]);
   });
 
