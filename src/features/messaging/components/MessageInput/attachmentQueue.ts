@@ -8,6 +8,7 @@ export interface PendingAttachment {
   size: number;
   kind: AttachmentKind;
   previewUrl: string | null;
+  durationMs?: number;
 }
 
 export interface AttachmentSendUnit {

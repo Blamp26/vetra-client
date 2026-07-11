@@ -199,6 +199,7 @@ function finalizeMessageAttachments(
 function fallbackAttachmentName(kind: AttachmentKind) {
   if (kind === "photo") return "Photo";
   if (kind === "video") return "Video";
+  if (kind === "voice") return "Voice message";
   return "File";
 }
 
@@ -359,6 +360,7 @@ export function isMessageForwardable(message: AttachmentLike): boolean {
 export function getAttachmentKindLabel(kind: AttachmentKind): string {
   if (kind === "photo") return "Photo";
   if (kind === "video") return "Video";
+  if (kind === "voice") return "Voice message";
   return "File";
 }
 
@@ -398,6 +400,7 @@ export function getAttachmentTypeLabel(
   if (attachment.mime_type === "application/pdf") return "PDF";
   if (attachment.kind === "photo") return "Photo";
   if (attachment.kind === "video") return "Video";
+  if (attachment.kind === "voice") return "Voice message";
   return attachment.mime_type || "File";
 }
 
@@ -418,6 +421,9 @@ function attachmentOnlyPreview(source: PreviewLike): string | null {
     const allVideos = attachments.every((attachment) => attachment.kind === "video");
     if (allVideos) return "Videos";
 
+    const allVoice = attachments.every((attachment) => attachment.kind === "voice");
+    if (allVoice) return "Voice messages";
+
     return "Files";
   }
 
@@ -430,6 +436,7 @@ function attachmentOnlyPreview(source: PreviewLike): string | null {
 
   if (kind === "photo") return "Photo";
   if (kind === "video") return "Video";
+  if (kind === "voice") return "Voice message";
   if (name) return `File: ${name}`;
   return attachment ||
     source.attachment_kind ||

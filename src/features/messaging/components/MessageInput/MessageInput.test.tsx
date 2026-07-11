@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { useAppStoreMock, uploadSendMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
@@ -35,6 +35,25 @@ class MockXMLHttpRequest {
   send(formData: FormData) {
     uploadSendMock({ formData, xhr: this });
   }
+}
+
+class MockMediaRecorder {
+  static isTypeSupported = vi.fn((mimeType: string) => mimeType === "audio/webm;codecs=opus");
+  mimeType = "audio/webm;codecs=opus";
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  constructor(public stream: MediaStream, options?: { mimeType?: string }) {
+    this.mimeType = options?.mimeType ?? this.mimeType;
+  }
+
+  start = vi.fn();
+
+  stop = vi.fn(() => {
+    this.ondataavailable?.({ data: new Blob([new Uint8Array([1, 2, 3])], { type: this.mimeType }) });
+    this.onstop?.();
+  });
 }
 
 function makeState() {
@@ -88,6 +107,23 @@ describe("MessageInput attachments", () => {
     );
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function installVoiceMocks() {
+    const stopTrack = vi.fn();
+    const getUserMedia = vi.fn(async () => ({
+      getTracks: () => [{ stop: stopTrack }],
+    } as unknown as MediaStream));
+    vi.stubGlobal("MediaRecorder", MockMediaRecorder);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    return { getUserMedia, stopTrack };
+  }
+
   it("opens the attachment source menu from the attachment button", () => {
     render(<MessageInput onSend={vi.fn()} />);
 
@@ -96,6 +132,62 @@ describe("MessageInput attachments", () => {
     expect(screen.getByTestId("attachment-source-menu")).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Photo or Video" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "File" })).toBeInTheDocument();
+  });
+
+  it("records, cancels, and releases microphone tracks without sending", async () => {
+    const { getUserMedia, stopTrack } = installVoiceMocks();
+    const onSend = vi.fn();
+    render(<MessageInput onSend={onSend} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Record voice message" }));
+    await waitFor(() => expect(screen.getByTestId("voice-recording-panel")).toBeInTheDocument());
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
+
+    fireEvent.click(screen.getByRole("button", { name: /Cancel/ }));
+
+    await waitFor(() => expect(screen.queryByTestId("voice-recording-panel")).not.toBeInTheDocument());
+    expect(stopTrack).toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("uploads the finished recording before sending one voice attachment", async () => {
+    installVoiceMocks();
+    const onSend = vi.fn(async () => undefined);
+    render(<MessageInput onSend={onSend} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Record voice message" }));
+    await waitFor(() => expect(screen.getByTestId("voice-recording-panel")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Stop and send voice message" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: null,
+        mediaFileId: expect.stringMatching(/^media-voice-message-/),
+        mediaFileIds: null,
+      }),
+      undefined,
+    );
+    const [{ formData }] = uploadSendMock.mock.calls.map(([request]) => request as { formData: FormData });
+    expect(formData.get("kind")).toBe("voice");
+    expect(Number(formData.get("duration_ms"))).toBeGreaterThan(0);
+  });
+
+  it("restores the composer when microphone permission is denied", async () => {
+    const getUserMedia = vi.fn(async () => {
+      throw new DOMException("denied", "NotAllowedError");
+    });
+    vi.stubGlobal("MediaRecorder", MockMediaRecorder);
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+    render(<MessageInput onSend={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Record voice message" }));
+
+    await waitFor(() => expect(screen.getByText(/Microphone permission was denied/)).toBeInTheDocument());
+    expect(screen.queryByTestId("voice-recording-panel")).not.toBeInTheDocument();
   });
 
   it("closes the attachment source menu on outside click", async () => {

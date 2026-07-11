@@ -6,6 +6,7 @@ import { useAppStore } from "@/store";
 import { StatusIcon } from "./StatusIcon";
 import { MessageTail } from "./MessageTail";
 import { DocumentAttachmentRow } from "./DocumentAttachmentRow";
+import { VoiceMessagePlayer } from "./VoiceMessagePlayer";
 import { VisualAttachmentGroup, type ResolvedVisualAttachment } from "./VisualAttachmentGroup";
 import {
   getAttachmentDisplaySrc,
@@ -208,7 +209,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       : [];
   const isVisualMediaMessage = visualAttachments.length > 0;
   const isVisualAlbum = visualAttachments.length > 1;
-  const isDocumentAttachment = attachments.length > 0 && !isVisualMediaMessage;
+  const isVoiceMessage = attachments.length === 1 && attachments[0].kind === "voice";
+  const isDocumentAttachment = attachments.length > 0 && !isVisualMediaMessage && !isVoiceMessage;
   const isSingleDocumentAttachment = attachments.length === 1 && isDocumentAttachment;
   const isDocumentGroup = attachments.length >= 2 && attachments.every((currentAttachment) => currentAttachment.kind === "file");
   const isMediaOnly =
@@ -218,7 +220,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const isTextOnly = hasText && !hasMedia;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
   const shouldRenderTail =
-    !isGroupedWithNext && (isTextOnly || isDocumentAttachment || isVisualMediaMessage);
+    !isGroupedWithNext && (isTextOnly || isDocumentAttachment || isVisualMediaMessage || isVoiceMessage);
   const resolvedVisualAttachments = React.useMemo<ResolvedVisualAttachment[]>(() => (
     visualAttachments.map((currentAttachment) => {
       const serverDimensions = getAttachmentIntrinsicSize(currentAttachment);
@@ -710,6 +712,29 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     );
   };
 
+  const renderVoiceAttachment = () => {
+    const voiceAttachment = attachments[0];
+    if (!voiceAttachment || voiceAttachment.kind !== "voice") return null;
+
+    return (
+      <div className="min-w-[220px]" data-testid="message-voice-attachment">
+        <VoiceMessagePlayer attachment={voiceAttachment} />
+        {hasText && (
+          <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
+            <EmojiText text={msg.content || ""} />
+          </div>
+        )}
+        <span
+          className="relative top-[6px] float-right ml-[7px] mr-[-6px] mt-[-20px] flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px]"
+          data-testid="message-voice-inline-metadata"
+        >
+          {renderMetadata()}
+        </span>
+        {renderBubbleTail("message-voice-tail")}
+      </div>
+    );
+  };
+
   const renderVisualCaption = () => {
     return (
       <div className="relative text-[16px] font-normal leading-[21px] tracking-normal" data-testid="message-text-content">
@@ -729,7 +754,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <>
         {hasMedia && (
           <>
-            {isVisualMediaMessage ? renderPhotoMedia() : renderDocumentAttachment()}
+            {isVoiceMessage
+              ? renderVoiceAttachment()
+              : isVisualMediaMessage
+                ? renderPhotoMedia()
+                : renderDocumentAttachment()}
           </>
         )}
         {hasText && !isDocumentAttachment && (
@@ -820,13 +849,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                     ? "max-w-[min(480px,calc(100vw-6rem))]"
                     : "max-w-[min(480px,calc(100vw-6rem))]",
                 )
-              : isSingleDocumentAttachment
+            : isSingleDocumentAttachment || isVoiceMessage
                 ? "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
           isDocumentGroup
             ? "rounded-none"
-            : isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment
+            : isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment || isVoiceMessage
             ? textGroupRadiusClassName
             : isOwnLeftColumn
               ? cn(

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
-import { FileText, ImagePlus, Paperclip, SendHorizonal } from "lucide-react";
+import { FileText, ImagePlus, Mic, Paperclip, SendHorizonal, Square, X } from "lucide-react";
 import { useAppStore, type RootState } from "@/store"; 
 import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
@@ -21,6 +21,11 @@ import {
   uploadAttachmentsBounded,
   type PendingAttachment,
 } from "./attachmentQueue";
+import {
+  createVoiceRecordingFile,
+  formatVoiceDuration,
+  selectVoiceRecordingMimeType,
+} from "../../utils/voiceRecording";
 import {
   createAttachmentBatchId,
   createAttachmentSendUnitId,
@@ -139,6 +144,8 @@ interface Props {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadLabel, setUploadLabel] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [voiceRecordingState, setVoiceRecordingState] = useState<"idle" | "recording" | "processing">("idle");
+  const [voiceElapsedMs, setVoiceElapsedMs] = useState(0);
   const [isComposerAttachmentMenuOpen, setIsComposerAttachmentMenuOpen] = useState(false);
   const [isModalAttachmentMenuOpen, setIsModalAttachmentMenuOpen] = useState(false);
 
@@ -151,6 +158,12 @@ interface Props {
   const attachmentBatchIdRef = useRef<string | null>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const uploadedMediaFileIdsRef = useRef(new Map<string, string>());
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceStartedAtRef = useRef(0);
+  const voiceDiscardRef = useRef(false);
+  const voiceSendLockRef = useRef(false);
  
    const editingMessage = useAppStore((s: RootState) => s.editingMessage); 
    const cancelEditing = useAppStore((s: RootState) => s.cancelEditing); 
@@ -162,6 +175,13 @@ interface Props {
  
    const isEditing = !!editingMessage; 
   const isUploading = uploadStatus === "uploading";
+  const activeChatKey = activeChat
+    ? activeChat.type === "direct"
+      ? `direct:${activeChat.partnerId}`
+      : activeChat.type === "room"
+        ? `room:${activeChat.roomId}`
+        : activeChat.type
+    : null;
  
    useEffect(() => { 
      if (isEditing && editingMessage) { 
@@ -199,10 +219,10 @@ interface Props {
   }, [pendingAttachments.length]);
 
   useEffect(() => {
-    if (!disabled && !isSending && !isUploading && !isEditing) return;
+    if (!disabled && !isSending && !isUploading && !isEditing && voiceRecordingState === "idle") return;
     setIsComposerAttachmentMenuOpen(false);
     setIsModalAttachmentMenuOpen(false);
-  }, [disabled, isEditing, isSending, isUploading]);
+  }, [disabled, isEditing, isSending, isUploading, voiceRecordingState]);
 
   useEffect(() => {
     logAttachmentDebug("modal.state", {
@@ -219,11 +239,26 @@ interface Props {
   useEffect(() => {
     return () => {
       uploadAbortControllerRef.current?.abort();
+      voiceDiscardRef.current = true;
+      voiceRecorderRef.current?.stop();
+      voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+      voiceRecorderRef.current = null;
+      voiceStreamRef.current = null;
       pendingAttachmentsRef.current.forEach((attachment) => {
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
       });
     };
   }, []);
+
+  useEffect(() => {
+    if (voiceRecordingState === "idle") return;
+    const interval = window.setInterval(() => {
+      if (voiceStartedAtRef.current > 0) {
+        setVoiceElapsedMs(Date.now() - voiceStartedAtRef.current);
+      }
+    }, 200);
+    return () => window.clearInterval(interval);
+  }, [voiceRecordingState]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -235,7 +270,7 @@ interface Props {
 
   const stopTyping = () => { onTypingStop?.() }; 
  
-   const handleChange = (value: string) => { 
+  const handleChange = (value: string) => {
     setContent(value); 
     if (value.trim().length > 0) { 
         onTypingStart?.(); 
@@ -243,6 +278,138 @@ interface Props {
         stopTyping(); 
     } 
    }; 
+
+  const releaseVoiceStream = () => {
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    voiceStreamRef.current = null;
+    voiceRecorderRef.current = null;
+  };
+
+  const resetVoiceRecording = () => {
+    releaseVoiceStream();
+    voiceChunksRef.current = [];
+    voiceStartedAtRef.current = 0;
+    voiceDiscardRef.current = false;
+    setVoiceElapsedMs(0);
+    setVoiceRecordingState("idle");
+  };
+
+  const sendVoiceRecording = async (chunks: BlobPart[], mimeType: string, durationMs: number) => {
+    if (voiceSendLockRef.current || chunks.length === 0) return;
+    voiceSendLockRef.current = true;
+    setVoiceRecordingState("processing");
+    const file = createVoiceRecordingFile(chunks, mimeType);
+    const voiceAttachment: PendingAttachment = {
+      id: `pending-voice-${Date.now()}`,
+      file,
+      name: file.name,
+      mimeType,
+      size: file.size,
+      kind: "voice",
+      previewUrl: null,
+      durationMs: Math.max(1, Math.round(durationMs)),
+    };
+
+    try {
+      const mediaFileId = await performUpload(voiceAttachment, 1, 1);
+      await onSend({ content: null, mediaFileId, mediaFileIds: null }, replyTo?.id);
+      resetUploadState();
+      resetVoiceRecording();
+    } catch (error) {
+      console.error("Failed to send voice message:", error);
+      setUploadStatus("error");
+      setUploadError(error instanceof AttachmentUploadError ? "Voice upload failed" : "Voice message send failed");
+      setUploadLabel(null);
+      setVoiceRecordingState("idle");
+    } finally {
+      releaseVoiceStream();
+      voiceSendLockRef.current = false;
+    }
+  };
+
+  const cancelVoiceRecording = () => {
+    if (voiceRecordingState === "idle") return;
+    voiceDiscardRef.current = true;
+    voiceRecorderRef.current?.stop();
+    releaseVoiceStream();
+    voiceChunksRef.current = [];
+    setVoiceElapsedMs(0);
+    setVoiceRecordingState("idle");
+  };
+
+  const stopVoiceRecording = () => {
+    if (voiceRecordingState !== "recording" || voiceSendLockRef.current) return;
+    voiceRecorderRef.current?.stop();
+    setVoiceRecordingState("processing");
+  };
+
+  const startVoiceRecording = async () => {
+    if (
+      disabled ||
+      isEditing ||
+      isSending ||
+      isUploading ||
+      pendingAttachments.length > 0 ||
+      voiceRecordingState !== "idle"
+    ) return;
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setUploadStatus("error");
+      setUploadError("Voice recording is not supported in this app");
+      return;
+    }
+
+    const mimeType = selectVoiceRecordingMimeType();
+    if (!mimeType) {
+      setUploadStatus("error");
+      setUploadError("No supported voice recording format is available");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType });
+      voiceStreamRef.current = stream;
+      voiceRecorderRef.current = recorder;
+      voiceChunksRef.current = [];
+      voiceDiscardRef.current = false;
+      voiceStartedAtRef.current = Date.now();
+      setVoiceElapsedMs(0);
+      setVoiceRecordingState("recording");
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) voiceChunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setUploadStatus("error");
+        setUploadError("Voice recording failed");
+        releaseVoiceStream();
+        setVoiceRecordingState("idle");
+      };
+      recorder.onstop = () => {
+        const chunks = voiceChunksRef.current;
+        const durationMs = Math.max(1, Date.now() - voiceStartedAtRef.current);
+        const discarded = voiceDiscardRef.current;
+        releaseVoiceStream();
+        voiceChunksRef.current = [];
+        if (discarded) return;
+        void sendVoiceRecording(chunks, recorder.mimeType || mimeType, durationMs);
+      };
+      recorder.start();
+    } catch (error) {
+      console.error("Unable to access microphone:", error);
+      releaseVoiceStream();
+      setVoiceRecordingState("idle");
+      setUploadStatus("error");
+      setUploadError("Microphone permission was denied or no input device is available");
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (voiceRecordingState !== "idle") cancelVoiceRecording();
+    };
+  }, [activeChatKey]);
 
   const resetUploadState = () => {
     setUploadStatus("idle");
@@ -754,6 +921,10 @@ interface Props {
 
       const formData = new FormData();
       formData.append("file", attachment.file);
+      if (attachment.kind === "voice") {
+        formData.append("kind", "voice");
+        formData.append("duration_ms", String(attachment.durationMs ?? 1));
+      }
       xhr.send(formData);
     });
   };
@@ -866,6 +1037,35 @@ interface Props {
         </div>
        )}
 
+       {voiceRecordingState !== "idle" && (
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-xs" data-testid="voice-recording-panel">
+          <span className={voiceRecordingState === "recording" ? "text-destructive" : "text-muted-foreground"}>
+            {voiceRecordingState === "recording"
+              ? `Recording ${formatVoiceDuration(voiceElapsedMs)}`
+              : "Preparing voice message..."}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              className="vt-button min-h-8 px-3 text-xs"
+              onClick={cancelVoiceRecording}
+              disabled={voiceRecordingState === "processing"}
+            >
+              <X className="mr-1 h-3.5 w-3.5" /> Cancel
+            </button>
+            <button
+              type="button"
+              className="vt-button vt-button--primary min-h-8 px-3 text-xs"
+              onClick={stopVoiceRecording}
+              disabled={voiceRecordingState !== "recording"}
+              aria-label="Stop and send voice message"
+            >
+              <Square className="mr-1 h-3.5 w-3.5" /> Stop and send
+            </button>
+          </div>
+        </div>
+       )}
+
        {uploadStatus !== "idle" && pendingAttachments.length === 0 && (
         <div className="border-b border-border px-4 py-2 text-[11px]">
           {uploadStatus === "uploading" ? (
@@ -894,7 +1094,7 @@ interface Props {
             <button
               type="button"
               onClick={handleAttachClick}
-              disabled={disabled || isSending || isEditing || isUploading}
+              disabled={disabled || isSending || isEditing || isUploading || voiceRecordingState !== "idle"}
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors",
                 "hover:bg-accent hover:text-foreground focus-visible:outline-none",
@@ -949,7 +1149,7 @@ interface Props {
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            disabled={disabled || isSending || isUploading || pendingAttachments.length > 0}
+            disabled={disabled || isSending || isUploading || pendingAttachments.length > 0 || voiceRecordingState !== "idle"}
             rows={1}
             style={{ overflowY: "hidden" }}
             aria-label="Message composer"
@@ -957,8 +1157,22 @@ interface Props {
 
           <button
             type="button"
+            onClick={() => void startVoiceRecording()}
+            disabled={disabled || isSending || isUploading || isEditing || pendingAttachments.length > 0 || voiceRecordingState !== "idle"}
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors",
+              "hover:bg-accent hover:text-foreground focus-visible:outline-none",
+              "disabled:pointer-events-none disabled:opacity-60",
+            )}
+            aria-label="Record voice message"
+          >
+            <Mic className="h-[18px] w-[18px]" />
+          </button>
+
+          <button
+            type="button"
             onClick={handleSend}
-            disabled={pendingAttachments.length > 0 || (!content.trim() && pendingAttachments.length === 0) || disabled || isSending || isUploading}
+            disabled={pendingAttachments.length > 0 || (!content.trim() && pendingAttachments.length === 0) || disabled || isSending || isUploading || voiceRecordingState !== "idle"}
             className={cn(
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
               "hover:bg-accent focus-visible:outline-none",

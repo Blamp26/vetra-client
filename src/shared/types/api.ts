@@ -16,7 +16,7 @@ export interface User {
 
 export type MessageStatus = "sent" | "delivered" | "read" | "error";
 
-export type AttachmentKind = "photo" | "video" | "file";
+export type AttachmentKind = "photo" | "video" | "file" | "voice";
 
 export interface Attachment {
   id: string;
@@ -29,6 +29,8 @@ export interface Attachment {
   original_name: string | null;
   file_size: number | null;
   kind: AttachmentKind;
+  duration_ms?: number | null;
+  durationMs?: number | null;
   width?: number | null;
   height?: number | null;
 }

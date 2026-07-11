@@ -91,6 +91,7 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
 vi.mock("../../utils/attachmentDownloads", () => ({
   downloadAttachmentWithAuth: vi.fn(),
   openAttachmentWithAuth: vi.fn(),
+  fetchAttachmentBlob: vi.fn(async () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/webm" })),
 }));
 
 import { MessageItem } from "./MessageItem";
@@ -226,6 +227,27 @@ describe("MessageItem bubble layout", () => {
     expect(paths[1]).not.toHaveAttribute("fill", "currentColor");
     expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
+  });
+
+  it("renders hydrated voice attachments in the voice player, not as documents", async () => {
+    renderMessageItem({
+      content: null,
+      media_file_id: "voice-1",
+      attachment: {
+        id: "voice-1",
+        url: "/api/v1/media/voice-1",
+        mime_type: "audio/webm",
+        original_name: "voice-message.webm",
+        file_size: 3210,
+        kind: "voice",
+        duration_ms: 2450,
+      },
+    });
+
+    expect(screen.getByTestId("message-voice-attachment")).toBeInTheDocument();
+    expect(screen.getByTestId("voice-message-player")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
+    await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob).toHaveBeenCalled());
   });
 
   it("renders own short messages as right-aligned bubbles with integrated metadata", () => {

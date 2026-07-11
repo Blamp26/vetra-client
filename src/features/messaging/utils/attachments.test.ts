@@ -98,6 +98,32 @@ describe("attachments utils", () => {
     expect(message.attachments?.[0].original_name).toBe("only.pdf");
   });
 
+  it("labels an explicitly hydrated voice attachment as a voice message", () => {
+    const message = normalizeMessageAttachments({
+      id: 903,
+      content: null,
+      sender_id: 7,
+      recipient_id: 8,
+      room_id: null,
+      status: "sent",
+      inserted_at: "2026-07-11T08:02:00Z",
+      media_file_id: "voice-1",
+      attachment: {
+        id: "voice-1",
+        url: "/api/v1/media/voice-1",
+        mime_type: "audio/webm",
+        original_name: "voice-message.webm",
+        file_size: 3210,
+        kind: "voice",
+        duration_ms: 2450,
+      },
+    });
+
+    expect(getPreviewText(message)).toBe("Voice message");
+    expect(message.attachments?.[0].kind).toBe("voice");
+    expect(message.attachments?.[0].duration_ms).toBe(2450);
+  });
+
   it("uses useful labels for attachment-only reply/search previews", () => {
     expect(
       getPreviewText({
