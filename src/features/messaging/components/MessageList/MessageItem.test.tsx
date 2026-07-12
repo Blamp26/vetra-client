@@ -257,6 +257,45 @@ describe("MessageItem bubble layout", () => {
     await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob).toHaveBeenCalled());
   });
 
+  it("renders an outgoing final voice message through the shared bubble shell", () => {
+    renderMessageItem({
+      content: null,
+      media_file_id: "voice-outgoing",
+      attachment: {
+        id: "voice-outgoing",
+        url: "/api/v1/media/voice-outgoing",
+        mime_type: "audio/webm",
+        original_name: "voice-outgoing.webm",
+        file_size: 3210,
+        kind: "voice",
+        duration_ms: 2450,
+      },
+    }, { isOwn: true, isConsecutive: true, isGroupedWithNext: false });
+
+    const bubble = screen.getByTestId("message-bubble");
+    expect(bubble).toContainElement(screen.getByTestId("message-voice-tail"));
+    expect(bubble).toHaveClass("rounded-br-[0px]");
+  });
+
+  it("suppresses the voice tail for a grouped continuation", () => {
+    renderMessageItem({
+      content: null,
+      media_file_id: "voice-middle",
+      attachment: {
+        id: "voice-middle",
+        url: "/api/v1/media/voice-middle",
+        mime_type: "audio/webm",
+        original_name: "voice-middle.webm",
+        file_size: 3210,
+        kind: "voice",
+        duration_ms: 2450,
+      },
+    }, { isConsecutive: true, isGroupedWithNext: true });
+
+    expect(screen.queryByTestId("message-voice-tail")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-bubble")).toHaveClass("rounded-bl-[6px]");
+  });
+
   it("shows the unread voice dot only for a known outgoing unread status", () => {
     renderMessageItem(
       {
@@ -304,6 +343,26 @@ describe("MessageItem bubble layout", () => {
     await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob).toHaveBeenCalled());
   });
 
+  it("renders an outgoing final audio message through the shared bubble shell", () => {
+    renderMessageItem({
+      content: null,
+      media_file_id: "audio-outgoing",
+      attachment: {
+        id: "audio-outgoing",
+        url: "/api/v1/media/audio-outgoing",
+        mime_type: "audio/mpeg",
+        original_name: "track-outgoing.mp3",
+        file_size: 3210,
+        kind: "audio",
+        duration_ms: 2450,
+      },
+    }, { isOwn: true, isConsecutive: true, isGroupedWithNext: false });
+
+    const bubble = screen.getByTestId("message-bubble");
+    expect(bubble).toContainElement(screen.getByTestId("message-audio-tail"));
+    expect(bubble).toHaveClass("rounded-br-[0px]", "min-h-[69px]", "w-[320px]");
+  });
+
   it("renders multiple audio attachments as one connected bubble with shared metadata and tail", async () => {
     renderMessageItem({
       content: null,
@@ -322,14 +381,48 @@ describe("MessageItem bubble layout", () => {
 
     const bubble = screen.getByTestId("message-bubble");
     expect(screen.getByTestId("message-audio-group")).toBeInTheDocument();
-    expect(screen.getAllByTestId("message-audio-group-row")).toHaveLength(3);
+    expect(screen.getAllByTestId("message-audio-segment-first")).toHaveLength(1);
+    expect(screen.getAllByTestId("message-audio-segment-middle")).toHaveLength(1);
+    expect(screen.getAllByTestId("message-audio-segment-last")).toHaveLength(1);
     expect(screen.getAllByTestId("audio-file-player")).toHaveLength(3);
-    expect(screen.getByTestId("message-audio-group-meta")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+    expect(screen.getByTestId("message-audio-segment-last")).toContainElement(screen.getByTestId("message-metadata"));
+    expect(screen.getByTestId("message-audio-segment-first")).not.toContainElement(screen.getByTestId("message-metadata"));
+    expect(screen.getByTestId("message-audio-segment-middle")).not.toContainElement(screen.getByTestId("message-metadata"));
+    expect(screen.getByTestId("message-audio-group-tail")).toBeInTheDocument();
+    expect(screen.getByTestId("message-audio-segment-last")).toContainElement(screen.getByTestId("message-audio-group-tail"));
+    expect(screen.getByTestId("message-audio-segment-first")).not.toContainElement(screen.getByTestId("message-audio-group-tail"));
+    expect(screen.getByTestId("message-audio-segment-middle")).not.toContainElement(screen.getByTestId("message-audio-group-tail"));
+    expect(screen.queryByTestId("message-audio-tail")).not.toBeInTheDocument();
+    expect(bubble).toHaveClass("w-[320px]", "p-0", "rounded-none", "bg-transparent");
+    expect(screen.getByTestId("message-audio-segment-first")).toHaveClass("rounded-tl-[15px]", "rounded-tr-[15px]");
+    expect(screen.getByTestId("message-audio-segment-middle")).toHaveClass("rounded-none");
+    expect(screen.getByTestId("message-audio-segment-last")).toHaveClass("rounded-bl-[0px]");
+    await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob.mock.calls.slice(-3)).toHaveLength(3));
+  });
+
+  it("renders a two-audio logical message as one first/last connected group", () => {
+    renderMessageItem({
+      content: null,
+      media_file_id: "audio-two-1",
+      media_file_ids: ["audio-two-1", "audio-two-2"],
+      attachments: [1, 2].map((index) => ({
+        id: `audio-two-${index}`,
+        url: `/api/v1/media/audio-two-${index}`,
+        mime_type: "audio/mpeg",
+        original_name: `track-two-${index}.mp3`,
+        file_size: 3210,
+        kind: "audio" as const,
+        duration_ms: index * 1000,
+      })),
+    });
+
+    expect(screen.getByTestId("message-audio-group")).toBeInTheDocument();
+    expect(screen.getByTestId("message-audio-segment-first")).toBeInTheDocument();
+    expect(screen.getByTestId("message-audio-segment-last")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-audio-segment-middle")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
     expect(screen.getByTestId("message-audio-group-tail")).toBeInTheDocument();
-    expect(screen.queryByTestId("message-audio-tail")).not.toBeInTheDocument();
-    expect(bubble).toHaveClass("w-[320px]", "px-2", "pt-[5px]", "pb-[6px]");
-    await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob.mock.calls.slice(-3)).toHaveLength(3));
   });
 
   it("renders own short messages as right-aligned bubbles with integrated metadata", () => {

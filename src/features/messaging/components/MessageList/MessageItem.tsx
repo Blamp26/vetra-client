@@ -745,7 +745,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         >
           {renderMetadata()}
         </span>
-        {renderBubbleTail("message-voice-tail")}
       </div>
     );
   };
@@ -762,33 +761,65 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             <EmojiText text={msg.content || ""} />
           </div>
         )}
-        <span
-          className="absolute right-0 bottom-0 flex h-[20px] items-center whitespace-nowrap bg-transparent px-[4px]"
-          data-testid="message-audio-inline-metadata"
-        >
-          {renderMetadata()}
-        </span>
-        {renderBubbleTail("message-audio-tail")}
       </div>
     );
   };
 
   const renderAudioGroup = () => (
-    <div className="relative w-full" data-testid="message-audio-group">
-      {attachments.map((currentAttachment) => (
-        <div key={currentAttachment.id} className="h-[48px] w-full" data-testid="message-audio-group-row">
-          <AudioFilePlayer attachment={currentAttachment} isOwn={isOwn} />
-        </div>
-      ))}
-      {hasText && (
-        <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current" data-testid="message-audio-group-caption">
-          <EmojiText text={msg.content || ""} />
-        </div>
-      )}
-      <div className="flex h-[21px] items-center justify-end pl-[60px]" data-testid="message-audio-group-meta">
-        {renderMetadata()}
-      </div>
-      {renderBubbleTail("message-audio-group-tail")}
+    <div className="relative m-0 flex w-[320px] max-w-full flex-col gap-0 bg-transparent p-0" data-testid="message-audio-group">
+      {attachments.map((currentAttachment, index) => {
+        const role = index === 0
+          ? "first"
+          : index === attachments.length - 1
+            ? "last"
+            : "middle";
+        const isLast = role === "last";
+        const hasTail = isLast && !isGroupedWithNext;
+        const isLeftFacing = !isOwn || alignmentMode === "left-column";
+        const topRadiusClassName = isConsecutive
+          ? "rounded-tl-[6px] rounded-tr-[6px]"
+          : "rounded-tl-[15px] rounded-tr-[15px]";
+        const bottomRadiusClassName = isLeftFacing
+          ? hasTail
+            ? "rounded-bl-[0px] rounded-br-[15px]"
+            : isGroupedWithNext
+              ? "rounded-bl-[6px] rounded-br-[15px]"
+              : "rounded-bl-[15px] rounded-br-[15px]"
+          : hasTail
+            ? "rounded-bl-[15px] rounded-br-[0px]"
+            : isGroupedWithNext
+              ? "rounded-bl-[15px] rounded-br-[6px]"
+              : "rounded-bl-[15px] rounded-br-[15px]";
+
+        return (
+          <div
+            key={currentAttachment.id}
+            className={cn(
+              "relative box-border w-[320px] max-w-full bg-[var(--message-surface-color)]",
+              role === "first" && cn("min-h-[69px] rounded-bl-[0px] rounded-br-[0px] px-2 pt-[5px] pb-[6px]", topRadiusClassName),
+              role === "middle" && "min-h-[69px] rounded-none px-2 pt-[5px] pb-[6px]",
+              role === "last" && cn("min-h-[69px] rounded-tl-[0px] rounded-tr-[0px] px-2 pt-[5px] pb-[6px]", bottomRadiusClassName),
+            )}
+            data-testid={`message-audio-segment-${role}`}
+            data-audio-role={role}
+            style={{
+              "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
+            } as React.CSSProperties}
+          >
+            <AudioFilePlayer
+              attachment={currentAttachment}
+              isOwn={isOwn}
+              messageMeta={isLast ? renderMetadata() : undefined}
+            />
+            {isLast && hasText && (
+              <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current" data-testid="message-audio-group-caption">
+                <EmojiText text={msg.content || ""} />
+              </div>
+            )}
+            {isLast && hasTail && renderBubbleTail("message-audio-group-tail")}
+          </div>
+        );
+      })}
     </div>
   );
 
@@ -888,8 +919,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
           "relative box-border w-fit overflow-visible text-[16px] font-normal leading-[21px] tracking-normal",
-          isDocumentGroup
-            ? "min-w-0 w-[275px] max-w-[min(480px,calc(100vw-6rem))] rounded-none p-0"
+          isAudioGroup
+            ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] rounded-none p-0"
+            : isDocumentGroup
+              ? "min-w-0 w-[275px] max-w-[min(480px,calc(100vw-6rem))] rounded-none p-0"
             : isMediaOnly
             ? cn(
                 "min-w-0 p-0",
@@ -920,7 +953,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
-          isDocumentGroup
+          isDocumentGroup || isAudioGroup
             ? "rounded-none"
             : isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment || isVoiceMessage || isSingleAudioMessage || isAudioGroup
             ? textGroupRadiusClassName
@@ -938,7 +971,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   isConsecutive && "rounded-tl-[12px]",
                   isGroupedWithNext && "rounded-bl-[12px]",
                 ),
-          isDocumentGroup
+          isDocumentGroup || isAudioGroup
             ? (isOwn ? "bg-transparent text-bubble-outgoing-text" : "bg-transparent text-bubble-incoming-text")
             : isMediaOnly
             ? isVisualAlbum
@@ -959,7 +992,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         data-testid="message-bubble"
         style={{
           "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
-          backgroundColor: isDocumentGroup ? "transparent" : "var(--message-surface-color)",
+          backgroundColor: isDocumentGroup || isAudioGroup ? "transparent" : "var(--message-surface-color)",
           ...(isSingleVisualMessage ? { width: `${photoLayout.width}px` } : {}),
         } as React.CSSProperties}
       >
@@ -987,6 +1020,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             {renderContent()}
           </div>
         )}
+
+        {isVoiceMessage && renderBubbleTail("message-voice-tail")}
+        {isSingleAudioMessage && renderBubbleTail("message-audio-tail")}
 
         {isMediaOnly && (
           <div

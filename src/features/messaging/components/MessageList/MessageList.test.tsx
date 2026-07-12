@@ -150,6 +150,7 @@ vi.mock("../ForwardModal", () => ({
 
 vi.mock("../../utils/attachmentDownloads", () => ({
   downloadAttachmentWithAuth: vi.fn(),
+  fetchAttachmentBlob: vi.fn(async () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" })),
 }));
 
 import * as attachmentDownloads from "../../utils/attachmentDownloads";
@@ -222,6 +223,27 @@ function makeAlbumMessage(id: number, content: string | null) {
       kind: "photo" as const,
       width: 1600,
       height: 900,
+    })),
+  });
+}
+
+function makeAudioMessage(id: number, senderId = 2, count = 2) {
+  const mediaFileIds = Array.from({ length: count }, (_, index) => `audio-${id}-${index + 1}`);
+  return makeMessage({
+    id,
+    sender_id: senderId,
+    content: null,
+    media_file_id: mediaFileIds[0],
+    media_file_ids: mediaFileIds,
+    media_mime_types: mediaFileIds.map(() => "audio/mpeg"),
+    attachments: mediaFileIds.map((mediaFileId, index) => ({
+      id: mediaFileId,
+      url: `/api/v1/media/${mediaFileId}`,
+      mime_type: "audio/mpeg",
+      original_name: `${mediaFileId}.mp3`,
+      file_size: 1024,
+      kind: "audio" as const,
+      duration_ms: (index + 1) * 1000,
     })),
   });
 }
@@ -745,6 +767,18 @@ describe("MessageList bubble layout", () => {
     const bubbles = screen.getAllByTestId("message-bubble");
     expect(within(bubbles[0]).queryByTestId("message-text-tail")).not.toBeInTheDocument();
     expect(within(bubbles[1]).getByTestId("message-text-tail")).toBeInTheDocument();
+  });
+
+  it("keeps separate logical audio groups on normal outer spacing", () => {
+    renderMessageList([
+      makeAudioMessage(1, 2, 2),
+      makeAudioMessage(2, 2, 3),
+    ]);
+
+    const rows = screen.getAllByTestId("message-row-spacing");
+    expect(rows[1]).toHaveAttribute("data-attachment-run", "false");
+    expect(rows[1]).toHaveClass("mt-1.5");
+    expect(screen.getAllByTestId("message-audio-group")).toHaveLength(2);
   });
 
   it("uses six-pixel grouped spacing when a consecutive message has no attachment", () => {
