@@ -4,13 +4,13 @@ import type { Attachment } from "@/shared/types";
 import { useAppStore } from "@/store";
 import { cn } from "@/shared/utils/cn";
 import { fetchAttachmentBlob } from "../../utils/attachmentDownloads";
+import { claimMediaAudio, releaseMediaAudio } from "../../utils/mediaPlaybackCoordinator";
 import { formatVoiceDuration } from "../../utils/voiceRecording";
 
 export const WAVEFORM_BAR_COUNT = 65;
 export const WAVEFORM_MIN_HEIGHT = 2;
 export const WAVEFORM_MAX_HEIGHT = 23;
 
-let activeVoiceAudio: HTMLAudioElement | null = null;
 const waveformCache = new Map<string, Promise<number[]>>();
 
 interface Props {
@@ -278,7 +278,7 @@ export function VoiceMessagePlayer({ attachment, isOwn = false, showUnreadDot = 
       cancelled = true;
       const audio = audioRef.current;
       audio?.pause();
-      if (activeVoiceAudio === audio) activeVoiceAudio = null;
+      if (audio) releaseMediaAudio(audio);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       setAudioUrl(null);
     };
@@ -298,7 +298,7 @@ export function VoiceMessagePlayer({ attachment, isOwn = false, showUnreadDot = 
     const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
-      if (activeVoiceAudio === audio) activeVoiceAudio = null;
+      releaseMediaAudio(audio);
     };
     const handleError = () => {
       setIsLoading(false);
@@ -368,8 +368,7 @@ export function VoiceMessagePlayer({ attachment, isOwn = false, showUnreadDot = 
       return;
     }
 
-    if (activeVoiceAudio && activeVoiceAudio !== audio) activeVoiceAudio.pause();
-    activeVoiceAudio = audio;
+    claimMediaAudio(audio);
     void audio.play()
       .then(() => setIsPlaying(true))
       .catch(() => {

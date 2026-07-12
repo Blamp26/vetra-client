@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPreviewMessage,
   classifyPendingAttachment,
+  extractAudioDurationMs,
   getAttachmentDisplaySrc,
   getMessageAttachment,
   getMessageAttachments,
@@ -11,6 +12,7 @@ import {
   getPreviewText,
   isMessageForwardable,
   validateAttachmentFile,
+  MESSAGE_FILE_ATTACHMENT_ACCEPT,
 } from "./attachments";
 
 describe("attachments utils", () => {
@@ -574,5 +576,64 @@ describe("attachments utils", () => {
     expect(validateAttachmentFile(new File(["plain"], "notes.txt", { type: "text/plain" }))).toMatch(
       /Unsupported file type/,
     );
+  });
+
+  it("accepts audio through the Files picker without changing document support", () => {
+    expect(MESSAGE_FILE_ATTACHMENT_ACCEPT).toContain("application/pdf");
+    for (const [name, mimeType] of [
+      ["track.mp3", "audio/mpeg"],
+      ["track.m4a", "audio/mp4"],
+      ["track.aac", "audio/aac"],
+      ["track.ogg", "audio/ogg"],
+      ["track.opus", "audio/opus"],
+      ["track.wav", "audio/wav"],
+      ["track.flac", "audio/flac"],
+      ["track.webm", "audio/webm"],
+    ] as const) {
+      const file = new File([new Uint8Array(32)], name, { type: mimeType });
+      expect(validateAttachmentFile(file)).toBeNull();
+      expect(classifyPendingAttachment(file)).toEqual({ kind: "audio", mimeType });
+    }
+  });
+
+  it("uses extension fallback only for empty or generic MIME types", () => {
+    expect(classifyPendingAttachment(new File(["audio"], "track.mp3", { type: "" }))).toEqual({
+      kind: "audio",
+      mimeType: "audio/mpeg",
+    });
+    expect(classifyPendingAttachment(new File(["audio"], "track.mp3", { type: "application/octet-stream" }))).toEqual({
+      kind: "audio",
+      mimeType: "audio/mpeg",
+    });
+    expect(classifyPendingAttachment(new File(["audio"], "track.mp3", { type: "text/plain" }))).toBeNull();
+  });
+
+  it("hydrates audio as audio and uses the neutral sidebar preview", () => {
+    const message = normalizeMessageAttachments({
+      id: 904,
+      content: null,
+      sender_id: 7,
+      recipient_id: 8,
+      room_id: null,
+      status: "sent",
+      inserted_at: "2026-07-11T08:03:00Z",
+      media_file_id: "audio-1",
+      attachment: {
+        id: "audio-1",
+        url: "/api/v1/media/audio-1",
+        mime_type: "audio/mpeg",
+        original_name: "track.mp3",
+        file_size: 3210,
+        kind: "audio",
+        duration_ms: 2450,
+      },
+    });
+
+    expect(message.attachments?.[0]).toMatchObject({ kind: "audio", original_name: "track.mp3", duration_ms: 2450 });
+    expect(getPreviewText(message)).toBe("Audio");
+  });
+
+  it("allows audio duration extraction to fail without rejecting the file", async () => {
+    await expect(extractAudioDurationMs(new Blob(["not audio"]))).resolves.toBeNull();
   });
 });

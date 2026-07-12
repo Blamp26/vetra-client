@@ -36,8 +36,8 @@ interface AttachmentReviewModalProps {
 }
 
 function getPreviewGridClasses(attachments: PendingAttachment[]) {
-  const visualCount = attachments.filter((attachment) => attachment.kind !== "file").length;
-  const hasFiles = attachments.some((attachment) => attachment.kind === "file");
+  const visualCount = attachments.filter((attachment) => attachment.kind === "photo" || attachment.kind === "video").length;
+  const hasFiles = attachments.some((attachment) => attachment.kind === "file" || attachment.kind === "audio");
 
   if (hasFiles) {
     return "grid-cols-2 auto-rows-[120px]";
@@ -59,12 +59,12 @@ function getPreviewGridClasses(attachments: PendingAttachment[]) {
 }
 
 function getPreviewItemClasses(attachment: PendingAttachment, attachments: PendingAttachment[]) {
-  if (attachment.kind === "file") {
+  if (attachment.kind === "file" || attachment.kind === "audio") {
     return "col-span-full min-h-[72px]";
   }
 
-  const visualCount = attachments.filter((item) => item.kind !== "file").length;
-  const hasFiles = attachments.some((item) => item.kind === "file");
+  const visualCount = attachments.filter((item) => item.kind === "photo" || item.kind === "video").length;
+  const hasFiles = attachments.some((item) => item.kind === "file" || item.kind === "audio");
 
   if (!hasFiles && visualCount === 1) {
     return "min-h-[228px]";
@@ -196,7 +196,7 @@ function AttachmentPreviewCard({
   disabled: boolean;
   onRemove: (id: string) => void;
 }) {
-  if (attachment.kind === "file") {
+  if (attachment.kind === "file" || attachment.kind === "audio") {
     return (
       <div
         className="vt-attachment-review__file-row flex items-center gap-3 px-4 py-3"

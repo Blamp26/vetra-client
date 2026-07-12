@@ -249,7 +249,10 @@ describe("MessageInput attachments", () => {
       "accept",
       "image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,video/mp4,video/quicktime,video/webm,video/ogg",
     );
-    expect(fileInput).toHaveAttribute("accept", "application/pdf");
+    expect(fileInput).toHaveAttribute(
+      "accept",
+      "application/pdf,audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/opus,audio/wav,audio/flac,audio/webm,audio/x-wav,.mp3,.m4a,.aac,.ogg,.opus,.wav,.flac,.webm",
+    );
     expect(mediaInput).toHaveAttribute("multiple");
     expect(fileInput).toHaveAttribute("multiple");
 
@@ -265,6 +268,39 @@ describe("MessageInput attachments", () => {
     expect(screen.getByText("photo.png")).toBeInTheDocument();
     expect(screen.getByText("Photo · 1.0 KB")).toBeInTheDocument();
     expect(screen.getAllByTestId("attachment-review-item")).toHaveLength(2);
+  });
+
+  it("uploads a Files-selected audio attachment before sending it with audio metadata", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    class MockAudio {
+      duration = 2.5;
+      onloadedmetadata: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      preload = "";
+      src = "";
+      removeAttribute = vi.fn();
+      load = vi.fn(() => this.onloadedmetadata?.());
+    }
+    vi.stubGlobal("Audio", MockAudio);
+
+    const { container } = render(<MessageInput onSend={onSend} />);
+    const fileInput = getFileInput(container);
+    const audio = new File([new Uint8Array(2048)], "track.mp3", { type: "audio/mpeg" });
+
+    fireEvent.change(fileInput, { target: { files: [audio] } });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith(expect.objectContaining({
+      content: null,
+      mediaFileId: "media-track.mp3",
+      mediaFileIds: null,
+    }), undefined));
+
+    const [{ formData }] = uploadSendMock.mock.calls.map(
+      ([request]) => request as { formData: FormData },
+    );
+    expect(formData.get("kind")).toBe("audio");
+    expect(formData.get("duration_ms")).toBe("2500");
   });
 
   it("keeps composer controls aligned with simple button and input styling", () => {
@@ -1045,7 +1081,7 @@ describe("MessageInput attachments", () => {
 
     expect(
       screen.getByText(
-        "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, M4V, MOV, WEBM, OGG.",
+        "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP3, M4A, AAC, OGG, OPUS, WAV, FLAC, MP4, M4V, MOV, WEBM.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("notes.txt")).not.toBeInTheDocument();

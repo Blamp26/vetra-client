@@ -23,6 +23,14 @@ const ALLOWED_ATTACHMENT_TYPES = {
   "image/heic": [".heic"],
   "image/heif": [".heif"],
   "application/pdf": [".pdf"],
+  "audio/mpeg": [".mp3"],
+  "audio/mp4": [".m4a"],
+  "audio/aac": [".aac"],
+  "audio/ogg": [".ogg"],
+  "audio/opus": [".opus"],
+  "audio/wav": [".wav"],
+  "audio/flac": [".flac"],
+  "audio/webm": [".webm"],
   "video/mp4": [".mp4", ".m4v"],
   "video/quicktime": [".mov"],
   "video/webm": [".webm"],
@@ -35,10 +43,11 @@ const MIME_TYPE_ALIASES: Record<string, keyof typeof ALLOWED_ATTACHMENT_TYPES> =
   "video/x-m4v": "video/mp4",
   "video/m4v": "video/mp4",
   "application/mp4": "video/mp4",
+  "audio/x-wav": "audio/wav",
 };
 
 const ALLOWED_ATTACHMENT_LABEL =
-  "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP4, M4V, MOV, WEBM, OGG.";
+  "Unsupported file type. Allowed: PNG, JPG, JPEG, GIF, WEBP, AVIF, HEIC, HEIF, PDF, MP3, M4A, AAC, OGG, OPUS, WAV, FLAC, MP4, M4V, MOV, WEBM.";
 
 export const MESSAGE_ATTACHMENT_ACCEPT = Object.keys(
   ALLOWED_ATTACHMENT_TYPES,
@@ -49,7 +58,14 @@ export const MESSAGE_MEDIA_ATTACHMENT_ACCEPT = Object.keys(
 ).filter((mimeType) => mimeType.startsWith("image/") || mimeType.startsWith("video/"))
   .join(",");
 
-export const MESSAGE_FILE_ATTACHMENT_ACCEPT = "application/pdf";
+export const MESSAGE_FILE_ATTACHMENT_ACCEPT = [
+  "application/pdf",
+  ...Object.keys(ALLOWED_ATTACHMENT_TYPES).filter((mimeType) => mimeType.startsWith("audio/")),
+  "audio/x-wav",
+  ...Object.entries(ALLOWED_ATTACHMENT_TYPES)
+    .filter(([mimeType]) => mimeType.startsWith("audio/"))
+    .flatMap(([, extensions]) => extensions),
+].join(",");
 
 type AttachmentLike = {
   attachment?: Attachment | null;
@@ -73,7 +89,7 @@ type PreviewLike = AttachmentLike & {
 };
 
 function normalizeMimeType(mimeType?: string | null) {
-  const normalized = mimeType?.toLowerCase().trim() || null;
+  const normalized = mimeType?.toLowerCase().split(";", 1)[0].trim() || null;
   if (!normalized) return null;
   return MIME_TYPE_ALIASES[normalized] ?? normalized;
 }
@@ -129,7 +145,13 @@ export function resolveAttachmentMimeType(
     return normalizedMimeType as keyof typeof ALLOWED_ATTACHMENT_TYPES;
   }
 
-  if (extensionMimeType) {
+  const isGenericMimeType = !normalizedMimeType || [
+    "application/octet-stream",
+    "binary/octet-stream",
+    "application/x-octet-stream",
+  ].includes(normalizedMimeType);
+
+  if (isGenericMimeType && extensionMimeType) {
     return extensionMimeType;
   }
 
@@ -199,6 +221,7 @@ function finalizeMessageAttachments(
 function fallbackAttachmentName(kind: AttachmentKind) {
   if (kind === "photo") return "Photo";
   if (kind === "video") return "Video";
+  if (kind === "audio") return "Audio";
   if (kind === "voice") return "Voice message";
   return "File";
 }
@@ -210,6 +233,7 @@ export function inferAttachmentKind(
   const normalized = resolveAttachmentMimeType(mimeType, fileName);
   if (normalized?.startsWith("image/")) return "photo";
   if (normalized?.startsWith("video/")) return "video";
+  if (normalized?.startsWith("audio/")) return "audio";
   return "file";
 }
 
@@ -360,6 +384,7 @@ export function isMessageForwardable(message: AttachmentLike): boolean {
 export function getAttachmentKindLabel(kind: AttachmentKind): string {
   if (kind === "photo") return "Photo";
   if (kind === "video") return "Video";
+  if (kind === "audio") return "Audio";
   if (kind === "voice") return "Voice message";
   return "File";
 }
@@ -400,6 +425,7 @@ export function getAttachmentTypeLabel(
   if (attachment.mime_type === "application/pdf") return "PDF";
   if (attachment.kind === "photo") return "Photo";
   if (attachment.kind === "video") return "Video";
+  if (attachment.kind === "audio") return "Audio";
   if (attachment.kind === "voice") return "Voice message";
   return attachment.mime_type || "File";
 }
@@ -436,6 +462,7 @@ function attachmentOnlyPreview(source: PreviewLike): string | null {
 
   if (kind === "photo") return "Photo";
   if (kind === "video") return "Video";
+  if (kind === "audio") return "Audio";
   if (kind === "voice") return "Voice message";
   if (name) return `File: ${name}`;
   return attachment ||
@@ -551,6 +578,39 @@ export function validateAttachmentFile(file: File): string | null {
   }
 
   return null;
+}
+
+/** Read duration without making metadata extraction a prerequisite for upload. */
+export function extractAudioDurationMs(file: Blob): Promise<number | null> {
+  if (typeof Audio === "undefined" || typeof URL.createObjectURL !== "function") {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    const objectUrl = URL.createObjectURL(file);
+    let settled = false;
+    const timeout = globalThis.setTimeout(() => finish(null), 1_000);
+
+    const finish = (durationMs: number | null) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      audio.removeAttribute("src");
+      audio.load();
+      URL.revokeObjectURL(objectUrl);
+      resolve(durationMs);
+    };
+
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      const duration = audio.duration;
+      finish(Number.isFinite(duration) && duration > 0 ? Math.round(duration * 1_000) : null);
+    };
+    audio.onerror = () => finish(null);
+    audio.src = objectUrl;
+    audio.load();
+  });
 }
 
 export { ALLOWED_ATTACHMENT_LABEL };

@@ -279,6 +279,30 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("voice-unread-dot")).toBeInTheDocument();
   });
 
+  it("renders hydrated audio attachments in the dedicated audio player", async () => {
+    renderMessageItem({
+      content: null,
+      media_file_id: "audio-1",
+      attachment: {
+        id: "audio-1",
+        url: "/api/v1/media/audio-1",
+        mime_type: "audio/mpeg",
+        original_name: "track.mp3",
+        file_size: 3210,
+        kind: "audio",
+        duration_ms: 2450,
+      },
+    });
+
+    expect(screen.getByTestId("message-audio-attachment")).toBeInTheDocument();
+    expect(screen.getByTestId("audio-file-player")).toBeInTheDocument();
+    expect(screen.getByText("track.mp3")).toBeInTheDocument();
+    expect(screen.queryByTestId("voice-message-player")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download audio file" })).toBeInTheDocument();
+    await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob).toHaveBeenCalled());
+  });
+
   it("renders own short messages as right-aligned bubbles with integrated metadata", () => {
     renderMessageItem(
       {

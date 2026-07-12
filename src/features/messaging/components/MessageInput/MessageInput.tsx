@@ -8,6 +8,7 @@ import { withFallbackRef } from "@/shared/utils/refs";
 import {
   ALLOWED_ATTACHMENT_LABEL,
   classifyPendingAttachment,
+  extractAudioDurationMs,
   MESSAGE_FILE_ATTACHMENT_ACCEPT,
   MESSAGE_MEDIA_ATTACHMENT_ACCEPT,
   validateAttachmentFile,
@@ -656,7 +657,18 @@ interface Props {
         resetUploadState();
        } else {
         // Freeze the current queue at send start so UI updates do not drop later units.
-        const attachmentsToSend = pendingAttachmentsRef.current.map((attachment) => ({ ...attachment }));
+        const attachmentsToSend = await Promise.all(
+          pendingAttachmentsRef.current.map(async (attachment) => {
+            if (attachment.kind !== "audio" || attachment.durationMs != null) return { ...attachment };
+
+            try {
+              const durationMs = await extractAudioDurationMs(attachment.file);
+              return { ...attachment, durationMs: durationMs ?? undefined };
+            } catch {
+              return { ...attachment, durationMs: undefined };
+            }
+          }),
+        );
         const batchId = attachmentBatchIdRef.current ?? createAttachmentBatchId();
         attachmentBatchIdRef.current = batchId;
         const sendUnits = buildAttachmentSendUnits(attachmentsToSend).map((unit) => ({
@@ -921,9 +933,11 @@ interface Props {
 
       const formData = new FormData();
       formData.append("file", attachment.file);
-      if (attachment.kind === "voice") {
-        formData.append("kind", "voice");
-        formData.append("duration_ms", String(attachment.durationMs ?? 1));
+      if (attachment.kind === "voice" || attachment.kind === "audio") {
+        formData.append("kind", attachment.kind);
+        if (attachment.durationMs != null) {
+          formData.append("duration_ms", String(attachment.durationMs));
+        }
       }
       xhr.send(formData);
     });
