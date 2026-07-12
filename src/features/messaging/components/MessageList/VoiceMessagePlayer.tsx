@@ -19,19 +19,19 @@ interface Props {
   showUnreadDot?: boolean;
 }
 
-function FilledPlayIcon() {
+function FilledPlayIcon({ className, style }: { className?: string; style?: CSSProperties }) {
   return (
-    <svg viewBox="0 0 26 26" className="h-[26px] w-[26px]" aria-hidden="true">
-      <path d="M8 5.5a1.5 1.5 0 0 1 2.28-1.28l10.7 6.5a1.5 1.5 0 0 1 0 2.56l-10.7 6.5A1.5 1.5 0 0 1 8 18.5z" fill="currentColor" stroke="none" />
+    <svg width="26" height="26" viewBox="0 0 26 26" className={cn("absolute m-0 block h-[26px] w-[26px] transform-origin-[50%_50%]", className)} style={style} aria-hidden="true">
+      <path d="M6.5 5.5a1.5 1.5 0 0 1 2.28-1.28l10.7 6.5a1.5 1.5 0 0 1 0 2.56l-10.7 6.5A1.5 1.5 0 0 1 6.5 18.5z" fill="currentColor" stroke="none" />
     </svg>
   );
 }
 
-function FilledPauseIcon() {
+function FilledPauseIcon({ className, style }: { className?: string; style?: CSSProperties }) {
   return (
-    <svg viewBox="0 0 25 25" className="h-[25px] w-[25px]" aria-hidden="true">
-      <rect x="6" y="4" width="5" height="17" rx="1" fill="currentColor" stroke="none" />
-      <rect x="14" y="4" width="5" height="17" rx="1" fill="currentColor" stroke="none" />
+    <svg width="26" height="26" viewBox="0 0 26 26" className={cn("absolute m-0 block h-[26px] w-[26px] transform-origin-[50%_50%]", className)} style={style} aria-hidden="true">
+      <rect x="7" y="4.5" width="4.5" height="17" rx="1" fill="currentColor" stroke="none" />
+      <rect x="14.5" y="4.5" width="4.5" height="17" rx="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -419,26 +419,25 @@ export function VoiceMessagePlayer({ attachment, isOwn = false, showUnreadDot = 
           ) : error ? (
             <RotateCcw className="h-6 w-6" aria-hidden="true" />
           ) : (
-            <>
-              <span
+            <div
+              className="pointer-events-none absolute inset-0 grid place-items-center leading-[0]"
+              data-testid="voice-icon-stage"
+            >
+              <FilledPlayIcon
                 className={cn(
-                  "absolute ml-[3px] h-[26px] w-[26px] transform transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+                  "transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
                   isPlaying ? "scale-50 opacity-0" : "scale-100 opacity-100",
                 )}
                 style={{ transitionDuration: "400ms, 600ms" }}
-              >
-                <FilledPlayIcon />
-              </span>
-              <span
+              />
+              <FilledPauseIcon
                 className={cn(
-                  "absolute h-[25px] w-[25px] transform transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+                  "transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
                   isPlaying ? "scale-100 opacity-100" : "scale-50 opacity-0",
                 )}
                 style={{ transitionDuration: "400ms, 600ms" }}
-              >
-                <FilledPauseIcon />
-              </span>
-            </>
+              />
+            </div>
           )}
         </button>
       </div>

@@ -104,6 +104,8 @@ describe("VoiceMessagePlayer", () => {
     const content = screen.getByTestId("voice-message-content");
     const waveform = screen.getByTestId("voice-message-waveform");
     const canvas = waveform.querySelector("canvas");
+    const iconStage = screen.getByTestId("voice-icon-stage");
+    const icons = Array.from(button.querySelectorAll("svg"));
 
     expect(player).toHaveClass("h-[48px]", "mt-[3px]", "mb-[7px]");
     expect(player).toHaveStyle({
@@ -111,6 +113,17 @@ describe("VoiceMessagePlayer", () => {
       "--voice-surface-color": "var(--bubble-outgoing)",
     });
     expect(button).toHaveClass("h-[48px]", "w-[48px]", "rounded-full", "p-[5px]");
+    expect(iconStage).toHaveClass("absolute", "inset-0", "grid", "place-items-center", "leading-[0]", "pointer-events-none");
+    expect(icons).toHaveLength(2);
+    icons.forEach((icon) => {
+      expect(icon).toHaveAttribute("viewBox", "0 0 26 26");
+      expect(icon).toHaveAttribute("width", "26");
+      expect(icon).toHaveAttribute("height", "26");
+      expect(icon).toHaveClass("absolute", "m-0", "block", "h-[26px]", "w-[26px]");
+      expect(icon.getAttribute("class") ?? "").not.toContain("ml-");
+      expect(icon.getAttribute("class") ?? "").not.toContain("translate");
+      expect(icon.style.transform).toBe("");
+    });
     expect(button.parentElement).toHaveClass("h-[48px]", "w-[60px]");
     expect(content).toHaveClass("h-[48px]");
     expect(waveform).toHaveClass("h-[23px]", "max-w-[260px]");
@@ -210,12 +223,16 @@ describe("VoiceMessagePlayer", () => {
     fireEvent.click(button);
     await waitFor(() => expect(screen.getByRole("button", { name: "Pause voice message" })).toBeInTheDocument());
     const pauseIcon = Array.from(screen.getByRole("button", { name: "Pause voice message" }).querySelectorAll("svg"))
-      .find((icon) => icon.getAttribute("viewBox") === "0 0 25 25");
+      .find((icon) => icon.querySelectorAll("rect").length === 2);
 
-    expect(pauseIcon).toHaveAttribute("viewBox", "0 0 25 25");
+    expect(pauseIcon).toHaveAttribute("viewBox", "0 0 26 26");
+    expect(pauseIcon).toHaveAttribute("width", "26");
+    expect(pauseIcon).toHaveAttribute("height", "26");
     expect(pauseIcon?.querySelectorAll("rect")).toHaveLength(2);
     expect(pauseIcon?.querySelector("rect")).toHaveAttribute("fill", "currentColor");
     expect(pauseIcon?.querySelector("rect")).toHaveAttribute("stroke", "none");
+    expect(pauseIcon?.getAttribute("class") ?? "").not.toContain("translate");
+    expect(pauseIcon?.getAttribute("class") ?? "").not.toContain("ml-");
     expect(button).toHaveClass("h-[48px]", "w-[48px]");
   });
 });
