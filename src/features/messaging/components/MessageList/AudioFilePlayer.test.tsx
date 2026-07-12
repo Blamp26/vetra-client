@@ -50,8 +50,15 @@ describe("AudioFilePlayer", () => {
     expect(fetchAttachmentBlobMock).toHaveBeenCalledWith(audioAttachment, "secret-token");
     expect(screen.getByText("track.mp3")).toBeInTheDocument();
     expect(screen.getByText("0:03")).toBeInTheDocument();
+    expect(screen.queryByTestId("audio-seekline")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Play audio file" }));
+    const player = screen.getByTestId("audio-file-player");
+    const playButton = screen.getByRole("button", { name: "Play audio file" });
+    expect(player).toHaveClass("h-[48px]", "w-full");
+    expect(playButton).toHaveClass("h-[48px]", "w-[48px]", "mr-3", "rounded-full", "p-0");
+    expect(screen.getByTestId("audio-icon-stage")).toHaveClass("absolute", "inset-0", "grid", "place-items-center");
+
+    fireEvent.click(playButton);
     await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
 
     const seek = screen.getByRole("slider", { name: "Seek audio file" });

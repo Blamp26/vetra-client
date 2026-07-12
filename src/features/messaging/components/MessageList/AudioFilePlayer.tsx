@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Download, LoaderCircle, Pause, Play, RotateCcw } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Download, LoaderCircle, RotateCcw } from "lucide-react";
 import type { Attachment } from "@/shared/types";
 import { useAppStore } from "@/store";
 import { cn } from "@/shared/utils/cn";
@@ -9,6 +9,7 @@ import { claimMediaAudio, releaseMediaAudio } from "../../utils/mediaPlaybackCoo
 interface Props {
   attachment: Attachment;
   isOwn?: boolean;
+  messageMeta?: ReactNode;
 }
 
 function formatAudioDuration(seconds: number) {
@@ -17,12 +18,44 @@ function formatAudioDuration(seconds: number) {
   return `${minutes}:${String(totalSeconds % 60).padStart(2, "0")}`;
 }
 
-export function AudioFilePlayer({ attachment, isOwn = false }: Props) {
+function FilledPlayIcon({ className, style }: { className?: string; style?: CSSProperties }) {
+  return (
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 26 26"
+      className={cn("absolute m-0 block h-[26px] w-[26px] transform-origin-[50%_50%]", className)}
+      style={style}
+      aria-hidden="true"
+    >
+      <path d="M6.5 5.5a1.5 1.5 0 0 1 2.28-1.28l10.7 6.5a1.5 1.5 0 0 1 0 2.56l-10.7 6.5A1.5 1.5 0 0 1 6.5 18.5z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function FilledPauseIcon({ className, style }: { className?: string; style?: CSSProperties }) {
+  return (
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 26 26"
+      className={cn("absolute m-0 block h-[26px] w-[26px] transform-origin-[50%_50%]", className)}
+      style={style}
+      aria-hidden="true"
+    >
+      <rect x="7" y="4.5" width="4.5" height="17" rx="1" fill="currentColor" stroke="none" />
+      <rect x="14.5" y="4.5" width="4.5" height="17" rx="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function AudioFilePlayer({ attachment, isOwn = false, messageMeta }: Props) {
   const authToken = useAppStore((state) => state.authToken);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState((attachment.duration_ms ?? attachment.durationMs ?? 0) / 1_000);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +68,7 @@ export function AudioFilePlayer({ attachment, isOwn = false }: Props) {
     setIsLoading(true);
     setError(null);
     setIsPlaying(false);
+    setHasStarted(false);
     setCurrentTime(0);
     setDuration((attachment.duration_ms ?? attachment.durationMs ?? 0) / 1_000);
     setAudioUrl(null);
@@ -109,6 +143,7 @@ export function AudioFilePlayer({ attachment, isOwn = false }: Props) {
       return;
     }
 
+    setHasStarted(true);
     claimMediaAudio(audio);
     void audio.play().then(() => setIsPlaying(true)).catch(() => {
       releaseMediaAudio(audio);
@@ -129,22 +164,32 @@ export function AudioFilePlayer({ attachment, isOwn = false }: Props) {
     }
   };
 
-  const maxDuration = duration > 0 ? duration : 0;
+  const totalDuration = duration > 0 ? duration : 0;
+  const shownDuration = hasStarted
+    ? `${formatAudioDuration(currentTime)} / ${formatAudioDuration(totalDuration)}`
+    : formatAudioDuration(totalDuration);
   const label = error
     ? "Retry audio file"
     : isPlaying
       ? "Pause audio file"
       : "Play audio file";
+  const audioStyle = {
+    "--audio-control-background": isOwn ? "var(--bubble-outgoing-text)" : "var(--primary)",
+    "--audio-icon-color": isOwn ? "var(--bubble-outgoing)" : "var(--primary-foreground)",
+    "--audio-strong-foreground": isOwn ? "var(--bubble-outgoing-text)" : "var(--bubble-incoming-text)",
+  } as CSSProperties;
 
   return (
     <div
-      className={cn("flex min-w-0 items-center gap-2 py-1", isOwn ? "text-bubble-outgoing-text" : "text-bubble-incoming-text")}
+      className="relative flex h-[48px] w-full min-w-0 items-center"
       data-testid="audio-file-player"
+      style={audioStyle}
     >
       <audio ref={audioRef} preload="metadata" aria-hidden="true" />
       <button
         type="button"
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-current/15"
+        className="relative mr-3 flex h-[48px] w-[48px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-0 p-0 text-[color:var(--audio-icon-color)]"
+        style={{ backgroundColor: "var(--audio-control-background)" }}
         onClick={(event) => {
           event.stopPropagation();
           if (error) setLoadAttempt((attempt) => attempt + 1);
@@ -153,42 +198,69 @@ export function AudioFilePlayer({ attachment, isOwn = false }: Props) {
         disabled={isLoading}
         aria-label={label}
       >
-        {isLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : error ? <RotateCcw className="h-4 w-4" /> : isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        {isLoading ? (
+          <LoaderCircle className="h-6 w-6 animate-spin" aria-hidden="true" />
+        ) : error ? (
+          <RotateCcw className="h-6 w-6" aria-hidden="true" />
+        ) : (
+          <span className="pointer-events-none absolute inset-0 grid place-items-center leading-[0]" data-testid="audio-icon-stage">
+            <FilledPlayIcon
+              className={cn(
+                "transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+                isPlaying ? "scale-50 opacity-0" : "scale-100 opacity-100",
+              )}
+              style={{ transitionDuration: "400ms, 600ms" }}
+            />
+            <FilledPauseIcon
+              className={cn(
+                "transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+                isPlaying ? "scale-100 opacity-100" : "scale-50 opacity-0",
+              )}
+              style={{ transitionDuration: "400ms, 600ms" }}
+            />
+          </span>
+        )}
       </button>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium" title={attachment.original_name ?? "Audio"}>
-          {attachment.original_name || "Audio"}
+
+      <div className="flex h-[43px] min-w-0 flex-1 flex-col justify-start text-[color:var(--audio-strong-foreground)]">
+        <div className="flex h-[20px] min-w-0 items-center">
+          <div className="min-w-0 flex-1 truncate whitespace-nowrap text-[16px] font-medium leading-[20px]" title={attachment.original_name ?? "Audio"}>
+            {attachment.original_name || "Audio"}
+          </div>
+          <button
+            type="button"
+            className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full opacity-70 hover:opacity-100"
+            onClick={(event) => { event.stopPropagation(); void handleDownload(); }}
+            disabled={isDownloading}
+            aria-label="Download audio file"
+          >
+            {isDownloading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          </button>
         </div>
-        <input
-          type="range"
-          min={0}
-          max={maxDuration}
-          step={0.01}
-          value={Math.min(currentTime, maxDuration)}
-          onChange={(event) => {
-            const nextTime = Number(event.currentTarget.value);
-            if (audioRef.current && Number.isFinite(nextTime)) audioRef.current.currentTime = nextTime;
-            setCurrentTime(nextTime);
-          }}
-          disabled={!audioUrl || maxDuration <= 0}
-          aria-label="Seek audio file"
-          className="h-3 w-full accent-current"
-        />
-        <div className="flex justify-between text-[11px] opacity-70">
-          <span>{formatAudioDuration(currentTime)}</span>
-          <span>{formatAudioDuration(maxDuration)}</span>
+        <div className="mt-[2px] flex h-[21px] min-w-0 items-center gap-1 text-[12px] leading-[21px]" data-testid="audio-meta">
+          {hasStarted ? (
+            <input
+              type="range"
+              min={0}
+              max={totalDuration}
+              step={0.01}
+              value={Math.min(currentTime, totalDuration)}
+              onChange={(event) => {
+                const nextTime = Number(event.currentTarget.value);
+                if (audioRef.current && Number.isFinite(nextTime)) audioRef.current.currentTime = nextTime;
+                setCurrentTime(nextTime);
+              }}
+              disabled={!audioUrl || totalDuration <= 0}
+              aria-label="Seek audio file"
+              data-testid="audio-seekline"
+              className="h-3 min-w-0 flex-1 accent-current"
+            />
+          ) : null}
+          <span className="shrink-0 opacity-75" data-testid="audio-duration">{shownDuration}</span>
+          {messageMeta ? <span className="ml-auto shrink-0">{messageMeta}</span> : null}
         </div>
-        {error && <div className="truncate text-[11px] text-destructive">{error}</div>}
+        {error && <div className="truncate text-[11px] leading-[14px] text-destructive">{error}</div>}
       </div>
-      <button
-        type="button"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full opacity-75 hover:opacity-100"
-        onClick={(event) => { event.stopPropagation(); void handleDownload(); }}
-        disabled={isDownloading}
-        aria-label="Download audio file"
-      >
-        {isDownloading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-      </button>
     </div>
   );
 }

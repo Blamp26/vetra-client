@@ -216,9 +216,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const isVisualAlbum = visualAttachments.length > 1;
   const isVoiceMessage = attachments.length === 1 && attachments[0].kind === "voice";
   const isSingleAudioMessage = attachments.length === 1 && attachments[0].kind === "audio";
+  const isAudioGroup = attachments.length >= 2 && attachments.every((currentAttachment) => currentAttachment.kind === "audio");
   const isDocumentAttachment = attachments.length > 0 && !isVisualMediaMessage && !isVoiceMessage && !isSingleAudioMessage && attachments.some((currentAttachment) => currentAttachment.kind === "file");
   const isSingleDocumentAttachment = attachments.length === 1 && isDocumentAttachment;
-  const isDocumentGroup = attachments.length >= 2 && attachments.every(isFileLikeAttachment);
+  const isDocumentGroup = attachments.length >= 2 && attachments.every(isFileLikeAttachment) && !isAudioGroup;
   const isMediaOnly =
     isVisualMediaMessage &&
     (!msg.content || msg.content.trim().length === 0) &&
@@ -754,8 +755,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     if (!audioAttachment || audioAttachment.kind !== "audio") return null;
 
     return (
-      <div className="relative min-h-[74px] w-full" data-testid="message-audio-attachment">
-        <AudioFilePlayer attachment={audioAttachment} isOwn={isOwn} />
+      <div className="relative w-full" data-testid="message-audio-attachment">
+        <AudioFilePlayer attachment={audioAttachment} isOwn={isOwn} messageMeta={renderMetadata()} />
         {hasText && (
           <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
             <EmojiText text={msg.content || ""} />
@@ -771,6 +772,25 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       </div>
     );
   };
+
+  const renderAudioGroup = () => (
+    <div className="relative w-full" data-testid="message-audio-group">
+      {attachments.map((currentAttachment) => (
+        <div key={currentAttachment.id} className="h-[48px] w-full" data-testid="message-audio-group-row">
+          <AudioFilePlayer attachment={currentAttachment} isOwn={isOwn} />
+        </div>
+      ))}
+      {hasText && (
+        <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current" data-testid="message-audio-group-caption">
+          <EmojiText text={msg.content || ""} />
+        </div>
+      )}
+      <div className="flex h-[21px] items-center justify-end pl-[60px]" data-testid="message-audio-group-meta">
+        {renderMetadata()}
+      </div>
+      {renderBubbleTail("message-audio-group-tail")}
+    </div>
+  );
 
   const renderVisualCaption = () => {
     return (
@@ -795,12 +815,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               ? renderVoiceAttachment()
               : isSingleAudioMessage
                 ? renderAudioAttachment()
+              : isAudioGroup
+                ? renderAudioGroup()
               : isVisualMediaMessage
                 ? renderPhotoMedia()
                 : renderDocumentAttachment()}
           </>
         )}
-        {hasText && !isDocumentAttachment && !isSingleAudioMessage && !isVoiceMessage && (
+        {hasText && !isDocumentAttachment && !isSingleAudioMessage && !isAudioGroup && !isVoiceMessage && (
           isVisualMediaMessage
             ? renderVisualCaption()
             : (
@@ -888,17 +910,19 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                     ? "max-w-[min(480px,calc(100vw-6rem))]"
                     : "max-w-[min(480px,calc(100vw-6rem))]",
                 )
-            : isSingleDocumentAttachment || isVoiceMessage || isSingleAudioMessage
+            : isSingleDocumentAttachment || isVoiceMessage || isSingleAudioMessage || isAudioGroup
                 ? isVoiceMessage
                   ? "h-[69px] w-[337px] max-w-[min(337px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                   : isSingleAudioMessage
-                    ? "min-w-0 w-[360px] max-w-[min(360px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
+                    ? "min-h-[69px] min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
+                    : isAudioGroup
+                      ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                   : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
           isDocumentGroup
             ? "rounded-none"
-            : isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment || isVoiceMessage || isSingleAudioMessage
+            : isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment || isVoiceMessage || isSingleAudioMessage || isAudioGroup
             ? textGroupRadiusClassName
             : isOwnLeftColumn
               ? cn(
@@ -977,7 +1001,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
         {isVisualMediaMessage && renderBubbleTail("message-media-tail")}
 
-        {!isTextOnly && !isMediaOnly && !isVisualMediaMessage && !isDocumentAttachment && !isSingleAudioMessage && !isVoiceMessage && (
+        {!isTextOnly && !isMediaOnly && !isVisualMediaMessage && !isDocumentAttachment && !isSingleAudioMessage && !isAudioGroup && !isVoiceMessage && (
           <div className="mt-1.5 flex justify-end">
             {renderMetadata()}
           </div>

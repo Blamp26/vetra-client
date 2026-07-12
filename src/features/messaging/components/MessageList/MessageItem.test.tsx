@@ -300,7 +300,36 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByTestId("voice-message-player")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download audio file" })).toBeInTheDocument();
+    expect(screen.getByTestId("message-bubble")).toHaveClass("min-h-[69px]", "w-[320px]");
     await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob).toHaveBeenCalled());
+  });
+
+  it("renders multiple audio attachments as one connected bubble with shared metadata and tail", async () => {
+    renderMessageItem({
+      content: null,
+      media_file_id: "audio-1",
+      media_file_ids: ["audio-1", "audio-2", "audio-3"],
+      attachments: [1, 2, 3].map((index) => ({
+        id: `audio-${index}`,
+        url: `/api/v1/media/audio-${index}`,
+        mime_type: "audio/mpeg",
+        original_name: `track-${index}.mp3`,
+        file_size: 3210,
+        kind: "audio" as const,
+        duration_ms: index * 1000,
+      })),
+    });
+
+    const bubble = screen.getByTestId("message-bubble");
+    expect(screen.getByTestId("message-audio-group")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-audio-group-row")).toHaveLength(3);
+    expect(screen.getAllByTestId("audio-file-player")).toHaveLength(3);
+    expect(screen.getByTestId("message-audio-group-meta")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+    expect(screen.getByTestId("message-audio-group-tail")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-audio-tail")).not.toBeInTheDocument();
+    expect(bubble).toHaveClass("w-[320px]", "px-2", "pt-[5px]", "pb-[6px]");
+    await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob.mock.calls.slice(-3)).toHaveLength(3));
   });
 
   it("renders own short messages as right-aligned bubbles with integrated metadata", () => {
