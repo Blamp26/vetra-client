@@ -128,6 +128,7 @@ interface Props {
    disabled?: boolean; 
    replyTo?: ReplyTarget | null; 
    onCancelReply?: () => void; 
+   focusBlocked?: boolean;
  } 
  
  export function MessageInput({ 
@@ -137,6 +138,7 @@ interface Props {
    disabled = false, 
    replyTo, 
    onCancelReply, 
+   focusBlocked = false,
  }: Props) { 
    const [content, setContent] = useState(""); 
    const [isSending, setIsSending] = useState(false); 
@@ -149,6 +151,7 @@ interface Props {
   const [voiceElapsedMs, setVoiceElapsedMs] = useState(0);
   const [isComposerAttachmentMenuOpen, setIsComposerAttachmentMenuOpen] = useState(false);
   const [isModalAttachmentMenuOpen, setIsModalAttachmentMenuOpen] = useState(false);
+  const [focusRequest, setFocusRequest] = useState(0);
 
    const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -269,6 +272,56 @@ interface Props {
     textarea.style.overflowY = "hidden";
   }, [content, isEditing]);
 
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea || !activeChatKey || focusBlocked) return;
+    if (
+      disabled ||
+      isSending ||
+      isUploading ||
+      isEditing ||
+      voiceRecordingState !== "idle" ||
+      isComposerAttachmentMenuOpen ||
+      isModalAttachmentMenuOpen ||
+      pendingAttachments.length > 0
+    ) return;
+
+    const activeElement = document.activeElement;
+    if (
+      activeElement &&
+      activeElement !== textarea &&
+      activeElement instanceof HTMLElement &&
+      activeElement.matches("input, textarea, [contenteditable=\"true\"]")
+    ) return;
+
+    if (document.querySelector('[role="dialog"], [aria-modal="true"], [role="menu"]')) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      if (
+        textareaRef.current &&
+        !textareaRef.current.disabled &&
+        !document.querySelector('[role="dialog"], [aria-modal="true"], [role="menu"]')
+      ) {
+        textareaRef.current.focus({ preventScroll: true });
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    activeChatKey,
+    disabled,
+    focusBlocked,
+    focusRequest,
+    isComposerAttachmentMenuOpen,
+    isEditing,
+    isModalAttachmentMenuOpen,
+    isSending,
+    isUploading,
+    pendingAttachments.length,
+    replyTo?.id,
+    voiceRecordingState,
+  ]);
+
   const stopTyping = () => { onTypingStop?.() }; 
  
   const handleChange = (value: string) => {
@@ -279,6 +332,11 @@ interface Props {
         stopTyping(); 
     } 
    }; 
+
+  const handleSuccessfulSend = () => {
+    if (replyTo) onCancelReply?.();
+    setFocusRequest((current) => current + 1);
+  };
 
   const releaseVoiceStream = () => {
     voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -316,6 +374,7 @@ interface Props {
       await onSend({ content: null, mediaFileId, mediaFileIds: null }, replyTo?.id);
       resetUploadState();
       resetVoiceRecording();
+      handleSuccessfulSend();
     } catch (error) {
       console.error("Failed to send voice message:", error);
       setUploadStatus("error");
@@ -652,9 +711,10 @@ interface Props {
          setContent("");
          resetUploadState();
        } else if (pendingAttachments.length === 0) { 
-        await onSend({ content: trimmed || null, mediaFileId: null }, replyTo?.id); 
-        setContent(""); 
+        await onSend({ content: trimmed || null, mediaFileId: null }, replyTo?.id);
+        setContent("");
         resetUploadState();
+        handleSuccessfulSend();
        } else {
         // Freeze the current queue at send start so UI updates do not drop later units.
         const attachmentsToSend = await Promise.all(
@@ -778,7 +838,7 @@ interface Props {
 
           await onSend(
             outgoingPayload,
-            shouldUseContent ? replyTo?.id : undefined,
+            shouldUseContent || (unitIndex === 0 && trimmed.length === 0) ? replyTo?.id : undefined,
           );
 
           logAttachmentDebug("send.result", {
@@ -797,6 +857,7 @@ interface Props {
 
         resetUploadState();
         uploadAbortControllerRef.current = null;
+        handleSuccessfulSend();
       }
      } catch (err) { 
        if (err instanceof DOMException && err.name === "AbortError") {

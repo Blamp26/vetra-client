@@ -37,18 +37,31 @@ vi.mock("@/features/messaging/hooks/useUnifiedMessages", () => ({
 }));
 
 vi.mock("../MessageList/MessageList", () => ({
-  MessageList: ({ messages }: { messages: Array<{ content?: string | null }> }) => (
+  MessageList: ({
+    messages,
+    onReply,
+  }: {
+    messages: Array<{ content?: string | null }>;
+    onReply?: (target: { id: number; content: string; author: string }) => void;
+  }) => (
     <div data-testid="message-list">
       {messages.map((message, index) => (
         <div key={index}>{message.content}</div>
       ))}
+      <button type="button" onClick={() => onReply?.({ id: 100, content: "Reply target", author: "Alice" })}>
+        Select mock reply
+      </button>
     </div>
   ),
 }));
 
 vi.mock("../MessageInput/MessageInput", () => ({
-  MessageInput: () => (
-    <textarea data-testid="message-input" aria-label="Message composer" />
+  MessageInput: ({ replyTo }: { replyTo?: { id: number } | null }) => (
+    <textarea
+      data-testid="message-input"
+      aria-label="Message composer"
+      data-reply-id={replyTo?.id ?? "none"}
+    />
   ),
 }));
 
@@ -225,6 +238,36 @@ describe("ChatWindow presence rendering", () => {
     expect(searchButton).toHaveClass("h-10", "w-10");
     fireEvent.click(searchButton);
     expect(screen.getByTestId("message-search")).toBeInTheDocument();
+  });
+
+  it("clears the active reply when switching conversations", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    const { rerender } = render(
+      <ChatWindow activeChat={{ type: "direct", partnerId: 2 }} call={makeCall()} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Select mock reply" }));
+    expect(screen.getByTestId("message-input")).toHaveAttribute("data-reply-id", "100");
+
+    rerender(<ChatWindow activeChat={{ type: "direct", partnerId: 3 }} call={makeCall()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("message-input")).toHaveAttribute("data-reply-id", "none");
+    });
   });
 
   it("renders an enabled direct-call button that invokes provider startCall once", async () => {

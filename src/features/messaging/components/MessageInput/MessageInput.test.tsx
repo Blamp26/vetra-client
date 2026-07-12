@@ -303,6 +303,29 @@ describe("MessageInput attachments", () => {
     expect(formData.get("duration_ms")).toBe("2500");
   });
 
+  it("clears a reply after a successful attachment send", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const onCancelReply = vi.fn();
+    const { container } = render(
+      <MessageInput
+        onSend={onSend}
+        replyTo={{ id: 77, content: "Attached original", author: "Alice" }}
+        onCancelReply={onCancelReply}
+      />,
+    );
+    const fileInput = getFileInput(container);
+    const pdf = new File(["pdf"], "reply.pdf", { type: "application/pdf" });
+
+    fireEvent.change(fileInput, { target: { files: [pdf] } });
+    fireEvent.click(within(screen.getByTestId("attachment-review-modal")).getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onCancelReply).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({ content: null, mediaFileId: "media-reply.pdf" }),
+      77,
+    );
+  });
+
   it("keeps composer controls aligned with simple button and input styling", () => {
     render(<MessageInput onSend={vi.fn()} />);
 
@@ -363,6 +386,110 @@ describe("MessageInput attachments", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(onSend).toHaveBeenCalledWith({ content: "Hello", mediaFileId: null }, undefined);
+  });
+
+  it("clears a reply only after a successful send and omits it from the next message", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const onCancelReply = vi.fn();
+    const { rerender } = render(
+      <MessageInput
+        onSend={onSend}
+        replyTo={{ id: 42, content: "Original", author: "Alice" }}
+        onCancelReply={onCancelReply}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("message-input-textarea"), { target: { value: "Reply" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onCancelReply).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenNthCalledWith(1, { content: "Reply", mediaFileId: null }, 42);
+
+    rerender(<MessageInput onSend={onSend} onCancelReply={onCancelReply} />);
+    fireEvent.change(screen.getByTestId("message-input-textarea"), { target: { value: "Normal" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
+    expect(onSend).toHaveBeenNthCalledWith(2, { content: "Normal", mediaFileId: null }, undefined);
+  });
+
+  it("keeps the active reply when sending fails", async () => {
+    const onSend = vi.fn().mockRejectedValue(new Error("offline"));
+    const onCancelReply = vi.fn();
+    render(
+      <MessageInput
+        onSend={onSend}
+        replyTo={{ id: 42, content: "Original", author: "Alice" }}
+        onCancelReply={onCancelReply}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("message-input-textarea"), { target: { value: "Retry me" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(screen.getByText("Reply to Alice")).toBeInTheDocument());
+    expect(onCancelReply).not.toHaveBeenCalled();
+  });
+
+  it("focuses the composer on chat open, reply changes, cancellation, and successful send", async () => {
+    const state = { ...makeState(), activeChat: { type: "direct" as const, partnerId: 2 } };
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    const onCancelReply = vi.fn();
+    const focusSpy = vi.spyOn(HTMLElement.prototype, "focus");
+    const { rerender } = render(
+      <MessageInput
+        onSend={onSend}
+        replyTo={{ id: 42, content: "Original", author: "Alice" }}
+        onCancelReply={onCancelReply}
+      />,
+    );
+    const textarea = screen.getByTestId("message-input-textarea");
+
+    await waitFor(() => expect(textarea).toHaveFocus());
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
+    state.activeChat = { type: "direct", partnerId: 3 };
+    textarea.blur();
+    rerender(
+      <MessageInput
+        onSend={onSend}
+        replyTo={{ id: 42, content: "Original", author: "Alice" }}
+        onCancelReply={onCancelReply}
+      />,
+    );
+    await waitFor(() => expect(textarea).toHaveFocus());
+
+    textarea.blur();
+    rerender(
+      <MessageInput
+        onSend={onSend}
+        replyTo={{ id: 43, content: "Another original", author: "Bob" }}
+        onCancelReply={onCancelReply}
+      />,
+    );
+    await waitFor(() => expect(textarea).toHaveFocus());
+
+    textarea.blur();
+    rerender(<MessageInput onSend={onSend} onCancelReply={onCancelReply} />);
+    await waitFor(() => expect(textarea).toHaveFocus());
+
+    textarea.blur();
+    fireEvent.change(textarea, { target: { value: "Sent" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(textarea).toHaveFocus());
+  });
+
+  it("does not steal focus while a normal chat focus blocker is active", async () => {
+    const state = { ...makeState(), activeChat: { type: "direct" as const, partnerId: 2 } };
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+    const { rerender } = render(<MessageInput onSend={vi.fn()} focusBlocked />);
+    const textarea = screen.getByTestId("message-input-textarea");
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(textarea).not.toHaveFocus();
+
+    rerender(<MessageInput onSend={vi.fn()} />);
+    await waitFor(() => expect(textarea).toHaveFocus());
   });
 
   it("accepts images and labels them as photos", () => {

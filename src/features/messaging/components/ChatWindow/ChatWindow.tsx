@@ -389,6 +389,7 @@ export function ChatWindow({ activeChat, call }: Props) {
         onTypingStop={handleTypingStop}
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
+        focusBlocked={isSearchOpen}
       />
 
       {isSearchOpen && (
