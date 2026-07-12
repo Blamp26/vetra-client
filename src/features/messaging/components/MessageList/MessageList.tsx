@@ -419,13 +419,15 @@ export function MessageList({
   }, [lightboxData, messagesById, setForwardingMessages]);
 
   const handlePerformForward = useCallback(async (target: { type: 'direct' | 'room', id: number; ref?: string | number | null }) => {
-    if (!forwardingMessageIds || forwardingMessageIds.length === 0 || !socketManager) return;
+    if (!forwardingMessageIds || forwardingMessageIds.length === 0 || !socketManager) {
+      throw new Error("Forwarding is unavailable");
+    }
     try {
       for (const msgId of forwardingMessageIds) {
         const msg = messagesById.get(msgId);
         if (!msg) continue;
         if (!isMessageForwardable(msg)) {
-          return;
+          throw new Error("This message cannot be forwarded");
         }
         const payload = {
           content: msg.content,
@@ -455,6 +457,7 @@ export function MessageList({
       clearSelection();
     } catch (err) {
       console.error("Forwarding failed:", err);
+      throw err;
     }
   }, [forwardingMessageIds, socketManager, messagesById, setActiveChat, clearSelection, setForwardingMessages, roomPreviews]);
 

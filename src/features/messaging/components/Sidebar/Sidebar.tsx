@@ -15,6 +15,7 @@ import {
   serverChatForServer,
 } from "@/shared/utils/chatRoutes";
 import { getPresenceText, resolvePresenceStatus } from "@/shared/utils/presence";
+import { sortConversationItems } from "../../utils/conversationOrdering";
 import { getPreviewText } from "../../utils/attachments";
 
 interface SidebarProps {
@@ -118,9 +119,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
 
   const allItems = useMemo(
     () =>
-      [...directItems, ...roomItems].sort(
-        (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
-      ),
+      sortConversationItems([...directItems, ...roomItems]),
     [directItems, roomItems],
   );
 

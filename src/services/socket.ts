@@ -662,7 +662,7 @@ export async function connectSocket(
           .receive("error", (resp) =>
             reject(
               new Error(
-                resp?.errors?.content?.[0] ?? "Failed to send room message",
+                resp?.reason ?? resp?.errors?.content?.[0] ?? "Failed to send room message",
               ),
             ),
           )
@@ -782,7 +782,7 @@ export function sendMessageViaChannel(
       })
       .receive("error", (resp) =>
         reject(
-          new Error(resp?.errors?.content?.[0] ?? "Failed to send message"),
+          new Error(resp?.reason ?? resp?.errors?.content?.[0] ?? "Failed to send message"),
         ),
       )
       .receive("timeout", () => reject(new Error("Send message timed out")));
