@@ -400,6 +400,44 @@ describe("App hash sync", () => {
     );
   });
 
+  it("lets an explicit active-chat switch win over the previous route", async () => {
+    const state = makeState();
+    state.activeChat = { type: "direct", partnerId: 2, partnerRef: "user-2" };
+    state.conversationPreviews = {
+      2: {
+        partner_id: 2,
+        partner_public_id: "user-2",
+        partner_username: "user-2",
+        partner_display_name: "User 2",
+        unread_count: 0,
+        last_message: null,
+      },
+      3: {
+        partner_id: 3,
+        partner_public_id: "user-3",
+        partner_username: "user-3",
+        partner_display_name: "User 3",
+        unread_count: 0,
+        last_message: null,
+      },
+    } as any;
+    window.location.hash = "#/2";
+
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
+    );
+
+    const view = render(<App />);
+    setActiveChatMock.mockReset();
+    state.activeChat = { type: "direct", partnerId: 3, partnerRef: "user-3" };
+    view.rerender(<App />);
+
+    await waitFor(() => expect(window.location.hash).toBe("#/user-3"));
+    expect(setActiveChatMock).not.toHaveBeenCalledWith(
+      { type: "direct", partnerId: 2, partnerRef: "user-2" },
+    );
+  });
+
   it("keeps the explicit settings hash stable instead of restoring the active chat route", async () => {
     const state = makeState();
     state.activeChat = {
