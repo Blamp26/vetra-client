@@ -148,6 +148,11 @@ export function ChatWindow({ activeChat, call }: Props) {
         .getUser(directPartnerRef ?? activePartnerId)
         .then((user: User) => {
           if (!cancelled) setPartner(user);
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            console.error("Failed to load chat user:", error);
+          }
         });
       return () => {
         cancelled = true;

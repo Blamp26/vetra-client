@@ -8,7 +8,6 @@ import { ImageLightbox } from "@/shared/components/ImageLightbox";
 import { VideoLightbox } from "@/shared/components/VideoLightbox";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
 import { cn } from "@/shared/utils/cn";
-import { roomChatForPreview } from "@/shared/utils/chatRoutes";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
   getMessageAttachments,
@@ -142,14 +141,12 @@ export function MessageList({
     clearSelection,
     forwardingMessageIds,
     setForwardingMessages,
-    setActiveChat,
     socketManager,
     deleteMessage,
     deleteRoomMessage,
     messageReactions,
     startEditing,
     conversationPreviews,
-    roomPreviews,
     authToken,
     appendMessage,
     appendRoomMessage,
@@ -163,14 +160,12 @@ export function MessageList({
     clearSelection: s.clearSelection,
     forwardingMessageIds: s.forwardingMessageIds,
     setForwardingMessages: s.setForwardingMessages,
-    setActiveChat: s.setActiveChat,
     socketManager: s.socketManager,
     deleteMessage: s.deleteMessage,
     deleteRoomMessage: s.deleteRoomMessage,
     messageReactions: s.messageReactions,
     startEditing: s.startEditing,
     conversationPreviews: s.conversationPreviews,
-    roomPreviews: s.roomPreviews,
     authToken: s.authToken,
     appendMessage: s.appendMessage,
     appendRoomMessage: s.appendRoomMessage,
@@ -475,18 +470,6 @@ export function MessageList({
           });
         }
       }
-      if (target.type === 'direct') {
-        setActiveChat(
-          { type: 'direct', partnerId: target.id, partnerRef: target.ref ?? target.id },
-        );
-      } else {
-        const roomPreview = roomPreviews[target.id];
-        setActiveChat(
-          roomPreview
-            ? roomChatForPreview(roomPreview)
-            : { type: 'room', roomId: target.id, roomRef: target.ref ?? target.id },
-        );
-      }
       setForwardingMessages(null);
       clearSelection();
     } catch (err) {
@@ -497,10 +480,8 @@ export function MessageList({
     forwardingMessageIds,
     socketManager,
     messagesById,
-    setActiveChat,
     clearSelection,
     setForwardingMessages,
-    roomPreviews,
     appendMessage,
     appendRoomMessage,
     upsertPreview,

@@ -399,6 +399,7 @@ describe("MessageList bubble layout", () => {
       partner_id: 9,
       last_message: expect.objectContaining({ id: 99 }),
     }));
+    expect(setActiveChat).not.toHaveBeenCalled();
     expect(setForwardingMessages).toHaveBeenCalledWith(null);
     expect(clearSelection).toHaveBeenCalledTimes(1);
   });
@@ -456,6 +457,7 @@ describe("MessageList bubble layout", () => {
       last_message_at: returnedMessage.inserted_at,
       last_message: expect.objectContaining({ id: 100 }),
     }));
+    expect(setActiveChat).not.toHaveBeenCalled();
     expect(socketManager.sendRoomMessageViaChannel).toHaveBeenCalledTimes(1);
     expect(setForwardingMessages).toHaveBeenCalledWith(null);
     expect(clearSelection).toHaveBeenCalledTimes(1);
