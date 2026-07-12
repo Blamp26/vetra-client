@@ -1714,14 +1714,17 @@ describe("MessageItem bubble layout", () => {
     const fileInfo = screen.getByTestId("message-file-info");
     const metadata = screen.getByTestId("message-document-inline-metadata");
 
-    expect(bubble).toHaveClass("w-fit", "max-w-[min(480px,calc(100vw-6rem))]", "px-2", "pt-[5px]", "pb-[6px]");
+    expect(bubble).toHaveClass("w-fit", "min-w-[268px]", "max-w-[min(430px,calc(100vw-6rem))]", "px-2", "pt-[5px]", "pb-[6px]");
+    expect(bubble).not.toHaveClass("max-w-[min(480px,calc(100vw-6rem))]");
+    expect(bubble).toHaveStyle({ minWidth: "268px", maxWidth: "min(430px, calc(100vw - 6rem))" });
     expect(bubble).toHaveClass("rounded-[15px]", "rounded-tr-[15px]", "rounded-br-[0px]");
     expect(bubble).not.toHaveClass("border", "border-transparent", "border-border");
     expect(bubble).toHaveStyle({
       "--message-surface-color": "var(--bubble-outgoing)",
       backgroundColor: "var(--message-surface-color)",
     });
-    expect(fileRow).toHaveClass("relative", "flex", "items-center", "min-w-[224px]", "max-w-full", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
+    expect(fileRow).toHaveClass("relative", "flex", "items-center", "w-full", "max-w-full", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
+    expect(fileRow).not.toHaveClass("min-w-[224px]", "w-[224px]");
     expect(fileRow).not.toHaveClass("w-[224px]");
     expect(fileRow).not.toHaveClass("border", "rounded-full", "rounded-[6px]");
     expect(iconContainer).toHaveClass("relative", "w-[54px]", "h-[54px]", "mr-[12px]", "shrink-0");
@@ -1763,7 +1766,8 @@ describe("MessageItem bubble layout", () => {
 
     const bubble = screen.getByTestId("message-bubble");
     expect(bubble).toHaveClass("bg-bubble-incoming", "px-2", "pt-[5px]", "pb-[6px]");
-    expect(screen.getByTestId("message-file-row")).toHaveClass("max-w-full", "min-w-[224px]", "h-[54px]");
+    expect(screen.getByTestId("message-file-row")).toHaveClass("w-full", "max-w-full", "h-[54px]");
+    expect(screen.getByTestId("message-file-row")).not.toHaveClass("min-w-[224px]", "w-[224px]");
     expect(screen.getByTestId("message-file-row")).not.toHaveClass("w-[224px]");
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
@@ -1928,7 +1932,8 @@ describe("MessageItem bubble layout", () => {
     expect(group).not.toHaveClass("gap-1", "gap-2", "shadow", "rounded-[15px]");
     expect(rows).toHaveLength(2);
     rows.forEach((row) => {
-      expect(row).toHaveClass("w-[259px]", "min-w-[224px]", "h-[54px]", "my-[3px]");
+      expect(row).toHaveClass("w-[259px]", "h-[54px]", "my-[3px]");
+      expect(row).not.toHaveClass("min-w-[224px]");
     });
     expect(screen.getByText("first-document.pdf")).toBeInTheDocument();
     expect(screen.getAllByTestId("message-file-name")[1]).toHaveAttribute("title", "second-document-with-a-very-long-filename-that-must-truncate.docx");
@@ -2119,8 +2124,40 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByTestId("message-file-name-leading")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-file-name-trailing")).not.toBeInTheDocument();
     expect(screen.queryByText("…")).not.toBeInTheDocument();
-    expect(screen.getByTestId("message-file-row")).toHaveClass("max-w-full", "min-w-[224px]");
-    expect(screen.getByTestId("message-file-row")).not.toHaveClass("w-[224px]");
+    expect(screen.getByTestId("message-file-row")).toHaveClass("w-full", "max-w-full");
+    expect(screen.getByTestId("message-file-row")).not.toHaveClass("min-w-[224px]", "w-[224px]");
+  });
+
+  it("preserves the basename ending and complete extension when rendered text overflows", async () => {
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    const getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => ({
+      font: "",
+      measureText: () => ({ width: 500 }),
+    } as unknown as CanvasRenderingContext2D));
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 300 });
+
+    try {
+      renderMessageItem({
+        media_file_id: "media-file-middle",
+        media_mime_type: "application/pdf",
+        attachment: {
+          id: "media-file-middle",
+          url: "/api/v1/media/media-file-middle",
+          mime_type: "application/pdf",
+          original_name: "asodjasoidsoajdsaoijdaosijdsaiodjasoidjaodjasidjaoidjaiosjdasiojdiaosdjjjjjjjjjjjjjasoijdsaoijdaoidjasiod.pdf",
+          file_size: 12000000,
+          kind: "file",
+        },
+      });
+
+      await waitFor(() => expect(screen.getByTestId("message-file-name-trailing")).toHaveTextContent("daoidjasiod.pdf"));
+      expect(screen.getByTestId("message-file-name-leading")).toHaveTextContent("asodjasoidsoajds");
+      expect(screen.getByTestId("message-file-name")).toHaveAttribute("title", "asodjasoidsoajdsaoijdaosijdsaiodjasoidjaodjasidjaoidjaiosjdasiojdiaosdjjjjjjjjjjjjjasoijdsaoijdaoidjasiod.pdf");
+    } finally {
+      getContextSpy.mockRestore();
+      if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
+      else delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+    }
   });
 
   it("keeps timestamp and status visible for long outgoing text messages", () => {

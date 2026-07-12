@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { Download, X } from "lucide-react";
 import type { Attachment } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
@@ -61,6 +61,84 @@ function getAttachmentExtensionTone(attachment: Attachment | null) {
   }
 
   return "bg-[#5d6a62] text-white";
+}
+
+function getFilenameGraphemes(value: string) {
+  const Segmenter = (Intl as unknown as {
+    Segmenter?: new (locales?: string | string[], options?: { granularity: "grapheme" }) => {
+      segment: (input: string) => Iterable<{ segment: string }>;
+    };
+  }).Segmenter;
+
+  if (Segmenter) {
+    return Array.from(new Segmenter(undefined, { granularity: "grapheme" }).segment(value), ({ segment }) => segment);
+  }
+  return Array.from(value);
+}
+
+function splitFilenameForDisplay(filename: string) {
+  const lastDot = filename.lastIndexOf(".");
+  const hasExtension = lastDot > 0 && lastDot < filename.length - 1;
+  const basename = hasExtension ? filename.slice(0, lastDot) : filename;
+  const extension = hasExtension ? filename.slice(lastDot) : "";
+  const basenameGraphemes = getFilenameGraphemes(basename);
+
+  return {
+    leading: basenameGraphemes.slice(0, -12).join(""),
+    trailing: basenameGraphemes.slice(-12).join("") + extension,
+    canSplit: basenameGraphemes.length > 12 && Boolean(extension || basenameGraphemes.length > 12),
+  };
+}
+
+function MiddleEllipsisFilename({ filename }: { filename: string }) {
+  const titleRef = useRef<HTMLDivElement>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const { leading, trailing, canSplit } = splitFilenameForDisplay(filename);
+
+  useLayoutEffect(() => {
+    const updateOverflow = () => {
+      const element = titleRef.current;
+      if (!element || !canSplit || element.clientWidth <= 0) return;
+      try {
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        const computedStyle = window.getComputedStyle(element);
+        context.font = computedStyle.font || `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+        setIsOverflowing(context.measureText(filename).width > element.clientWidth);
+      } catch {
+        // Keep the complete CSS title when text measurement is unavailable.
+      }
+    };
+
+    updateOverflow();
+    if (typeof ResizeObserver === "undefined" || !titleRef.current) return undefined;
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(titleRef.current);
+    return () => observer.disconnect();
+  }, [canSplit, filename]);
+
+  return (
+    <div
+      ref={titleRef}
+      className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[16px] font-medium leading-[24px] text-current"
+      title={filename}
+      aria-label={filename}
+      dir="auto"
+      data-testid="message-file-name"
+    >
+      {isOverflowing ? (
+        <>
+          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" data-testid="message-file-name-leading" aria-hidden="true">
+            {leading}
+          </span>
+          <span className="shrink-0 whitespace-nowrap" data-testid="message-file-name-trailing" aria-hidden="true">
+            {trailing}
+          </span>
+        </>
+      ) : filename}
+    </div>
+  );
 }
 
 export function DocumentAttachmentRow({
@@ -167,8 +245,8 @@ export function DocumentAttachmentRow({
       className={cn(
         isCompact
           ? cn(
-              "relative my-[3px] flex h-[54px] min-w-[224px] items-center bg-transparent p-0",
-              isGrouped ? "w-[259px]" : "max-w-full",
+              "relative my-[3px] flex h-[54px] items-center bg-transparent p-0",
+              isGrouped ? "w-[259px]" : "w-full max-w-full",
             )
           : "flex min-w-0 items-start gap-3",
       )}
@@ -249,17 +327,19 @@ export function DocumentAttachmentRow({
           : "min-w-0 flex-1 pt-[2px]"}
         data-testid="message-file-info"
       >
-        <div
-          className={isCompact
-            ? "block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[16px] font-medium leading-[24px] text-current"
-            : "block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[18px] text-current"}
-          title={attachmentName}
-          aria-label={attachmentName}
-          dir="auto"
-          data-testid="message-file-name"
-        >
-          {attachmentName}
-        </div>
+        {isCompact ? (
+          <MiddleEllipsisFilename filename={attachmentName} />
+        ) : (
+          <div
+            className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[18px] text-current"
+            title={attachmentName}
+            aria-label={attachmentName}
+            dir="auto"
+            data-testid="message-file-name"
+          >
+            {attachmentName}
+          </div>
+        )}
         <div
           className={cn(
             isCompact

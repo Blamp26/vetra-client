@@ -78,6 +78,8 @@ type VisualRuntimeMetrics = MediaRuntimeDiagnostics & {
 
 const MESSAGE_ALBUM_MAX_WIDTH = 480;
 const SINGLE_MEDIA_MAX_HEIGHT = 432;
+export const SINGLE_DOCUMENT_MIN_WIDTH = 268;
+export const SINGLE_DOCUMENT_MAX_WIDTH = 430;
 const MESSAGE_ALBUM_LAYOUT_OPTIONS = {
   maxWidth: MESSAGE_ALBUM_MAX_WIDTH,
   spacing: 2,
@@ -946,7 +948,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                     : "max-w-[min(480px,calc(100vw-6rem))]",
                 )
             : isSingleDocumentAttachment || isVoiceMessage || isSingleAudioMessage || isAudioGroup
-                ? isVoiceMessage
+                ? isSingleDocumentAttachment
+                  ? "w-fit min-w-[268px] max-w-[min(430px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
+                  : isVoiceMessage
                   ? "h-[69px] w-[337px] max-w-[min(337px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                   : isSingleAudioMessage
                     ? "min-h-[69px] min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] px-2 py-0 flex items-center"
@@ -996,6 +1000,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
           backgroundColor: isDocumentGroup || isAudioGroup ? "transparent" : "var(--message-surface-color)",
           ...(isSingleVisualMessage ? { width: `${photoLayout.width}px` } : {}),
+          ...(isSingleDocumentAttachment
+            ? {
+                minWidth: `${SINGLE_DOCUMENT_MIN_WIDTH}px`,
+                maxWidth: `min(${SINGLE_DOCUMENT_MAX_WIDTH}px, calc(100vw - 6rem))`,
+              }
+            : {}),
         } as React.CSSProperties}
       >
         {showSenderName && (
