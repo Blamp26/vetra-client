@@ -511,6 +511,9 @@ export function MessageList({
         }
       }
       if (operationId !== forwardingOperationRef.current) return;
+      // Consume the completion before the canonical navigation so no later
+      // duplicate completion can reuse this operation.
+      forwardingOperationRef.current = 0;
       setForwardingMessages(null);
       clearSelection();
       setActiveChat(
