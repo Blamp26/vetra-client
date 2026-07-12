@@ -15,6 +15,8 @@ import {
   getMessageAttachment,
   getPreviewText,
   isMessageForwardable,
+  buildPreviewMessage,
+  normalizeMessageAttachments,
 } from "../../utils/attachments";
 import { downloadAttachmentWithAuth } from "../../utils/attachmentDownloads";
 
@@ -149,6 +151,10 @@ export function MessageList({
     conversationPreviews,
     roomPreviews,
     authToken,
+    appendMessage,
+    appendRoomMessage,
+    upsertPreview,
+    upsertRoomPreview,
   } = useAppStore((s: RootState) => ({
     selectionMode: s.selectionMode,
     selectedMessageIds: s.selectedMessageIds,
@@ -166,6 +172,10 @@ export function MessageList({
     conversationPreviews: s.conversationPreviews,
     roomPreviews: s.roomPreviews,
     authToken: s.authToken,
+    appendMessage: s.appendMessage,
+    appendRoomMessage: s.appendRoomMessage,
+    upsertPreview: s.upsertPreview,
+    upsertRoomPreview: s.upsertRoomPreview,
   }), true);
 
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
@@ -436,9 +446,33 @@ export function MessageList({
           forwardedFromMessageId: msg.id,
         };
         if (target.type === 'direct') {
-          await sendMessageViaChannel(socketManager.userChannel, target.ref ?? target.id, payload);
+          const forwardedMessage = await sendMessageViaChannel(
+            socketManager.userChannel,
+            target.ref ?? target.id,
+            payload,
+          );
+          const normalizedMessage = normalizeMessageAttachments(forwardedMessage);
+          appendMessage(target.id, normalizedMessage);
+          upsertPreview({
+            partner_id: target.id,
+            partner_public_id:
+              normalizedMessage.recipient_public_id ??
+              (typeof target.ref === "string" ? target.ref : null),
+            partner_username: normalizedMessage.recipient_username ?? "Unknown",
+            partner_display_name: normalizedMessage.recipient_display_name ?? null,
+            unread_count: 0,
+            last_message: buildPreviewMessage(normalizedMessage),
+          });
         } else {
-          await socketManager.sendRoomMessageViaChannel(target.id, payload);
+          const forwardedMessage = await socketManager.sendRoomMessageViaChannel(target.id, payload);
+          const normalizedMessage = normalizeMessageAttachments(forwardedMessage);
+          appendRoomMessage(target.id, normalizedMessage);
+          upsertRoomPreview({
+            id: target.id,
+            public_id: normalizedMessage.room_public_id ?? (typeof target.ref === "string" ? target.ref : null),
+            last_message_at: normalizedMessage.inserted_at,
+            last_message: buildPreviewMessage(normalizedMessage),
+          });
         }
       }
       if (target.type === 'direct') {
@@ -459,7 +493,19 @@ export function MessageList({
       console.error("Forwarding failed:", err);
       throw err;
     }
-  }, [forwardingMessageIds, socketManager, messagesById, setActiveChat, clearSelection, setForwardingMessages, roomPreviews]);
+  }, [
+    forwardingMessageIds,
+    socketManager,
+    messagesById,
+    setActiveChat,
+    clearSelection,
+    setForwardingMessages,
+    roomPreviews,
+    appendMessage,
+    appendRoomMessage,
+    upsertPreview,
+    upsertRoomPreview,
+  ]);
 
   const selectedMessages = useMemo(
     () =>

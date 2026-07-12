@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { within } from "@testing-library/react";
 import type { ComponentProps } from "react";
@@ -145,7 +145,16 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
 }));
 
 vi.mock("../ForwardModal", () => ({
-  ForwardModal: () => null,
+  ForwardModal: ({ onForward }: { onForward: (target: unknown) => void }) => (
+    <div data-testid="forward-modal-mock">
+      <button onClick={() => void Promise.resolve(onForward({ type: "direct", id: 9, ref: "user-9" })).catch(() => undefined)}>
+        forward-direct
+      </button>
+      <button onClick={() => void Promise.resolve(onForward({ type: "room", id: 7, ref: "room-7" })).catch(() => undefined)}>
+        forward-room
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("../../utils/attachmentDownloads", () => ({
@@ -326,6 +335,178 @@ describe("MessageList bubble layout", () => {
     expect(screen.getAllByTestId("message-date-group")[0]).toHaveClass("w-full");
     expect(screen.getByText("First day")).toBeInTheDocument();
     expect(screen.getByText("Second day")).toBeInTheDocument();
+  });
+
+  it("applies a successful direct forwarding acknowledgement through the live store path", async () => {
+    const returnedMessage = makeMessage({
+      id: 99,
+      sender_id: 1,
+      sender_public_id: "me-public-id",
+      recipient_id: 9,
+      recipient_public_id: "user-9",
+      content: "Forwarded live",
+      inserted_at: "2026-07-12T12:00:00Z",
+      forwarded_from: { source_display_name: "Alice" },
+    });
+    const appendMessage = vi.fn();
+    const upsertPreview = vi.fn();
+    const setForwardingMessages = vi.fn();
+    const clearSelection = vi.fn();
+    const setActiveChat = vi.fn();
+    const channel = {
+      push: vi.fn(() => {
+        const response = {
+          receive(event: string, callback: (payload: unknown) => void) {
+            if (event === "ok") callback(returnedMessage);
+            return response;
+          },
+        };
+        return response;
+      }),
+    };
+
+    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({
+        selectionMode: false,
+        selectedMessageIds: [],
+        setSelectionMode: vi.fn(),
+        toggleMessageSelection: vi.fn(),
+        clearSelection,
+        forwardingMessageIds: [1],
+        setForwardingMessages,
+        setActiveChat,
+        socketManager: { userChannel: channel },
+        deleteMessage: vi.fn(),
+        deleteRoomMessage: vi.fn(),
+        messageReactions: {},
+        startEditing: vi.fn(),
+        conversationPreviews: {},
+        roomPreviews: {},
+        authToken: "secret-token",
+        appendMessage,
+        appendRoomMessage: vi.fn(),
+        upsertPreview,
+        upsertRoomPreview: vi.fn(),
+      }),
+    );
+
+    renderMessageList([makeMessage({ id: 1, sender_id: 2 })]);
+    fireEvent.click(screen.getByRole("button", { name: "forward-direct" }));
+
+    await waitFor(() => expect(appendMessage).toHaveBeenCalledTimes(1));
+    expect(appendMessage).toHaveBeenCalledWith(9, expect.objectContaining({ id: 99, forwarded_from: { source_display_name: "Alice" } }));
+    expect(upsertPreview).toHaveBeenCalledWith(expect.objectContaining({
+      partner_id: 9,
+      last_message: expect.objectContaining({ id: 99 }),
+    }));
+    expect(setForwardingMessages).toHaveBeenCalledWith(null);
+    expect(clearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies a successful room forwarding acknowledgement and deduplicates later delivery", async () => {
+    const returnedMessage = makeMessage({
+      id: 100,
+      sender_id: 1,
+      room_id: 7,
+      room_public_id: "room-7",
+      content: "Forwarded room live",
+      inserted_at: "2026-07-12T12:01:00Z",
+    });
+    const appendRoomMessage = vi.fn();
+    const upsertRoomPreview = vi.fn();
+    const setForwardingMessages = vi.fn();
+    const clearSelection = vi.fn();
+    const setActiveChat = vi.fn();
+    const socketManager = {
+      sendRoomMessageViaChannel: vi.fn().mockResolvedValue(returnedMessage),
+    };
+
+    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({
+        selectionMode: false,
+        selectedMessageIds: [],
+        setSelectionMode: vi.fn(),
+        toggleMessageSelection: vi.fn(),
+        clearSelection,
+        forwardingMessageIds: [1],
+        setForwardingMessages,
+        setActiveChat,
+        socketManager,
+        deleteMessage: vi.fn(),
+        deleteRoomMessage: vi.fn(),
+        messageReactions: {},
+        startEditing: vi.fn(),
+        conversationPreviews: {},
+        roomPreviews: {},
+        authToken: "secret-token",
+        appendMessage: vi.fn(),
+        appendRoomMessage,
+        upsertPreview: vi.fn(),
+        upsertRoomPreview,
+      }),
+    );
+
+    renderMessageList([makeMessage({ id: 1, sender_id: 2 })]);
+    fireEvent.click(screen.getByRole("button", { name: "forward-room" }));
+
+    await waitFor(() => expect(appendRoomMessage).toHaveBeenCalledTimes(1));
+    expect(appendRoomMessage).toHaveBeenCalledWith(7, expect.objectContaining({ id: 100 }));
+    expect(upsertRoomPreview).toHaveBeenCalledWith(expect.objectContaining({
+      id: 7,
+      last_message_at: returnedMessage.inserted_at,
+      last_message: expect.objectContaining({ id: 100 }),
+    }));
+    expect(socketManager.sendRoomMessageViaChannel).toHaveBeenCalledTimes(1);
+    expect(setForwardingMessages).toHaveBeenCalledWith(null);
+    expect(clearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not insert a phantom message when forwarding acknowledgement fails", async () => {
+    const appendMessage = vi.fn();
+    const setForwardingMessages = vi.fn();
+    const channel = {
+      push: vi.fn(() => {
+        const response = {
+          receive(event: string, callback: (payload: unknown) => void) {
+            if (event === "error") callback({ reason: "forbidden" });
+            return response;
+          },
+        };
+        return response;
+      }),
+    };
+
+    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({
+        selectionMode: false,
+        selectedMessageIds: [],
+        setSelectionMode: vi.fn(),
+        toggleMessageSelection: vi.fn(),
+        clearSelection: vi.fn(),
+        forwardingMessageIds: [1],
+        setForwardingMessages,
+        setActiveChat: vi.fn(),
+        socketManager: { userChannel: channel },
+        deleteMessage: vi.fn(),
+        deleteRoomMessage: vi.fn(),
+        messageReactions: {},
+        startEditing: vi.fn(),
+        conversationPreviews: {},
+        roomPreviews: {},
+        authToken: "secret-token",
+        appendMessage,
+        appendRoomMessage: vi.fn(),
+        upsertPreview: vi.fn(),
+        upsertRoomPreview: vi.fn(),
+      }),
+    );
+
+    renderMessageList([makeMessage({ id: 1, sender_id: 2 })]);
+    fireEvent.click(screen.getByRole("button", { name: "forward-direct" }));
+
+    await waitFor(() => expect(channel.push).toHaveBeenCalledTimes(1));
+    expect(appendMessage).not.toHaveBeenCalled();
+    expect(setForwardingMessages).not.toHaveBeenCalledWith(null);
   });
 
   it("keeps split alignment when the chat viewport is at or below the wide threshold", () => {
