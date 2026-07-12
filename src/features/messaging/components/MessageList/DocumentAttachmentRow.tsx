@@ -121,7 +121,11 @@ function MiddleEllipsisFilename({ filename }: { filename: string }) {
   return (
     <div
       ref={titleRef}
-      className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[16px] font-medium leading-[24px] text-current"
+      className={cn(
+        isOverflowing
+          ? "flex w-full min-w-0 overflow-hidden whitespace-nowrap text-[16px] font-medium leading-[24px] text-current"
+          : "block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[16px] font-medium leading-[24px] text-current",
+      )}
       title={filename}
       aria-label={filename}
       dir="auto"
@@ -129,7 +133,7 @@ function MiddleEllipsisFilename({ filename }: { filename: string }) {
     >
       {isOverflowing ? (
         <>
-          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" data-testid="message-file-name-leading" aria-hidden="true">
+          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap" data-testid="message-file-name-leading" aria-hidden="true">
             {leading}
           </span>
           <span className="shrink-0 whitespace-nowrap" data-testid="message-file-name-trailing" aria-hidden="true">

@@ -2151,6 +2151,10 @@ describe("MessageItem bubble layout", () => {
       });
 
       await waitFor(() => expect(screen.getByTestId("message-file-name-trailing")).toHaveTextContent("daoidjasiod.pdf"));
+      expect(screen.getByTestId("message-file-name")).toHaveClass("flex", "w-full", "min-w-0", "overflow-hidden", "whitespace-nowrap");
+      expect(screen.getByTestId("message-file-name")).not.toHaveClass("text-ellipsis");
+      expect(screen.getByTestId("message-file-name-leading")).toHaveClass("min-w-0", "flex-1", "overflow-hidden", "text-ellipsis", "whitespace-nowrap");
+      expect(screen.getByTestId("message-file-name-trailing")).toHaveClass("shrink-0", "whitespace-nowrap");
       expect(screen.getByTestId("message-file-name-leading")).toHaveTextContent("asodjasoidsoajds");
       expect(screen.getByTestId("message-file-name")).toHaveAttribute("title", "asodjasoidsoajdsaoijdaosijdsaiodjasoidjaodjasidjaoidjaiosjdasiojdiaosdjjjjjjjjjjjjjasoijdsaoijdaoidjasiod.pdf");
     } finally {
