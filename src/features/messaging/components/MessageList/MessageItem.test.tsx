@@ -339,7 +339,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByTestId("voice-message-player")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download audio file" })).toBeInTheDocument();
-    expect(screen.getByTestId("message-bubble")).toHaveClass("min-h-[69px]", "w-[320px]");
+    expect(screen.getByTestId("message-bubble")).toHaveClass("min-h-[69px]", "w-[320px]", "items-center", "py-0");
     await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob).toHaveBeenCalled());
   });
 
@@ -396,8 +396,9 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByTestId("message-audio-tail")).not.toBeInTheDocument();
     expect(bubble).toHaveClass("w-[320px]", "p-0", "rounded-none", "bg-transparent");
     expect(screen.getByTestId("message-audio-segment-first")).toHaveClass("rounded-tl-[15px]", "rounded-tr-[15px]");
-    expect(screen.getByTestId("message-audio-segment-middle")).toHaveClass("rounded-none");
-    expect(screen.getByTestId("message-audio-segment-last")).toHaveClass("rounded-bl-[0px]");
+    expect(screen.getByTestId("message-audio-segment-first")).toHaveClass("min-h-[69px]", "items-center", "py-0");
+    expect(screen.getByTestId("message-audio-segment-middle")).toHaveClass("rounded-none", "min-h-[69px]", "items-center", "py-0");
+    expect(screen.getByTestId("message-audio-segment-last")).toHaveClass("rounded-bl-[0px]", "min-h-[69px]", "items-center", "py-0");
     await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob.mock.calls.slice(-3)).toHaveLength(3));
   });
 

@@ -71,4 +71,13 @@ describe("AudioFilePlayer", () => {
       authToken: "secret-token",
     }));
   });
+
+  it("keeps message metadata absolute without changing the centered player row", async () => {
+    render(<AudioFilePlayer attachment={audioAttachment} messageMeta={<span data-testid="message-metadata">12:00</span>} />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Play audio file" })).toBeInTheDocument());
+
+    expect(screen.getByTestId("audio-file-player")).toHaveClass("h-[48px]", "items-center");
+    expect(screen.getByTestId("message-metadata").parentElement).toHaveClass("absolute", "right-0", "bottom-0");
+  });
 });

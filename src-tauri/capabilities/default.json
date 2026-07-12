@@ -11,6 +11,8 @@
     "core:window:allow-is-maximized",
     "core:window:allow-close",
     "shell:default",
-    "notification:default"
+    "notification:default",
+    "dialog:default",
+    "fs:default"
   ]
 }

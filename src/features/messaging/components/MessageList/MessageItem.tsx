@@ -796,9 +796,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             key={currentAttachment.id}
             className={cn(
               "relative box-border w-[320px] max-w-full bg-[var(--message-surface-color)]",
-              role === "first" && cn("min-h-[69px] rounded-bl-[0px] rounded-br-[0px] px-2 pt-[5px] pb-[6px]", topRadiusClassName),
-              role === "middle" && "min-h-[69px] rounded-none px-2 pt-[5px] pb-[6px]",
-              role === "last" && cn("min-h-[69px] rounded-tl-[0px] rounded-tr-[0px] px-2 pt-[5px] pb-[6px]", bottomRadiusClassName),
+              "flex min-h-[69px] items-center py-0",
+              role === "first" && cn("rounded-bl-[0px] rounded-br-[0px] px-2", topRadiusClassName),
+              role === "middle" && "rounded-none px-2",
+              role === "last" && cn("rounded-tl-[0px] rounded-tr-[0px] px-2", bottomRadiusClassName),
             )}
             data-testid={`message-audio-segment-${role}`}
             data-audio-role={role}
@@ -947,9 +948,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 ? isVoiceMessage
                   ? "h-[69px] w-[337px] max-w-[min(337px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                   : isSingleAudioMessage
-                    ? "min-h-[69px] min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
+                    ? "min-h-[69px] min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] px-2 py-0 flex items-center"
                     : isAudioGroup
-                      ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
+                      ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] px-2 py-0 flex items-center"
                   : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",

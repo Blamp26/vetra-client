@@ -257,10 +257,17 @@ export function AudioFilePlayer({ attachment, isOwn = false, messageMeta }: Prop
             />
           ) : null}
           <span className="shrink-0 opacity-75" data-testid="audio-duration">{shownDuration}</span>
-          {messageMeta ? <span className="ml-auto shrink-0">{messageMeta}</span> : null}
         </div>
         {error && <div className="truncate text-[11px] leading-[14px] text-destructive">{error}</div>}
       </div>
+      {messageMeta ? (
+        <span
+          className="absolute right-0 bottom-0 flex h-[20px] items-center whitespace-nowrap bg-transparent px-[4px]"
+          data-testid="audio-file-metadata"
+        >
+          {messageMeta}
+        </span>
+      ) : null}
     </div>
   );
 }
