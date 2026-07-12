@@ -274,7 +274,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const isOwnLeftColumn = isOwn && alignmentMode === "left-column";
   const showSenderName = isRoom && !isOwn && !isConsecutive;
   const metadataClassName = isOwn
-    ? "text-white/60"
+    ? "text-white/[0.533]"
     : "text-[color:var(--bubble-incoming-meta)]";
   const overlayMetadataClassName = "h-[18px] rounded-[10px] bg-black/[0.20] py-0 pl-[6px] pr-[5px] text-white";
   const textGroupRadiusClassName = getBubbleCornerClassName(
@@ -515,7 +515,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         className={cn(
           variant === "overlay"
             ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
-            : "mr-[4px] text-[12px] leading-[16.2px] font-normal text-current",
+            : cn("mr-[4px] text-[12px] leading-[16.2px] font-normal", metadataClassName),
         )}
       >
         {formatTime(msg.inserted_at)}
@@ -525,7 +525,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           className={cn(
             variant === "overlay"
               ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
-              : "mr-[4px] text-[12px] leading-[16.2px] font-normal text-current",
+              : cn("mr-[4px] text-[12px] leading-[16.2px] font-normal", metadataClassName),
           )}
         >
           (ed.)
@@ -537,7 +537,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               className={cn(
                 "box-border ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[19px]",
                 isOwn ? "text-white opacity-100" : "text-current",
-                (msg.status === "sent" || msg.status === "delivered") && "pl-[2px]",
               )}
               data-testid="message-media-only-status"
             >
@@ -548,7 +547,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
               className={cn(
                 "box-border ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[19px]",
                 isOwn ? "text-white opacity-100" : "text-current",
-                (msg.status === "sent" || msg.status === "delivered") && "pl-[2px]",
               )}
               data-testid="message-inline-status"
             >
@@ -561,7 +559,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
   const renderInlineMetadata = () => (
     <span
-      className="pointer-events-none relative top-[6px] float-right ml-[7px] mr-[-6px] inline-flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px]"
+      className="pointer-events-none relative box-border top-[6px] float-right ml-[7px] mr-[-6px] inline-flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0"
       data-testid="message-text-inline-metadata"
     >
       {renderMetadata()}
@@ -684,7 +682,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 )}
                 {isLast && (
                   <span
-                    className="relative float-right top-[8px] mt-[-20px] mr-[-6px] mb-0 ml-[7px] flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px]"
+                    className="relative box-border float-right top-[8px] mt-[-20px] mr-[-6px] mb-0 ml-[7px] flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0"
                     data-testid="message-document-inline-metadata"
                   >
                     {renderMetadata()}
@@ -716,7 +714,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
         {isSingleDocumentAttachment && !hasText && (
           <span
-            className="relative float-right top-[8px] mt-[-20px] mr-[-6px] mb-0 ml-[7px] flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px]"
+            className="relative box-border float-right top-[8px] mt-[-20px] mr-[-6px] mb-0 ml-[7px] flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0"
             data-testid="message-document-inline-metadata"
           >
             {renderMetadata()}
@@ -1002,8 +1000,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                       : "bg-bubble-incoming text-bubble-incoming-text"
                   )
                 : (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text"),
-          isOwn && !isMediaOnly && !isVisualMediaMessage && !isDocumentGroup && !isAudioGroup
-            && "shadow-[0_1px_2px_rgba(16,16,16,0.61)]",
         )}
         data-testid="message-bubble"
         style={{

@@ -210,25 +210,12 @@ describe("MessageItem bubble layout", () => {
     expect(tail).toHaveAttribute("height", "20");
     expect(tail).not.toHaveAttribute("viewBox");
     const paths = tail.querySelectorAll("path");
-    expect(paths).toHaveLength(2);
+    expect(paths).toHaveLength(1);
     expect(paths[0]).toHaveAttribute("d", "M3 17h6V0c-.193 2.84-.876 5.767-2.05 8.782-.904 2.325-2.446 4.485-4.625 6.48A1 1 0 003 17z");
-    expect(paths[0]).toHaveAttribute("fill", "#000");
-    expect(paths[0]).toHaveAttribute("filter");
-    expect(tail.querySelector("filter")).toMatchObject({
-      id: expect.any(String),
-    });
-    expect(tail.querySelector("filter")).toHaveAttribute("x", "-50%");
-    expect(tail.querySelector("filter")).toHaveAttribute("y", "-14.7%");
-    expect(tail.querySelector("filter")).toHaveAttribute("width", "200%");
-    expect(tail.querySelector("filter")).toHaveAttribute("height", "141.2%");
-    expect(tail.querySelector("filter")).toHaveAttribute("filterUnits", "objectBoundingBox");
-    expect(tail.querySelector("feOffset")).toHaveAttribute("dy", "1");
-    expect(tail.querySelector("feGaussianBlur")).toHaveAttribute("stdDeviation", "1");
-    expect(tail.querySelector("feColorMatrix")).toHaveAttribute("values", "0 0 0 0 0.0621962482 0 0 0 0 0.138574144 0 0 0 0 0.185037364 0 0 0 0.15 0");
-    expect(paths[1]).toHaveAttribute("d", "M3 17h6V0c-.193 2.84-.876 5.767-2.05 8.782-.904 2.325-2.446 4.485-4.625 6.48A1 1 0 003 17z");
-    expect(paths[1]).toHaveClass("corner");
-    expect(paths[1]).toHaveAttribute("fill", "var(--message-surface-color)");
-    expect(paths[1]).not.toHaveAttribute("fill", "currentColor");
+    expect(paths[0]).toHaveClass("corner");
+    expect(paths[0]).toHaveAttribute("fill", "var(--message-surface-color)");
+    expect(paths[0]).not.toHaveAttribute("filter");
+    expect(tail.querySelector("filter")).not.toBeInTheDocument();
     expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
   });
@@ -460,14 +447,14 @@ describe("MessageItem bubble layout", () => {
     });
     expect(bubble).toHaveClass("rounded-br-[0px]");
     expect(bubble).not.toHaveClass("flex-1");
-    expect(bubble).toHaveClass("shadow-[0_1px_2px_rgba(16,16,16,0.61)]");
+    expect(bubble).not.toHaveClass("shadow-[0_1px_2px_rgba(16,16,16,0.61)]");
     expect(screen.queryByText("Tester")).not.toBeInTheDocument();
     expect(screen.getByText("23")).toBeInTheDocument();
-    expect(screen.getByText("12:00")).toHaveClass("mr-[4px]", "text-[12px]", "leading-[16.2px]", "font-normal");
-    expect(inlineMeta).toHaveClass("relative", "float-right", "top-[6px]", "h-[20px]", "ml-[7px]", "mr-[-6px]", "px-[4px]", "bg-transparent");
-    expect(screen.getByTestId("message-inline-status")).toHaveClass("box-border", "ml-[-3px]", "h-[19px]", "w-[19px]", "overflow-hidden", "rounded-[10px]", "pl-[2px]");
+    expect(screen.getByText("12:00")).toHaveClass("mr-[4px]", "text-[12px]", "leading-[16.2px]", "font-normal", "text-white/[0.533]");
+    expect(inlineMeta).toHaveClass("relative", "box-border", "float-right", "top-[6px]", "h-[20px]", "ml-[7px]", "mr-[-6px]", "px-[4px]", "py-0", "rounded-[10px]", "bg-transparent");
+    expect(screen.getByTestId("message-inline-status")).toHaveClass("box-border", "ml-[-3px]", "h-[19px]", "w-[19px]", "overflow-hidden", "rounded-[10px]");
     const sentIcon = screen.getByLabelText("Sent");
-    expect(sentIcon).toHaveClass("h-[19px]", "w-[19px]", "shrink-0");
+    expect(sentIcon).toHaveClass("box-border", "h-[19px]", "w-[19px]", "shrink-0", "pl-[2px]");
     expect(sentIcon).toHaveAttribute("viewBox", "0 0 19 19");
     expect(sentIcon.querySelectorAll("path")).toHaveLength(1);
     const tail = screen.getByTestId("message-text-tail");
@@ -477,13 +464,12 @@ describe("MessageItem bubble layout", () => {
     expect(tail).toHaveAttribute("height", "20");
     expect(tail).not.toHaveAttribute("viewBox");
     const paths = tail.querySelectorAll("path");
-    expect(paths).toHaveLength(2);
+    expect(paths).toHaveLength(1);
     expect(paths[0]).toHaveAttribute("d", "M6 17H0V0c.193 2.84.876 5.767 2.05 8.782.904 2.325 2.446 4.485 4.625 6.48A1 1 0 016 17z");
-    expect(paths[0]).toHaveAttribute("fill", "#000");
-    expect(paths[0]).toHaveAttribute("filter");
-    expect(paths[1]).toHaveAttribute("d", "M6 17H0V0c.193 2.84.876 5.767 2.05 8.782.904 2.325 2.446 4.485 4.625 6.48A1 1 0 016 17z");
-    expect(paths[1]).toHaveAttribute("fill", "var(--message-surface-color)");
-    expect(paths[1]).not.toHaveAttribute("fill", "currentColor");
+    expect(paths[0]).toHaveClass("corner");
+    expect(paths[0]).toHaveAttribute("fill", "var(--message-surface-color)");
+    expect(paths[0]).not.toHaveAttribute("filter");
+    expect(tail.querySelector("filter")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Sent")).toBeInTheDocument();
   });
 
@@ -530,6 +516,7 @@ describe("MessageItem bubble layout", () => {
     const readIcon = screen.getByLabelText("Read");
     expect(readIcon).toHaveAttribute("viewBox", "0 0 19 19");
     expect(readIcon).toHaveClass("h-[19px]", "w-[19px]", "shrink-0");
+    expect(readIcon).not.toHaveClass("pl-[2px]");
     expect(readIcon.querySelectorAll("path")).toHaveLength(2);
   });
 
@@ -1745,7 +1732,7 @@ describe("MessageItem bubble layout", () => {
     expect(fileRow).not.toHaveAttribute("tabindex");
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(bubble).toContainElement(screen.getByTestId("message-metadata"));
-    expect(metadata).toHaveClass("relative", "flex", "items-center", "h-[20px]", "top-[8px]", "mt-[-20px]", "mr-[-6px]", "mb-0", "ml-[7px]", "px-[4px]", "bg-transparent");
+    expect(metadata).toHaveClass("relative", "box-border", "flex", "items-center", "h-[20px]", "top-[8px]", "mt-[-20px]", "mr-[-6px]", "mb-0", "ml-[7px]", "px-[4px]", "py-0", "rounded-[10px]", "bg-transparent");
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
     expect(screen.getByTestId("message-text-tail")).toBeInTheDocument();
   });

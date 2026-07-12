@@ -39,7 +39,12 @@ export function StatusIcon({ status, className }: StatusIconProps) {
   if (status === "sent" || status === "delivered") {
     return (
       <svg
-        className={cn("h-[19px] w-[19px] shrink-0", status === "sent" ? "opacity-55" : "opacity-80", className)}
+        className={cn(
+          "box-border h-[19px] w-[19px] shrink-0",
+          status === "sent" ? "opacity-55" : "opacity-80",
+          "pl-[2px]",
+          className,
+        )}
         viewBox="0 0 19 19"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
