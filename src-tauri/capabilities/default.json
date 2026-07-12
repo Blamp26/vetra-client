@@ -13,6 +13,8 @@
     "shell:default",
     "notification:default",
     "fs:default",
+    "fs:allow-download-write-recursive",
+    "fs:allow-download-meta-recursive",
     "opener:default"
   ]
 }
