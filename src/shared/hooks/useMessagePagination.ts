@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import type { Message } from "@/shared/types";
 
 const PAGE_SIZE = 50;
@@ -39,6 +39,7 @@ export function useMessagePagination(
   conversationKey?: string | null,
 ) {
   const loadedRef = useRef<Set<string>>(new Set());
+  const [initialHistoryLoaded, setInitialHistoryLoaded] = useState(false);
   const activeKeyRef = useRef<string | null>(null);
   const requestGenerationRef = useRef(0);
   const initialRequestRef = useRef<{
@@ -67,6 +68,10 @@ export function useMessagePagination(
   const loadKey = conversationKey ?? (id !== null ? String(id) : null);
 
   useEffect(() => {
+    setInitialHistoryLoaded(loadKey !== null && loadedRef.current.has(loadKey));
+  }, [loadKey]);
+
+  useEffect(() => {
     const previousInitial = initialRequestRef.current;
     previousInitial?.controller.abort();
     const previousPagination = paginationRequestRef.current;
@@ -84,6 +89,7 @@ export function useMessagePagination(
     const currentState = stateRef.current;
     if (loadedRef.current.has(loadKey)) {
       loadedRef.current.add(loadKey);
+      setInitialHistoryLoaded(true);
       if (currentState?.isLoading) currentActions.setLoading(false);
       return;
     }
@@ -101,6 +107,7 @@ export function useMessagePagination(
         loadedRef.current.add(loadKey);
         currentActions.setMessages(msgs);
         currentActions.setHasMore(msgs.length === PAGE_SIZE);
+        setInitialHistoryLoaded(true);
       })
       .catch((error: unknown) => {
         if (isAbortError(error)) return;
@@ -151,5 +158,5 @@ export function useMessagePagination(
     }
   }, [id, currentUserId, loadKey, isLoading, hasMore, messages]);
 
-  return { messages, isLoading, hasMore, loadMore };
+  return { messages, isLoading, hasMore, loadMore, initialHistoryLoaded };
 }

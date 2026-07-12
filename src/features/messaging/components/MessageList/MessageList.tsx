@@ -26,6 +26,7 @@ interface Props {
   messages:      Message[];
   currentUserId: number;
   isLoading:     boolean;
+  initialHistoryLoaded?: boolean;
   hasMore:       boolean;
   onLoadMore:    () => void;
   chatContext:
@@ -123,6 +124,7 @@ export function MessageList({
   messages,
   currentUserId,
   isLoading,
+  initialHistoryLoaded = false,
   hasMore,
   onLoadMore,
   chatContext,
@@ -130,7 +132,6 @@ export function MessageList({
 }: Props) {
   const bottomRef    = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const isFirstLoad  = useRef(true);
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const {
@@ -141,6 +142,7 @@ export function MessageList({
     clearSelection,
     forwardingMessageIds,
     setForwardingMessages,
+    setActiveChat,
     socketManager,
     deleteMessage,
     deleteRoomMessage,
@@ -160,6 +162,7 @@ export function MessageList({
     clearSelection: s.clearSelection,
     forwardingMessageIds: s.forwardingMessageIds,
     setForwardingMessages: s.setForwardingMessages,
+    setActiveChat: s.setActiveChat,
     socketManager: s.socketManager,
     deleteMessage: s.deleteMessage,
     deleteRoomMessage: s.deleteRoomMessage,
@@ -183,6 +186,9 @@ export function MessageList({
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
   const pendingReplyTargetId = useRef<number | null>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialScrollDoneRef = useRef(false);
+  const olderScrollAnchorRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
+  const forwardingOperationRef = useRef(0);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -259,17 +265,42 @@ export function MessageList({
     }
   }, [socketManager, chatContext, conversationPreviews]);
 
-  useEffect(() => {
-    if (isFirstLoad.current && messages.length > 0) {
-      bottomRef.current?.scrollIntoView();
-      isFirstLoad.current = false;
-    } else if (!isFirstLoad.current) {
-      const el = containerRef.current;
-      if (!el) return;
-      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-      if (isNearBottom) bottomRef.current?.scrollIntoView();
+  const handleLoadMore = useCallback(() => {
+    const element = containerRef.current;
+    if (element) {
+      olderScrollAnchorRef.current = {
+        scrollTop: element.scrollTop,
+        scrollHeight: element.scrollHeight,
+      };
     }
-  }, [messages]);
+    onLoadMore();
+  }, [onLoadMore]);
+
+  useLayoutEffect(() => {
+    const element = containerRef.current;
+    const anchor = olderScrollAnchorRef.current;
+    if (!element || !anchor || isLoading) return;
+
+    element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
+    olderScrollAnchorRef.current = null;
+  }, [messages, isLoading]);
+
+  useEffect(() => {
+    if (olderScrollAnchorRef.current) return;
+
+    if (!initialScrollDoneRef.current) {
+      if (initialHistoryLoaded) {
+        bottomRef.current?.scrollIntoView();
+        initialScrollDoneRef.current = true;
+      }
+      return;
+    }
+
+    const element = containerRef.current;
+    if (!element) return;
+    const isNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+    if (isNearBottom) bottomRef.current?.scrollIntoView();
+  }, [initialHistoryLoaded, isLoading, messages]);
 
   useEffect(() => {
     const targetId = pendingReplyTargetId.current;
@@ -427,6 +458,7 @@ export function MessageList({
     if (!forwardingMessageIds || forwardingMessageIds.length === 0 || !socketManager) {
       throw new Error("Forwarding is unavailable");
     }
+    const operationId = ++forwardingOperationRef.current;
     try {
       for (const msgId of forwardingMessageIds) {
         const msg = messagesById.get(msgId);
@@ -446,6 +478,7 @@ export function MessageList({
             target.ref ?? target.id,
             payload,
           );
+          if (operationId !== forwardingOperationRef.current) return;
           const normalizedMessage = normalizeMessageAttachments(forwardedMessage);
           appendMessage(target.id, normalizedMessage);
           upsertPreview({
@@ -460,6 +493,7 @@ export function MessageList({
           });
         } else {
           const forwardedMessage = await socketManager.sendRoomMessageViaChannel(target.id, payload);
+          if (operationId !== forwardingOperationRef.current) return;
           const normalizedMessage = normalizeMessageAttachments(forwardedMessage);
           appendRoomMessage(target.id, normalizedMessage);
           upsertRoomPreview({
@@ -470,8 +504,14 @@ export function MessageList({
           });
         }
       }
+      if (operationId !== forwardingOperationRef.current) return;
       setForwardingMessages(null);
       clearSelection();
+      setActiveChat(
+        target.type === "direct"
+          ? { type: "direct", partnerId: target.id, partnerRef: target.ref ?? target.id }
+          : { type: "room", roomId: target.id, roomRef: target.ref ?? target.id },
+      );
     } catch (err) {
       console.error("Forwarding failed:", err);
       throw err;
@@ -480,6 +520,7 @@ export function MessageList({
     forwardingMessageIds,
     socketManager,
     messagesById,
+    setActiveChat,
     clearSelection,
     setForwardingMessages,
     appendMessage,
@@ -487,6 +528,11 @@ export function MessageList({
     upsertPreview,
     upsertRoomPreview,
   ]);
+
+  const cancelForwarding = useCallback(() => {
+    forwardingOperationRef.current += 1;
+    setForwardingMessages(null);
+  }, [setForwardingMessages]);
 
   const selectedMessages = useMemo(
     () =>
@@ -529,7 +575,7 @@ export function MessageList({
       const element = messageRefs.current[targetId];
       if (!element) {
         pendingReplyTargetId.current = targetId;
-        if (hasMore && !isLoading) onLoadMore();
+        if (hasMore && !isLoading) handleLoadMore();
         return;
       }
 
@@ -667,7 +713,7 @@ export function MessageList({
         >
           {hasMore && (
             <div className="flex justify-center p-2">
-              <button onClick={onLoadMore} disabled={isLoading} className="vt-button">
+              <button onClick={handleLoadMore} disabled={isLoading} className="vt-button">
                 {isLoading ? "Loading..." : "Older messages"}
               </button>
             </div>
@@ -889,7 +935,7 @@ export function MessageList({
       {forwardingMessageIds && (
         <ForwardModal 
           onForward={handlePerformForward}
-          onCancel={() => setForwardingMessages(null)}
+          onCancel={cancelForwarding}
         />
       )}
     </div>

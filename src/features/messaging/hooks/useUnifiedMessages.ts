@@ -190,7 +190,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
   const conversationKey =
     contextType && id ? `${contextType}:${id}` : null;
 
-  const { messages, isLoading, hasMore, loadMore } = useMessagePagination(
+  const { messages, isLoading, hasMore, loadMore, initialHistoryLoaded } = useMessagePagination(
     id,
     currentUser?.id ?? null,
     conversation,
@@ -468,5 +468,5 @@ export function useUnifiedMessages(context: ChatContext | null) {
     ],
   );
 
-  return { messages, isLoading, hasMore, loadMore, sendMessage };
+  return { messages, isLoading, hasMore, loadMore, initialHistoryLoaded, sendMessage };
 }

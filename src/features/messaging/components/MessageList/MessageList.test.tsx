@@ -399,7 +399,12 @@ describe("MessageList bubble layout", () => {
       partner_id: 9,
       last_message: expect.objectContaining({ id: 99 }),
     }));
-    expect(setActiveChat).not.toHaveBeenCalled();
+    expect(setActiveChat).toHaveBeenCalledTimes(1);
+    expect(setActiveChat).toHaveBeenCalledWith({
+      type: "direct",
+      partnerId: 9,
+      partnerRef: "user-9",
+    });
     expect(setForwardingMessages).toHaveBeenCalledWith(null);
     expect(clearSelection).toHaveBeenCalledTimes(1);
   });
@@ -457,7 +462,12 @@ describe("MessageList bubble layout", () => {
       last_message_at: returnedMessage.inserted_at,
       last_message: expect.objectContaining({ id: 100 }),
     }));
-    expect(setActiveChat).not.toHaveBeenCalled();
+    expect(setActiveChat).toHaveBeenCalledTimes(1);
+    expect(setActiveChat).toHaveBeenCalledWith({
+      type: "room",
+      roomId: 7,
+      roomRef: "room-7",
+    });
     expect(socketManager.sendRoomMessageViaChannel).toHaveBeenCalledTimes(1);
     expect(setForwardingMessages).toHaveBeenCalledWith(null);
     expect(clearSelection).toHaveBeenCalledTimes(1);
@@ -466,6 +476,7 @@ describe("MessageList bubble layout", () => {
   it("does not insert a phantom message when forwarding acknowledgement fails", async () => {
     const appendMessage = vi.fn();
     const setForwardingMessages = vi.fn();
+    const setActiveChat = vi.fn();
     const channel = {
       push: vi.fn(() => {
         const response = {
@@ -487,7 +498,7 @@ describe("MessageList bubble layout", () => {
         clearSelection: vi.fn(),
         forwardingMessageIds: [1],
         setForwardingMessages,
-        setActiveChat: vi.fn(),
+        setActiveChat,
         socketManager: { userChannel: channel },
         deleteMessage: vi.fn(),
         deleteRoomMessage: vi.fn(),
@@ -509,6 +520,7 @@ describe("MessageList bubble layout", () => {
     await waitFor(() => expect(channel.push).toHaveBeenCalledTimes(1));
     expect(appendMessage).not.toHaveBeenCalled();
     expect(setForwardingMessages).not.toHaveBeenCalledWith(null);
+    expect(setActiveChat).not.toHaveBeenCalled();
   });
 
   it("keeps split alignment when the chat viewport is at or below the wide threshold", () => {

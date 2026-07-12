@@ -112,7 +112,7 @@ export function ChatWindow({ activeChat, call }: Props) {
     return null;
   }, [activePartnerId, activePartnerRef, activeRoomId, activeRoomRef]);
 
-  const { messages, isLoading, hasMore, loadMore, sendMessage } =
+  const { messages, isLoading, hasMore, loadMore, initialHistoryLoaded, sendMessage } =
     useUnifiedMessages(chatContext);
 
   const chatId =
@@ -379,6 +379,7 @@ export function ChatWindow({ activeChat, call }: Props) {
           messages={messages}
           currentUserId={currentUser.id}
           isLoading={isLoading}
+          initialHistoryLoaded={initialHistoryLoaded}
           hasMore={hasMore}
           onLoadMore={loadMore}
           chatContext={chatContext!}
