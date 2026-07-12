@@ -1796,6 +1796,33 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByRole("button", { name: "Open restored.pdf" })).toBeInTheDocument();
   });
 
+  it("opens an existing local document without entering the downloading state", async () => {
+    getAttachmentLocalStateMock.mockResolvedValue(true);
+    vi.mocked(attachmentDownloads.downloadAttachmentWithAuth).mockResolvedValue(undefined);
+
+    renderMessageItem({
+      media_file_id: "existing-document",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "existing-document",
+        url: "/api/v1/media/existing-document",
+        mime_type: "application/pdf",
+        original_name: "existing.pdf",
+        file_size: 1024,
+        kind: "file",
+      },
+    });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open existing.pdf" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Open existing.pdf" }));
+    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith({
+      attachment: expect.objectContaining({ id: "existing-document" }),
+      authToken: "secret-token",
+    }));
+    expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "downloaded");
+    expect(screen.queryByTestId("message-file-progress")).not.toBeInTheDocument();
+  });
+
   it("downloads the clicked document through its own attachment and stops message selection", async () => {
     const onToggleSelection = vi.fn();
 
@@ -1858,7 +1885,7 @@ describe("MessageItem bubble layout", () => {
     const downloadButton = screen.getByRole("button", { name: "Download pending.pdf" });
     fireEvent.click(downloadButton);
 
-    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("button", { name: "Cancel download of pending.pdf" })).toBeInTheDocument();
     expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "downloading");
     expect(screen.getByTestId("message-file-progress")).toHaveAttribute("role", "progressbar");

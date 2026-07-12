@@ -190,7 +190,7 @@ export function DocumentAttachmentRow({
       : `${formatCompactSize(loadedBytes)} / ${formatCompactSize(totalBytes)}`
     : documentSize;
 
-  const handleAction = (action: DocumentAction) => {
+  const handleAction = async (action: DocumentAction) => {
     if (downloadState === "downloading") {
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
@@ -202,6 +202,26 @@ export function DocumentAttachmentRow({
     }
     if (downloadInProgressRef.current) return;
 
+    downloadInProgressRef.current = true;
+    let localFileExists = false;
+    if (attachment) {
+      try {
+        localFileExists = await getAttachmentLocalState(attachment);
+      } catch {
+        localFileExists = false;
+      }
+    }
+
+    if (localFileExists) {
+      try {
+        await action();
+        setDownloadState("downloaded");
+      } finally {
+        downloadInProgressRef.current = false;
+      }
+      return;
+    }
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
     downloadInProgressRef.current = true;
@@ -209,28 +229,28 @@ export function DocumentAttachmentRow({
     setLoadedBytes(0);
     setTotalBytes(attachment?.file_size ?? null);
 
-    void Promise.resolve(action({
-      signal: controller.signal,
-      onProgress: ({ loadedBytes: nextLoadedBytes, totalBytes: nextTotalBytes }) => {
-        if (abortControllerRef.current !== controller) return;
-        setLoadedBytes(nextLoadedBytes);
-        setTotalBytes(nextTotalBytes ?? attachment?.file_size ?? null);
-      },
-    })).then((succeeded) => {
-      if (abortControllerRef.current !== controller) return;
-      setDownloadState(succeeded ? "downloaded" : "failed");
-    }).catch(() => {
+    try {
+      const succeeded = await action({
+        signal: controller.signal,
+        onProgress: ({ loadedBytes: nextLoadedBytes, totalBytes: nextTotalBytes }) => {
+          if (abortControllerRef.current !== controller) return;
+          setLoadedBytes(nextLoadedBytes);
+          setTotalBytes(nextTotalBytes ?? attachment?.file_size ?? null);
+        },
+      });
+      if (abortControllerRef.current === controller) setDownloadState(succeeded ? "downloaded" : "failed");
+    } catch {
       if (abortControllerRef.current === controller) setDownloadState("failed");
-    }).finally(() => {
+    } finally {
       if (abortControllerRef.current !== controller) return;
       abortControllerRef.current = null;
       downloadInProgressRef.current = false;
-    });
+    }
   };
 
   const handleDownloadClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    handleAction(onDownload);
+    void handleAction(onDownload);
   };
 
   const isDownloading = downloadState === "downloading";
