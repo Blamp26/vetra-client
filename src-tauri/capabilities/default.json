@@ -16,6 +16,13 @@
     "fs:allow-download-write-recursive",
     "fs:allow-download-meta-recursive",
     "opener:default",
-    "opener:allow-open-path"
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        {
+          "path": "$DOWNLOAD/Telegram Desktop/**"
+        }
+      ]
+    }
   ]
 }
