@@ -37,6 +37,7 @@ interface MessageItemProps {
   isConsecutive: boolean;
   isGroupedWithNext: boolean;
   isSelected: boolean;
+  isHighlighted?: boolean;
   selectionMode: boolean;
   isRoom: boolean;
   messageReactions: MessageReactionGroup[];
@@ -182,6 +183,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   isConsecutive,
   isGroupedWithNext,
   isSelected,
+  isHighlighted = false,
   selectionMode,
   isRoom,
   messageReactions,
@@ -965,6 +967,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                   : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
+          isHighlighted && "outline outline-2 outline-primary outline-offset-1",
           isDocumentGroup || isAudioGroup
             ? "rounded-none"
             : isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment || isVoiceMessage || isSingleAudioMessage || isAudioGroup
@@ -1002,6 +1005,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 : (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text"),
         )}
         data-testid="message-bubble"
+        data-message-highlighted={isHighlighted ? "true" : "false"}
         style={{
           "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
           backgroundColor: isDocumentGroup || isAudioGroup ? "transparent" : "var(--message-surface-color)",

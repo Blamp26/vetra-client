@@ -6,6 +6,7 @@ import { ForwardModal } from "../ForwardModal";
 import { sendMessageViaChannel } from "@/services/socket";
 import { ImageLightbox } from "@/shared/components/ImageLightbox";
 import { VideoLightbox } from "@/shared/components/VideoLightbox";
+import { Emoji } from "@/shared/components/Emoji/Emoji";
 import { cn } from "@/shared/utils/cn";
 import { roomChatForPreview } from "@/shared/utils/chatRoutes";
 import { withFallbackRef } from "@/shared/utils/refs";
@@ -174,6 +175,9 @@ export function MessageList({
   const [isPickerExpanded, setIsPickerExpanded] = useState(false);
   const [lightboxData, setLightboxData] = useState<MediaViewerState | null>(null);
   const [chatViewportWidth, setChatViewportWidth] = useState(0);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
+  const pendingReplyTargetId = useRef<number | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -217,6 +221,14 @@ export function MessageList({
     return map;
   }, [messages]);
 
+  const brieflyHighlightMessage = useCallback((messageId: number) => {
+    setHighlightedMessageId(messageId);
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => {
+      setHighlightedMessageId((current) => current === messageId ? null : current);
+    }, 1200);
+  }, []);
+
   const toggleReaction = useCallback(async (msgId: number, emoji: string) => {
     if (!socketManager) return;
     try {
@@ -253,6 +265,19 @@ export function MessageList({
       if (isNearBottom) bottomRef.current?.scrollIntoView();
     }
   }, [messages]);
+
+  useEffect(() => {
+    const targetId = pendingReplyTargetId.current;
+    if (targetId == null || !messageRefs.current[targetId]) return;
+
+    pendingReplyTargetId.current = null;
+    messageRefs.current[targetId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    brieflyHighlightMessage(targetId);
+  }, [brieflyHighlightMessage, messages]);
+
+  useEffect(() => () => {
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+  }, []);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -450,31 +475,125 @@ export function MessageList({
   };
 
   const renderReplyPreview = (msg: Message, isOwn: boolean) => {
-    void isOwn;
-    if (!msg.reply_to_id) return null;
-    const target = messagesById.get(msg.reply_to_id);
+    const replyTargetId = msg.reply_to_id;
+    if (replyTargetId == null) return null;
+    const target = messagesById.get(replyTargetId);
     const author = target?.sender_display_name || target?.sender_username || (target ? `User #${target.sender_id}` : "Message");
 
-    let previewText = "";
-    if (target) {
-      const base = getPreviewText(target, "");
-      if (base.length > 0) {
-        previewText = base.length > 80 ? `${base.slice(0, 77)}…` : base;
+    const targetAttachment = target ? getMessageAttachment(target) : null;
+    const isDocument = targetAttachment?.kind === "file";
+    const previewText = target
+      ? (isDocument
+        ? targetAttachment.original_name || getPreviewText(target, "Message")
+        : getPreviewText(target, "Message"))
+        .replace(/\s+/g, " ")
+        .trim()
+      : "Message";
+
+    const jumpToReplyTarget = () => {
+      const targetId = replyTargetId;
+      const element = messageRefs.current[targetId];
+      if (!element) {
+        pendingReplyTargetId.current = targetId;
+        if (hasMore && !isLoading) onLoadMore();
+        return;
       }
-    }
+
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      brieflyHighlightMessage(targetId);
+    };
 
     return (
-      <button
-        type="button"
-        className="mb-2 block w-full rounded-[12px] border border-border bg-card/65 px-3 py-2 text-left text-xs"
-        onClick={() => {
-          const el = messageRefs.current[msg.reply_to_id!];
-          if (el) el.scrollIntoView();
+      <div
+        className="box-border flex h-[49px] w-full flex-col justify-start gap-[4px] px-0 pb-[2px] pt-[2px]"
+        data-testid="message-reply-preview-wrapper"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-start",
+          paddingTop: "2px",
+          paddingBottom: "2px",
+          gap: "4px",
+          height: "49px",
         }}
       >
-        <div className="mb-0.5 font-medium text-foreground">{author}</div>
-        {previewText && <div className="truncate text-muted-foreground">{previewText}</div>}
-      </button>
+        <button
+          type="button"
+          className="relative box-border flex h-[44px] w-full min-w-0 cursor-pointer items-center overflow-hidden rounded-[6px] border-0 p-0 text-left shadow-none"
+          data-testid="message-reply-preview-card"
+          style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+            height: "44px",
+            boxSizing: "border-box",
+            padding: "3px 6px 3px 9px",
+            marginBottom: "1px",
+            borderRadius: "6px",
+            overflow: "hidden",
+            cursor: "pointer",
+            backgroundColor: isOwn ? "var(--bubble-outgoing-meta-bg)" : "var(--bubble-incoming-meta-bg)",
+            color: isOwn ? "var(--bubble-outgoing-meta)" : "var(--bubble-incoming-meta)",
+            boxShadow: "none",
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            jumpToReplyTarget();
+          }}
+          onContextMenu={(event) => event.stopPropagation()}
+        >
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-0 left-0 w-[3px]"
+            data-testid="message-reply-preview-accent"
+            style={{
+              position: "absolute",
+              width: "3px",
+              height: "100%",
+              top: "0",
+              left: "0",
+              backgroundColor: "currentColor",
+            }}
+          />
+          <span className="flex h-[38px] min-w-0 flex-1 flex-col justify-start">
+            <span
+              className="block h-[20px] min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[20px]"
+              data-testid="message-reply-preview-sender"
+              style={{
+                height: "20px",
+                fontSize: "14px",
+                fontWeight: 500,
+                lineHeight: "20px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: "0",
+                maxWidth: "100%",
+              }}
+            >
+              {author}
+            </span>
+            <span
+              className="flex h-[18px] min-w-0 max-w-full items-center overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-normal leading-[18px]"
+              data-testid="message-reply-preview-quoted"
+              style={{
+                height: "18px",
+                fontSize: "14px",
+                fontWeight: 400,
+                lineHeight: "18px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                minWidth: "0",
+              }}
+            >
+              {isDocument && <Emoji emoji="📎" size={18} className="mr-px shrink-0" />}
+              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{previewText}</span>
+            </span>
+          </span>
+        </button>
+      </div>
     );
   };
 
@@ -581,6 +700,7 @@ export function MessageList({
                       isConsecutive={isConsecutive}
                       isGroupedWithNext={isGroupedWithNext}
                       isSelected={selectedMessageIds.includes(msg.id)}
+                      isHighlighted={highlightedMessageId === msg.id}
                       selectionMode={selectionMode}
                       isRoom={chatContext.type === "room"}
                       messageReactions={messageReactions[msg.id] || msg.reactions || []}

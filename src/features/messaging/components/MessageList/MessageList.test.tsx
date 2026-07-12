@@ -558,6 +558,87 @@ describe("MessageList bubble layout", () => {
     });
   });
 
+  it("renders the existing reply relation in a compact preview and leaves un-replied messages unchanged", () => {
+    renderMessageList([
+      makeMessage({ id: 10, content: "Original message", sender_id: 2, sender_display_name: "Original sender" }),
+      makeMessage({ id: 11, content: "My response", sender_id: 1, reply_to_id: 10 }),
+      makeMessage({ id: 12, content: "No reply" }),
+    ]);
+
+    const wrapper = screen.getByTestId("message-reply-preview-wrapper");
+    const card = screen.getByTestId("message-reply-preview-card");
+    const accent = screen.getByTestId("message-reply-preview-accent");
+    const sender = screen.getByTestId("message-reply-preview-sender");
+    const quoted = screen.getByTestId("message-reply-preview-quoted");
+
+    expect(wrapper).toHaveStyle({
+      height: "49px",
+      paddingTop: "2px",
+      paddingBottom: "2px",
+      gap: "4px",
+    });
+    expect(card).toHaveStyle({
+      width: "100%",
+      height: "44px",
+      padding: "3px 6px 3px 9px",
+      marginBottom: "1px",
+      borderRadius: "6px",
+      boxShadow: "none",
+    });
+    expect(accent).toHaveStyle({ width: "3px", height: "100%", top: "0px", left: "0px" });
+    expect(sender).toHaveStyle({ fontSize: "14px", fontWeight: "500", lineHeight: "20px" });
+    expect(quoted).toHaveStyle({ fontSize: "14px", fontWeight: "400", lineHeight: "18px" });
+    expect(sender).toHaveTextContent("Original sender");
+    expect(quoted).toHaveTextContent("Original message");
+    expect(card.style.boxShadow).toBe("none");
+    expect(screen.getAllByTestId("message-reply-preview-card")).toHaveLength(1);
+  });
+
+  it("jumps to the referenced message, briefly highlights it, and does not download documents", () => {
+    renderMessageList([
+      makeMessage({
+        id: 20,
+        content: null,
+        sender_id: 2,
+        sender_display_name: "Document sender",
+        attachment: {
+          id: "reply-document",
+          url: "/api/v1/media/reply-document",
+          mime_type: "application/pdf",
+          original_name: "the-real-filename.pdf",
+          file_size: 2048,
+          kind: "file" as const,
+        },
+        media_file_id: "reply-document",
+        media_mime_type: "application/pdf",
+      }),
+      makeMessage({ id: 21, content: "Acknowledged", sender_id: 1, reply_to_id: 20 }),
+    ]);
+
+    const card = screen.getByTestId("message-reply-preview-card");
+    expect(screen.getByTestId("message-reply-preview-sender")).toHaveTextContent("Document sender");
+    expect(screen.getByTestId("message-reply-preview-quoted")).toHaveTextContent("the-real-filename.pdf");
+    expect(screen.getByAltText("📎")).toHaveStyle({ width: "18px", height: "18px" });
+
+    fireEvent.click(card);
+
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(screen.getAllByTestId("message-bubble")[0]).toHaveAttribute("data-message-highlighted", "true");
+    expect(attachmentDownloads.downloadAttachmentWithAuth).not.toHaveBeenCalled();
+  });
+
+  it("uses the existing history loader when a reply target is not mounted", () => {
+    const onLoadMore = vi.fn();
+    renderMessageList(
+      [makeMessage({ id: 30, content: "Reply with unloaded target", reply_to_id: 999 })],
+      { hasMore: true, onLoadMore },
+    );
+
+    fireEvent.click(screen.getByTestId("message-reply-preview-card"));
+
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
   it("shows download for attachments and calls the existing authenticated download path", () => {
     renderMessageList([
       makeMessage({
