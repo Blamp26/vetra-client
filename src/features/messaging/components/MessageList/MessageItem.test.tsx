@@ -3,8 +3,9 @@ import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useAppStoreMock } = vi.hoisted(() => ({
+const { useAppStoreMock, getAttachmentLocalStateMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
+  getAttachmentLocalStateMock: vi.fn(async () => false),
 }));
 
 vi.mock("@/store", () => ({
@@ -91,6 +92,7 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
 vi.mock("../../utils/attachmentDownloads", () => ({
   downloadAttachmentWithAuth: vi.fn(),
   openAttachmentWithAuth: vi.fn(),
+  getAttachmentLocalState: getAttachmentLocalStateMock,
   fetchAttachmentBlob: vi.fn(async () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/webm" })),
 }));
 
@@ -149,6 +151,8 @@ describe("MessageItem bubble layout", () => {
     useAppStoreMock.mockReset();
     vi.mocked(attachmentDownloads.downloadAttachmentWithAuth).mockReset();
     vi.mocked(attachmentDownloads.openAttachmentWithAuth).mockReset();
+    getAttachmentLocalStateMock.mockReset();
+    getAttachmentLocalStateMock.mockResolvedValue(false);
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
       selector({ authToken: "secret-token" }),
     );
@@ -1720,17 +1724,17 @@ describe("MessageItem bubble layout", () => {
     expect(fileRow).toHaveClass("relative", "flex", "items-center", "w-[224px]", "min-w-[224px]", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
     expect(fileRow).not.toHaveClass("border", "rounded-full", "rounded-[6px]");
     expect(iconContainer).toHaveClass("relative", "w-[54px]", "h-[54px]", "mr-[12px]", "shrink-0");
-    expect(fileIcon).toHaveClass("w-[54px]", "h-[54px]", "flex", "items-end", "justify-center", "px-[12px]", "pt-[16px]", "pb-[8px]", "rounded-[6px]");
-    expect(screen.getByText("pdf")).toHaveClass("text-[16px]", "font-medium", "leading-[24px]", "text-white");
+    expect(fileIcon).toHaveClass("w-[54px]", "h-[54px]", "flex", "items-center", "justify-center", "px-0", "py-0", "rounded-[6px]");
+    expect(screen.getByText("pdf")).toHaveClass("text-[16px]", "font-medium", "leading-[24px]", "text-white", "opacity-0");
     expect(screen.getByText("Lection 3. JS (1).pdf")).toHaveAttribute("title", "Lection 3. JS (1).pdf");
     expect(fileInfo).toHaveClass("flex-1", "min-w-0", "h-[39px]", "mt-[3px]", "mr-[2px]", "overflow-hidden", "whitespace-nowrap");
     expect(screen.getByTestId("message-file-name")).toHaveClass("truncate", "text-[16px]", "font-medium", "leading-[24px]");
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.getByTestId("message-file-size")).toHaveClass("truncate", "text-[14px]", "font-normal", "leading-[15px]");
     const downloadButton = screen.getByRole("button", { name: /Download/ });
-    expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "opacity-0", "bg-transparent", "group-hover:opacity-100", "group-focus-within:opacity-100");
+    expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "bg-transparent");
     expect(downloadButton).toHaveAccessibleName("Download Lection 3. JS (1).pdf");
-    expect(downloadButton.querySelector("svg")).toHaveClass("h-6", "w-6");
+    expect(screen.getByTestId("message-file-download-stage")).toBeInTheDocument();
     expect(fileRow).toHaveAttribute("role", "button");
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(bubble).toContainElement(screen.getByTestId("message-metadata"));
@@ -1761,6 +1765,28 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-text-tail")).toHaveClass("left-[-9px]", "bottom-[-1px]");
   });
 
+  it("initializes the downloaded visual state from the native local-path check", async () => {
+    getAttachmentLocalStateMock.mockResolvedValue(true);
+
+    renderMessageItem({
+      media_file_id: "restored-document",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "restored-document",
+        url: "/api/v1/media/restored-document",
+        mime_type: "application/pdf",
+        original_name: "restored.pdf",
+        file_size: 1024,
+        kind: "file",
+      },
+    });
+
+    await waitFor(() => expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "downloaded"));
+    expect(screen.getByTestId("message-file-extension")).toHaveClass("opacity-100");
+    expect(screen.queryByTestId("message-file-download-stage")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open restored.pdf" })).toBeInTheDocument();
+  });
+
   it("downloads the clicked document through its own attachment and stops message selection", async () => {
     const onToggleSelection = vi.fn();
 
@@ -1783,29 +1809,28 @@ describe("MessageItem bubble layout", () => {
     const downloadButton = screen.getByRole("button", { name: "Download download-me.pdf" });
     const extension = screen.getByText("pdf");
 
-    expect(extension).toHaveClass("group-hover:opacity-0", "group-focus-within:opacity-0");
-    expect(downloadButton).toHaveClass("group-hover:opacity-100", "group-focus-within:opacity-100");
+    expect(extension).toHaveClass("opacity-0");
+    expect(screen.getByTestId("message-file-download-stage")).toBeInTheDocument();
     act(() => downloadButton.focus());
     expect(downloadButton).toHaveFocus();
     fireEvent.click(downloadButton);
 
-    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith({
+    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith(expect.objectContaining({
       attachment: expect.objectContaining({
         id: "download-document",
         url: expect.stringContaining("/api/v1/media/download-document"),
         original_name: "download-me.pdf",
       }),
       authToken: "secret-token",
-    }));
+      signal: expect.any(AbortSignal),
+      onProgress: expect.any(Function),
+    })));
     expect(onToggleSelection).not.toHaveBeenCalled();
   });
 
-  it("blocks duplicate downloads and shows a local spinner for the active document", async () => {
-    let resolveDownload: (() => void) | undefined;
+  it("shows streamed progress and cancels the active document from the same tile", async () => {
     vi.mocked(attachmentDownloads.downloadAttachmentWithAuth).mockReturnValue(
-      new Promise<void>((resolve) => {
-        resolveDownload = resolve;
-      }),
+      new Promise<void>(() => {}),
     );
 
     renderMessageItem({
@@ -1823,16 +1848,15 @@ describe("MessageItem bubble layout", () => {
 
     const downloadButton = screen.getByRole("button", { name: "Download pending.pdf" });
     fireEvent.click(downloadButton);
-    fireEvent.click(downloadButton);
 
     expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledTimes(1);
-    expect(downloadButton).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel download of pending.pdf" })).toBeInTheDocument();
     expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "downloading");
-    expect(downloadButton.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(screen.getByTestId("message-file-progress")).toHaveAttribute("role", "progressbar");
 
-    resolveDownload?.();
-    await waitFor(() => expect(downloadButton).not.toBeDisabled());
-    expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "downloaded");
+    fireEvent.click(downloadButton);
+    await waitFor(() => expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "not-downloaded"));
+    expect(screen.getByRole("button", { name: "Download pending.pdf" })).toBeInTheDocument();
   });
 
   it("restores a failed document download to a retryable state", async () => {
@@ -1857,7 +1881,7 @@ describe("MessageItem bubble layout", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Download failed for failed.pdf"));
     expect(downloadButton).not.toBeDisabled();
     expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "failed");
-    expect(downloadButton.querySelector(".lucide-download")).toBeInTheDocument();
+    expect(screen.getByTestId("message-file-download-stage")).toBeInTheDocument();
 
     vi.mocked(attachmentDownloads.downloadAttachmentWithAuth).mockResolvedValueOnce(undefined);
     fireEvent.click(downloadButton);
@@ -1925,14 +1949,18 @@ describe("MessageItem bubble layout", () => {
       await Promise.resolve();
     });
 
-    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenNthCalledWith(1, {
+    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenNthCalledWith(1, expect.objectContaining({
       attachment: expect.objectContaining({ id: "group-document-1" }),
       authToken: "secret-token",
-    });
-    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenNthCalledWith(2, {
+      signal: expect.any(AbortSignal),
+      onProgress: expect.any(Function),
+    }));
+    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenNthCalledWith(2, expect.objectContaining({
       attachment: expect.objectContaining({ id: "group-document-2" }),
       authToken: "secret-token",
-    });
+      signal: expect.any(AbortSignal),
+      onProgress: expect.any(Function),
+    }));
   });
 
   it("renders incoming three-document groups with square middle segments and time-only metadata", () => {
@@ -2010,7 +2038,7 @@ describe("MessageItem bubble layout", () => {
 
     expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
     expect(fileRow).toHaveAttribute("role", "button");
-    expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "opacity-0");
+    expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "bg-transparent");
     expect(downloadButton.textContent).toBe("");
     expect(iconContainer).toContainElement(downloadButton);
   });
@@ -2031,10 +2059,12 @@ describe("MessageItem bubble layout", () => {
 
     fireEvent.click(screen.getByTestId("message-file-row"));
 
-    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith({
+    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith(expect.objectContaining({
       attachment: expect.objectContaining({ id: "media-file-open-row" }),
       authToken: "secret-token",
-    }));
+      signal: expect.any(AbortSignal),
+      onProgress: expect.any(Function),
+    })));
   });
 
   it("renders legacy photo attachments without an attachment object", () => {

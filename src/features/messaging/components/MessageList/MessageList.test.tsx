@@ -150,6 +150,7 @@ vi.mock("../ForwardModal", () => ({
 
 vi.mock("../../utils/attachmentDownloads", () => ({
   downloadAttachmentWithAuth: vi.fn(),
+  getAttachmentLocalState: vi.fn(async () => false),
   fetchAttachmentBlob: vi.fn(async () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" })),
 }));
 

@@ -6,6 +6,13 @@ import { getAttachmentDisplayName, resolveAttachmentUrl } from "./attachments";
 type AttachmentDownloadOptions = {
   attachment: Attachment;
   authToken: string | null;
+  signal?: AbortSignal;
+  onProgress?: (progress: AttachmentDownloadProgress) => void;
+};
+
+export type AttachmentDownloadProgress = {
+  loadedBytes: number;
+  totalBytes: number | null;
 };
 
 const ATTACHMENT_DOWNLOADS_KEY = "vetra-attachment-downloads";
@@ -25,9 +32,11 @@ function setAttachmentDownloadPath(attachmentId: string, path: string) {
 async function fetchAttachmentBlobInternal(
   url: string,
   authToken: string | null,
+  options: Pick<AttachmentDownloadOptions, "signal" | "onProgress"> = {},
 ): Promise<Blob> {
   const response = await fetch(url, {
     headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    signal: options.signal,
   });
 
   if (!response.ok) {
@@ -38,7 +47,41 @@ async function fetchAttachmentBlobInternal(
     throw new Error(`Attachment request failed: ${response.status}`);
   }
 
-  return response.blob();
+  const totalBytesHeader = response.headers.get("content-length");
+  const parsedTotalBytes = totalBytesHeader ? Number(totalBytesHeader) : NaN;
+  const totalBytes = Number.isFinite(parsedTotalBytes) && parsedTotalBytes >= 0
+    ? parsedTotalBytes
+    : null;
+  const reader = response.body?.getReader();
+
+  if (!reader) {
+    const blob = await response.blob();
+    options.onProgress?.({ loadedBytes: blob.size, totalBytes: totalBytes ?? blob.size });
+    return blob;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let loadedBytes = 0;
+  options.onProgress?.({ loadedBytes: 0, totalBytes });
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      chunks.push(value);
+      loadedBytes += value.byteLength;
+      options.onProgress?.({ loadedBytes, totalBytes });
+    }
+  } finally {
+    if (options.signal?.aborted) {
+      await reader.cancel().catch(() => undefined);
+    }
+  }
+
+  return new Blob(chunks as BlobPart[], {
+    type: response.headers.get("content-type") || "application/octet-stream",
+  });
 }
 
 function revokeObjectUrlLater(url: string) {
@@ -105,10 +148,23 @@ export async function fetchAttachmentBlob(
   return fetchAttachmentBlobInternal(url, authToken);
 }
 
+export async function getAttachmentLocalState(attachment: Attachment): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  const mappedPath = getAttachmentDownloadMap()[attachment.id];
+  if (!mappedPath) return false;
+  const { exists } = await import("@tauri-apps/plugin-fs");
+  return exists(mappedPath);
+}
+
 export async function downloadAttachmentWithAuth({
   attachment,
   authToken,
+  signal,
+  onProgress,
 }: AttachmentDownloadOptions): Promise<void> {
+  const attachmentUrl = resolveAttachmentUrl(attachment.url);
+  if (!attachmentUrl) throw new Error("Attachment URL is missing");
+
   if (isTauriRuntime()) {
     const [{ exists, writeFile }, { openPath }] = await Promise.all([
       import("@tauri-apps/plugin-fs"),
@@ -127,13 +183,21 @@ export async function downloadAttachmentWithAuth({
       sanitizeWindowsFileName(getAttachmentDisplayName(attachment)),
       exists,
     );
-    const blob = await fetchAttachmentBlob(attachment, authToken);
+    const blob = await fetchAttachmentBlobInternal(
+      attachmentUrl,
+      authToken,
+      { signal, onProgress },
+    );
     await writeFile(targetPath, new Uint8Array(await blob.arrayBuffer()));
     setAttachmentDownloadPath(attachment.id, targetPath);
     return;
   }
 
-  const blob = await fetchAttachmentBlob(attachment, authToken);
+  const blob = await fetchAttachmentBlobInternal(
+    attachmentUrl,
+    authToken,
+    { signal, onProgress },
+  );
   const fileName = getAttachmentDisplayName(attachment);
 
   const objectUrl = URL.createObjectURL(blob);

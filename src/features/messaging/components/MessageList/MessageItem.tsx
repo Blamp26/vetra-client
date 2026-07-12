@@ -23,6 +23,7 @@ import {
 import {
   downloadAttachmentWithAuth,
   openAttachmentWithAuth,
+  type AttachmentDownloadProgress,
 } from "../../utils/attachmentDownloads";
 import {
   computeMediaAlbumLayout,
@@ -459,6 +460,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const handleAttachmentAction = async (
     action: "download" | "open",
     currentAttachment: Attachment | null = attachment,
+    downloadOptions?: { signal?: AbortSignal; onProgress?: (progress: AttachmentDownloadProgress) => void },
   ): Promise<boolean> => {
     if (!currentAttachment) return false;
 
@@ -486,10 +488,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
         await openAttachmentWithAuth({ attachment: currentAttachment, authToken });
       } else {
-        await downloadAttachmentWithAuth({ attachment: currentAttachment, authToken });
+        await downloadAttachmentWithAuth({ attachment: currentAttachment, authToken, ...downloadOptions });
       }
       return true;
     } catch (error) {
+      if (downloadOptions?.signal?.aborted) return false;
       console.error("Attachment action failed:", error);
       setAttachmentActionError("Attachment unavailable");
       return false;
@@ -661,8 +664,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                     isOwn={isOwn}
                     isCompact
                     isGrouped
-                    onOpen={() => void handleAttachmentAction(currentAttachment.kind === "video" ? "open" : "download", currentAttachment)}
-                    onDownload={() => handleAttachmentAction("download", currentAttachment)}
+                    onOpen={(options) => handleAttachmentAction(currentAttachment.kind === "video" ? "open" : "download", currentAttachment, options)}
+                    onDownload={(options) => handleAttachmentAction("download", currentAttachment, options)}
                   />
                 )}
                 {isLast && hasText && (
@@ -693,8 +696,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           isOwn={isOwn}
           isCompact={isSingleDocumentAttachment}
           isGrouped={false}
-          onOpen={() => void handleAttachmentAction(attachment?.kind === "video" ? "open" : "download")}
-          onDownload={() => handleAttachmentAction("download")}
+          onOpen={(options) => handleAttachmentAction(attachment?.kind === "video" ? "open" : "download", attachment, options)}
+          onDownload={(options) => handleAttachmentAction("download", attachment, options)}
         />
 
         {hasText && (

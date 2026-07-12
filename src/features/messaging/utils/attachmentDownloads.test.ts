@@ -140,6 +140,108 @@ describe("attachmentDownloads", () => {
     expect(document.querySelector("a")).toBeNull();
   });
 
+  it("reports streamed loaded and total bytes before writing the complete file", async () => {
+    downloadDirMock.mockResolvedValue("C:\\Users\\Tester\\Downloads");
+    existsMock.mockResolvedValue(false);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: new Uint8Array([1, 2]) })
+        .mockResolvedValueOnce({ done: false, value: new Uint8Array([3, 4, 5]) })
+        .mockResolvedValueOnce({ done: true, value: undefined }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "content-length": "5", "content-type": "application/pdf" }),
+      body: { getReader: () => reader },
+    } as unknown as Response);
+    const progress: Array<{ loadedBytes: number; totalBytes: number | null }> = [];
+
+    await downloadAttachmentWithAuth({
+      attachment: {
+        id: "media-file-progress",
+        url: "/api/v1/media/media-file-progress",
+        mime_type: "application/pdf",
+        original_name: "progress.pdf",
+        file_size: 5,
+        kind: "file",
+      },
+      authToken: "secret-token",
+      onProgress: (nextProgress) => progress.push(nextProgress),
+    });
+
+    expect(progress).toEqual([
+      { loadedBytes: 0, totalBytes: 5 },
+      { loadedBytes: 2, totalBytes: 5 },
+      { loadedBytes: 5, totalBytes: 5 },
+    ]);
+    expect(writeFileMock).toHaveBeenCalledWith(
+      "C:\\Users\\Tester\\Downloads/Telegram Desktop/progress.pdf",
+      new Uint8Array([1, 2, 3, 4, 5]),
+    );
+  });
+
+  it("reports loaded bytes without inventing a percentage when content length is missing", async () => {
+    downloadDirMock.mockResolvedValue("C:\\Users\\Tester\\Downloads");
+    existsMock.mockResolvedValue(false);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: new Uint8Array([1, 2, 3]) })
+        .mockResolvedValueOnce({ done: true, value: undefined }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      body: { getReader: () => reader },
+    } as unknown as Response);
+    const progress: Array<{ loadedBytes: number; totalBytes: number | null }> = [];
+
+    await downloadAttachmentWithAuth({
+      attachment: {
+        id: "media-file-unknown-length",
+        url: "/api/v1/media/media-file-unknown-length",
+        mime_type: "application/pdf",
+        original_name: "unknown.pdf",
+        file_size: null,
+        kind: "file",
+      },
+      authToken: "secret-token",
+      onProgress: (nextProgress) => progress.push(nextProgress),
+    });
+
+    expect(progress).toEqual([
+      { loadedBytes: 0, totalBytes: null },
+      { loadedBytes: 3, totalBytes: null },
+    ]);
+  });
+
+  it("does not write or map a file when the download is aborted", async () => {
+    downloadDirMock.mockResolvedValue("C:\\Users\\Tester\\Downloads");
+    existsMock.mockResolvedValue(false);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const controller = new AbortController();
+    controller.abort();
+    vi.mocked(fetch).mockRejectedValue(new DOMException("Aborted", "AbortError"));
+
+    await expect(downloadAttachmentWithAuth({
+      attachment: {
+        id: "media-file-aborted",
+        url: "/api/v1/media/media-file-aborted",
+        mime_type: "application/pdf",
+        original_name: "aborted.pdf",
+        file_size: 10,
+        kind: "file",
+      },
+      authToken: "secret-token",
+      signal: controller.signal,
+    })).rejects.toMatchObject({ name: "AbortError" });
+    expect(writeFileMock).not.toHaveBeenCalled();
+    expect(localStorage.getItem("vetra-attachment-downloads")).toBeNull();
+  });
+
   it("opens a mapped existing file without fetching it again", async () => {
     downloadDirMock.mockResolvedValue("C:\\Users\\Tester\\Downloads");
     existsMock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
