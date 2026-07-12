@@ -190,6 +190,12 @@ export function MessageList({
   const olderScrollAnchorRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
   const forwardingOperationRef = useRef(0);
 
+  useEffect(() => () => {
+    // A manual chat switch unmounts this list. Invalidate any completion that
+    // could otherwise navigate back after the user has chosen another chat.
+    forwardingOperationRef.current += 1;
+  }, []);
+
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -478,7 +484,6 @@ export function MessageList({
             target.ref ?? target.id,
             payload,
           );
-          if (operationId !== forwardingOperationRef.current) return;
           const normalizedMessage = normalizeMessageAttachments(forwardedMessage);
           appendMessage(target.id, normalizedMessage);
           upsertPreview({
@@ -491,9 +496,9 @@ export function MessageList({
             unread_count: 0,
             last_message: buildPreviewMessage(normalizedMessage),
           });
+          if (operationId !== forwardingOperationRef.current) return;
         } else {
           const forwardedMessage = await socketManager.sendRoomMessageViaChannel(target.id, payload);
-          if (operationId !== forwardingOperationRef.current) return;
           const normalizedMessage = normalizeMessageAttachments(forwardedMessage);
           appendRoomMessage(target.id, normalizedMessage);
           upsertRoomPreview({
@@ -502,6 +507,7 @@ export function MessageList({
             last_message_at: normalizedMessage.inserted_at,
             last_message: buildPreviewMessage(normalizedMessage),
           });
+          if (operationId !== forwardingOperationRef.current) return;
         }
       }
       if (operationId !== forwardingOperationRef.current) return;

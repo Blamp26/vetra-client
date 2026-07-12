@@ -155,6 +155,11 @@ function AppShell() {
   const [isResizing, setIsResizing] = useState(false);
   const currentActiveChatKey = activeChatKey(activeChat);
   const currentActiveChatKeyRef = useRef(currentActiveChatKey);
+  const previousNavigationStateRef = useRef({
+    activeChatKey: currentActiveChatKey,
+    routeHash,
+  });
+  const navigationStateInitializedRef = useRef(false);
   const activeCallDirectChatRef = useRef<Extract<ActiveChat, { type: "direct" }> | null>(null);
 
   useEffect(() => {
@@ -434,10 +439,23 @@ function AppShell() {
       return;
     }
 
-    if (routeTarget && routeTargetKey !== currentActiveChatKeyRef.current) {
+    const previous = previousNavigationStateRef.current;
+    const activeChanged = previous.activeChatKey !== currentActiveChatKey;
+    const routeChanged = previous.routeHash !== routeHash;
+
+    // The active-chat store is the authority for normal sidebar actions. A
+    // route change is authoritative only when it was not accompanied by an
+    // active-chat change in the same render. This prevents the two sync
+    // effects from undoing each other during an explicit chat switch.
+    if (
+      routeTarget &&
+      (!navigationStateInitializedRef.current || (routeChanged && !activeChanged)) &&
+      routeTargetKey !== currentActiveChatKey
+    ) {
       setActiveChat(routeTarget);
     }
   }, [
+    currentActiveChatKey,
     routeHash,
     routeTarget,
     routeTargetKey,
@@ -458,13 +476,18 @@ function AppShell() {
       return;
     }
 
-    if (activeChatHash && routeHash !== activeChatHash) {
+    const previous = previousNavigationStateRef.current;
+    const activeChanged = previous.activeChatKey !== currentActiveChatKey;
+    const routeChanged = previous.routeHash !== routeHash;
+
+    if (activeChatHash && routeHash !== activeChatHash && (!routeChanged || activeChanged)) {
       navigateToHash(activeChatHash);
     }
   }, [
     activeChat,
     activeChatHash,
     activeCallChatHash,
+    currentActiveChatKey,
     isSettingsRoute,
     navigateToHash,
     routeHash,
@@ -472,6 +495,14 @@ function AppShell() {
     routeTargetKey,
     status,
   ]);
+
+  useEffect(() => {
+    previousNavigationStateRef.current = {
+      activeChatKey: currentActiveChatKey,
+      routeHash,
+    };
+    navigationStateInitializedRef.current = true;
+  }, [currentActiveChatKey, routeHash]);
 
   const lastServerIdRef = useRef<number | null>(null);
 
