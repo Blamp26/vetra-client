@@ -16,7 +16,12 @@ vi.mock("../../utils/attachmentDownloads", () => ({
   fetchAttachmentBlob: fetchAttachmentBlobMock,
 }));
 
-import { VoiceMessagePlayer } from "./VoiceMessagePlayer";
+import {
+  buildWaveformFromAudioBuffer,
+  createFallbackWaveform,
+  VoiceMessagePlayer,
+  WAVEFORM_BAR_COUNT,
+} from "./VoiceMessagePlayer";
 
 const voiceAttachment = (id: string): Attachment => ({
   id,
@@ -56,9 +61,23 @@ describe("VoiceMessagePlayer", () => {
     await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
 
     fireEvent.loadedMetadata(container.querySelector("audio") as HTMLAudioElement);
-    const progress = screen.getByTestId("voice-message-progress") as HTMLInputElement;
-    fireEvent.change(progress, { target: { value: "1.5" } });
-    expect(progress.value).toBe("1.5");
+    const progress = screen.getByTestId("voice-message-waveform");
+    vi.spyOn(progress, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 260,
+      bottom: 23,
+      width: 260,
+      height: 23,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent.pointerDown(progress, { clientX: 130, pointerId: 1 });
+    expect(progress).toHaveAttribute("aria-valuenow", "1.5");
+    fireEvent.keyDown(progress, { key: "ArrowRight" });
+    expect(progress).toHaveAttribute("aria-valuenow", "2.5");
+    expect(screen.getByTestId("voice-message-duration")).not.toHaveTextContent("/");
   });
 
   it("pauses the previous voice message when another starts", async () => {
@@ -73,5 +92,43 @@ describe("VoiceMessagePlayer", () => {
     fireEvent.click(playButtons[0]);
     fireEvent.click(playButtons[1]);
     expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+  });
+
+  it("uses the Telegram voice geometry and a 2x 65-bar canvas", async () => {
+    render(<VoiceMessagePlayer attachment={voiceAttachment("voice-geometry")} isOwn />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Play voice message" })).toBeInTheDocument());
+
+    const player = screen.getByTestId("voice-message-player");
+    const button = screen.getByRole("button", { name: "Play voice message" });
+    const content = screen.getByTestId("voice-message-content");
+    const waveform = screen.getByTestId("voice-message-waveform");
+    const canvas = waveform.querySelector("canvas");
+
+    expect(player).toHaveClass("h-[48px]", "mt-[3px]", "mb-[7px]");
+    expect(button).toHaveClass("h-[48px]", "w-[48px]", "rounded-full", "p-[5px]");
+    expect(button.parentElement).toHaveClass("h-[48px]", "w-[60px]");
+    expect(content).toHaveClass("h-[48px]");
+    expect(waveform).toHaveClass("h-[23px]", "max-w-[260px]");
+    expect(waveform).toHaveAttribute("data-bar-count", String(WAVEFORM_BAR_COUNT));
+    expect(waveform).toHaveAttribute("data-bar-width", "2");
+    expect(waveform).toHaveAttribute("data-bar-gap", "2");
+    expect(canvas).toHaveClass("h-[23px]", "w-[260px]", "ml-[1px]");
+    expect(canvas).toHaveAttribute("width", "520");
+    expect(canvas).toHaveAttribute("height", "46");
+    expect(screen.getByTestId("voice-message-duration")).toHaveTextContent("0:03");
+  });
+
+  it("derives stable bar heights from decoded audio and keeps a deterministic fallback", () => {
+    const channel = Float32Array.from([0, 0.2, 0.5, 1, 0.1, 0.4, 0.8, 0]);
+    const waveform = buildWaveformFromAudioBuffer({
+      length: channel.length,
+      numberOfChannels: 1,
+      getChannelData: () => channel,
+    }, 4);
+
+    expect(waveform).toHaveLength(4);
+    expect(waveform.every((height) => height >= 2 && height <= 23)).toBe(true);
+    expect(new Set(waveform).size).toBeGreaterThan(1);
+    expect(createFallbackWaveform(4)).toEqual([2, 2, 2, 2]);
   });
 });

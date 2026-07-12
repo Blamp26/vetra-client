@@ -247,6 +247,11 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-voice-attachment")).toBeInTheDocument();
     expect(screen.getByTestId("voice-message-player")).toBeInTheDocument();
     expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
+    const bubble = screen.getByTestId("message-bubble");
+    expect(bubble).toHaveClass("h-[69px]", "w-[337px]", "px-2", "pt-[5px]", "pb-[6px]");
+    expect(screen.getByTestId("message-voice-attachment")).toHaveClass("relative", "h-[58px]");
+    expect(screen.getByTestId("message-voice-inline-metadata")).toHaveClass("absolute", "right-0", "bottom-0", "h-[20px]");
+    expect(screen.getByTestId("voice-message-waveform")).toHaveAttribute("role", "slider");
     await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob).toHaveBeenCalled());
   });
 

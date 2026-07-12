@@ -717,15 +717,15 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     if (!voiceAttachment || voiceAttachment.kind !== "voice") return null;
 
     return (
-      <div className="min-w-[220px]" data-testid="message-voice-attachment">
-        <VoiceMessagePlayer attachment={voiceAttachment} />
+      <div className="relative h-[58px] w-full" data-testid="message-voice-attachment">
+        <VoiceMessagePlayer attachment={voiceAttachment} isOwn={isOwn} />
         {hasText && (
           <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
             <EmojiText text={msg.content || ""} />
           </div>
         )}
         <span
-          className="relative top-[6px] float-right ml-[7px] mr-[-6px] mt-[-20px] flex h-[20px] shrink-0 items-center whitespace-nowrap bg-transparent px-[4px]"
+          className="absolute right-0 bottom-0 flex h-[20px] items-center whitespace-nowrap bg-transparent px-[4px]"
           data-testid="message-voice-inline-metadata"
         >
           {renderMetadata()}
@@ -850,7 +850,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                     : "max-w-[min(480px,calc(100vw-6rem))]",
                 )
             : isSingleDocumentAttachment || isVoiceMessage
-                ? "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
+                ? isVoiceMessage
+                  ? "h-[69px] w-[337px] max-w-[min(337px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
+                  : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                 : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
           isSelected && "ring-1 ring-primary",
           isDocumentGroup
