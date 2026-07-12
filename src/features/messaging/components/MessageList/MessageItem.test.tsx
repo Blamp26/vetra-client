@@ -1721,18 +1721,19 @@ describe("MessageItem bubble layout", () => {
       "--message-surface-color": "var(--bubble-outgoing)",
       backgroundColor: "var(--message-surface-color)",
     });
-    expect(fileRow).toHaveClass("relative", "flex", "items-center", "w-[224px]", "min-w-[224px]", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
+    expect(fileRow).toHaveClass("relative", "flex", "items-center", "min-w-[224px]", "max-w-full", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
+    expect(fileRow).not.toHaveClass("w-[224px]");
     expect(fileRow).not.toHaveClass("border", "rounded-full", "rounded-[6px]");
     expect(iconContainer).toHaveClass("relative", "w-[54px]", "h-[54px]", "mr-[12px]", "shrink-0");
     expect(fileIcon).toHaveClass("w-[54px]", "h-[54px]", "flex", "items-center", "justify-center", "px-0", "py-0", "rounded-[6px]");
     expect(screen.getByText("pdf")).toHaveClass("text-[16px]", "font-medium", "leading-[24px]", "text-white", "opacity-0");
     expect(screen.getByTestId("message-file-name")).toHaveAttribute("title", "Lection 3. JS (1).pdf");
     expect(fileInfo).toHaveClass("flex-1", "min-w-0", "h-[39px]", "mt-[3px]", "mr-[2px]", "overflow-hidden", "whitespace-nowrap");
-    expect(screen.getByTestId("message-file-name")).toHaveClass("min-w-0", "flex-1", "overflow-hidden", "text-ellipsis", "whitespace-nowrap", "text-[16px]", "font-medium", "leading-[24px]");
+    expect(screen.getByTestId("message-file-name")).toHaveClass("block", "min-w-0", "flex-1", "overflow-hidden", "text-ellipsis", "whitespace-nowrap", "text-[16px]", "font-medium", "leading-[24px]");
     expect(screen.getByTestId("message-file-name")).toHaveAttribute("dir", "auto");
     expect(screen.getByTestId("message-file-name")).toHaveAttribute("aria-label", "Lection 3. JS (1).pdf");
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
-    expect(screen.getByTestId("message-file-size")).toHaveClass("truncate", "text-[14px]", "font-normal", "leading-[15px]");
+    expect(screen.getByTestId("message-file-size")).toHaveClass("max-w-full", "truncate", "text-[14px]", "font-normal", "leading-[15px]");
     const downloadButton = screen.getByRole("button", { name: /Download/ });
     expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "bg-transparent");
     expect(downloadButton).toHaveAccessibleName("Download Lection 3. JS (1).pdf");
@@ -1762,7 +1763,8 @@ describe("MessageItem bubble layout", () => {
 
     const bubble = screen.getByTestId("message-bubble");
     expect(bubble).toHaveClass("bg-bubble-incoming", "px-2", "pt-[5px]", "pb-[6px]");
-    expect(screen.getByTestId("message-file-row")).toHaveClass("w-[224px]", "min-w-[224px]", "h-[54px]");
+    expect(screen.getByTestId("message-file-row")).toHaveClass("max-w-full", "min-w-[224px]", "h-[54px]");
+    expect(screen.getByTestId("message-file-row")).not.toHaveClass("w-[224px]");
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
     expect(screen.getByTestId("message-text-tail")).toHaveClass("left-[-9px]", "bottom-[-1px]");
@@ -1934,7 +1936,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("docx")).toBeInTheDocument();
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.getAllByTestId("message-file-size")[1]).toHaveTextContent("8.0MB");
-    expect(screen.getAllByTestId("message-file-name")[1]).toHaveClass("min-w-0", "flex-1", "overflow-hidden", "text-ellipsis", "whitespace-nowrap");
+    expect(screen.getAllByTestId("message-file-name")[1]).toHaveClass("block", "min-w-0", "flex-1", "overflow-hidden", "text-ellipsis", "whitespace-nowrap");
     expect(screen.getAllByTestId("message-file-name")[1]).toHaveAttribute("title", "second-document-with-a-very-long-filename-that-must-truncate.docx");
     expect(within(first).queryByTestId("message-document-inline-metadata")).not.toBeInTheDocument();
     expect(within(first).queryByTestId("message-inline-status")).not.toBeInTheDocument();
@@ -2117,7 +2119,8 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByTestId("message-file-name-leading")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-file-name-trailing")).not.toBeInTheDocument();
     expect(screen.queryByText("…")).not.toBeInTheDocument();
-    expect(screen.getByTestId("message-file-row")).toHaveClass("w-[224px]");
+    expect(screen.getByTestId("message-file-row")).toHaveClass("max-w-full", "min-w-[224px]");
+    expect(screen.getByTestId("message-file-row")).not.toHaveClass("w-[224px]");
   });
 
   it("keeps timestamp and status visible for long outgoing text messages", () => {

@@ -168,7 +168,7 @@ export function DocumentAttachmentRow({
         isCompact
           ? cn(
               "relative my-[3px] flex h-[54px] min-w-[224px] items-center bg-transparent p-0",
-              isGrouped ? "w-[259px]" : "w-[224px]",
+              isGrouped ? "w-[259px]" : "max-w-full",
             )
           : "flex min-w-0 items-start gap-3",
       )}
@@ -251,8 +251,8 @@ export function DocumentAttachmentRow({
       >
         <div
           className={isCompact
-            ? "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[16px] font-medium leading-[24px] text-current"
-            : "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[18px] text-current"}
+            ? "block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[16px] font-medium leading-[24px] text-current"
+            : "block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[18px] text-current"}
           title={attachmentName}
           aria-label={attachmentName}
           dir="auto"
@@ -263,8 +263,8 @@ export function DocumentAttachmentRow({
         <div
           className={cn(
             isCompact
-            ? "truncate text-[14px] font-normal leading-[15px]"
-              : "mt-1 truncate text-[12px] leading-[16px]",
+              ? "max-w-full truncate text-[14px] font-normal leading-[15px]"
+              : "mt-1 max-w-full truncate text-[12px] leading-[16px]",
             isOwn ? "text-[color:var(--bubble-outgoing-meta)]" : "text-muted-foreground",
           )}
           data-testid="message-file-size"
