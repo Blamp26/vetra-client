@@ -1721,14 +1721,15 @@ describe("MessageItem bubble layout", () => {
       "--message-surface-color": "var(--bubble-outgoing)",
       backgroundColor: "var(--message-surface-color)",
     });
-    expect(fileRow).toHaveClass("relative", "flex", "items-center", "w-[224px]", "min-w-[224px]", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
+    expect(fileRow).toHaveClass("relative", "flex", "items-center", "w-fit", "max-w-[min(480px,calc(100vw-6rem))]", "min-w-[224px]", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
+    expect(fileRow).toHaveStyle({ width: "224px" });
     expect(fileRow).not.toHaveClass("border", "rounded-full", "rounded-[6px]");
     expect(iconContainer).toHaveClass("relative", "w-[54px]", "h-[54px]", "mr-[12px]", "shrink-0");
     expect(fileIcon).toHaveClass("w-[54px]", "h-[54px]", "flex", "items-center", "justify-center", "px-0", "py-0", "rounded-[6px]");
     expect(screen.getByText("pdf")).toHaveClass("text-[16px]", "font-medium", "leading-[24px]", "text-white", "opacity-0");
-    expect(screen.getByText("Lection 3. JS (1).pdf")).toHaveAttribute("title", "Lection 3. JS (1).pdf");
+    expect(screen.getByTestId("message-file-name")).toHaveAttribute("title", "Lection 3. JS (1).pdf");
     expect(fileInfo).toHaveClass("flex-1", "min-w-0", "h-[39px]", "mt-[3px]", "mr-[2px]", "overflow-hidden", "whitespace-nowrap");
-    expect(screen.getByTestId("message-file-name")).toHaveClass("truncate", "text-[16px]", "font-medium", "leading-[24px]");
+    expect(screen.getByTestId("message-file-name")).toHaveClass("flex", "min-w-0", "flex-1", "whitespace-nowrap", "text-[16px]", "font-medium", "leading-[24px]");
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.getByTestId("message-file-size")).toHaveClass("truncate", "text-[14px]", "font-normal", "leading-[15px]");
     const downloadButton = screen.getByRole("button", { name: /Download/ });
@@ -1759,7 +1760,8 @@ describe("MessageItem bubble layout", () => {
 
     const bubble = screen.getByTestId("message-bubble");
     expect(bubble).toHaveClass("bg-bubble-incoming", "px-2", "pt-[5px]", "pb-[6px]");
-    expect(screen.getByTestId("message-file-row")).toHaveClass("w-[224px]", "min-w-[224px]", "h-[54px]");
+    expect(screen.getByTestId("message-file-row")).toHaveClass("w-fit", "max-w-[min(480px,calc(100vw-6rem))]", "min-w-[224px]", "h-[54px]");
+    expect(screen.getByTestId("message-file-row")).toHaveStyle({ width: "224px" });
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
     expect(screen.getByTestId("message-text-tail")).toHaveClass("left-[-9px]", "bottom-[-1px]");
@@ -1926,12 +1928,12 @@ describe("MessageItem bubble layout", () => {
       expect(row).toHaveClass("w-[259px]", "min-w-[224px]", "h-[54px]", "my-[3px]");
     });
     expect(screen.getByText("first-document.pdf")).toBeInTheDocument();
-    expect(screen.getByText("second-document-with-a-very-long-filename-that-must-truncate.docx")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-file-name")[1]).toHaveAttribute("title", "second-document-with-a-very-long-filename-that-must-truncate.docx");
     expect(screen.getByText("pdf")).toBeInTheDocument();
     expect(screen.getByText("docx")).toBeInTheDocument();
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.getAllByTestId("message-file-size")[1]).toHaveTextContent("8.0MB");
-    expect(screen.getAllByTestId("message-file-name")[1]).toHaveClass("truncate", "whitespace-nowrap");
+    expect(screen.getAllByTestId("message-file-name")[1]).toHaveClass("flex", "min-w-0", "whitespace-nowrap");
     expect(screen.getAllByTestId("message-file-name")[1]).toHaveAttribute("title", "second-document-with-a-very-long-filename-that-must-truncate.docx");
     expect(within(first).queryByTestId("message-document-inline-metadata")).not.toBeInTheDocument();
     expect(within(first).queryByTestId("message-inline-status")).not.toBeInTheDocument();
@@ -2094,7 +2096,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument();
   });
 
-  it("keeps long document filenames truncated instead of expanding the bubble", () => {
+  it("uses middle ellipsis for long document filenames while preserving both ends", () => {
     renderMessageItem({
       media_file_id: "media-file-long",
       media_mime_type: "application/pdf",
@@ -2108,11 +2110,38 @@ describe("MessageItem bubble layout", () => {
       },
     });
 
-    expect(screen.getByTestId("message-file-name")).toHaveClass("truncate", "whitespace-nowrap");
-    expect(screen.getByTestId("message-file-name")).toHaveAttribute(
+    const filename = screen.getByTestId("message-file-name");
+    expect(filename).toHaveClass("flex", "min-w-0", "whitespace-nowrap");
+    expect(filename).toHaveAttribute(
       "title",
       "very-long-quarterly-financial-report-final-final-approved-version-2026.pdf",
     );
+    expect(screen.getByTestId("message-file-name-leading")).toHaveTextContent("very-long-quarterly");
+    expect(screen.getByTestId("message-file-name-trailing")).toHaveTextContent("version-2026.pdf");
+    expect(screen.getByTestId("message-file-row")).toHaveStyle({ width: "480px" });
+  });
+
+  it("splits Unicode filenames without corrupting surrogate pairs", () => {
+    const filename = "Проект😀финальный-документ-версия-2026-утверждено.pdf";
+    renderMessageItem({
+      media_file_id: "media-file-unicode-long",
+      media_mime_type: "application/pdf",
+      attachment: {
+        id: "media-file-unicode-long",
+        url: "/api/v1/media/media-file-unicode-long",
+        mime_type: "application/pdf",
+        original_name: filename,
+        file_size: 12000000,
+        kind: "file",
+      },
+    });
+
+    const name = screen.getByTestId("message-file-name");
+    expect(name).toHaveAttribute("title", filename);
+    expect(name).toHaveAttribute("aria-label", filename);
+    expect(screen.getByTestId("message-file-name-trailing")).toHaveTextContent(".pdf");
+    expect(screen.getByTestId("message-file-name-leading").textContent).not.toContain("�");
+    expect(screen.getByTestId("message-file-name-trailing").textContent).not.toContain("�");
   });
 
   it("keeps timestamp and status visible for long outgoing text messages", () => {

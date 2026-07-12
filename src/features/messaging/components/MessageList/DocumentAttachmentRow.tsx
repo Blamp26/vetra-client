@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Download, X } from "lucide-react";
 import type { Attachment } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
@@ -62,6 +62,74 @@ function getAttachmentExtensionTone(attachment: Attachment | null) {
   }
 
   return "bg-[#5d6a62] text-white";
+}
+
+function splitFilenameForDisplay(filename: string) {
+  const characters = Array.from(filename);
+  const lastDot = filename.lastIndexOf(".");
+  const hasExtension = lastDot > 0 && lastDot < filename.length - 1;
+  const basename = hasExtension ? filename.slice(0, lastDot) : filename;
+  const extension = hasExtension ? filename.slice(lastDot) : "";
+  const suffixCharacters = Array.from(basename).slice(-12).join("") + extension;
+  const prefixCharacters = Array.from(basename).slice(0, -12).join("");
+
+  return {
+    characters,
+    prefix: prefixCharacters,
+    suffix: suffixCharacters,
+    canSplit: characters.length > 24 && Boolean(prefixCharacters),
+  };
+}
+
+function MiddleEllipsisFilename({ filename }: { filename: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [measuredOverflow, setMeasuredOverflow] = useState<boolean | null>(null);
+  const { characters, prefix, suffix, canSplit } = splitFilenameForDisplay(filename);
+
+  useLayoutEffect(() => {
+    const updateOverflow = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const availableWidth = container.clientWidth;
+      const estimatedFullWidth = characters.length * 8;
+      setMeasuredOverflow(availableWidth > 0
+        ? estimatedFullWidth > availableWidth
+        : characters.length > 48);
+    };
+
+    updateOverflow();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(updateOverflow);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [characters.length, filename]);
+
+  const showMiddleEllipsis = canSplit && (measuredOverflow ?? characters.length > 48);
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[16px] font-medium leading-[24px]"
+      title={filename}
+      aria-label={filename}
+      data-testid="message-file-name"
+    >
+      {showMiddleEllipsis ? (
+        <>
+          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" data-testid="message-file-name-leading" aria-hidden="true">
+            {prefix}…
+          </span>
+          <span className="shrink-0 whitespace-nowrap" data-testid="message-file-name-trailing" aria-hidden="true">
+            {suffix}
+          </span>
+        </>
+      ) : (
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" data-testid="message-file-name-full">
+          {filename}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function DocumentAttachmentRow({
@@ -173,6 +241,10 @@ export function DocumentAttachmentRow({
   const progressPercent = totalBytes && totalBytes > 0
     ? Math.min(100, (loadedBytes / totalBytes) * 100)
     : undefined;
+  const estimatedCompactWidth = Math.min(
+    480,
+    Math.max(224, Math.ceil(66 + Array.from(attachmentName).length * 6.5)),
+  );
 
   return (
     <div
@@ -180,12 +252,13 @@ export function DocumentAttachmentRow({
         isCompact
           ? cn(
               "relative my-[3px] flex h-[54px] min-w-[224px] items-center bg-transparent p-0",
-              isGrouped ? "w-[259px]" : "w-[224px]",
+              isGrouped ? "w-[259px]" : "w-fit max-w-[min(480px,calc(100vw-6rem))]",
             )
           : "flex min-w-0 items-start gap-3",
         canOpenInline && "cursor-pointer",
       )}
       data-testid="message-file-row"
+      style={isCompact && !isGrouped ? { width: `${estimatedCompactWidth}px` } : undefined}
       onClick={() => {
         if (canOpenInline && !downloadInProgressRef.current) {
           handleAction(onOpen);
@@ -273,15 +346,17 @@ export function DocumentAttachmentRow({
           : "min-w-0 flex-1 pt-[2px]"}
         data-testid="message-file-info"
       >
-        <div
-          className={isCompact
-            ? "truncate whitespace-nowrap text-[16px] font-medium leading-[24px] text-current"
-            : "truncate text-[14px] font-medium leading-[18px] text-current"}
-          data-testid="message-file-name"
-          title={attachmentName}
-        >
-          {attachmentName}
-        </div>
+        {isCompact ? (
+          <MiddleEllipsisFilename filename={attachmentName} />
+        ) : (
+          <div
+            className="truncate text-[14px] font-medium leading-[18px] text-current"
+            data-testid="message-file-name"
+            title={attachmentName}
+          >
+            {attachmentName}
+          </div>
+        )}
         <div
           className={cn(
             isCompact
