@@ -16,7 +16,8 @@ export type AttachmentDownloadProgress = {
 };
 
 const ATTACHMENT_DOWNLOADS_KEY = "vetra-attachment-downloads";
-const TELEGRAM_DOWNLOAD_FOLDER = "Telegram Desktop";
+const VETRA_DOWNLOAD_FOLDER = "Vetra Desktop";
+const LEGACY_DOWNLOAD_FOLDER = "Telegram Desktop";
 
 function getAttachmentDownloadMap() {
   return storage.get<Record<string, string>>(ATTACHMENT_DOWNLOADS_KEY) ?? {};
@@ -27,6 +28,34 @@ function setAttachmentDownloadPath(attachmentId: string, path: string) {
     ...getAttachmentDownloadMap(),
     [attachmentId]: path,
   });
+}
+
+function removeAttachmentDownloadPath(attachmentId: string) {
+  const map = getAttachmentDownloadMap();
+  if (!(attachmentId in map)) return;
+  delete map[attachmentId];
+  storage.set(ATTACHMENT_DOWNLOADS_KEY, map);
+}
+
+function normalizePathForComparison(path: string) {
+  return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "").toLowerCase();
+}
+
+async function isLegacyDownloadPath(path: string) {
+  const downloadsPath = await downloadDir();
+  const legacyDirectory = normalizePathForComparison(await join(downloadsPath, LEGACY_DOWNLOAD_FOLDER));
+  const normalizedPath = normalizePathForComparison(path);
+  return normalizedPath === legacyDirectory || normalizedPath.startsWith(`${legacyDirectory}/`);
+}
+
+async function getMappedAttachmentPath(attachmentId: string) {
+  const mappedPath = getAttachmentDownloadMap()[attachmentId];
+  if (!mappedPath) return null;
+  if (await isLegacyDownloadPath(mappedPath)) {
+    removeAttachmentDownloadPath(attachmentId);
+    return null;
+  }
+  return mappedPath;
 }
 
 async function fetchAttachmentBlobInternal(
@@ -107,7 +136,7 @@ function sanitizeWindowsFileName(fileName: string) {
 async function getAutomaticDownloadDirectory() {
   const downloadsPath = await downloadDir();
   if (!downloadsPath) throw new Error("Downloads directory unavailable");
-  const directory = await join(downloadsPath, TELEGRAM_DOWNLOAD_FOLDER);
+  const directory = await join(downloadsPath, VETRA_DOWNLOAD_FOLDER);
   const { mkdir } = await import("@tauri-apps/plugin-fs");
   await mkdir(directory, { recursive: true });
   return directory;
@@ -150,7 +179,7 @@ export async function fetchAttachmentBlob(
 
 export async function getAttachmentLocalState(attachment: Attachment): Promise<boolean> {
   if (!isTauriRuntime()) return false;
-  const mappedPath = getAttachmentDownloadMap()[attachment.id];
+  const mappedPath = await getMappedAttachmentPath(attachment.id);
   if (!mappedPath) return false;
   const { exists } = await import("@tauri-apps/plugin-fs");
   return exists(mappedPath);
@@ -170,7 +199,7 @@ export async function downloadAttachmentWithAuth({
       import("@tauri-apps/plugin-fs"),
       import("@tauri-apps/plugin-opener"),
     ]);
-    const mappedPath = getAttachmentDownloadMap()[attachment.id];
+    const mappedPath = await getMappedAttachmentPath(attachment.id);
 
     if (mappedPath && await exists(mappedPath)) {
       await openPath(mappedPath);

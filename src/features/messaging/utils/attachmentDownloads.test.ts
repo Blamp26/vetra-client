@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   downloadAttachmentWithAuth,
   fetchAttachmentBlob,
+  getAttachmentLocalState,
 } from "./attachmentDownloads";
 
 const { downloadDirMock, joinMock, existsMock, mkdirMock, writeFileMock, openPathMock } = vi.hoisted(() => ({
@@ -112,7 +113,7 @@ describe("attachmentDownloads", () => {
     expect(click).toHaveBeenCalledTimes(1);
   });
 
-  it("automatically writes to Downloads/Telegram Desktop without a dialog", async () => {
+  it("automatically writes to Downloads/Vetra Desktop without a dialog", async () => {
     const pdfBytes = new Uint8Array([112, 100, 102, 45, 98, 121, 116, 101, 115]);
     vi.mocked(fetch).mockResolvedValue(new Response(pdfBytes, { status: 200 }));
     downloadDirMock.mockResolvedValue("C:\\Users\\Tester\\Downloads");
@@ -131,9 +132,9 @@ describe("attachmentDownloads", () => {
       authToken: "secret-token",
     })).resolves.toBeUndefined();
 
-    expect(mkdirMock).toHaveBeenCalledWith("C:\\Users\\Tester\\Downloads/Telegram Desktop", { recursive: true });
+    expect(mkdirMock).toHaveBeenCalledWith("C:\\Users\\Tester\\Downloads/Vetra Desktop", { recursive: true });
     expect(writeFileMock).toHaveBeenCalledWith(
-      "C:\\Users\\Tester\\Downloads/Telegram Desktop/report.pdf",
+      "C:\\Users\\Tester\\Downloads/Vetra Desktop/report.pdf",
       pdfBytes,
     );
     expect(openPathMock).not.toHaveBeenCalled();
@@ -177,7 +178,7 @@ describe("attachmentDownloads", () => {
       { loadedBytes: 5, totalBytes: 5 },
     ]);
     expect(writeFileMock).toHaveBeenCalledWith(
-      "C:\\Users\\Tester\\Downloads/Telegram Desktop/progress.pdf",
+      "C:\\Users\\Tester\\Downloads/Vetra Desktop/progress.pdf",
       new Uint8Array([1, 2, 3, 4, 5]),
     );
   });
@@ -263,8 +264,81 @@ describe("attachmentDownloads", () => {
       attachment,
       authToken: "secret-token",
     })).resolves.toBeUndefined();
-    expect(openPathMock).toHaveBeenCalledWith("C:\\Users\\Tester\\Downloads/Telegram Desktop/report.pdf");
+    expect(openPathMock).toHaveBeenCalledWith("C:\\Users\\Tester\\Downloads/Vetra Desktop/report.pdf");
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("invalidates legacy Telegram mappings without touching their files", async () => {
+    downloadDirMock.mockResolvedValue("C:\\Users\\Test\\Downloads");
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    localStorage.setItem("vetra-attachment-downloads", JSON.stringify({
+      legacyWindows: "C:\\Users\\Test\\Downloads\\Telegram Desktop\\file.pdf",
+      legacyForward: "c:/users/test/downloads/telegram desktop/other.pdf",
+    }));
+
+    await expect(getAttachmentLocalState({
+      id: "legacyWindows",
+      url: "/api/v1/media/legacyWindows",
+      mime_type: "application/pdf",
+      original_name: "file.pdf",
+      file_size: 1,
+      kind: "file",
+    })).resolves.toBe(false);
+    await expect(getAttachmentLocalState({
+      id: "legacyForward",
+      url: "/api/v1/media/legacyForward",
+      mime_type: "application/pdf",
+      original_name: "other.pdf",
+      file_size: 1,
+      kind: "file",
+    })).resolves.toBe(false);
+
+    expect(localStorage.getItem("vetra-attachment-downloads")).toBe(JSON.stringify({}));
+    expect(writeFileMock).not.toHaveBeenCalled();
+  });
+
+  it("redownloads a legacy-mapped attachment into Vetra Desktop", async () => {
+    downloadDirMock.mockResolvedValue("C:\\Users\\Test\\Downloads");
+    existsMock.mockResolvedValue(false);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    localStorage.setItem("vetra-attachment-downloads", JSON.stringify({
+      legacy: "C:\\Users\\Test\\Downloads\\Telegram Desktop\\file.pdf",
+    }));
+    vi.mocked(fetch).mockResolvedValue(new Response(new Uint8Array([1, 2]), { status: 200 }));
+
+    await downloadAttachmentWithAuth({
+      attachment: {
+        id: "legacy",
+        url: "/api/v1/media/legacy",
+        mime_type: "application/pdf",
+        original_name: "file.pdf",
+        file_size: 2,
+        kind: "file",
+      },
+      authToken: "secret-token",
+    });
+
+    const vetraPath = "C:\\Users\\Test\\Downloads/Vetra Desktop/file.pdf";
+    expect(writeFileMock).toHaveBeenCalledWith(vetraPath, new Uint8Array([1, 2]));
+    expect(JSON.parse(localStorage.getItem("vetra-attachment-downloads") || "{}")).toEqual({ legacy: vetraPath });
+  });
+
+  it("keeps a valid Vetra Desktop mapping downloaded when its file exists", async () => {
+    downloadDirMock.mockResolvedValue("C:\\Users\\Test\\Downloads");
+    existsMock.mockResolvedValue(true);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const vetraPath = "C:\\Users\\Test\\Downloads\\Vetra Desktop\\file.pdf";
+    localStorage.setItem("vetra-attachment-downloads", JSON.stringify({ valid: vetraPath }));
+
+    await expect(getAttachmentLocalState({
+      id: "valid",
+      url: "/api/v1/media/valid",
+      mime_type: "application/pdf",
+      original_name: "file.pdf",
+      file_size: 1,
+      kind: "file",
+    })).resolves.toBe(true);
+    expect(JSON.parse(localStorage.getItem("vetra-attachment-downloads") || "{}")).toEqual({ valid: vetraPath });
   });
 
   it("redownloads a deleted mapped file to the same path", async () => {
@@ -285,7 +359,7 @@ describe("attachmentDownloads", () => {
     writeFileMock.mockClear();
     await expect(downloadAttachmentWithAuth({ attachment, authToken: "secret-token" })).resolves.toBeUndefined();
     expect(writeFileMock).toHaveBeenCalledWith(
-      "C:\\Users\\Tester\\Downloads/Telegram Desktop/deleted.pdf",
+      "C:\\Users\\Tester\\Downloads/Vetra Desktop/deleted.pdf",
       new Uint8Array([1, 2]),
     );
   });
@@ -308,7 +382,7 @@ describe("attachmentDownloads", () => {
       authToken: "secret-token",
     });
     expect(writeFileMock).toHaveBeenCalledWith(
-      "C:\\Users\\Tester\\Downloads/Telegram Desktop/report (2).pdf",
+      "C:\\Users\\Tester\\Downloads/Vetra Desktop/report (2).pdf",
       new Uint8Array([1]),
     );
   });

@@ -20,7 +20,7 @@
       "identifier": "opener:allow-open-path",
       "allow": [
         {
-          "path": "$DOWNLOAD/Telegram Desktop/**"
+          "path": "$DOWNLOAD/Vetra Desktop/**"
         }
       ]
     }
