@@ -1721,22 +1721,24 @@ describe("MessageItem bubble layout", () => {
       "--message-surface-color": "var(--bubble-outgoing)",
       backgroundColor: "var(--message-surface-color)",
     });
-    expect(fileRow).toHaveClass("relative", "flex", "items-center", "w-fit", "max-w-[min(480px,calc(100vw-6rem))]", "min-w-[224px]", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
-    expect(fileRow).toHaveStyle({ width: "224px" });
+    expect(fileRow).toHaveClass("relative", "flex", "items-center", "w-[224px]", "min-w-[224px]", "h-[54px]", "my-[3px]", "p-0", "bg-transparent");
     expect(fileRow).not.toHaveClass("border", "rounded-full", "rounded-[6px]");
     expect(iconContainer).toHaveClass("relative", "w-[54px]", "h-[54px]", "mr-[12px]", "shrink-0");
     expect(fileIcon).toHaveClass("w-[54px]", "h-[54px]", "flex", "items-center", "justify-center", "px-0", "py-0", "rounded-[6px]");
     expect(screen.getByText("pdf")).toHaveClass("text-[16px]", "font-medium", "leading-[24px]", "text-white", "opacity-0");
     expect(screen.getByTestId("message-file-name")).toHaveAttribute("title", "Lection 3. JS (1).pdf");
     expect(fileInfo).toHaveClass("flex-1", "min-w-0", "h-[39px]", "mt-[3px]", "mr-[2px]", "overflow-hidden", "whitespace-nowrap");
-    expect(screen.getByTestId("message-file-name")).toHaveClass("flex", "min-w-0", "flex-1", "whitespace-nowrap", "text-[16px]", "font-medium", "leading-[24px]");
+    expect(screen.getByTestId("message-file-name")).toHaveClass("min-w-0", "flex-1", "overflow-hidden", "text-ellipsis", "whitespace-nowrap", "text-[16px]", "font-medium", "leading-[24px]");
+    expect(screen.getByTestId("message-file-name")).toHaveAttribute("dir", "auto");
+    expect(screen.getByTestId("message-file-name")).toHaveAttribute("aria-label", "Lection 3. JS (1).pdf");
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.getByTestId("message-file-size")).toHaveClass("truncate", "text-[14px]", "font-normal", "leading-[15px]");
     const downloadButton = screen.getByRole("button", { name: /Download/ });
     expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "bg-transparent");
     expect(downloadButton).toHaveAccessibleName("Download Lection 3. JS (1).pdf");
     expect(screen.getByTestId("message-file-download-stage")).toBeInTheDocument();
-    expect(fileRow).toHaveAttribute("role", "button");
+    expect(fileRow).not.toHaveAttribute("role");
+    expect(fileRow).not.toHaveAttribute("tabindex");
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(bubble).toContainElement(screen.getByTestId("message-metadata"));
     expect(metadata).toHaveClass("relative", "flex", "items-center", "h-[20px]", "top-[8px]", "mt-[-20px]", "mr-[-6px]", "mb-0", "ml-[7px]", "px-[4px]", "bg-transparent");
@@ -1760,8 +1762,7 @@ describe("MessageItem bubble layout", () => {
 
     const bubble = screen.getByTestId("message-bubble");
     expect(bubble).toHaveClass("bg-bubble-incoming", "px-2", "pt-[5px]", "pb-[6px]");
-    expect(screen.getByTestId("message-file-row")).toHaveClass("w-fit", "max-w-[min(480px,calc(100vw-6rem))]", "min-w-[224px]", "h-[54px]");
-    expect(screen.getByTestId("message-file-row")).toHaveStyle({ width: "224px" });
+    expect(screen.getByTestId("message-file-row")).toHaveClass("w-[224px]", "min-w-[224px]", "h-[54px]");
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
     expect(screen.getByTestId("message-text-tail")).toHaveClass("left-[-9px]", "bottom-[-1px]");
@@ -1933,7 +1934,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("docx")).toBeInTheDocument();
     expect(screen.getAllByTestId("message-file-size")[0]).toHaveTextContent("12.0MB");
     expect(screen.getAllByTestId("message-file-size")[1]).toHaveTextContent("8.0MB");
-    expect(screen.getAllByTestId("message-file-name")[1]).toHaveClass("flex", "min-w-0", "whitespace-nowrap");
+    expect(screen.getAllByTestId("message-file-name")[1]).toHaveClass("min-w-0", "flex-1", "overflow-hidden", "text-ellipsis", "whitespace-nowrap");
     expect(screen.getAllByTestId("message-file-name")[1]).toHaveAttribute("title", "second-document-with-a-very-long-filename-that-must-truncate.docx");
     expect(within(first).queryByTestId("message-document-inline-metadata")).not.toBeInTheDocument();
     expect(within(first).queryByTestId("message-inline-status")).not.toBeInTheDocument();
@@ -2020,7 +2021,7 @@ describe("MessageItem bubble layout", () => {
     expect(bubble).not.toHaveClass("bg-bubble-outgoing/12");
   });
 
-  it("keeps download inside the file tile and uses the row itself as the inline-open target", () => {
+  it("keeps download inside the file tile and makes only the icon actionable", () => {
     renderMessageItem({
       media_file_id: "media-file-compact",
       media_mime_type: "application/pdf",
@@ -2038,14 +2039,14 @@ describe("MessageItem bubble layout", () => {
     const fileRow = screen.getByTestId("message-file-row");
     const iconContainer = screen.getByTestId("message-file-icon-container");
 
-    expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
-    expect(fileRow).toHaveAttribute("role", "button");
+    expect(fileRow).not.toHaveAttribute("role");
+    expect(fileRow).not.toHaveAttribute("tabindex");
     expect(downloadButton).toHaveClass("absolute", "inset-0", "w-[54px]", "h-[54px]", "bg-transparent");
     expect(downloadButton.textContent).toBe("");
     expect(iconContainer).toContainElement(downloadButton);
   });
 
-  it("uses the canonical document action from the file row", async () => {
+  it("does not activate a document action from the filename, subtitle, or whitespace", async () => {
     renderMessageItem({
       media_file_id: "media-file-open-row",
       media_mime_type: "application/pdf",
@@ -2059,14 +2060,11 @@ describe("MessageItem bubble layout", () => {
       },
     });
 
-    fireEvent.click(screen.getByTestId("message-file-row"));
-
-    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith(expect.objectContaining({
-      attachment: expect.objectContaining({ id: "media-file-open-row" }),
-      authToken: "secret-token",
-      signal: expect.any(AbortSignal),
-      onProgress: expect.any(Function),
-    })));
+    fireEvent.click(screen.getByTestId("message-file-name"));
+    fireEvent.click(screen.getByTestId("message-file-size"));
+    fireEvent.click(screen.getByTestId("message-file-info"));
+    expect(attachmentDownloads.downloadAttachmentWithAuth).not.toHaveBeenCalled();
+    expect(attachmentDownloads.openAttachmentWithAuth).not.toHaveBeenCalled();
   });
 
   it("renders legacy photo attachments without an attachment object", () => {
@@ -2096,7 +2094,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument();
   });
 
-  it("uses middle ellipsis for long document filenames while preserving both ends", () => {
+  it("uses CSS end ellipsis for long document filenames without changing the source name", () => {
     renderMessageItem({
       media_file_id: "media-file-long",
       media_mime_type: "application/pdf",
@@ -2111,37 +2109,15 @@ describe("MessageItem bubble layout", () => {
     });
 
     const filename = screen.getByTestId("message-file-name");
-    expect(filename).toHaveClass("flex", "min-w-0", "whitespace-nowrap");
+    expect(filename).toHaveClass("min-w-0", "overflow-hidden", "text-ellipsis", "whitespace-nowrap");
     expect(filename).toHaveAttribute(
       "title",
       "very-long-quarterly-financial-report-final-final-approved-version-2026.pdf",
     );
-    expect(screen.getByTestId("message-file-name-leading")).toHaveTextContent("very-long-quarterly");
-    expect(screen.getByTestId("message-file-name-trailing")).toHaveTextContent("version-2026.pdf");
-    expect(screen.getByTestId("message-file-row")).toHaveStyle({ width: "480px" });
-  });
-
-  it("splits Unicode filenames without corrupting surrogate pairs", () => {
-    const filename = "Проект😀финальный-документ-версия-2026-утверждено.pdf";
-    renderMessageItem({
-      media_file_id: "media-file-unicode-long",
-      media_mime_type: "application/pdf",
-      attachment: {
-        id: "media-file-unicode-long",
-        url: "/api/v1/media/media-file-unicode-long",
-        mime_type: "application/pdf",
-        original_name: filename,
-        file_size: 12000000,
-        kind: "file",
-      },
-    });
-
-    const name = screen.getByTestId("message-file-name");
-    expect(name).toHaveAttribute("title", filename);
-    expect(name).toHaveAttribute("aria-label", filename);
-    expect(screen.getByTestId("message-file-name-trailing")).toHaveTextContent(".pdf");
-    expect(screen.getByTestId("message-file-name-leading").textContent).not.toContain("�");
-    expect(screen.getByTestId("message-file-name-trailing").textContent).not.toContain("�");
+    expect(screen.queryByTestId("message-file-name-leading")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("message-file-name-trailing")).not.toBeInTheDocument();
+    expect(screen.queryByText("…")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-file-row")).toHaveClass("w-[224px]");
   });
 
   it("keeps timestamp and status visible for long outgoing text messages", () => {
