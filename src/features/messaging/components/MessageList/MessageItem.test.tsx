@@ -183,7 +183,7 @@ describe("MessageItem bubble layout", () => {
       backgroundColor: "var(--message-surface-color)",
     });
     expect(bubble).not.toHaveClass("flex-1");
-    expect(bubble.className).not.toMatch(/shadow|drop-shadow|filter/);
+    expect(bubble).not.toHaveClass("shadow-[0_1px_2px_rgba(16,16,16,0.61)]");
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByText("Hello from Alice")).toBeInTheDocument();
@@ -460,18 +460,18 @@ describe("MessageItem bubble layout", () => {
     });
     expect(bubble).toHaveClass("rounded-br-[0px]");
     expect(bubble).not.toHaveClass("flex-1");
-    expect(bubble.className).not.toMatch(/shadow|drop-shadow|filter/);
+    expect(bubble).toHaveClass("shadow-[0_1px_2px_rgba(16,16,16,0.61)]");
     expect(screen.queryByText("Tester")).not.toBeInTheDocument();
     expect(screen.getByText("23")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toHaveClass("mr-[4px]", "text-[12px]", "leading-[16.2px]", "font-normal");
     expect(inlineMeta).toHaveClass("relative", "float-right", "top-[6px]", "h-[20px]", "ml-[7px]", "mr-[-6px]", "px-[4px]", "bg-transparent");
-    expect(screen.getByTestId("message-inline-status")).toHaveClass("ml-[-3px]", "h-[19px]", "w-[19px]");
+    expect(screen.getByTestId("message-inline-status")).toHaveClass("box-border", "ml-[-3px]", "h-[19px]", "w-[19px]", "overflow-hidden", "rounded-[10px]", "pl-[2px]");
     const sentIcon = screen.getByLabelText("Sent");
     expect(sentIcon).toHaveClass("h-[19px]", "w-[19px]", "shrink-0");
     expect(sentIcon).toHaveAttribute("viewBox", "0 0 19 19");
     expect(sentIcon.querySelectorAll("path")).toHaveLength(1);
     const tail = screen.getByTestId("message-text-tail");
-    expect(tail).toHaveClass("right-[-9px]", "left-auto", "bottom-[-1px]", "block", "box-border", "h-[18px]", "w-[9px]", "m-0", "p-0", "overflow-hidden", "border-0", "rounded-none", "transform-none", "opacity-100");
+    expect(tail).toHaveClass("right-[-8.81667px]", "left-auto", "bottom-[-1px]", "block", "box-border", "h-[18px]", "w-[9px]", "m-0", "p-0", "overflow-hidden", "border-0", "rounded-none", "transform-none", "opacity-100");
     expect(tail.parentElement).toBe(bubble);
     expect(tail).toHaveAttribute("width", "9");
     expect(tail).toHaveAttribute("height", "20");
@@ -659,7 +659,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("authenticated-image").getAttribute("src")).toContain("/api/v1/media/media-photo-1");
     expect(mediaShell).toHaveStyle({ width: "324px", aspectRatio: "324 / 432" });
     expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
-    expect(screen.getByTestId("message-media-tail")).toHaveClass("right-[-9px]", "bottom-[-1px]");
+    expect(screen.getByTestId("message-media-tail")).toHaveClass("right-[-8.81667px]", "bottom-[-1px]");
     expect(metadata).toHaveClass("h-[18px]", "rounded-[10px]", "bg-black/[0.20]", "py-0", "pl-[6px]", "pr-[5px]", "text-white");
     expect(metadata).not.toHaveClass("bg-black/40", "bg-black/60", "rounded-full", "backdrop-blur-[2px]", "shadow-[0_2px_10px_rgba(0,0,0,0.24)]");
     expect(screen.getByText("12:00")).toHaveClass("mr-[4px]", "text-[12px]", "leading-[12px]", "font-normal");

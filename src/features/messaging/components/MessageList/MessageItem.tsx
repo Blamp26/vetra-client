@@ -534,17 +534,25 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       {isOwn && !isRoom && (
           variant === "overlay" ? (
             <span
-              className="ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center leading-[19px] text-current"
+              className={cn(
+                "box-border ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[19px]",
+                isOwn ? "text-white opacity-100" : "text-current",
+                (msg.status === "sent" || msg.status === "delivered") && "pl-[2px]",
+              )}
               data-testid="message-media-only-status"
             >
-              <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
+              <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current opacity-100" />
             </span>
           ) : (
             <span
-              className="ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center leading-[19px] text-current"
+              className={cn(
+                "box-border ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[19px]",
+                isOwn ? "text-white opacity-100" : "text-current",
+                (msg.status === "sent" || msg.status === "delivered") && "pl-[2px]",
+              )}
               data-testid="message-inline-status"
             >
-              <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current" />
+              <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current opacity-100" />
             </span>
           )
       )}
@@ -994,6 +1002,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                       : "bg-bubble-incoming text-bubble-incoming-text"
                   )
                 : (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text"),
+          isOwn && !isMediaOnly && !isVisualMediaMessage && !isDocumentGroup && !isAudioGroup
+            && "shadow-[0_1px_2px_rgba(16,16,16,0.61)]",
         )}
         data-testid="message-bubble"
         style={{
