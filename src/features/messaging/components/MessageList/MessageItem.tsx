@@ -661,7 +661,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                     isOwn={isOwn}
                     isCompact
                     isGrouped
-                    onOpen={() => void handleAttachmentAction("open", currentAttachment)}
+                    onOpen={() => void handleAttachmentAction(currentAttachment.kind === "video" ? "open" : "download", currentAttachment)}
                     onDownload={() => handleAttachmentAction("download", currentAttachment)}
                   />
                 )}
@@ -693,7 +693,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           isOwn={isOwn}
           isCompact={isSingleDocumentAttachment}
           isGrouped={false}
-          onOpen={() => void handleAttachmentAction("open")}
+          onOpen={() => void handleAttachmentAction(attachment?.kind === "video" ? "open" : "download")}
           onDownload={() => handleAttachmentAction("download")}
         />
 

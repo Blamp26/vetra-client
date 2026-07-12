@@ -12,7 +12,7 @@
     "core:window:allow-close",
     "shell:default",
     "notification:default",
-    "dialog:default",
-    "fs:default"
+    "fs:default",
+    "opener:default"
   ]
 }

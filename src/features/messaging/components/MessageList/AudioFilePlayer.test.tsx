@@ -3,10 +3,9 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Attachment } from "@/shared/types";
 
-const { useAppStoreMock, fetchAttachmentBlobMock, downloadAttachmentWithAuthMock } = vi.hoisted(() => ({
+const { useAppStoreMock, fetchAttachmentBlobMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
   fetchAttachmentBlobMock: vi.fn(),
-  downloadAttachmentWithAuthMock: vi.fn(),
 }));
 
 vi.mock("@/store", () => ({
@@ -15,7 +14,6 @@ vi.mock("@/store", () => ({
 
 vi.mock("../../utils/attachmentDownloads", () => ({
   fetchAttachmentBlob: fetchAttachmentBlobMock,
-  downloadAttachmentWithAuth: downloadAttachmentWithAuthMock,
 }));
 
 import { AudioFilePlayer } from "./AudioFilePlayer";
@@ -34,7 +32,6 @@ describe("AudioFilePlayer", () => {
   beforeEach(() => {
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) => selector({ authToken: "secret-token" }));
     fetchAttachmentBlobMock.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }));
-    downloadAttachmentWithAuthMock.mockResolvedValue(undefined);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:audio");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
@@ -43,7 +40,7 @@ describe("AudioFilePlayer", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("loads protected audio and supports play, seek, and original-name download", async () => {
+  it("loads protected audio and supports play and seek without a download action", async () => {
     render(<AudioFilePlayer attachment={audioAttachment} />);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Play audio file" })).toBeInTheDocument());
@@ -65,11 +62,7 @@ describe("AudioFilePlayer", () => {
     fireEvent.change(seek, { target: { value: "1.5" } });
     expect(seek).toHaveValue("1.5");
 
-    fireEvent.click(screen.getByRole("button", { name: "Download audio file" }));
-    await waitFor(() => expect(downloadAttachmentWithAuthMock).toHaveBeenCalledWith({
-      attachment: audioAttachment,
-      authToken: "secret-token",
-    }));
+    expect(screen.queryByRole("button", { name: "Download audio file" })).not.toBeInTheDocument();
   });
 
   it("keeps message metadata absolute without changing the centered player row", async () => {

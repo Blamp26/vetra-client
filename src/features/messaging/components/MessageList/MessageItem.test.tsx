@@ -338,7 +338,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByText("track.mp3")).toBeInTheDocument();
     expect(screen.queryByTestId("voice-message-player")).not.toBeInTheDocument();
     expect(screen.queryByTestId("message-file-row")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Download audio file" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Download audio file" })).not.toBeInTheDocument();
     expect(screen.getByTestId("message-bubble")).toHaveClass("min-h-[69px]", "w-[320px]", "items-center", "py-0");
     await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob).toHaveBeenCalled());
   });
@@ -1832,7 +1832,7 @@ describe("MessageItem bubble layout", () => {
 
     resolveDownload?.();
     await waitFor(() => expect(downloadButton).not.toBeDisabled());
-    expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "idle");
+    expect(screen.getByTestId("message-file-icon-container")).toHaveAttribute("data-download-state", "downloaded");
   });
 
   it("restores a failed document download to a retryable state", async () => {
@@ -2015,7 +2015,7 @@ describe("MessageItem bubble layout", () => {
     expect(iconContainer).toContainElement(downloadButton);
   });
 
-  it("opens inline documents from the file row without a separate right-side action button", async () => {
+  it("uses the canonical document action from the file row", async () => {
     renderMessageItem({
       media_file_id: "media-file-open-row",
       media_mime_type: "application/pdf",
@@ -2031,10 +2031,10 @@ describe("MessageItem bubble layout", () => {
 
     fireEvent.click(screen.getByTestId("message-file-row"));
 
-    expect(attachmentDownloads.openAttachmentWithAuth).toHaveBeenCalledWith({
+    await waitFor(() => expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith({
       attachment: expect.objectContaining({ id: "media-file-open-row" }),
       authToken: "secret-token",
-    });
+    }));
   });
 
   it("renders legacy photo attachments without an attachment object", () => {

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Download, LoaderCircle, RotateCcw } from "lucide-react";
+import { LoaderCircle, RotateCcw } from "lucide-react";
 import type { Attachment } from "@/shared/types";
 import { useAppStore } from "@/store";
 import { cn } from "@/shared/utils/cn";
-import { fetchAttachmentBlob, downloadAttachmentWithAuth } from "../../utils/attachmentDownloads";
+import { fetchAttachmentBlob } from "../../utils/attachmentDownloads";
 import { claimMediaAudio, releaseMediaAudio } from "../../utils/mediaPlaybackCoordinator";
 
 interface Props {
@@ -60,7 +60,6 @@ export function AudioFilePlayer({ attachment, isOwn = false, messageMeta }: Prop
   const [duration, setDuration] = useState((attachment.duration_ms ?? attachment.durationMs ?? 0) / 1_000);
   const [error, setError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,18 +151,6 @@ export function AudioFilePlayer({ attachment, isOwn = false, messageMeta }: Prop
     });
   };
 
-  const handleDownload = async () => {
-    setIsDownloading(true);
-    setError(null);
-    try {
-      await downloadAttachmentWithAuth({ attachment, authToken });
-    } catch {
-      setError("Audio download failed");
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
   const totalDuration = duration > 0 ? duration : 0;
   const shownDuration = hasStarted
     ? `${formatAudioDuration(currentTime)} / ${formatAudioDuration(totalDuration)}`
@@ -227,15 +214,6 @@ export function AudioFilePlayer({ attachment, isOwn = false, messageMeta }: Prop
           <div className="min-w-0 flex-1 truncate whitespace-nowrap text-[16px] font-medium leading-[20px]" title={attachment.original_name ?? "Audio"}>
             {attachment.original_name || "Audio"}
           </div>
-          <button
-            type="button"
-            className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full opacity-70 hover:opacity-100"
-            onClick={(event) => { event.stopPropagation(); void handleDownload(); }}
-            disabled={isDownloading}
-            aria-label="Download audio file"
-          >
-            {isDownloading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-          </button>
         </div>
         <div className="mt-[2px] flex h-[21px] min-w-0 items-center gap-1 text-[12px] leading-[21px]" data-testid="audio-meta">
           {hasStarted ? (

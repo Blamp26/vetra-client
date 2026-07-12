@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Download, LoaderCircle } from "lucide-react";
 import type { Attachment } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
@@ -62,10 +62,12 @@ export function DocumentAttachmentRow({
   onDownload,
 }: DocumentAttachmentRowProps) {
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(false);
   const [downloadFailed, setDownloadFailed] = useState(false);
+  const downloadInProgressRef = useRef(false);
   const attachmentName = getAttachmentDisplayName(attachment);
   const attachmentExtension = getAttachmentExtensionBadge(attachment, isCompact);
-  const canOpenInline = attachment?.mime_type === "application/pdf" || attachment?.kind === "video";
+  const canOpenInline = Boolean(attachment);
   const formattedSize = formatAttachmentSize(attachment?.file_size);
   const documentSize = formattedSize === "Unknown size"
     ? formattedSize
@@ -77,6 +79,7 @@ export function DocumentAttachmentRow({
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!canOpenInline) return;
+    if (downloadInProgressRef.current) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     onOpen();
@@ -84,13 +87,16 @@ export function DocumentAttachmentRow({
 
   const handleDownloadClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (isDownloading) return;
+    if (isDownloading || downloadInProgressRef.current) return;
 
+    downloadInProgressRef.current = true;
     setIsDownloading(true);
     setDownloadFailed(false);
     void onDownload().then((succeeded) => {
       setDownloadFailed(!succeeded);
+      setIsDownloaded(succeeded);
     }).finally(() => {
+      downloadInProgressRef.current = false;
       setIsDownloading(false);
     });
   };
@@ -108,7 +114,7 @@ export function DocumentAttachmentRow({
       )}
       data-testid="message-file-row"
       onClick={() => {
-        if (canOpenInline) {
+        if (canOpenInline && !downloadInProgressRef.current) {
           onOpen();
         }
       }}
@@ -121,7 +127,7 @@ export function DocumentAttachmentRow({
           ? "relative mr-[12px] h-[54px] w-[54px] shrink-0 cursor-pointer"
           : "relative h-[54px] w-[54px] shrink-0")}
         data-testid="message-file-icon-container"
-        data-download-state={isDownloading ? "downloading" : downloadFailed ? "failed" : "idle"}
+        data-download-state={isDownloading ? "downloading" : downloadFailed ? "failed" : isDownloaded ? "downloaded" : "idle"}
       >
         <div
           className={cn(
