@@ -82,9 +82,7 @@ export function useMessagePagination(
 
     const currentActions = actions;
     const currentState = stateRef.current;
-    const hasLoadedMessages = (currentState?.messages.length ?? 0) > 0;
-
-    if (loadedRef.current.has(loadKey) || hasLoadedMessages) {
+    if (loadedRef.current.has(loadKey)) {
       loadedRef.current.add(loadKey);
       if (currentState?.isLoading) currentActions.setLoading(false);
       return;

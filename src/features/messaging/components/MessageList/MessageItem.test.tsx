@@ -261,6 +261,37 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-forwarded-source-name")).toHaveTextContent("Original Alice");
   });
 
+  it("keeps normal media metadata visible for an outgoing forwarded photo", () => {
+    renderMessageItem(
+      {
+        id: 77,
+        content: null,
+        sender_id: 1,
+        recipient_id: 9,
+        inserted_at: "2026-07-12T12:34:00Z",
+        status: "delivered",
+        media_file_id: "forwarded-photo",
+        forwarded_from: { source_display_name: "Original Alice" },
+        attachment: {
+          id: "forwarded-photo",
+          url: "/api/v1/media/forwarded-photo",
+          mime_type: "image/jpeg",
+          original_name: "photo.jpg",
+          file_size: 1024,
+          kind: "photo",
+          width: 640,
+          height: 480,
+        },
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("message-forwarded-header")).toBeInTheDocument();
+    expect(screen.getByTestId("message-media-only-overlay")).toContainElement(screen.getByTestId("message-metadata"));
+    expect(screen.getByText("12:00")).toBeInTheDocument();
+    expect(screen.getByLabelText("Delivered")).toBeInTheDocument();
+  });
+
   it("renders hydrated voice attachments in the voice player, not as documents", async () => {
     renderMessageItem({
       content: null,

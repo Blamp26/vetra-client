@@ -232,6 +232,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id &&
     !msg.forwarded_from;
+  const isForwardedMediaOnly =
+    isVisualMediaMessage &&
+    (!msg.content || msg.content.trim().length === 0) &&
+    !msg.reply_to_id &&
+    Boolean(msg.forwarded_from);
+  const shouldRenderMediaOnlyMetadata = isMediaOnly || isForwardedMediaOnly;
   const isTextOnly = hasText && !hasMedia;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
   const forwardedSource = msg.forwarded_from;
@@ -1129,7 +1135,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         {isVoiceMessage && renderBubbleTail("message-voice-tail")}
         {isSingleAudioMessage && renderBubbleTail("message-audio-tail")}
 
-        {isMediaOnly && (
+        {shouldRenderMediaOnlyMetadata && (
           <div
             className="pointer-events-none absolute bottom-[4px] right-[4px]"
             data-testid="message-media-only-overlay"

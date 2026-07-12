@@ -188,6 +188,26 @@ describe("useMessagePagination", () => {
     expect(actions.init).toHaveBeenCalledTimes(1);
   });
 
+  it("loads the latest page even when the conversation only has a seeded acknowledgement", async () => {
+    const fetchPage = vi.fn().mockResolvedValue([message(7)]);
+    const actions = makeActions();
+
+    renderHook(() =>
+      useMessagePagination(
+        7,
+        1,
+        { messages: [message(99)], isLoading: false, hasMore: true },
+        fetchPage,
+        actions,
+        "direct:7",
+      ),
+    );
+
+    await waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(1));
+    expect(actions.setMessages).toHaveBeenCalledWith([message(7)]);
+    expect(actions.setLoading).toHaveBeenLastCalledWith(false);
+  });
+
   it("allows only one older-message request at a time", async () => {
     const initialMessages = Array.from({ length: 50 }, (_, index) => message(100 - index));
     const older = deferred<Message[]>();

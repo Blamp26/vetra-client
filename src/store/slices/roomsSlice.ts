@@ -33,6 +33,22 @@ function patchConvIfChanged(
   return patchConv(record, id, patch);
 }
 
+function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
+  const byId = new Map<number, Message>();
+  existing.forEach((message) => byId.set(message.id, message));
+  incoming.forEach((message) => byId.set(message.id, message));
+
+  return Array.from(byId.values()).sort((a, b) => {
+    const timeDifference = parseMessageTime(a.inserted_at) - parseMessageTime(b.inserted_at);
+    return timeDifference !== 0 ? timeDifference : a.id - b.id;
+  });
+}
+
+function parseMessageTime(value?: string | null): number {
+  const timestamp = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 function patchSet(s: Set<number>, id: number, add: boolean): Set<number> {
   const next = new Set(s);
   add ? next.add(id) : next.delete(id);
@@ -98,9 +114,14 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
   },
 
   setRoomMessages: (roomId, messages) =>
-    set((state: any) => ({
-      roomConversations: patchConv(state.roomConversations, roomId, { messages }),
-    })),
+    set((state: any) => {
+      const current = state.roomConversations[roomId] ?? DEFAULT_CONV;
+      return {
+        roomConversations: patchConv(state.roomConversations, roomId, {
+          messages: mergeMessages(current.messages, messages),
+        }),
+      };
+    }),
 
   prependRoomMessages: (roomId, messages) =>
     set((state: any) => {
@@ -108,7 +129,7 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
       if (!conv) return state;
       return {
         roomConversations: patchConv(state.roomConversations, roomId, {
-          messages: [...messages, ...conv.messages],
+          messages: mergeMessages(conv.messages, messages),
         }),
       };
     }),
@@ -116,10 +137,11 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
   appendRoomMessage: (roomId, message) =>
     set((state: any) => {
       const conv = state.roomConversations[roomId] ?? DEFAULT_CONV;
-      if (conv.messages.some((m: Message) => m.id === message.id)) return state;
+      const existing = conv.messages.find((current: Message) => current.id === message.id);
+      if (existing === message) return state;
       return {
         roomConversations: patchConv(state.roomConversations, roomId, {
-          messages: [...conv.messages, message],
+          messages: mergeMessages(conv.messages, [message]),
         }),
       };
     }),

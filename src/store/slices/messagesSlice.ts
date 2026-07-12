@@ -66,6 +66,22 @@ function patchConvIfChanged(
   return patchConv(record, id, patch);
 }
 
+function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
+  const byId = new Map<number, Message>();
+  existing.forEach((message) => byId.set(message.id, message));
+  incoming.forEach((message) => byId.set(message.id, message));
+
+  return Array.from(byId.values()).sort((a, b) => {
+    const timeDifference = parseMessageTime(a.inserted_at) - parseMessageTime(b.inserted_at);
+    return timeDifference !== 0 ? timeDifference : a.id - b.id;
+  });
+}
+
+function parseMessageTime(value?: string | null): number {
+  const timestamp = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 export interface MessagesSlice {
   conversations: Record<number, ConversationState>;
   conversationPreviews: Record<number, ConversationPreview>;
@@ -173,9 +189,14 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
   },
 
   setConversationMessages: (partnerId, messages) =>
-    set((state: any) => ({
-      conversations: patchConv(state.conversations, partnerId, { messages }),
-    })),
+    set((state: any) => {
+      const current = state.conversations[partnerId] ?? DEFAULT_CONV;
+      return {
+        conversations: patchConv(state.conversations, partnerId, {
+          messages: mergeMessages(current.messages, messages),
+        }),
+      };
+    }),
 
   prependMessages: (partnerId, messages) =>
     set((state: any) => {
@@ -183,7 +204,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
       if (!conv) return state;
       return {
         conversations: patchConv(state.conversations, partnerId, {
-          messages: [...messages, ...conv.messages],
+          messages: mergeMessages(conv.messages, messages),
         }),
       };
     }),
@@ -191,10 +212,11 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
   appendMessage: (partnerId, message) =>
     set((state: any) => {
       const conv = state.conversations[partnerId] ?? DEFAULT_CONV;
-      if (conv.messages.some((m: Message) => m.id === message.id)) return state;
+      const existing = conv.messages.find((current: Message) => current.id === message.id);
+      if (existing === message) return state;
       return {
         conversations: patchConv(state.conversations, partnerId, {
-          messages: [...conv.messages, message],
+          messages: mergeMessages(conv.messages, [message]),
         }),
       };
     }),
