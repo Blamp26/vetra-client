@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { LoaderCircle, Pause, Play, RotateCcw } from "lucide-react";
+import { LoaderCircle, RotateCcw } from "lucide-react";
 import type { Attachment } from "@/shared/types";
 import { useAppStore } from "@/store";
 import { cn } from "@/shared/utils/cn";
@@ -16,6 +16,24 @@ const waveformCache = new Map<string, Promise<number[]>>();
 interface Props {
   attachment: Attachment;
   isOwn?: boolean;
+  showUnreadDot?: boolean;
+}
+
+function FilledPlayIcon() {
+  return (
+    <svg viewBox="0 0 26 26" className="h-[26px] w-[26px]" aria-hidden="true">
+      <path d="M8 5.5a1.5 1.5 0 0 1 2.28-1.28l10.7 6.5a1.5 1.5 0 0 1 0 2.56l-10.7 6.5A1.5 1.5 0 0 1 8 18.5z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function FilledPauseIcon() {
+  return (
+    <svg viewBox="0 0 25 25" className="h-[25px] w-[25px]" aria-hidden="true">
+      <rect x="6" y="4" width="5" height="17" rx="1" fill="currentColor" stroke="none" />
+      <rect x="14" y="4" width="5" height="17" rx="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
 }
 
 export function createFallbackWaveform(barCount = WAVEFORM_BAR_COUNT): number[] {
@@ -139,8 +157,12 @@ function drawWaveform(
   context.clearRect(0, 0, cssWidth, cssHeight);
 
   const computedStyle = getComputedStyle(canvas);
-  const playedColor = computedStyle.color || "rgb(255, 255, 255)";
-  const baseColor = withAlpha(playedColor, 0.5);
+  const button = canvas.closest<HTMLElement>("[data-testid='voice-message-player']")?.querySelector("button");
+  const buttonColor = button ? getComputedStyle(button).backgroundColor : "";
+  const bubble = canvas.closest<HTMLElement>("[data-testid='message-bubble']");
+  const bubbleColor = bubble ? getComputedStyle(bubble).backgroundColor : "";
+  const inheritedStrongColor = computedStyle.color;
+  const colors = resolveVoiceCanvasColors(inheritedStrongColor, buttonColor, bubbleColor);
   const step = cssWidth / waveform.length;
   const barWidth = Math.min(2, Math.max(1, step / 2));
 
@@ -159,21 +181,58 @@ function drawWaveform(
     context!.restore();
   };
 
-  drawBars(baseColor);
-  if (progress > 0) drawBars(playedColor, cssWidth * Math.min(1, Math.max(0, progress)));
+  drawBars(colors.unplayed);
+  if (progress > 0) drawBars(colors.played, cssWidth * Math.min(1, Math.max(0, progress)));
+}
+
+function parseRgb(color: string): [number, number, number] | null {
+  const match = color.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+function colorsNearlyEqual(first: string, second: string): boolean {
+  const firstRgb = parseRgb(first);
+  const secondRgb = parseRgb(second);
+  if (!firstRgb || !secondRgb) return false;
+  return firstRgb.every((channel, index) => Math.abs(channel - secondRgb[index]) <= 3);
 }
 
 function withAlpha(color: string, alpha: number): string {
-  const rgb = color.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
-  if (!rgb) return color;
-  return `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${alpha})`;
+  const rgb = parseRgb(color);
+  if (!rgb) return "rgb(255, 255, 255)";
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
+
+function chooseContrastingColor(strongColor: string, buttonColor: string, bubbleColor: string): string {
+  const resolvedStrong = parseRgb(strongColor) ? strongColor : buttonColor;
+  if (parseRgb(resolvedStrong) && !colorsNearlyEqual(resolvedStrong, bubbleColor)) return resolvedStrong;
+  if (parseRgb(buttonColor) && !colorsNearlyEqual(buttonColor, bubbleColor)) return buttonColor;
+  return "rgb(255, 255, 255)";
+}
+
+function chooseVisibleMutedColor(strongColor: string, bubbleColor: string): string {
+  const mutedColor = withAlpha(strongColor, 0.32);
+  if (!colorsNearlyEqual(mutedColor, bubbleColor)) return mutedColor;
+  return withAlpha(strongColor, 0.35);
+}
+
+export function resolveVoiceCanvasColors(
+  inheritedStrongColor: string,
+  controlBackground: string,
+  bubbleBackground: string,
+): { unplayed: string; played: string } {
+  const played = chooseContrastingColor(inheritedStrongColor, controlBackground, bubbleBackground);
+  return {
+    unplayed: chooseVisibleMutedColor(played, bubbleBackground),
+    played,
+  };
 }
 
 function formatDuration(seconds: number): string {
   return formatVoiceDuration(Math.max(0, Math.round(seconds * 1_000)));
 }
 
-export function VoiceMessagePlayer({ attachment, isOwn = false }: Props) {
+export function VoiceMessagePlayer({ attachment, isOwn = false, showUnreadDot = false }: Props) {
   const authToken = useAppStore((state) => state.authToken);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<HTMLCanvasElement | null>(null);
@@ -264,8 +323,18 @@ export function VoiceMessagePlayer({ attachment, isOwn = false }: Props) {
   }, [audioUrl]);
 
   useEffect(() => {
-    if (waveformRef.current) drawWaveform(waveformRef.current, waveform, duration > 0 ? currentTime / duration : 0);
-  }, [currentTime, duration, waveform]);
+    const redraw = () => {
+      if (waveformRef.current) drawWaveform(waveformRef.current, waveform, duration > 0 ? currentTime / duration : 0);
+    };
+    redraw();
+
+    if (typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(redraw);
+    const options = { attributes: true, attributeFilter: ["class", "data-theme"] };
+    observer.observe(document.documentElement, options);
+    if (document.body) observer.observe(document.body, options);
+    return () => observer.disconnect();
+  }, [currentTime, duration, isOwn, waveform]);
 
   const seek = (nextTime: number) => {
     const audio = audioRef.current;
@@ -316,11 +385,13 @@ export function VoiceMessagePlayer({ attachment, isOwn = false }: Props) {
       : "Play voice message";
   const shownDuration = currentTime > 0 || isPlaying ? currentTime : duration;
   const voiceStyle = {
-    "--voice-button-background": isOwn ? "var(--bubble-outgoing-text)" : "var(--bubble-incoming)",
-    "--voice-button-foreground": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming-text)",
-    "--voice-waveform-base": "color-mix(in srgb, var(--voice-button-foreground) 50%, transparent)",
-    "--voice-waveform-played": "var(--voice-button-foreground)",
-    color: "var(--voice-button-foreground)",
+    "--voice-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
+    "--voice-strong-foreground": isOwn ? "var(--bubble-outgoing-text)" : "var(--bubble-incoming-text)",
+    "--voice-control-background": isOwn ? "var(--bubble-outgoing-text)" : "var(--bubble-incoming-text)",
+    "--voice-icon-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
+    "--voice-waveform-base": "color-mix(in srgb, var(--voice-strong-foreground) 32%, transparent)",
+    "--voice-waveform-played": "var(--voice-strong-foreground)",
+    color: "var(--voice-strong-foreground)",
   } as CSSProperties;
 
   return (
@@ -333,8 +404,8 @@ export function VoiceMessagePlayer({ attachment, isOwn = false }: Props) {
       <div className="relative h-[48px] w-[60px] shrink-0">
         <button
           type="button"
-          className="relative flex h-[48px] w-[48px] shrink-0 items-center justify-center overflow-hidden rounded-full border-0 p-[5px] text-[color:var(--voice-button-foreground)] transition-colors"
-          style={{ backgroundColor: "var(--voice-button-background)" }}
+          className="relative flex h-[48px] w-[48px] shrink-0 items-center justify-center overflow-hidden rounded-full border-0 p-[5px] text-[color:var(--voice-icon-color)] transition-colors"
+          style={{ backgroundColor: "var(--voice-control-background)" }}
           onClick={(event) => {
             event.stopPropagation();
             if (error) setLoadAttempt((attempt) => attempt + 1);
@@ -349,22 +420,24 @@ export function VoiceMessagePlayer({ attachment, isOwn = false }: Props) {
             <RotateCcw className="h-6 w-6" aria-hidden="true" />
           ) : (
             <>
-              <Play
+              <span
                 className={cn(
                   "absolute ml-[3px] h-[26px] w-[26px] transform transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
                   isPlaying ? "scale-50 opacity-0" : "scale-100 opacity-100",
                 )}
                 style={{ transitionDuration: "400ms, 600ms" }}
-                aria-hidden="true"
-              />
-              <Pause
+              >
+                <FilledPlayIcon />
+              </span>
+              <span
                 className={cn(
                   "absolute h-[25px] w-[25px] transform transition-[opacity,transform] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
                   isPlaying ? "scale-100 opacity-100" : "scale-50 opacity-0",
                 )}
                 style={{ transitionDuration: "400ms, 600ms" }}
-                aria-hidden="true"
-              />
+              >
+                <FilledPauseIcon />
+              </span>
             </>
           )}
         </button>
@@ -410,12 +483,17 @@ export function VoiceMessagePlayer({ attachment, isOwn = false }: Props) {
         </div>
         <div
           className={cn(
-            "mt-[4px] flex h-[21px] w-full max-w-[261px] items-center overflow-hidden pr-[58px] text-[14px] font-normal leading-[21px] text-[color:var(--voice-button-foreground)]",
+            "mt-[4px] flex h-[21px] w-full max-w-[261px] items-center overflow-hidden pr-[58px] text-[14px] font-normal leading-[21px] text-[color:var(--voice-strong-foreground)]",
             error && "text-destructive",
           )}
           data-testid="voice-message-duration"
         >
-          {error ?? formatDuration(shownDuration)}
+          {error ?? (
+            <>
+              <span>{formatDuration(shownDuration)}</span>
+              {showUnreadDot && <span className="ml-1 h-1 w-1 shrink-0 rounded-full bg-current" data-testid="voice-unread-dot" />}
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -718,7 +718,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
     return (
       <div className="relative h-[58px] w-full" data-testid="message-voice-attachment">
-        <VoiceMessagePlayer attachment={voiceAttachment} isOwn={isOwn} />
+        <VoiceMessagePlayer
+          attachment={voiceAttachment}
+          isOwn={isOwn}
+          showUnreadDot={isOwn && Boolean(msg.status) && msg.status !== "read"}
+        />
         {hasText && (
           <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
             <EmojiText text={msg.content || ""} />

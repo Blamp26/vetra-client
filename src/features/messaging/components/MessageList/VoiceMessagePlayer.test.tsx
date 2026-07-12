@@ -19,6 +19,7 @@ vi.mock("../../utils/attachmentDownloads", () => ({
 import {
   buildWaveformFromAudioBuffer,
   createFallbackWaveform,
+  resolveVoiceCanvasColors,
   VoiceMessagePlayer,
   WAVEFORM_BAR_COUNT,
 } from "./VoiceMessagePlayer";
@@ -105,6 +106,10 @@ describe("VoiceMessagePlayer", () => {
     const canvas = waveform.querySelector("canvas");
 
     expect(player).toHaveClass("h-[48px]", "mt-[3px]", "mb-[7px]");
+    expect(player).toHaveStyle({
+      "--voice-strong-foreground": "var(--bubble-outgoing-text)",
+      "--voice-surface-color": "var(--bubble-outgoing)",
+    });
     expect(button).toHaveClass("h-[48px]", "w-[48px]", "rounded-full", "p-[5px]");
     expect(button.parentElement).toHaveClass("h-[48px]", "w-[60px]");
     expect(content).toHaveClass("h-[48px]");
@@ -116,6 +121,12 @@ describe("VoiceMessagePlayer", () => {
     expect(canvas).toHaveAttribute("width", "520");
     expect(canvas).toHaveAttribute("height", "46");
     expect(screen.getByTestId("voice-message-duration")).toHaveTextContent("0:03");
+    expect(screen.getByTestId("voice-message-duration")).toHaveClass("text-[color:var(--voice-strong-foreground)]");
+
+    const playIcon = button.querySelector("svg");
+    expect(playIcon).toHaveAttribute("viewBox", "0 0 26 26");
+    expect(playIcon?.querySelector("path")).toHaveAttribute("fill", "currentColor");
+    expect(playIcon?.querySelector("path")).toHaveAttribute("stroke", "none");
   });
 
   it("derives stable bar heights from decoded audio and keeps a deterministic fallback", () => {
@@ -130,5 +141,81 @@ describe("VoiceMessagePlayer", () => {
     expect(waveform.every((height) => height >= 2 && height <= 23)).toBe(true);
     expect(new Set(waveform).size).toBeGreaterThan(1);
     expect(createFallbackWaveform(4)).toEqual([2, 2, 2, 2]);
+  });
+
+  it("resolves visible concrete semantic canvas colors instead of the outgoing surface", () => {
+    const colors = resolveVoiceCanvasColors(
+      "rgb(248, 250, 248)",
+      "rgb(248, 250, 248)",
+      "rgb(47, 107, 91)",
+    );
+
+    expect(colors.played).toBe("rgb(248, 250, 248)");
+    expect(colors.unplayed).toBe("rgba(248, 250, 248, 0.32)");
+    expect(colors.unplayed).not.toContain("var(");
+    expect(colors.unplayed).not.toContain("color-mix");
+    expect(colors.unplayed).not.toBe("rgb(47, 107, 91)");
+  });
+
+  it("falls back to the strong foreground when the semantic foreground matches the bubble", () => {
+    const colors = resolveVoiceCanvasColors(
+      "rgb(47, 107, 91)",
+      "rgb(248, 250, 248)",
+      "rgb(47, 107, 91)",
+    );
+
+    expect(colors.played).toBe("rgb(248, 250, 248)");
+    expect(colors.unplayed).toMatch(/^rgba\(248, 250, 248, 0\.3/);
+  });
+
+  it("passes resolved rgb/rgba colors to the canvas instead of CSS variables", async () => {
+    const fillStyles: string[] = [];
+    const context = {
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      save: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      clip: vi.fn(),
+      restore: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      quadraticCurveTo: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    Object.defineProperty(context, "fillStyle", {
+      configurable: true,
+      set(value: string) { fillStyles.push(value); },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element) => ({
+      color: element instanceof HTMLCanvasElement ? "rgb(248, 250, 248)" : "",
+      backgroundColor: element instanceof HTMLButtonElement ? "rgb(248, 250, 248)" : "",
+      getPropertyValue: () => "",
+    } as unknown as CSSStyleDeclaration));
+
+    render(<VoiceMessagePlayer attachment={voiceAttachment("voice-concrete-colors")} isOwn />);
+    await waitFor(() => expect(fillStyles.length).toBeGreaterThan(0));
+
+    expect(fillStyles[0]).toBe("rgba(248, 250, 248, 0.32)");
+    expect(fillStyles.every((color) => !color.includes("var(") && !color.includes("color-mix"))).toBe(true);
+  });
+
+  it("uses filled pause bars without changing the button geometry", async () => {
+    render(<VoiceMessagePlayer attachment={voiceAttachment("voice-pause")} isOwn />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Play voice message" })).toBeInTheDocument());
+
+    const button = screen.getByRole("button", { name: "Play voice message" });
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Pause voice message" })).toBeInTheDocument());
+    const pauseIcon = Array.from(screen.getByRole("button", { name: "Pause voice message" }).querySelectorAll("svg"))
+      .find((icon) => icon.getAttribute("viewBox") === "0 0 25 25");
+
+    expect(pauseIcon).toHaveAttribute("viewBox", "0 0 25 25");
+    expect(pauseIcon?.querySelectorAll("rect")).toHaveLength(2);
+    expect(pauseIcon?.querySelector("rect")).toHaveAttribute("fill", "currentColor");
+    expect(pauseIcon?.querySelector("rect")).toHaveAttribute("stroke", "none");
+    expect(button).toHaveClass("h-[48px]", "w-[48px]");
   });
 });

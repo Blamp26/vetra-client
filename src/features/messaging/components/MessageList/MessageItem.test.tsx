@@ -252,7 +252,31 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-voice-attachment")).toHaveClass("relative", "h-[58px]");
     expect(screen.getByTestId("message-voice-inline-metadata")).toHaveClass("absolute", "right-0", "bottom-0", "h-[20px]");
     expect(screen.getByTestId("voice-message-waveform")).toHaveAttribute("role", "slider");
+    expect(bubble).toHaveClass("overflow-visible");
+    expect(bubble).toContainElement(screen.getByTestId("message-voice-tail"));
     await waitFor(() => expect(attachmentDownloads.fetchAttachmentBlob).toHaveBeenCalled());
+  });
+
+  it("shows the unread voice dot only for a known outgoing unread status", () => {
+    renderMessageItem(
+      {
+        content: null,
+        media_file_id: "voice-unread",
+        status: "sent",
+        attachment: {
+          id: "voice-unread",
+          url: "/api/v1/media/voice-unread",
+          mime_type: "audio/webm",
+          original_name: "voice-unread.webm",
+          file_size: 3210,
+          kind: "voice",
+          duration_ms: 8_000,
+        },
+      },
+      { isOwn: true },
+    );
+
+    expect(screen.getByTestId("voice-unread-dot")).toBeInTheDocument();
   });
 
   it("renders own short messages as right-aligned bubbles with integrated metadata", () => {
