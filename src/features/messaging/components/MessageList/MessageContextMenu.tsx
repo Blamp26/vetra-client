@@ -412,8 +412,8 @@ export function MessageContextMenu({
         icon: Forward,
         onSelect: canForward ? onForward : undefined,
         disabled: !canForward,
-        title: !canForward ? "Messages with attachments cannot be forwarded yet." : undefined,
-        ariaLabel: canForward ? "Forward" : "Forward unavailable for attachments",
+        title: !canForward ? "This message cannot be forwarded." : undefined,
+        ariaLabel: canForward ? "Forward" : "Forward unavailable",
       },
       {
         key: "select",

@@ -715,7 +715,7 @@ describe("MessageList bubble layout", () => {
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("2026-06-30T12:00:00Z")).toBeInTheDocument();
     expect(screen.getByText("/avatars/alice.png")).toBeInTheDocument();
-    expect(screen.getByText("cannot-forward")).toBeInTheDocument();
+    expect(screen.getByText("can-forward")).toBeInTheDocument();
     expect(screen.getByText("cannot-delete")).toBeInTheDocument();
   });
 

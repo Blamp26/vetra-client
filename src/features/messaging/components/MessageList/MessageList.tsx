@@ -427,7 +427,12 @@ export function MessageList({
         if (!isMessageForwardable(msg)) {
           return;
         }
-        const payload = { content: msg.content, mediaFileId: msg.media_file_id };
+        const payload = {
+          content: msg.content,
+          mediaFileId: msg.media_file_id,
+          mediaFileIds: msg.media_file_ids,
+          forwardedFromMessageId: msg.id,
+        };
         if (target.type === 'direct') {
           await sendMessageViaChannel(socketManager.userChannel, target.ref ?? target.id, payload);
         } else {
@@ -446,11 +451,10 @@ export function MessageList({
             : { type: 'room', roomId: target.id, roomRef: target.ref ?? target.id },
         );
       }
-    } catch (err) {
-      console.error("Forwarding failed:", err);
-    } finally {
       setForwardingMessages(null);
       clearSelection();
+    } catch (err) {
+      console.error("Forwarding failed:", err);
     }
   }, [forwardingMessageIds, socketManager, messagesById, setActiveChat, clearSelection, setForwardingMessages, roomPreviews]);
 
@@ -738,7 +742,7 @@ export function MessageList({
             <div className="flex flex-wrap items-center gap-2">
             {selectedForwardBlocked && (
               <span className="text-[10px] text-muted-foreground">
-                Attachment messages cannot be forwarded yet.
+                One or more selected messages cannot be forwarded.
               </span>
             )}
               <button onClick={() => selectedMessageIds.length > 0 && setMsgToDelete(selectedMessageIds[0])} className="vt-button vt-button--danger min-h-9 px-3 py-0 text-xs">Delete</button>
@@ -780,7 +784,10 @@ export function MessageList({
             const contextMessage = messagesById.get(contextMenu.msgId);
             return !!contextMessage && getMessageAttachment(contextMessage) != null;
           })()}
-          canForward={!contextMenu.hasAttachment}
+          canForward={(() => {
+            const contextMessage = messagesById.get(contextMenu.msgId);
+            return !!contextMessage && isMessageForwardable(contextMessage);
+          })()}
           onClose={() => setContextMenu(null)}
         />
       )}

@@ -340,15 +340,13 @@ describe("MessageContextMenu", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("disables forwarding for attachment messages", () => {
-    renderMenu({ hasAttachment: true, content: null, hasText: false }, { canEdit: false, canForward: false });
+  it("allows forwarding attachment messages", () => {
+    const onForward = vi.fn();
+    renderMenu({ hasAttachment: true }, { canEdit: false, canForward: true, onForward });
 
-    const button = screen.getByRole("menuitem", {
-      name: "Forward unavailable for attachments",
-    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Forward" }));
 
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "Messages with attachments cannot be forwarded yet.");
+    expect(onForward).toHaveBeenCalledTimes(1);
   });
 
   it("renders delete as the destructive bottom action and only fires when available", () => {

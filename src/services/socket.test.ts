@@ -236,4 +236,21 @@ describe("buildSocketMessagePayload", () => {
       reply_to_id: null,
     });
   });
+
+  it("includes the persisted source message id for forwarded messages", () => {
+    expect(
+      buildSocketMessagePayload({
+        content: "copied text",
+        forwardedFromMessageId: 123,
+      }),
+    ).toEqual({
+      content: "copied text",
+      mediaFileId: null,
+      mediaFileIds: null,
+      media_file_id: null,
+      media_file_ids: null,
+      reply_to_id: null,
+      forwarded_from_message_id: 123,
+    });
+  });
 });

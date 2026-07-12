@@ -220,6 +220,47 @@ describe("MessageItem bubble layout", () => {
     expect(screen.queryByLabelText(/Sent|Delivered|Read|Error sending/)).not.toBeInTheDocument();
   });
 
+  it("renders forwarded attribution before the message content with the verified geometry", () => {
+    renderMessageItem({
+      content: "Forwarded body",
+      forwarded_from: {
+        source_display_name: "Original Alice",
+        source_username: "alice",
+        source_avatar_url: null,
+      },
+    });
+
+    const bubble = screen.getByTestId("message-bubble");
+    const header = screen.getByTestId("message-forwarded-header");
+    const icon = screen.getByTestId("message-forwarded-icon");
+    const label = screen.getByTestId("message-forwarded-label");
+    const source = screen.getByTestId("message-forwarded-source-name");
+
+    expect(header).toBe(bubble.firstElementChild);
+    expect(header).toHaveStyle({ height: "20px", width: "100%", paddingRight: "4px", boxShadow: "none" });
+    expect(icon).toHaveStyle({ width: "12px", height: "12px", marginRight: "3px" });
+    expect(label).toHaveStyle({ fontSize: "14px", fontWeight: "400", lineHeight: "20px" });
+    expect(source).toHaveStyle({ fontSize: "14px", fontWeight: "500", lineHeight: "20px" });
+    expect(screen.getByTestId("message-text-flow")).toBe(header.nextElementSibling);
+    expect(screen.getByText("Forwarded from")).toBeInTheDocument();
+    expect(screen.getByText("Original Alice")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-forwarded-header")?.querySelector("[data-slot=avatar]")).not.toBeInTheDocument();
+  });
+
+  it("renders an available forwarded source avatar without changing the source name", () => {
+    renderMessageItem({
+      content: "Forwarded body",
+      forwarded_from: {
+        source_display_name: "Original Alice",
+        source_avatar_url: "/avatars/alice.png",
+      },
+    });
+
+    const avatar = screen.getByTestId("message-forwarded-header").querySelector("[data-slot=avatar]");
+    expect(avatar).toHaveClass("h-4", "w-4", "mr-1");
+    expect(screen.getByTestId("message-forwarded-source-name")).toHaveTextContent("Original Alice");
+  });
+
   it("renders hydrated voice attachments in the voice player, not as documents", async () => {
     renderMessageItem({
       content: null,

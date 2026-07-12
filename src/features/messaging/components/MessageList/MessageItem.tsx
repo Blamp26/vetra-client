@@ -8,6 +8,8 @@ import { MessageTail } from "./MessageTail";
 import { DocumentAttachmentRow } from "./DocumentAttachmentRow";
 import { VoiceMessagePlayer } from "./VoiceMessagePlayer";
 import { AudioFilePlayer } from "./AudioFilePlayer";
+import { Avatar } from "@/shared/components/Avatar/Avatar";
+import { Forward as ForwardIcon } from "lucide-react";
 import { VisualAttachmentGroup, type ResolvedVisualAttachment } from "./VisualAttachmentGroup";
 import {
   getAttachmentDisplaySrc,
@@ -228,9 +230,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const isMediaOnly =
     isVisualMediaMessage &&
     (!msg.content || msg.content.trim().length === 0) &&
-    !msg.reply_to_id;
+    !msg.reply_to_id &&
+    !msg.forwarded_from;
   const isTextOnly = hasText && !hasMedia;
   const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
+  const forwardedSource = msg.forwarded_from;
+  const forwardedSourceName =
+    forwardedSource?.source_display_name || forwardedSource?.source_username || "Unknown source";
   const shouldRenderTail =
     !isGroupedWithNext && (isTextOnly || isDocumentAttachment || isVisualMediaMessage || isVoiceMessage || isSingleAudioMessage);
   const resolvedVisualAttachments = React.useMemo<ResolvedVisualAttachment[]>(() => (
@@ -574,6 +580,82 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     const isLeftFacing = !isOwn || alignmentMode === "left-column";
 
     return <MessageTail side={isLeftFacing ? "left" : "right"} testId={testId} />;
+  };
+
+  const renderForwardedHeader = () => {
+    if (!forwardedSource) return null;
+
+    const attributionColor = isOwn
+      ? "var(--bubble-outgoing-meta)"
+      : "var(--bubble-incoming-meta)";
+
+    return (
+      <div
+        className="box-border flex h-[20px] w-full min-w-0 items-center overflow-hidden bg-transparent p-0"
+        data-testid="message-forwarded-header"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          width: "100%",
+          height: "20px",
+          minWidth: "0",
+          paddingRight: "4px",
+          boxShadow: "none",
+          color: attributionColor,
+        }}
+      >
+        <ForwardIcon
+          aria-hidden="true"
+          className="mr-[3px] h-[12px] w-[12px] shrink-0 p-0"
+          data-testid="message-forwarded-icon"
+          style={{ width: "12px", height: "12px", flexShrink: 0, marginRight: "3px" }}
+        />
+        <span
+          className="mr-1 h-[20px] shrink-0 whitespace-nowrap text-[14px] font-normal leading-[20px]"
+          data-testid="message-forwarded-label"
+          style={{
+            height: "20px",
+            marginRight: "4px",
+            fontSize: "14px",
+            fontWeight: 400,
+            lineHeight: "20px",
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Forwarded from
+        </span>
+        <span
+          className="flex min-w-0 items-center overflow-hidden whitespace-nowrap"
+          data-testid="message-forwarded-source"
+          style={{ display: "flex", alignItems: "center", minWidth: "0", height: "20px", overflow: "hidden" }}
+        >
+          {forwardedSource.source_avatar_url && (
+            <Avatar
+              name={forwardedSourceName}
+              src={forwardedSource.source_avatar_url}
+              size="small"
+              className="mr-1 h-4 w-4"
+            />
+          )}
+          <span
+            className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[20px]"
+            data-testid="message-forwarded-source-name"
+            style={{
+              minWidth: "0",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontSize: "14px",
+              fontWeight: 500,
+              lineHeight: "20px",
+            }}
+          >
+            {forwardedSourceName}
+          </span>
+        </span>
+      </div>
+    );
   };
 
   const handleVisualAttachmentOpen = React.useCallback(async (currentAttachment: VisualAttachment) => {
@@ -1018,6 +1100,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             : {}),
         } as React.CSSProperties}
       >
+        {renderForwardedHeader()}
         {showSenderName && (
           <div className="mb-1.5 text-[11px] font-semibold tracking-[0.01em] text-primary">
             {authorName}

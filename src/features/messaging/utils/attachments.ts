@@ -68,6 +68,7 @@ export const MESSAGE_FILE_ATTACHMENT_ACCEPT = [
 ].join(",");
 
 type AttachmentLike = {
+  content?: string | null;
   attachment?: Attachment | null;
   attachments?: Attachment[] | null;
   media_file_id?: string | null;
@@ -378,7 +379,7 @@ export function getMessageAttachment(source: AttachmentLike): Attachment | null 
 }
 
 export function isMessageForwardable(message: AttachmentLike): boolean {
-  return getMessageAttachments(message).length === 0;
+  return getMessageAttachments(message).length > 0 || Boolean(message.content?.trim());
 }
 
 export function getAttachmentKindLabel(kind: AttachmentKind): string {

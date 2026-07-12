@@ -42,6 +42,13 @@ export interface MessageReactionGroup {
   user_ids: number[];
 }
 
+export interface ForwardedAttribution {
+  source_public_id?: string | null;
+  source_display_name?: string | null;
+  source_username?: string | null;
+  source_avatar_url?: string | null;
+}
+
 export interface Message {
   id:                      number;
   content:                 string | null;
@@ -52,6 +59,7 @@ export interface Message {
   room_id:                 number | null;
   room_public_id?:         string | null;
   reply_to_id?:            number | null;
+  forwarded_from?:        ForwardedAttribution | null;
   status:                  MessageStatus;
   inserted_at:             string;
   edited_at?:              string | null;
