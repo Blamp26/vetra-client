@@ -153,6 +153,28 @@ describe("MessageInput attachments", () => {
     }, undefined));
   });
 
+  it("normalizes a scheme-less URL before sending the text-link entity", async () => {
+    const onSend = vi.fn(async () => undefined);
+    render(<MessageInput onSend={onSend} />);
+    const textarea = screen.getByTestId("message-input-textarea") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "example.com" } });
+    textarea.setSelectionRange(0, textarea.value.length);
+    fireEvent.keyDown(textarea, { key: "k", ctrlKey: true });
+
+    const urlInput = screen.getByTestId("create-link-url-input");
+    fireEvent.change(urlInput, { target: { value: "example.com" } });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    fireEvent.keyDown(urlInput, { key: "Enter" });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith({
+      content: "example.com",
+      entities: [{ type: "text_link", offset: 0, length: 11, url: "https://example.com/" }],
+      mediaFileId: null,
+    }, undefined));
+  });
+
   it("opens the fixed formatting menus from a selected right-click", () => {
     render(<MessageInput onSend={vi.fn()} />);
     const textarea = screen.getByTestId("message-input-textarea") as HTMLTextAreaElement;

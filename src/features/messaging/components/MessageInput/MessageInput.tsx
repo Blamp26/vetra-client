@@ -5,7 +5,7 @@ import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { withFallbackRef } from "@/shared/utils/refs";
-import { isSafeExternalUrl } from "@/shared/utils/externalLinks";
+import { isSafeExternalUrl, normalizeExternalUrl } from "@/shared/utils/externalLinks";
 import { entitiesIntersectingRange, normalizeTextLinkEntities, transformTextLinkEntities, trimTextAndEntities, type TextLinkEntity } from "@/shared/utils/textEntities";
 import {
   ALLOWED_ATTACHMENT_LABEL,
@@ -404,15 +404,16 @@ interface Props {
   const saveCreateLinkDialog = () => {
     if (!createLinkDialog) return;
     const value = createLinkUrl.trim();
-    if (value && !isSafeExternalUrl(value)) {
+    const normalizedUrl = value ? normalizeExternalUrl(value) : null;
+    if (value && (!normalizedUrl || !isSafeExternalUrl(normalizedUrl))) {
       setCreateLinkInvalid(true);
       return;
     }
     const { start, end } = createLinkDialog;
     const intersecting = entitiesIntersectingRange(entities, start, end);
     const remaining = entities.filter((entity) => !intersecting.some((item) => item === entity));
-    const next = value
-      ? [...remaining, { type: "text_link" as const, offset: start, length: end - start, url: value }]
+    const next = normalizedUrl
+      ? [...remaining, { type: "text_link" as const, offset: start, length: end - start, url: normalizedUrl }]
       : remaining;
     setEntities(normalizeTextLinkEntities(next, content));
     setCreateLinkDialog(null);

@@ -33,7 +33,7 @@ export function CreateLinkDialog({ selectedText, url, invalid, allowEmpty, onUrl
           }}
           data-testid="create-link-url-input"
         />
-        <div className={`vt-create-link-url-underline${invalid ? " is-invalid" : ""}`} />
+        <div className={`vt-create-link-url-underline${invalid ? " is-invalid" : ""}`} data-testid="create-link-url-underline" />
         {invalid && <div className="vt-create-link-error" role="status">Enter a valid HTTP or HTTPS URL.</div>}
         <div className="vt-create-link-actions">
           <button type="button" onClick={onCancel}>Cancel</button>

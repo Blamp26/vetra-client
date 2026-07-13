@@ -336,6 +336,14 @@ body[data-vt-shell-resizing="true"] {
 .vt-create-link-divider { position: absolute; top: 102px; left: 22px; width: 276px; height: 1px; background: #313c49; }
 .vt-create-link-url-label { top: 124px; color: #6ab2f2; }
 .vt-create-link-url-input { position: absolute; top: 143px; left: 22px; box-sizing: border-box; width: 276px; height: 23px; padding: 0; border: 0; outline: 0; background: transparent; caret-color: #fff; color: #fff; font-size: 15px; line-height: 22px; font-weight: 400; }
+.vt-create-link-url-input:focus,
+.vt-create-link-url-input:focus-visible,
+.vt-create-link-url-input:focus-within {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+}
 .vt-create-link-url-underline { position: absolute; top: 166px; left: 22px; width: 276px; height: 2px; background: #6396cb; }
 .vt-create-link-url-underline.is-invalid { background: var(--destructive, #e57373); }
 .vt-create-link-error { position: absolute; top: 169px; left: 22px; color: var(--destructive, #e57373); font-size: 10px; line-height: 12px; }
