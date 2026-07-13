@@ -12,6 +12,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fitEmojiToLargeCell,
   getLargeEmojiLayout,
+  getSingleLargeEmojiSize,
+  hasLargeEmojiRepresentation,
 } from "../../utils/largeEmojiGeometry";
 
 const { useAppStoreMock, getAttachmentLocalStateMock } = vi.hoisted(() => ({
@@ -251,8 +253,8 @@ describe("MessageItem bubble layout", () => {
     const emojiOnly = screen.getByTestId("message-emoji-only");
     expect(emojiOnly).toHaveClass("message-emoji-only--single");
     expect(emojiOnly.querySelector("img")).toHaveStyle({
-      width: "38px",
-      height: "38px",
+      width: "112px",
+      height: "112px",
     });
     expect(
       screen.queryByTestId("message-emoji-only-metadata"),
@@ -364,6 +366,13 @@ describe("MessageItem bubble layout", () => {
       width: 36,
       height: 36,
     });
+    expect(getSingleLargeEmojiSize("😀")).toBe(112);
+    expect(getSingleLargeEmojiSize("❤️")).toBe(112);
+    expect(getSingleLargeEmojiSize("👍🏽")).toBe(112);
+    expect(getSingleLargeEmojiSize("👨‍👩‍👧‍👦")).toBe(112);
+    expect(getSingleLargeEmojiSize("🇺🇦")).toBe(38);
+    expect(hasLargeEmojiRepresentation("😀")).toBe(true);
+    expect(hasLargeEmojiRepresentation("🇺🇦")).toBe(false);
   });
 
   it("renders forwarded attribution before the message content with the verified geometry", () => {

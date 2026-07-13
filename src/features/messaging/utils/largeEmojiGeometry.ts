@@ -1,6 +1,7 @@
 export const LARGE_EMOJI_SIZE = 36;
 export const LARGE_EMOJI_OUTLINE = 1;
 export const LARGE_EMOJI_SKIP = 4;
+export const LARGE_EMOJI_SINGLE_SIZE = 112;
 
 export type IntrinsicEmojiSize = {
   width: number;
@@ -13,6 +14,22 @@ export type LargeEmojiLayout = {
   contentHeight: number;
   gap: number;
 };
+
+/**
+ * Telegram uses its animated-emoji pack for an eligible single emoji and
+ * falls back to the compact sprite path when that representation is absent.
+ * Regional-indicator pairs are the browser asset equivalent of that fallback:
+ * they have a compact flag representation rather than a large emoji sticker.
+ */
+export function hasLargeEmojiRepresentation(emoji: string): boolean {
+  return !/^\p{Regional_Indicator}{2}$/u.test(emoji);
+}
+
+export function getSingleLargeEmojiSize(emoji: string): number {
+  return hasLargeEmojiRepresentation(emoji)
+    ? LARGE_EMOJI_SINGLE_SIZE
+    : LARGE_EMOJI_SIZE + 2 * LARGE_EMOJI_OUTLINE;
+}
 
 export function getLargeEmojiLayout(count: number): LargeEmojiLayout {
   const safeCount = Math.max(1, Math.floor(count));

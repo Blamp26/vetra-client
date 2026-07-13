@@ -39,7 +39,10 @@ import {
   getMediaAlbumPackingRatio,
 } from "../../utils/mediaAlbumLayout";
 import { getEmojiOnlyGraphemes } from "../../utils/emojiOnly";
-import { getLargeEmojiLayout } from "../../utils/largeEmojiGeometry";
+import {
+  getLargeEmojiLayout,
+  getSingleLargeEmojiSize,
+} from "../../utils/largeEmojiGeometry";
 
 interface MessageItemProps {
   msg: Message;
@@ -1527,7 +1530,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                 <Emoji
                   key={`${emoji}-${index}`}
                   emoji={emoji}
-                  size={emojiOnlyLayout?.cellSize ?? 38}
+                  size={
+                    emojiOnlyGraphemes?.length === 1
+                      ? getSingleLargeEmojiSize(emoji)
+                      : (emojiOnlyLayout?.cellSize ?? 38)
+                  }
                   className="message-emoji-only__emoji"
                 />
               ))}
