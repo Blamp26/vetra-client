@@ -191,7 +191,7 @@ export function MessageList({
   chatContext,
   onReply,
 }: Props) {
-  const bottomRef    = useRef<HTMLDivElement | null>();
+  const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement | null>();
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -981,7 +981,6 @@ export function MessageList({
         <div
           ref={(element) => {
             contentRef.current = element;
-            bottomRef.current = element;
           }}
           className={cn(
             "flex w-full max-w-[900px] flex-col",
@@ -1099,6 +1098,12 @@ export function MessageList({
             </div>
           ))}
         </div>
+        <div
+          ref={bottomRef}
+          aria-hidden="true"
+          className="h-0 w-full"
+          data-testid="message-list-bottom-anchor"
+        />
       </div>
 
       {showScrollBottom && (

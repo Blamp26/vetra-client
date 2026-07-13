@@ -191,6 +191,7 @@ vi.mock("../../utils/attachmentDownloads", () => ({
 import * as attachmentDownloads from "../../utils/attachmentDownloads";
 
 let mockViewportWidth = 900;
+let scrollTargets: Element[] = [];
 
 class ResizeObserverMock {
   private readonly callback: ResizeObserverCallback;
@@ -312,7 +313,11 @@ function renderMessageList(
 describe("MessageList bubble layout", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    scrollTargets = [];
     Element.prototype.scrollIntoView = vi.fn();
+    vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
+      scrollTargets.push(this);
+    });
     mockViewportWidth = 900;
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
@@ -1522,5 +1527,43 @@ describe("MessageList bubble layout", () => {
       screen.queryByTestId("message-list-bottom-spacer"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("message-list-rail")).toBeInTheDocument();
+  });
+
+  it("uses a zero-height bottom anchor after the separate message rail", () => {
+    renderMessageList([makeMessage({ content: "Last message" })]);
+
+    const rail = screen.getByTestId("message-list-rail");
+    const anchor = screen.getByTestId("message-list-bottom-anchor");
+
+    expect(rail).not.toBe(anchor);
+    expect(rail.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(anchor).toHaveClass("h-0");
+    expect(anchor).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("targets the dedicated bottom anchor for initial scrolling and Down", async () => {
+    renderMessageList([makeMessage({ content: "Last message" })], {
+      initialHistoryLoaded: true,
+      hasMore: true,
+    });
+
+    const anchor = screen.getByTestId("message-list-bottom-anchor");
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
+    expect(scrollTargets).toContain(anchor);
+    expect(scrollTargets).not.toContain(screen.getByTestId("message-list-rail"));
+
+    vi.mocked(Element.prototype.scrollIntoView).mockClear();
+    const container = screen.getByTestId("message-list-scroll");
+    Object.defineProperties(container, {
+      scrollHeight: { configurable: true, value: 1000 },
+      scrollTop: { configurable: true, value: 0, writable: true },
+      clientHeight: { configurable: true, value: 500 },
+    });
+    fireEvent.scroll(container);
+    fireEvent.click(screen.getByRole("button", { name: "Scroll to latest messages" }));
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(scrollTargets).toHaveLength(2);
+    expect(scrollTargets.every((target) => target === anchor || target === screen.getByTestId("message-list-bottom-anchor"))).toBe(true);
+    expect(scrollTargets.every((target) => target !== screen.getByTestId("message-list-rail"))).toBe(true);
   });
 });
