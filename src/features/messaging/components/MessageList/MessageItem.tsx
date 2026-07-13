@@ -1,11 +1,12 @@
 import React from "react";
 import type { Attachment, Message, MessageReactionGroup } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
-import { Emoji } from "@/shared/components/Emoji/Emoji";
 import { MessageText } from "@/shared/components/MessageText/MessageText";
 import { useAppStore } from "@/store";
 import { StatusIcon } from "./StatusIcon";
 import { MessageTail } from "./MessageTail";
+import { MessageReactions } from "./MessageReactions";
+import "./MessageReactions.css";
 import { DocumentAttachmentRow } from "./DocumentAttachmentRow";
 import { VoiceMessagePlayer } from "./VoiceMessagePlayer";
 import { AudioFilePlayer } from "./AudioFilePlayer";
@@ -191,7 +192,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   selectionMode,
   isRoom,
   messageReactions,
-  currentUserId,
   onContextMenu,
   onToggleSelection,
   onToggleReaction,
@@ -323,7 +323,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     if (!hasMedia) return;
 
     logAttachmentDebug("message.render", {
-      ...summarizeMessageMedia(msg as Record<string, unknown>),
+      ...summarizeMessageMedia(msg as unknown as Record<string, unknown>),
       renderAttachmentCount: attachments.length,
       treatedAsAlbum: isVisualAlbum,
       isPhotoAttachment: isVisualMediaMessage,
@@ -1031,32 +1031,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   };
 
   const renderReactions = () => {
-    if (!messageReactions || messageReactions.length === 0) return null;
-    return (
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {messageReactions.map((g) => {
-          const mine = g.user_ids.includes(currentUserId);
-          return (
-            <button
-              key={`${msg.id}:${g.emoji}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleReaction(msg.id, g.emoji);
-              }}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium",
-                mine
-                  ? "border-primary/40 bg-primary/12 text-foreground"
-                  : "border-border bg-background/70 text-foreground"
-              )}
-            >
-              <Emoji emoji={g.emoji} size={12} />
-              <span>{g.count}</span>
-            </button>
-          );
-        })}
-      </div>
-    );
+    return <MessageReactions messageId={msg.id} reactions={messageReactions ?? []} onToggle={(reaction) => onToggleReaction(msg.id, reaction)} />;
   };
 
   return (

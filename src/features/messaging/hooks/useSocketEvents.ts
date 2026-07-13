@@ -236,7 +236,19 @@ export function useSocketEvents() {
     unsubs.push(socketManager.onMessageEdited((p) => editMessage(p)));
     unsubs.push(socketManager.onMessageDeleted((p) => deleteMessage(p)));
     unsubs.push(socketManager.onStatusUpdate((ids, status) => updateMessagesStatus(ids, status)));
-    unsubs.push(socketManager.onDirectReactionUpdated((p) => setMessageReactions(p.message_id, p.reactions)));
+    unsubs.push(socketManager.onDirectReactionUpdated((p) => {
+      const partnerId = p.partner_id ?? (p.sender_id === currentUser.id ? null : p.sender_id);
+      const message = partnerId == null
+        ? undefined
+        : getState().conversations[partnerId]?.messages.find((item) => item.id === p.message_id);
+      const reactions = p.reactions.map((incoming: any) => {
+        if (incoming.chosen !== undefined) return incoming;
+        const key = incoming.reaction ?? incoming.emoji;
+        const local = message?.reactions?.find((item: any) => (item.reaction ?? item.emoji) === key);
+        return local ? { ...incoming, chosen: local.chosen } : { ...incoming, chosen: false };
+      });
+      setMessageReactions(p.message_id, reactions, p.updated_at);
+    }));
     unsubs.push(socketManager.onPresenceState((s) => applyPresenceState(s)));
     unsubs.push(socketManager.onPresenceDiff((d) => applyPresenceDiff(d)));
     unsubs.push(socketManager.onTypingStart((id) => setTyping(id)));

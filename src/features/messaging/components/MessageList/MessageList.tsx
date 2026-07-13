@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo, useLayoutEffect } from "react";
-import type { Message, User } from "@/shared/types";
+import type { Message, MessageReactionGroup, User } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { ForwardModal } from "../ForwardModal";
@@ -20,6 +20,24 @@ import {
   normalizeMessageAttachments,
 } from "../../utils/attachments";
 import { downloadAttachmentWithAuth } from "../../utils/attachmentDownloads";
+
+function optimisticReactions(current: MessageReactionGroup[], reaction: string) {
+  const normalized = current.map((item) => ({ ...item, reaction: item.reaction ?? item.emoji ?? "" }));
+  const index = normalized.findIndex((item) => item.reaction === reaction);
+  if (index < 0) {
+    return [...normalized, { reaction, count: 1, chosen: true }].sort(
+      (left, right) => right.count - left.count,
+    );
+  }
+  const item = normalized[index];
+  if (item.chosen) {
+    const next = item.count - 1;
+    return next > 0
+      ? normalized.map((entry, i) => i === index ? { ...entry, count: next, chosen: false } : entry)
+      : normalized.filter((_, i) => i !== index);
+  }
+  return normalized.map((entry, i) => i === index ? { ...entry, count: entry.count + 1, chosen: true } : entry);
+}
 
 import { MessageItem } from "./MessageItem";
 import { MessageContextMenu } from "./MessageContextMenu";
@@ -175,6 +193,8 @@ export function MessageList({
     appendRoomMessage,
     upsertPreview,
     upsertRoomPreview,
+    setMessageReactions,
+    toggleRoomReaction,
   } = useAppStore((s: RootState) => ({
     selectionMode: s.selectionMode,
     selectedMessageIds: s.selectedMessageIds,
@@ -195,6 +215,8 @@ export function MessageList({
     appendRoomMessage: s.appendRoomMessage,
     upsertPreview: s.upsertPreview,
     upsertRoomPreview: s.upsertRoomPreview,
+    setMessageReactions: s.setMessageReactions,
+    toggleRoomReaction: s.toggleRoomReaction,
   }), true);
 
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
@@ -213,6 +235,7 @@ export function MessageList({
   const olderScrollAnchorRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
   const forwardingOperationRef = useRef(0);
   const forwardedSenderNavigationRef = useRef<string | null>(null);
+  const pendingReactionRef = useRef(new Set<string>());
   const isMountedRef = useRef(true);
   const [forwardedSenderError, setForwardedSenderError] = useState<string | null>(null);
 
@@ -318,9 +341,25 @@ export function MessageList({
 
   const toggleReaction = useCallback(async (msgId: number, emoji: string) => {
     if (!socketManager) return;
+    const key = `${msgId}:${emoji}`;
+    if (pendingReactionRef.current.has(key)) return;
+    const message = messagesById.get(msgId);
+    if (!message) return;
+    const before = messageReactions[msgId] || message.reactions || [];
+    const optimistic = optimisticReactions(before, emoji);
+    pendingReactionRef.current.add(key);
+    const apply = (reactions: MessageReactionGroup[]) => {
+      if (chatContext.type === "room") {
+        toggleRoomReaction({ message_id: msgId, room_id: chatContext.roomId, reactions });
+      } else {
+        setMessageReactions(msgId, reactions);
+      }
+    };
+    apply(optimistic);
     try {
       if (chatContext.type === "room") {
-        await socketManager.toggleReaction(chatContext.roomId, msgId, emoji);
+        const payload = await socketManager.toggleReaction(chatContext.roomId, msgId, emoji);
+        toggleRoomReaction({ message_id: msgId, room_id: chatContext.roomId, reactions: payload.reactions, updated_at: payload.updated_at });
       } else {
         await socketManager.toggleDirectReaction(
           withFallbackRef(
@@ -332,14 +371,16 @@ export function MessageList({
           ),
           msgId,
           emoji,
-        );
+        ).then((payload) => setMessageReactions(msgId, payload.reactions, payload.updated_at));
       }
     } catch (err) {
       console.error("Toggle reaction failed:", err);
+      apply(before);
     } finally {
+      pendingReactionRef.current.delete(key);
       setContextMenu(null);
     }
-  }, [socketManager, chatContext, conversationPreviews]);
+  }, [socketManager, chatContext, conversationPreviews, messagesById, messageReactions, setMessageReactions, toggleRoomReaction]);
 
   const handleLoadMore = useCallback(() => {
     const element = containerRef.current;

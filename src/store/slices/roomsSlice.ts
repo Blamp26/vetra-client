@@ -8,6 +8,14 @@ import {
   DEFAULT_CONV
 } from '@/shared/types';
 
+function mergeReactions(existing: any[], incoming: any[]) {
+  return incoming.map((item) => {
+    const key = item.reaction ?? item.emoji;
+    const old = existing.find((candidate) => (candidate.reaction ?? candidate.emoji) === key);
+    return item.chosen === undefined && old ? { ...item, chosen: old.chosen } : item;
+  });
+}
+
 function patchConv(
   record: Record<number, ConversationState>,
   id:     number,
@@ -36,7 +44,15 @@ function patchConvIfChanged(
 function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
   const byId = new Map<number, Message>();
   existing.forEach((message) => byId.set(message.id, message));
-  incoming.forEach((message) => byId.set(message.id, message));
+  incoming.forEach((message) => {
+    const existing = byId.get(message.id);
+    byId.set(
+      message.id,
+      existing
+        ? { ...existing, ...message, reactions: message.reactions ?? existing.reactions }
+        : { ...message, reactions: message.reactions ?? [] },
+    );
+  });
 
   return Array.from(byId.values()).sort((a, b) => {
     const timeDifference = parseMessageTime(a.inserted_at) - parseMessageTime(b.inserted_at);
@@ -58,6 +74,7 @@ function patchSet(s: Set<number>, id: number, add: boolean): Set<number> {
 export interface RoomsSlice {
   roomPreviews: Record<number, RoomPreview>;
   roomConversations: Record<number, ConversationState>;
+  roomReactionVersions: Record<number, string>;
   typingRoomMemberIds: Set<number>;
   typingRoomMemberInfo: Record<number, { username: string; display_name: string | null }>;
 
@@ -85,6 +102,7 @@ export interface RoomsSlice {
 export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get) => ({
   roomPreviews: {},
   roomConversations: {},
+  roomReactionVersions: {},
   typingRoomMemberIds: new Set(),
   typingRoomMemberInfo: {},
 
@@ -278,18 +296,23 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
       };
     }),
 
-  toggleRoomReaction: ({ message_id, reactions, room_id }) =>
+  toggleRoomReaction: ({ message_id, reactions, room_id, updated_at }) =>
     set((state: any) => {
       if (!room_id) return state;
+      const previousVersion = (state.roomReactionVersions ?? {})[message_id];
+      if (updated_at && previousVersion && updated_at <= previousVersion) return state;
       const conv = state.roomConversations[room_id];
       if (!conv) return state;
       
       return {
         roomConversations: patchConv(state.roomConversations, room_id, {
           messages: conv.messages.map((m: Message) =>
-            m.id === message_id ? { ...m, reactions } : m
+            m.id === message_id ? { ...m, reactions: mergeReactions(m.reactions ?? [], reactions) } : m
           ),
         }),
+        roomReactionVersions: updated_at
+          ? { ...(state.roomReactionVersions ?? {}), [message_id]: updated_at }
+          : (state.roomReactionVersions ?? {}),
       };
     }),
 });

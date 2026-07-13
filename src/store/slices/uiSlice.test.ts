@@ -2,6 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 import { createUISlice } from "./uiSlice";
 
 describe("createUISlice", () => {
+  it("ignores stale reaction revisions while accepting duplicate-safe updates", () => {
+    let state: any = { messageReactions: {}, messageReactionVersions: {} };
+    const set = vi.fn((updater: any) => {
+      const next = typeof updater === "function" ? updater(state) : updater;
+      state = { ...state, ...next };
+    });
+    const slice = createUISlice(set as any, () => state, {} as any);
+
+    slice.setMessageReactions(9, [{ reaction: "👍", count: 2, chosen: true }], "2026-07-13T00:00:02Z");
+    slice.setMessageReactions(9, [{ reaction: "👍", count: 1, chosen: false }], "2026-07-13T00:00:01Z");
+    slice.setMessageReactions(9, [{ reaction: "👍", count: 2, chosen: true }], "2026-07-13T00:00:02Z");
+
+    expect(state.messageReactions[9]).toEqual([{ reaction: "👍", count: 2, chosen: true }]);
+  });
+
   it("setActiveChat is idempotent for the already active server", () => {
     let state = {
       activeChat: { type: "server" as const, serverId: 5, serverRef: "srv-5" },

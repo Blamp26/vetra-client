@@ -43,9 +43,12 @@ export interface Attachment {
 
 // Сгруппированная реакция для одного emoji на одном сообщении
 export interface MessageReactionGroup {
-  emoji:    string;
+  reaction: string;
   count:    number;
-  user_ids: number[];
+  chosen:   boolean;
+  /** @deprecated accepted while older cached payloads drain */
+  emoji?:   string;
+  user_ids?: number[];
 }
 
 export interface ForwardedAttribution {
@@ -120,6 +123,7 @@ export interface ReactionUpdatedPayload {
   sender_public_id?: string | null;
   room_id?:    number;
   room_public_id?: string | null;
+  updated_at?: string;
 }
 
 export interface RoomMessageSummary {

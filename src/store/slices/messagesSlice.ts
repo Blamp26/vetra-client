@@ -11,6 +11,14 @@ import {
   Server,
 } from "@/shared/types";
 
+function mergeReactions(existing: any[], incoming: any[]) {
+  return incoming.map((item) => {
+    const key = item.reaction ?? item.emoji;
+    const old = existing.find((candidate) => (candidate.reaction ?? candidate.emoji) === key);
+    return item.chosen === undefined && old ? { ...item, chosen: old.chosen } : item;
+  });
+}
+
 function sameSearchResults(
   a: { users: User[]; servers: Server[] },
   b: { users: User[]; servers: Server[] },
@@ -69,7 +77,15 @@ function patchConvIfChanged(
 function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
   const byId = new Map<number, Message>();
   existing.forEach((message) => byId.set(message.id, message));
-  incoming.forEach((message) => byId.set(message.id, message));
+  incoming.forEach((message) => {
+    const existing = byId.get(message.id);
+    byId.set(
+      message.id,
+      existing
+        ? { ...existing, ...message, reactions: message.reactions ?? existing.reactions }
+        : { ...message, reactions: message.reactions ?? [] },
+    );
+  });
 
   return Array.from(byId.values()).sort((a, b) => {
     const timeDifference = parseMessageTime(a.inserted_at) - parseMessageTime(b.inserted_at);
@@ -390,7 +406,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
       return {
         conversations: patchConv(state.conversations, targetPartnerId, {
           messages: conv.messages.map((m: Message) =>
-            m.id === message_id ? { ...m, reactions } : m,
+            m.id === message_id ? { ...m, reactions: mergeReactions(m.reactions ?? [], reactions) } : m,
           ),
         }),
       };
