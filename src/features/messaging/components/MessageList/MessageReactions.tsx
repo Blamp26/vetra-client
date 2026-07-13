@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { MessageReactionGroup } from "@/shared/types";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
 
@@ -5,9 +6,10 @@ interface Props {
   messageId: number;
   reactions: MessageReactionGroup[];
   onToggle: (reaction: string) => void;
+  metadata?: ReactNode;
 }
 
-export function MessageReactions({ messageId, reactions, onToggle }: Props) {
+export function MessageReactions({ messageId, reactions, onToggle, metadata }: Props) {
   if (reactions.length === 0) return null;
 
   return (
@@ -31,11 +33,14 @@ export function MessageReactions({ messageId, reactions, onToggle }: Props) {
               onToggle(reaction);
             }}
           >
-            <Emoji emoji={reaction} size={20} className="message-reactions__emoji" />
+            <span className="message-reactions__emoji-wrapper">
+              <Emoji emoji={reaction} size={20} className="message-reactions__emoji" />
+            </span>
             <span className="message-reactions__count">{item.count}</span>
           </button>
         );
       })}
+      {metadata}
     </div>
   );
 }

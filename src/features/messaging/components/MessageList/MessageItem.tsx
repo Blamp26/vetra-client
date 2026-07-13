@@ -519,10 +519,19 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     }
   };
 
-  const renderMetadata = (variant: "inline" | "overlay" = "inline") => (
+  const hasReactions = messageReactions.length > 0;
+
+  const renderMetadata = (
+    variant: "inline" | "overlay" = "inline",
+    inReactions = false,
+  ) => {
+    if (hasReactions && !inReactions) return null;
+
+    return (
     <span
       className={cn(
         "inline-flex max-w-full items-center whitespace-nowrap",
+        inReactions && "message-reactions__metadata",
         variant === "overlay"
           ? overlayMetadataClassName
           : cn("gap-0 text-[12px] leading-[16.2px]", metadataClassName),
@@ -573,15 +582,18 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           )
       )}
     </span>
-  );
+    );
+  };
 
   const renderInlineMetadata = () => (
+    hasReactions ? null : (
     <span
       className="pointer-events-none relative box-border top-[6px] float-right ml-[7px] mr-[-6px] inline-flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0"
       data-testid="message-text-inline-metadata"
     >
       {renderMetadata()}
     </span>
+    )
   );
 
   const renderBubbleTail = (testId: string) => {
@@ -831,7 +843,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                     <MessageText text={msg.content || ""} entities={msg.entities} />
                   </div>
                 )}
-                {isLast && (
+                {isLast && !hasReactions && (
                   <span
                     className="relative box-border float-right top-[8px] mt-[-20px] mr-[-6px] mb-0 ml-[7px] flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0"
                     data-testid="message-document-inline-metadata"
@@ -863,7 +875,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {isSingleDocumentAttachment && !hasText && (
+        {isSingleDocumentAttachment && !hasText && !hasReactions && (
           <span
             className="relative box-border float-right top-[8px] mt-[-20px] mr-[-6px] mb-0 ml-[7px] flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0"
             data-testid="message-document-inline-metadata"
@@ -872,7 +884,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </span>
         )}
 
-        {(!isSingleDocumentAttachment || hasText) && <div className="mt-1 flex justify-end">{renderMetadata()}</div>}
+        {(!isSingleDocumentAttachment || hasText) && !hasReactions && <div className="mt-1 flex justify-end">{renderMetadata()}</div>}
 
         {attachmentActionError && (
           <div className="mt-1.5 text-[10px] text-destructive">
@@ -899,12 +911,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             <MessageText text={msg.content || ""} entities={msg.entities} />
           </div>
         )}
-        <span
+        {!hasReactions && <span
           className="absolute right-0 bottom-0 flex h-[20px] items-center whitespace-nowrap bg-transparent px-[4px]"
           data-testid="message-voice-inline-metadata"
         >
           {renderMetadata()}
-        </span>
+        </span>}
       </div>
     );
   };
@@ -915,7 +927,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
     return (
       <div className="relative w-full" data-testid="message-audio-attachment">
-        <AudioFilePlayer attachment={audioAttachment} isOwn={isOwn} messageMeta={renderMetadata()} />
+        <AudioFilePlayer attachment={audioAttachment} isOwn={isOwn} messageMeta={hasReactions ? undefined : renderMetadata()} />
         {hasText && (
           <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
             <MessageText text={msg.content || ""} entities={msg.entities} />
@@ -970,7 +982,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             <AudioFilePlayer
               attachment={currentAttachment}
               isOwn={isOwn}
-              messageMeta={isLast ? renderMetadata() : undefined}
+              messageMeta={isLast && !hasReactions ? renderMetadata() : undefined}
             />
             {isLast && hasText && (
               <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current" data-testid="message-audio-group-caption">
@@ -1031,7 +1043,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   };
 
   const renderReactions = () => {
-    return <MessageReactions messageId={msg.id} reactions={messageReactions ?? []} onToggle={(reaction) => onToggleReaction(msg.id, reaction)} />;
+    return (
+      <MessageReactions
+        messageId={msg.id}
+        reactions={messageReactions ?? []}
+        onToggle={(reaction) => onToggleReaction(msg.id, reaction)}
+        metadata={renderMetadata("inline", true)}
+      />
+    );
   };
 
   return (
@@ -1171,7 +1190,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         {isVoiceMessage && renderBubbleTail("message-voice-tail")}
         {isSingleAudioMessage && renderBubbleTail("message-audio-tail")}
 
-        {shouldRenderMediaOnlyMetadata && (
+        {shouldRenderMediaOnlyMetadata && !hasReactions && (
           <div
             className="pointer-events-none absolute bottom-[4px] right-[4px]"
             data-testid="message-media-only-overlay"
@@ -1184,7 +1203,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
         {isVisualMediaMessage && renderBubbleTail("message-media-tail")}
 
-        {!isTextOnly && !isMediaOnly && !isVisualMediaMessage && !isDocumentAttachment && !isSingleAudioMessage && !isAudioGroup && !isVoiceMessage && (
+        {!hasReactions && !isTextOnly && !isMediaOnly && !isVisualMediaMessage && !isDocumentAttachment && !isSingleAudioMessage && !isAudioGroup && !isVoiceMessage && (
           <div className="mt-1.5 flex justify-end">
             {renderMetadata()}
           </div>

@@ -33,4 +33,28 @@ describe("MessageReactions", () => {
     fireEvent.click(buttons[1]);
     expect(onToggle).toHaveBeenCalledWith("❤️");
   });
+
+  it("matches the captured reaction geometry and keeps metadata as the final child", () => {
+    render(
+      <MessageReactions
+        messageId={8}
+        reactions={[{ reaction: "👍", count: 1, chosen: false }]}
+        onToggle={vi.fn()}
+        metadata={<span data-testid="reaction-metadata">meta</span>}
+      />,
+    );
+
+    const group = screen.getByTestId("message-reactions");
+    const button = screen.getByRole("button");
+    const wrapper = group.querySelector(".message-reactions__emoji-wrapper") as HTMLElement;
+    const count = group.querySelector(".message-reactions__count") as HTMLElement;
+    const metadata = screen.getByTestId("reaction-metadata");
+
+    expect(group).toHaveClass("message-reactions");
+    expect(button).toHaveClass("message-reactions__pill");
+    expect(button).not.toHaveClass("is-chosen");
+    expect(wrapper).toHaveClass("message-reactions__emoji-wrapper");
+    expect(count).toHaveClass("message-reactions__count");
+    expect(group.lastElementChild).toBe(metadata);
+  });
 });
