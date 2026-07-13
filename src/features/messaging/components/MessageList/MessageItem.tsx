@@ -287,6 +287,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     !hasCompleteAlbumLayout(photoLayout, resolvedVisualAttachments.length);
   const isOwnLeftColumn = isOwn && alignmentMode === "left-column";
   const showSenderName = isRoom && !isOwn && !isConsecutive;
+  const hasContentAboveMedia = Boolean(forwardedSource) || Boolean(msg.reply_to_id) || showSenderName;
   const metadataClassName = isOwn
     ? "text-white/[0.533]"
     : "text-[color:var(--bubble-incoming-meta)]";
@@ -687,7 +688,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       layout={photoLayout}
       albumMaxWidth={MESSAGE_ALBUM_MAX_WIDTH}
       hasCaption={hasText}
-      hasHeaderAbove={Boolean(forwardedSource)}
+      hasContentAboveMedia={hasContentAboveMedia}
       isTemporaryLayout={isTemporaryVisualLayout}
       isDebugEnabled={isMediaDebugEnabled}
       runtimeMetricsByAttachmentId={visualRuntimeMetrics}
@@ -699,8 +700,15 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         isVisualAlbum
           ? undefined
           : hasText
-            ? cn(textGroupRadiusClassName, "rounded-bl-[0px] rounded-br-[0px]")
-            : textGroupRadiusClassName
+            ? cn(
+                textGroupRadiusClassName,
+                hasContentAboveMedia && "rounded-tl-[0px] rounded-tr-[0px]",
+                "rounded-bl-[0px] rounded-br-[0px]",
+              )
+            : cn(
+                textGroupRadiusClassName,
+                hasContentAboveMedia && "rounded-tl-[0px] rounded-tr-[0px]",
+              )
       }
       albumShellCornerClassName={
         isVisualAlbum

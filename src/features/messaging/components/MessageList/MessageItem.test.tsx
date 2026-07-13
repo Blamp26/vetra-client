@@ -324,8 +324,58 @@ describe("MessageItem bubble layout", () => {
 
     expect(screen.getByTestId("message-forwarded-header")).toBeInTheDocument();
     expect(screen.getByTestId("message-media-only-overlay")).toContainElement(screen.getByTestId("message-metadata"));
+    expect(screen.getByTestId("message-media-shell")).toHaveClass("rounded-tl-[0px]", "rounded-tr-[0px]");
     expect(screen.getByText("12:00")).toBeInTheDocument();
     expect(screen.getByLabelText("Delivered")).toBeInTheDocument();
+  });
+
+  it("squares the top of a forwarded captioned single photo while preserving caption spacing", () => {
+    renderMessageItem({
+      content: "Photo caption",
+      forwarded_from: { source_display_name: "Original Alice" },
+      attachments: [{
+        id: "forwarded-caption-photo",
+        url: "/api/v1/media/forwarded-caption-photo",
+        mime_type: "image/jpeg",
+        original_name: "photo.jpg",
+        file_size: 1024,
+        kind: "photo" as const,
+        width: 640,
+        height: 480,
+      }],
+    });
+
+    const mediaFrame = screen.getByTestId("message-media-shell").parentElement;
+    expect(mediaFrame).toHaveClass(
+      "mt-[-5px]",
+      "mb-[6px]",
+      "rounded-tl-[0px]",
+      "rounded-tr-[0px]",
+      "rounded-bl-[0px]",
+      "rounded-br-[0px]",
+    );
+    expect(screen.getByTestId("message-text-content")).toHaveTextContent("Photo caption");
+  });
+
+  it("squares the top of a forwarded single video", () => {
+    renderMessageItem({
+      forwarded_from: { source_display_name: "Original Alice" },
+      attachments: [{
+        id: "forwarded-video",
+        url: "/api/v1/media/forwarded-video",
+        mime_type: "video/mp4",
+        original_name: "clip.mp4",
+        file_size: 2048,
+        kind: "video" as const,
+        width: 1280,
+        height: 720,
+      }],
+    });
+
+    expect(screen.getByTestId("message-video-tile-forwarded-video").parentElement).toHaveClass(
+      "rounded-tl-[0px]",
+      "rounded-tr-[0px]",
+    );
   });
 
   it("renders hydrated voice attachments in the voice player, not as documents", async () => {

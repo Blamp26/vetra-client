@@ -27,7 +27,7 @@ interface VisualAttachmentGroupProps {
   layout: MediaAlbumLayout;
   albumMaxWidth: number;
   hasCaption: boolean;
-  hasHeaderAbove: boolean;
+  hasContentAboveMedia: boolean;
   isTemporaryLayout: boolean;
   isDebugEnabled: boolean;
   runtimeMetricsByAttachmentId: Record<string, VisualRuntimeMetrics>;
@@ -53,7 +53,7 @@ export function VisualAttachmentGroup({
   layout,
   albumMaxWidth,
   hasCaption,
-  hasHeaderAbove,
+  hasContentAboveMedia,
   isTemporaryLayout,
   isDebugEnabled,
   runtimeMetricsByAttachmentId,
@@ -65,18 +65,25 @@ export function VisualAttachmentGroup({
   albumShellCornerClassName,
 }: VisualAttachmentGroupProps) {
   const isAlbum = attachments.length > 1;
-  const isSurroundedAlbum = isAlbum && hasHeaderAbove && hasCaption;
+  const isSurroundedAlbum = isAlbum && hasContentAboveMedia && hasCaption;
   const mediaFrameClassName = hasCaption
     ? cn(
         "mb-[6px] ml-[-8px] mr-[-8px] overflow-hidden",
         isSurroundedAlbum
           ? "mt-[4px] rounded-none"
-          : "mt-[-5px] rounded-t-[15px] rounded-b-none",
+          : hasContentAboveMedia
+            ? "mt-[-5px] rounded-t-none rounded-b-none"
+            : "mt-[-5px] rounded-t-[15px] rounded-b-none",
       )
     : "";
   const albumShellClassName = cn(
     "relative max-w-full overflow-hidden border-0 p-0 shadow-none",
-    isSurroundedAlbum ? "rounded-none" : albumShellCornerClassName,
+    isSurroundedAlbum
+      ? "rounded-none"
+      : cn(
+          albumShellCornerClassName,
+          hasContentAboveMedia && "rounded-tl-[0px] rounded-tr-[0px]",
+        ),
   );
 
   if (attachments.length > 1) {
