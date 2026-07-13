@@ -132,6 +132,7 @@ export function MessageList({
 }: Props) {
   const bottomRef    = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const {
@@ -187,6 +188,8 @@ export function MessageList({
   const pendingReplyTargetId = useRef<number | null>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialScrollDoneRef = useRef(false);
+  const initialLayoutTrackingRef = useRef(false);
+  const lastInitialScrollHeightRef = useRef<number | null>(null);
   const olderScrollAnchorRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
   const forwardingOperationRef = useRef(0);
 
@@ -213,9 +216,16 @@ export function MessageList({
 
     const observer = new ResizeObserver(() => {
       readWidth();
+      if (!initialLayoutTrackingRef.current) return;
+
+      const nextScrollHeight = container.scrollHeight;
+      if (nextScrollHeight === lastInitialScrollHeightRef.current) return;
+      bottomRef.current?.scrollIntoView();
+      lastInitialScrollHeightRef.current = nextScrollHeight;
     });
 
     observer.observe(container);
+    if (contentRef.current) observer.observe(contentRef.current);
 
     return () => observer.disconnect();
   }, []);
@@ -223,7 +233,11 @@ export function MessageList({
   const handleScroll = () => {
     const el = containerRef.current;
     if (!el) return;
-    setShowScrollBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBottom(distanceFromBottom > 200);
+    if (initialLayoutTrackingRef.current && distanceFromBottom > 120) {
+      initialLayoutTrackingRef.current = false;
+    }
   };
 
   const scrollToBottom = () => {
@@ -291,15 +305,21 @@ export function MessageList({
     olderScrollAnchorRef.current = null;
   }, [messages, isLoading]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (olderScrollAnchorRef.current) return;
 
     if (!initialScrollDoneRef.current) {
-      if (initialHistoryLoaded) {
+      if (!initialHistoryLoaded || isLoading) return;
+
+      const frame = requestAnimationFrame(() => {
+        const element = containerRef.current;
+        if (!element || initialScrollDoneRef.current) return;
         bottomRef.current?.scrollIntoView();
         initialScrollDoneRef.current = true;
-      }
-      return;
+        initialLayoutTrackingRef.current = true;
+        lastInitialScrollHeightRef.current = element.scrollHeight;
+      });
+      return () => cancelAnimationFrame(frame);
     }
 
     const element = containerRef.current;
@@ -713,6 +733,7 @@ export function MessageList({
         data-testid="message-list-scroll"
       >
         <div
+          ref={contentRef}
           className={cn(
             "flex w-full max-w-[900px] flex-col",
             alignmentMode === "left-column" ? "mr-auto" : "mx-auto",

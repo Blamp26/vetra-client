@@ -337,6 +337,28 @@ describe("MessageList bubble layout", () => {
     expect(screen.getByText("Second day")).toBeInTheDocument();
   });
 
+  it("waits for latest history completion before performing the initial bottom scroll", async () => {
+    const seededMessage = makeMessage({ id: 99, content: "Forwarded photo" });
+    const view = renderMessageList([seededMessage], { initialHistoryLoaded: false });
+
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+
+    view.rerender(
+      <MessageList
+        messages={[seededMessage, makeMessage({ id: 100, content: "Newest history message" })]}
+        currentUserId={1}
+        isLoading={false}
+        initialHistoryLoaded
+        hasMore
+        onLoadMore={vi.fn()}
+        chatContext={{ type: "direct", partnerId: 2 }}
+        onReply={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1));
+  });
+
   it("applies a successful direct forwarding acknowledgement through the live store path", async () => {
     const returnedMessage = makeMessage({
       id: 99,

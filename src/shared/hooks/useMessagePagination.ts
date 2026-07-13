@@ -107,7 +107,6 @@ export function useMessagePagination(
         loadedRef.current.add(loadKey);
         currentActions.setMessages(msgs);
         currentActions.setHasMore(msgs.length === PAGE_SIZE);
-        setInitialHistoryLoaded(true);
       })
       .catch((error: unknown) => {
         if (isAbortError(error)) return;
@@ -119,6 +118,7 @@ export function useMessagePagination(
         if (activeKeyRef.current !== loadKey || initialRequestRef.current !== request) return;
         initialRequestRef.current = null;
         currentActions.setLoading(false);
+        setInitialHistoryLoaded(true);
       });
 
     return () => {
