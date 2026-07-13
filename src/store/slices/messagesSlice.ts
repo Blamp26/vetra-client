@@ -90,6 +90,7 @@ export interface MessagesSlice {
   editingMessage: {
     id: number;
     content: string;
+    entities: Message["entities"];
     chatType: "direct" | "room";
     targetId: number;
   } | null;
@@ -153,6 +154,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
       editingMessage: {
         id: message.id,
         content: message.content ?? "",
+        entities: message.entities ?? [],
         chatType,
         targetId,
       },
@@ -239,7 +241,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
       return { conversations };
     }),
 
-  editMessage: ({ id, content, edited_at, recipient_id, sender_id }) =>
+  editMessage: ({ id, content, entities, edited_at, recipient_id, sender_id }) =>
     set((state: any) => {
       const currentId = state.currentUser?.id;
       const partnerId =
@@ -257,7 +259,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
         conversations: patchConv(state.conversations, partnerId, {
           messages: conv.messages.map((m: Message) =>
             m.id === id
-              ? { ...m, content, edited_at: edited_at ?? m.edited_at }
+              ? { ...m, content, entities: entities ?? [], edited_at: edited_at ?? m.edited_at }
               : m,
           ),
         }),

@@ -10,6 +10,7 @@ import type {
   ReactionUpdatedPayload,
   RoomMessageSummary,
   ResourceRef,
+  MessageTextLinkEntity,
 } from "@/shared/types";
 import { callSignalingService } from "@/features/calling/services/callSignalingService";
 import {
@@ -102,6 +103,7 @@ export type ChannelCreatedHandler = (payload: {
 
 export type OutgoingMessagePayload = {
   content?: string | null;
+  entities?: MessageTextLinkEntity[];
   mediaFileId?: string | null;
   mediaFileIds?: string[] | null;
   replyToId?: number | null;
@@ -125,6 +127,7 @@ export function buildSocketMessagePayload(
   return {
     ...extra,
     content: payload.content ?? null,
+    ...(payload.entities && payload.entities.length > 0 ? { entities: payload.entities } : {}),
     mediaFileId: primaryMediaFileId,
     mediaFileIds: groupedMediaFileIds,
     media_file_id: primaryMediaFileId,
@@ -175,6 +178,7 @@ export interface SocketManager {
     recipientRef: ResourceRef,
     messageId: number,
     content: string,
+    entities?: MessageTextLinkEntity[],
   ) => Promise<MessageEditedPayload>;
   deleteMessage: (
     recipientRef: ResourceRef,
@@ -211,6 +215,7 @@ export interface SocketManager {
     roomId: number,
     messageId: number,
     content: string,
+    entities?: MessageTextLinkEntity[],
   ) => Promise<MessageEditedPayload>;
   deleteRoomMessage: (
     roomId: number,
@@ -539,12 +544,13 @@ export async function connectSocket(
     sendTypingStop: (recipientRef) =>
       userChannel.push("typing_stop", { recipient_id: recipientRef }),
 
-    editMessage(recipientRef, messageId, content) {
+    editMessage(recipientRef, messageId, content, entities = []) {
       return new Promise((resolve, reject) => {
         userChannel
           .push("edit_message", {
             message_id: messageId,
             content,
+            entities,
             recipient_id: recipientRef,
           })
           .receive("ok", (p: MessageEditedPayload) => resolve(p))
@@ -689,14 +695,14 @@ export async function connectSocket(
     onRoomReactionUpdated: (roomId, h) =>
       ensureRoomBus(roomId).reactionUpdated.subscribe(h),
 
-    editRoomMessage(roomId, messageId, content) {
+    editRoomMessage(roomId, messageId, content, entities = []) {
       return new Promise((resolve, reject) => {
         const ch = roomChannels.get(roomId);
         if (!ch) {
           reject(new Error(`Not joined room ${roomId}`));
           return;
         }
-        ch.push("edit_message", { message_id: messageId, content })
+        ch.push("edit_message", { message_id: messageId, content, entities })
           .receive("ok", (p: MessageEditedPayload) => resolve(p))
           .receive("error", (r) =>
             reject(new Error(r?.reason ?? "Edit failed")),

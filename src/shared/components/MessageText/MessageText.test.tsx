@@ -39,6 +39,15 @@ describe("MessageText", () => {
     expect(screen.queryAllByRole("link")).toHaveLength(0);
   });
 
+  it("renders explicit links before automatic URL detection and keeps visible text unchanged", () => {
+    render(<MessageText text="Открыть сайт https://example.com" entities={[{ type: "text_link", offset: 0, length: 12, url: "https://example.org/" }]} />);
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual(["Открыть сайт", "https://example.com"]);
+    expect(links[0]).toHaveAttribute("href", "https://example.org/");
+    expect(links[0]).toHaveStyle({ wordBreak: "normal" });
+    expect(screen.getByTestId("message-rich-text").textContent).toBe("Открыть сайт https://example.com");
+  });
+
   it("opens HTTP and HTTPS links without bubbling into the message container", () => {
     const containerClick = vi.fn();
     render(<div onClick={containerClick}><MessageText text="http://example.com https://example.com" /></div>);

@@ -501,6 +501,7 @@ export function buildPreviewMessage(
   const preview = {
     id: message.id,
     content: message.content,
+    entities: message.entities ?? [],
     preview: getPreviewText(message, "Attachment"),
     inserted_at: message.inserted_at,
     sender_id: message.sender_id,

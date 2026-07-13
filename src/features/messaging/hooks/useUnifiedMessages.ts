@@ -296,6 +296,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
         content?: string | null;
         mediaFileId?: string | null;
         mediaFileIds?: string[] | null;
+        entities?: import("@/shared/types").MessageTextLinkEntity[];
         __attachmentDebug?: {
           batchId: string;
           sendUnitId?: string | null;
@@ -327,6 +328,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
       if (contextType === "room" && roomId !== null) {
         const message = await socketManager.sendRoomMessageViaChannel(roomId, {
           content,
+          entities: payload.entities ?? [],
           mediaFileId: primaryMediaFileId,
           mediaFileIds,
           replyToId: replyToId ?? null,
@@ -383,6 +385,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
           directTargetRef ?? directPartnerId!,
           {
             content,
+            entities: payload.entities ?? [],
             mediaFileId: primaryMediaFileId,
             mediaFileIds,
             replyToId: replyToId ?? null,

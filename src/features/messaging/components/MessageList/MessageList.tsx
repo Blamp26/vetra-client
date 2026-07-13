@@ -550,6 +550,7 @@ export function MessageList({
         }
         const payload = {
           content: msg.content,
+          entities: msg.entities ?? [],
           mediaFileId: msg.media_file_id,
           mediaFileIds: msg.media_file_ids,
           forwardedFromMessageId: msg.id,

@@ -146,7 +146,7 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
       };
     }),
 
-  editRoomMessage: ({ id, content, edited_at, room_id }) =>
+  editRoomMessage: ({ id, content, entities, edited_at, room_id }) =>
     set((state: any) => {
       if (room_id == null) return state;
       const conv = state.roomConversations[room_id];
@@ -154,7 +154,7 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
       return {
         roomConversations: patchConv(state.roomConversations, room_id, {
           messages: conv.messages.map((m: Message) =>
-            m.id === id ? { ...m, content, edited_at: edited_at ?? m.edited_at } : m
+            m.id === id ? { ...m, content, entities: entities ?? [], edited_at: edited_at ?? m.edited_at } : m
           ),
         }),
       };

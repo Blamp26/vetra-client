@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
-import { FileText, ImagePlus, Mic, Paperclip, SendHorizonal, Square, X } from "lucide-react";
+import { Check, FileText, ImagePlus, Mic, Paperclip, SendHorizonal, Square, X } from "lucide-react";
 import { useAppStore, type RootState } from "@/store"; 
 import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { withFallbackRef } from "@/shared/utils/refs";
+import { isSafeExternalUrl } from "@/shared/utils/externalLinks";
+import { entitiesIntersectingRange, normalizeTextLinkEntities, transformTextLinkEntities, trimTextAndEntities, type TextLinkEntity } from "@/shared/utils/textEntities";
 import {
   ALLOWED_ATTACHMENT_LABEL,
   classifyPendingAttachment,
@@ -111,6 +113,51 @@ function AttachmentSourceMenu({
   );
 }
 
+function LinkEditor({
+  url,
+  invalid,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  url: string;
+  invalid: boolean;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      className="absolute bottom-full left-1/2 z-50 flex h-12 w-[422px] max-w-[calc(100vw-12px)] -translate-x-1/2 items-center rounded-[15px] bg-[#212121] px-[6px] py-2 shadow-[rgba(16,16,16,0.61)_0_1px_2px]"
+      data-testid="message-link-editor"
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <button type="button" className="mx-0.5 flex h-8 w-8 items-center justify-center rounded-[6px] p-1 text-[#aaa] hover:bg-white/10" aria-label="Cancel" onClick={onCancel}>
+        <X className="h-4 w-4" />
+      </button>
+      <span className="mx-1 h-7 w-px bg-[#303030]" />
+      <input
+        autoFocus
+        value={url}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") { event.preventDefault(); onSave(); }
+          if (event.key === "Escape") { event.preventDefault(); onCancel(); }
+        }}
+        className="h-[26px] w-[320px] border-0 bg-[#212121] px-0.5 py-px text-base font-normal leading-6 text-white outline-none"
+        placeholder="Enter URL..."
+        aria-label="URL"
+        data-testid="message-link-url"
+      />
+      <span className="mx-1 h-7 w-px bg-[#303030]" />
+      <button type="button" className="mx-0.5 flex h-8 w-8 items-center justify-center rounded-[6px] p-1 text-[#8774e1] hover:bg-white/10" aria-label="Save" onClick={onSave}>
+        <Check className="h-4 w-4" />
+      </button>
+      {invalid && <span className="sr-only">Invalid URL</span>}
+    </div>
+  );
+}
+
 interface ReplyTarget { id: number; content: string; author: string; }
 
 interface Props {
@@ -119,6 +166,7 @@ interface Props {
       content?: string | null;
       mediaFileId?: string | null;
       mediaFileIds?: string[] | null;
+      entities?: TextLinkEntity[];
       __attachmentDebug?: AttachmentDebugMeta | null;
     },
     replyToId?: number,
@@ -140,7 +188,11 @@ interface Props {
    onCancelReply, 
    focusBlocked = false,
  }: Props) { 
-   const [content, setContent] = useState(""); 
+   const [content, setContent] = useState("");
+  const [entities, setEntities] = useState<TextLinkEntity[]>([]);
+  const [linkEditor, setLinkEditor] = useState<{ start: number; end: number } | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkInvalid, setLinkInvalid] = useState(false);
    const [isSending, setIsSending] = useState(false); 
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "error">("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -189,12 +241,14 @@ interface Props {
  
    useEffect(() => { 
      if (isEditing && editingMessage) { 
-       setContent(editingMessage.content); 
+       setContent(editingMessage.content);
+       setEntities(normalizeTextLinkEntities(editingMessage.entities, editingMessage.content));
        setTimeout(() => { 
          textareaRef.current?.focus(); 
        }, 10); 
      } else if (!isEditing) { 
-       setContent(""); 
+       setContent("");
+       setEntities([]);
      } 
    }, [isEditing, editingMessage]); 
  
@@ -215,6 +269,17 @@ interface Props {
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments;
   }, [pendingAttachments]);
+
+  useEffect(() => {
+    if (!linkEditor) return;
+    const handleOutsidePointer = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (target instanceof Element && target.closest('[data-testid="message-link-editor"]')) return;
+      setLinkEditor(null);
+    };
+    document.addEventListener("mousedown", handleOutsidePointer);
+    return () => document.removeEventListener("mousedown", handleOutsidePointer);
+  }, [linkEditor]);
 
   useEffect(() => {
     if (pendingAttachments.length === 0) {
@@ -325,13 +390,42 @@ interface Props {
   const stopTyping = () => { onTypingStop?.() }; 
  
   const handleChange = (value: string) => {
-    setContent(value); 
+    setEntities((current) => transformTextLinkEntities(current, content, value));
+    setContent(value);
     if (value.trim().length > 0) { 
         onTypingStart?.(); 
     } else { 
         stopTyping(); 
     } 
    }; 
+
+  const openLinkEditor = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    if (start >= end || content.slice(start, end).trim().length === 0) return;
+    const existing = entities.find((entity) => entity.offset <= start && entity.offset + entity.length >= end);
+    setLinkEditor({ start, end });
+    setLinkUrl(existing?.url ?? "");
+    setLinkInvalid(false);
+  };
+
+  const saveLinkEditor = () => {
+    if (!linkEditor) return;
+    const value = linkUrl.trim();
+    if (value && !isSafeExternalUrl(value)) { setLinkInvalid(true); return; }
+    const intersecting = entitiesIntersectingRange(entities, linkEditor.start, linkEditor.end);
+    const remaining = entities.filter((entity) => !intersecting.some((item) => item === entity));
+    const next = value
+      ? [...remaining, { type: "text_link" as const, offset: linkEditor.start, length: linkEditor.end - linkEditor.start, url: value }]
+      : remaining;
+    setEntities(normalizeTextLinkEntities(next, content));
+    const { start, end } = linkEditor;
+    setLinkEditor(null);
+    textareaRef.current?.focus();
+    textareaRef.current?.setSelectionRange(start, end);
+  };
 
   const handleSuccessfulSend = () => {
     if (replyTo) onCancelReply?.();
@@ -688,7 +782,8 @@ interface Props {
      let sendFailureMessage = "Message send failed";
  
      try { 
-       const trimmed = content.trim();
+       const trimmedData = trimTextAndEntities(content, entities);
+       const trimmed = trimmedData.text;
        if (pendingAttachments.length === 0 && isEditing && editingMessage && socketManager) { 
          const { id, chatType, targetId } = editingMessage; 
  
@@ -703,15 +798,16 @@ interface Props {
              ),
              id,
              trimmed,
+             trimmedData.entities,
            ); 
          } else { 
-           await socketManager.editRoomMessage(targetId, id, trimmed); 
+          await socketManager.editRoomMessage(targetId, id, trimmed, trimmedData.entities);
          } 
          cancelEditing(); 
          setContent("");
          resetUploadState();
        } else if (pendingAttachments.length === 0) { 
-        await onSend({ content: trimmed || null, mediaFileId: null }, replyTo?.id);
+        await onSend({ content: trimmed || null, ...(trimmedData.entities.length > 0 ? { entities: trimmedData.entities } : {}), mediaFileId: null }, replyTo?.id);
         setContent("");
         resetUploadState();
         handleSuccessfulSend();
@@ -817,11 +913,14 @@ interface Props {
               ? "Album send failed"
               : "Message send failed";
 
-          const outgoingPayload = buildAttachmentMessagePayload(
-            uploadedMediaFileIds,
-            shouldUseContent ? trimmed : null,
-            debugMeta,
-          );
+          const outgoingPayload = {
+            ...buildAttachmentMessagePayload(
+              uploadedMediaFileIds,
+              shouldUseContent ? trimmed : null,
+              debugMeta,
+            ),
+            ...(shouldUseContent && trimmedData.entities.length > 0 ? { entities: trimmedData.entities } : {}),
+          };
 
           logAttachmentDebug("send.payload", {
             contentPresent: Boolean(outgoingPayload.content),
@@ -1047,12 +1146,25 @@ interface Props {
   };
  
    const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => { 
+     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+       const start = e.currentTarget.selectionStart;
+       const end = e.currentTarget.selectionEnd;
+       if (start < end && e.currentTarget.value.slice(start, end).trim().length > 0) {
+         e.preventDefault();
+         openLinkEditor();
+         return;
+       }
+     }
+     if (linkEditor) {
+       if (e.key === "Escape") { e.preventDefault(); setLinkEditor(null); }
+       return;
+     }
      if (e.key === "Enter" && !e.shiftKey) { 
        e.preventDefault(); 
        if (pendingAttachments.length > 0) return;
        handleSend(); 
      } 
-     if (e.key === "Escape") { 
+     if (e.key === "Escape") {
        if (isEditing) cancelEditing(); 
        if (pendingAttachments.length > 0 && !isSending && !isUploading) clearPendingAttachments();
      } 
@@ -1087,7 +1199,16 @@ interface Props {
          onSend={handleSend}
        />
      )}
-     <div className="flex flex-col border-t border-border bg-[color:var(--vetra-shell-chat-bg,var(--color-card))]" data-testid="message-composer-shell"> 
+     <div className="relative flex flex-col border-t border-border bg-[color:var(--vetra-shell-chat-bg,var(--color-card))]" data-testid="message-composer-shell">
+       {linkEditor && (
+         <LinkEditor
+           url={linkUrl}
+           invalid={linkInvalid}
+           onChange={(value) => { setLinkUrl(value); setLinkInvalid(false); }}
+           onSave={saveLinkEditor}
+           onCancel={() => setLinkEditor(null)}
+         />
+       )}
        {isEditing && ( 
          <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-2.5"> 
            <div className="flex flex-col text-xs"> 

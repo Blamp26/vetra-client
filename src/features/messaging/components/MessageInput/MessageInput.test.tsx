@@ -134,6 +134,25 @@ describe("MessageInput attachments", () => {
     expect(screen.getByRole("menuitem", { name: "File" })).toBeInTheDocument();
   });
 
+  it("creates a custom text link from the selected composer text", async () => {
+    const onSend = vi.fn(async () => undefined);
+    render(<MessageInput onSend={onSend} />);
+    const textarea = screen.getByTestId("message-input-textarea") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "Открыть сайт" } });
+    textarea.setSelectionRange(0, textarea.value.length);
+    fireEvent.keyDown(textarea, { key: "k", ctrlKey: true });
+    expect(screen.getByTestId("message-link-editor")).toBeInTheDocument();
+    expect(screen.getByTestId("message-link-url")).toHaveFocus();
+    fireEvent.change(screen.getByTestId("message-link-url"), { target: { value: "https://example.com/" } });
+    fireEvent.keyDown(screen.getByTestId("message-link-url"), { key: "Enter" });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith({
+      content: "Открыть сайт",
+      entities: [{ type: "text_link", offset: 0, length: 12, url: "https://example.com/" }],
+      mediaFileId: null,
+    }, undefined));
+  });
+
   it("records, cancels, and releases microphone tracks without sending", async () => {
     const { getUserMedia, stopTrack } = installVoiceMocks();
     const onSend = vi.fn();

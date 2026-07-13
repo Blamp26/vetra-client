@@ -15,6 +15,12 @@ export interface User {
 }
 
 export type MessageStatus = "sent" | "delivered" | "read" | "error";
+export interface MessageTextLinkEntity {
+  type: "text_link";
+  offset: number;
+  length: number;
+  url: string;
+}
 
 export type AttachmentKind = "photo" | "video" | "file" | "audio" | "voice";
 
@@ -52,6 +58,7 @@ export interface ForwardedAttribution {
 export interface Message {
   id:                      number;
   content:                 string | null;
+  entities?:               MessageTextLinkEntity[];
   sender_id:               number;
   sender_public_id?:       string | null;
   recipient_id:            number | null;
@@ -84,6 +91,7 @@ export interface Message {
 export interface MessageEditedPayload {
   id:            number;
   content:       string;
+  entities?:     MessageTextLinkEntity[];
   edited_at:     string;
   recipient_id?: number | null;
   recipient_public_id?: string | null;
@@ -137,6 +145,7 @@ export interface RoomMessageSummary {
 export interface PreviewMessage {
   id: number;
   content: string | null;
+  entities?: MessageTextLinkEntity[];
   preview?: string | null;
   inserted_at: string;
   sender_id: number;
