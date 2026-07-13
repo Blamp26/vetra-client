@@ -302,6 +302,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
           sendUnitId?: string | null;
           localAttachmentIds?: string[];
         } | null;
+        stickerId?: string | null;
       },
       replyToId?: number,
     ) => {
@@ -311,7 +312,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
       const mediaFileIds = payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
       const primaryMediaFileId = payload.mediaFileId ?? mediaFileIds[0] ?? null;
       const debugMeta = payload.__attachmentDebug ?? null;
-      if (!content && !primaryMediaFileId && mediaFileIds.length === 0) return;
+      if (!content && !primaryMediaFileId && mediaFileIds.length === 0 && !payload.stickerId) return;
 
       logAttachmentDebug("sendMessage.prepare", {
         contextType,
@@ -333,6 +334,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
           mediaFileIds,
           replyToId: replyToId ?? null,
           __attachmentDebug: debugMeta,
+          stickerId: payload.stickerId,
         });
         const normalizedAttachments = getMessageAttachments(message);
         const rawGroupedMediaIdsLength =
@@ -390,6 +392,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
             mediaFileIds,
             replyToId: replyToId ?? null,
             __attachmentDebug: debugMeta,
+            stickerId: payload.stickerId,
           },
         );
         const normalizedAttachments = getMessageAttachments(message);

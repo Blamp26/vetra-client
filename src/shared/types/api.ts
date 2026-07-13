@@ -78,13 +78,36 @@ export interface Message {
   recipient_username?:     string;
   recipient_display_name?: string | null;
   media_file_id?:          string | null;
+  mediaFileId?:             string | null;
   media_file_ids?:         string[] | null;
+  mediaFileIds?:            string[] | null;
   media_mime_type?:        string | null;
   media_mime_types?:       string[] | null;
   attachment?:             Attachment | null;
   attachments?:            Attachment[] | null;
   sender?:                 User;
   reactions?:              MessageReactionGroup[];
+  sticker?: StickerMessage | null;
+}
+
+export interface StickerMessage {
+  id: string;
+  pack_id: string;
+  media_file_id: string;
+  width: number;
+  height: number;
+  format: string;
+  emoji_tags: string[];
+  pack_title?: string | null;
+}
+
+export interface StickerPack {
+  id: string;
+  title: string;
+  slug: string;
+  visibility: "private" | "unlisted" | "public";
+  owner_id: number;
+  stickers: StickerMessage[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,6 +188,7 @@ export interface PreviewMessage {
   attachment_name?: string | null;
   attachment_size?: number | null;
   attachment_mime_type?: string | null;
+  sticker?: StickerMessage | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

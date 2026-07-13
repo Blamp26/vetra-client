@@ -1,4 +1,5 @@
 import React from "react";
+import { API_BASE_URL } from "@/api/base";
 import type { Attachment, Message, MessageReactionGroup } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { MessageText } from "@/shared/components/MessageText/MessageText";
@@ -280,6 +281,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const attachment = getMessageAttachment(msg);
   const hasMedia = attachments.length > 0;
   const hasText = !!(msg.content && msg.content.trim().length > 0);
+  const isSticker = Boolean(msg.sticker);
     const isVisualMediaGroup =
       attachments.length > 1 && attachments.every(isVisualAttachment);
     const isSingleVisualMessage =
@@ -1323,6 +1325,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   };
 
   const renderContent = () => {
+    if (msg.sticker) {
+      const sticker = msg.sticker;
+      return <div className="relative flex max-w-[220px] flex-col items-end" data-testid="sticker-message"><img src={`${API_BASE_URL}/media/${sticker.media_file_id}`} alt={sticker.emoji_tags.join(" ")} className="max-h-[220px] max-w-[220px] object-contain" style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} />{renderMetadata("overlay")}</div>;
+    }
     return (
       <>
         {hasMedia && (
@@ -1392,6 +1398,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
             isEmojiOnlyMessage && "message-emoji-only-bubble",
           isEmojiOnlyMessage
             ? "min-w-0 p-0"
+            : isSticker
+              ? "min-w-0 rounded-none bg-transparent p-0"
             : isAudioGroup
             ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] rounded-none p-0"
             : isDocumentGroup
@@ -1430,6 +1438,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
             isHighlighted &&
               "outline outline-2 outline-primary outline-offset-1",
           isEmojiOnlyMessage
+            ? "rounded-none"
+            : isSticker
             ? "rounded-none"
             : isDocumentGroup || isAudioGroup
             ? "rounded-none"
@@ -1492,7 +1502,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                 ? "var(--bubble-outgoing)"
                 : "var(--bubble-incoming)",
               backgroundColor:
-                isEmojiOnlyMessage || isDocumentGroup || isAudioGroup
+                isEmojiOnlyMessage || isSticker || isDocumentGroup || isAudioGroup
                   ? "transparent"
                   : "var(--message-surface-color)",
               ...(isSingleVisualMessage

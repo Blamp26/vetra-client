@@ -108,6 +108,7 @@ export type OutgoingMessagePayload = {
   mediaFileIds?: string[] | null;
   replyToId?: number | null;
   forwardedFromMessageId?: number | null;
+  stickerId?: string | null;
   __attachmentDebug?: {
     batchId: string;
     sendUnitId?: string | null;
@@ -133,6 +134,7 @@ export function buildSocketMessagePayload(
     media_file_id: primaryMediaFileId,
     media_file_ids: groupedMediaFileIds,
     reply_to_id: payload.replyToId ?? null,
+    ...(payload.stickerId ? { sticker_id: payload.stickerId, stickerId: payload.stickerId } : {}),
     ...(payload.forwardedFromMessageId != null
       ? { forwarded_from_message_id: payload.forwardedFromMessageId }
       : {}),

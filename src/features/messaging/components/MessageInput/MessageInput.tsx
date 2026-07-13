@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
-import { FileText, ImagePlus, Mic, Paperclip, SendHorizonal, Square, X } from "lucide-react";
+import { FileText, ImagePlus, Mic, Paperclip, SendHorizonal, Square, X, Smile } from "lucide-react";
 import { useAppStore, type RootState } from "@/store"; 
 import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
@@ -126,6 +126,7 @@ interface Props {
       mediaFileIds?: string[] | null;
       entities?: TextLinkEntity[];
       __attachmentDebug?: AttachmentDebugMeta | null;
+      stickerId?: string | null;
     },
     replyToId?: number,
   ) => Promise<void>; 
@@ -134,7 +135,9 @@ interface Props {
    disabled?: boolean; 
    replyTo?: ReplyTarget | null; 
    onCancelReply?: () => void; 
-   focusBlocked?: boolean;
+  focusBlocked?: boolean;
+  onOpenPicker?: () => void;
+  pickerOpen?: boolean;
  } 
  
  export function MessageInput({ 
@@ -144,8 +147,10 @@ interface Props {
    disabled = false, 
    replyTo, 
    onCancelReply, 
-   focusBlocked = false,
- }: Props) { 
+ focusBlocked = false,
+ onOpenPicker,
+ pickerOpen = false,
+}: Props) {
   const [content, setContent] = useState("");
   const [entities, setEntities] = useState<TextLinkEntity[]>([]);
   const [composerContextMenu, setComposerContextMenu] = useState<{ left: number; top: number; submenuOnLeft: boolean } | null>(null);
@@ -1487,6 +1492,8 @@ interface Props {
               aria-label="Message composer"
             />
           </div>
+
+          <button type="button" onClick={onOpenPicker} disabled={disabled || isSending || isUploading || voiceRecordingState !== "idle"} aria-label="Open emoji and sticker picker" aria-pressed={pickerOpen} className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground", pickerOpen && "bg-accent text-foreground", "disabled:pointer-events-none disabled:opacity-60")}><Smile className="h-[18px] w-[18px]" /></button>
 
           <button
             type="button"

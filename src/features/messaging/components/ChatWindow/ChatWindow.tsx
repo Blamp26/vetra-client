@@ -8,6 +8,7 @@ import { authApi } from "@/api/auth";
 import { MessageList } from "../MessageList/MessageList";
 import { MessageInput } from "../MessageInput/MessageInput";
 import { MessageSearch } from "../MessageSearch/MessageSearch";
+import { StickerPicker } from "../StickerPicker/StickerPicker";
 import type { ActiveChat, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from "@/features/calling/components/CallButton";
@@ -83,6 +84,7 @@ export function ChatWindow({ activeChat, call }: Props) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
   const [callStartIssue, setCallStartIssue] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const activeChatType = activeChat.type;
   const activePartnerId =
     activeChat.type === "direct" ? activeChat.partnerId : null;
@@ -161,6 +163,12 @@ export function ChatWindow({ activeChat, call }: Props) {
       setPartner(null);
     }
   }, [activeChatType, activePartnerId, directPartnerRef]);
+
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setPickerOpen(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, []);
 
   const handleCallUnavailable = useCallback((reason: string) => {
     setCallStartIssue(reason);
@@ -338,7 +346,8 @@ export function ChatWindow({ activeChat, call }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden bg-[var(--vetra-shell-chat-bg)]">
+    <div className="flex h-full min-w-0 flex-1 overflow-hidden bg-[var(--vetra-shell-chat-bg)]">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       {renderHeader()}
 
       {(callStartIssue || (call.status === "idle" && displayCallIssue?.message)) && (
@@ -391,6 +400,8 @@ export function ChatWindow({ activeChat, call }: Props) {
 
       <MessageInput
         onSend={sendMessage}
+        onOpenPicker={() => setPickerOpen((open) => !open)}
+        pickerOpen={pickerOpen}
         onTypingStart={handleTypingStart}
         onTypingStop={handleTypingStop}
         replyTo={replyTo}
@@ -406,6 +417,8 @@ export function ChatWindow({ activeChat, call }: Props) {
           onJumpTo={(id) => console.log("Jump to message:", id)}
         />
       )}
+      </div>
+      {pickerOpen && <StickerPicker onClose={() => setPickerOpen(false)} onSend={async (stickerId) => { await sendMessage({ stickerId }); }} />}
     </div>
   );
 }
