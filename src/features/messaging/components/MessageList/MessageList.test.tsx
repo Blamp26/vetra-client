@@ -9,9 +9,17 @@ const { useAppStoreMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
 }));
 
+const { getUserMock } = vi.hoisted(() => ({
+  getUserMock: vi.fn(),
+}));
+
 vi.mock("@/store", () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
     useAppStoreMock(selector),
+}));
+
+vi.mock("@/api/auth", () => ({
+  authApi: { getUser: getUserMock },
 }));
 
 vi.mock("@/shared/components/ImageLightbox", () => ({
@@ -335,6 +343,59 @@ describe("MessageList bubble layout", () => {
     expect(screen.getAllByTestId("message-date-group")[0]).toHaveClass("w-full");
     expect(screen.getByText("First day")).toBeInTheDocument();
     expect(screen.getByText("Second day")).toBeInTheDocument();
+  });
+
+  it("opens a forwarded sender by stable public ID through the canonical direct chat action", async () => {
+    const setActiveChat = vi.fn();
+    getUserMock.mockResolvedValue({
+      id: 42,
+      public_id: "user-alice",
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "offline",
+      last_seen_at: null,
+    });
+    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({
+        selectionMode: false,
+        selectedMessageIds: [],
+        setSelectionMode: vi.fn(),
+        toggleMessageSelection: vi.fn(),
+        clearSelection: vi.fn(),
+        forwardingMessageIds: null,
+        setForwardingMessages: vi.fn(),
+        setActiveChat,
+        socketManager: null,
+        deleteMessage: vi.fn(),
+        deleteRoomMessage: vi.fn(),
+        messageReactions: {},
+        startEditing: vi.fn(),
+        conversationPreviews: {},
+        roomPreviews: {},
+        authToken: "secret-token",
+      }),
+    );
+
+    renderMessageList([makeMessage({
+      forwarded_from: {
+        source_public_id: "user-alice",
+        source_display_name: "Alice",
+      },
+    })]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+
+    await waitFor(() => expect(getUserMock).toHaveBeenCalledTimes(1));
+    expect(getUserMock).toHaveBeenCalledWith("user-alice");
+    expect(setActiveChat).toHaveBeenCalledTimes(1);
+    expect(setActiveChat).toHaveBeenCalledWith({
+      type: "direct",
+      partnerId: 42,
+      partnerRef: "user-alice",
+    });
   });
 
   it("waits for latest history completion before performing the initial bottom scroll", async () => {

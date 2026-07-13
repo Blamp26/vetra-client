@@ -4,10 +4,12 @@ import { useAppStore, type RootState } from "@/store";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { ForwardModal } from "../ForwardModal";
 import { sendMessageViaChannel } from "@/services/socket";
+import { authApi } from "@/api/auth";
 import { ImageLightbox } from "@/shared/components/ImageLightbox";
 import { VideoLightbox } from "@/shared/components/VideoLightbox";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
 import { cn } from "@/shared/utils/cn";
+import { directChatForUser } from "@/shared/utils/chatRoutes";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
   getMessageAttachments,
@@ -192,12 +194,39 @@ export function MessageList({
   const lastInitialScrollHeightRef = useRef<number | null>(null);
   const olderScrollAnchorRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
   const forwardingOperationRef = useRef(0);
+  const forwardedSenderNavigationRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
+  const [forwardedSenderError, setForwardedSenderError] = useState<string | null>(null);
 
   useEffect(() => () => {
+    isMountedRef.current = false;
+    forwardedSenderNavigationRef.current = null;
     // A manual chat switch unmounts this list. Invalidate any completion that
     // could otherwise navigate back after the user has chosen another chat.
     forwardingOperationRef.current += 1;
   }, []);
+
+  const handleOpenForwardedSender = useCallback(async (sourcePublicId: string) => {
+    if (!isMountedRef.current) return;
+    if (forwardedSenderNavigationRef.current) return;
+
+    forwardedSenderNavigationRef.current = sourcePublicId;
+    setForwardedSenderError(null);
+
+    try {
+      const user = await authApi.getUser(sourcePublicId);
+      if (!isMountedRef.current || forwardedSenderNavigationRef.current !== sourcePublicId) return;
+      setActiveChat(directChatForUser(user));
+    } catch (error) {
+      if (!isMountedRef.current || forwardedSenderNavigationRef.current !== sourcePublicId) return;
+      console.error("Failed to open forwarded sender chat:", error);
+      setForwardedSenderError("This user is unavailable.");
+    } finally {
+      if (forwardedSenderNavigationRef.current === sourcePublicId) {
+        forwardedSenderNavigationRef.current = null;
+      }
+    }
+  }, [setActiveChat]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -819,6 +848,7 @@ export function MessageList({
                       onToggleSelection={toggleMessageSelection}
                       onToggleReaction={toggleReaction}
                       onLightbox={setLightboxData}
+                      onOpenForwardedSender={handleOpenForwardedSender}
                       renderReplyPreview={renderReplyPreview}
                       formatTime={formatTime}
                     />
@@ -839,6 +869,12 @@ export function MessageList({
         >
           Down
         </button>
+      )}
+
+      {forwardedSenderError && (
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground" role="status">
+          {forwardedSenderError}
+        </div>
       )}
 
       {selectionMode && (

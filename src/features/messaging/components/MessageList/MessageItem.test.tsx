@@ -261,6 +261,43 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-forwarded-source-name")).toHaveTextContent("Original Alice");
   });
 
+  it("makes only a stable forwarded sender identity clickable", () => {
+    const onOpenForwardedSender = vi.fn();
+    renderMessageItem(
+      {
+        content: "Forwarded body",
+        forwarded_from: {
+          source_public_id: "user-alice",
+          source_display_name: "Original Alice",
+          source_avatar_url: null,
+        },
+      },
+      { onOpenForwardedSender },
+    );
+
+    const sourceButton = screen.getByRole("button", { name: "Open chat with Original Alice" });
+    expect(sourceButton).toHaveAttribute("type", "button");
+    expect(sourceButton).toHaveClass("hover:underline");
+
+    fireEvent.click(screen.getByTestId("message-forwarded-icon"));
+    fireEvent.click(screen.getByTestId("message-forwarded-label"));
+    expect(onOpenForwardedSender).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("message-forwarded-source-name"));
+    expect(onOpenForwardedSender).toHaveBeenCalledTimes(1);
+    expect(onOpenForwardedSender).toHaveBeenCalledWith("user-alice");
+  });
+
+  it("keeps legacy forwarded attribution visible but non-interactive", () => {
+    renderMessageItem({
+      content: "Legacy forward",
+      forwarded_from: { source_display_name: "Original Alice" },
+    });
+
+    expect(screen.queryByTestId("message-forwarded-source-button")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-forwarded-source-name")).toHaveTextContent("Original Alice");
+  });
+
   it("uses square album geometry when a forwarded album has a caption", () => {
     renderMessageItem({
       content: "Album caption",

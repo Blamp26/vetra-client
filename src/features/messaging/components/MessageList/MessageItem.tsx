@@ -51,6 +51,7 @@ interface MessageItemProps {
     | { kind: "image"; src: string; authorName: string; createdAt: string; avatarSrc?: string | null; messageId: number }
     | { kind: "video"; src: string; authorName: string; createdAt: string; avatarSrc?: string | null; messageId: number }
   ) => void;
+  onOpenForwardedSender?: (sourcePublicId: string) => void;
   renderReplyPreview: (msg: Message, isOwn: boolean) => React.ReactNode;
   formatTime: (iso: string) => string;
 }
@@ -194,6 +195,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   onToggleSelection,
   onToggleReaction,
   onLightbox,
+  onOpenForwardedSender,
   renderReplyPreview,
   formatTime,
 }, ref) => {
@@ -592,6 +594,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const renderForwardedHeader = () => {
     if (!forwardedSource) return null;
 
+    const sourcePublicId = forwardedSource.source_public_id?.trim() || null;
+    const canOpenSource = Boolean(sourcePublicId && onOpenForwardedSender);
+    const stopForwardedSenderEvent = (event: React.SyntheticEvent) => {
+      event.stopPropagation();
+    };
+
     const attributionColor = isOwn
       ? "var(--bubble-outgoing-meta)"
       : "var(--bubble-incoming-meta)";
@@ -637,29 +645,71 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           data-testid="message-forwarded-source"
           style={{ display: "flex", alignItems: "center", minWidth: "0", height: "20px", overflow: "hidden" }}
         >
-          {forwardedSource.source_avatar_url && (
-            <Avatar
-              name={forwardedSourceName}
-              src={forwardedSource.source_avatar_url}
-              size="small"
-              className="mr-1 h-4 w-4"
-            />
+          {canOpenSource ? (
+            <button
+              type="button"
+              className="flex min-w-0 items-center overflow-hidden whitespace-nowrap border-0 bg-transparent p-0 text-left text-inherit hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current"
+              aria-label={`Open chat with ${forwardedSourceName}`}
+              data-testid="message-forwarded-source-button"
+              onClick={(event) => {
+                stopForwardedSenderEvent(event);
+                onOpenForwardedSender?.(sourcePublicId!);
+              }}
+              onContextMenu={stopForwardedSenderEvent}
+              onPointerDown={stopForwardedSenderEvent}
+            >
+              {forwardedSource.source_avatar_url && (
+                <Avatar
+                  name={forwardedSourceName}
+                  src={forwardedSource.source_avatar_url}
+                  size="small"
+                  className="mr-1 h-4 w-4"
+                />
+              )}
+              <span
+                className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[20px]"
+                data-testid="message-forwarded-source-name"
+                style={{
+                  minWidth: "0",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  lineHeight: "20px",
+                  cursor: "pointer",
+                }}
+              >
+                {forwardedSourceName}
+              </span>
+            </button>
+          ) : (
+            <>
+              {forwardedSource.source_avatar_url && (
+                <Avatar
+                  name={forwardedSourceName}
+                  src={forwardedSource.source_avatar_url}
+                  size="small"
+                  className="mr-1 h-4 w-4"
+                />
+              )}
+              <span
+                className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[20px]"
+                data-testid="message-forwarded-source-name"
+                style={{
+                  minWidth: "0",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  lineHeight: "20px",
+                }}
+              >
+                {forwardedSourceName}
+              </span>
+            </>
           )}
-          <span
-            className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-medium leading-[20px]"
-            data-testid="message-forwarded-source-name"
-            style={{
-              minWidth: "0",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              fontSize: "14px",
-              fontWeight: 500,
-              lineHeight: "20px",
-            }}
-          >
-            {forwardedSourceName}
-          </span>
         </span>
       </div>
     );
