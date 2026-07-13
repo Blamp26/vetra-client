@@ -1,7 +1,8 @@
 import React from "react";
 import type { Attachment, Message, MessageReactionGroup } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
-import { Emoji, EmojiText } from "@/shared/components/Emoji/Emoji";
+import { Emoji } from "@/shared/components/Emoji/Emoji";
+import { MessageText } from "@/shared/components/MessageText/MessageText";
 import { useAppStore } from "@/store";
 import { StatusIcon } from "./StatusIcon";
 import { MessageTail } from "./MessageTail";
@@ -827,7 +828,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 )}
                 {isLast && hasText && (
                   <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
-                    <EmojiText text={msg.content || ""} />
+                    <MessageText text={msg.content || ""} />
                   </div>
                 )}
                 {isLast && (
@@ -858,7 +859,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
         {hasText && (
           <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
-            <EmojiText text={msg.content || ""} />
+            <MessageText text={msg.content || ""} />
           </div>
         )}
 
@@ -895,7 +896,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         />
         {hasText && (
           <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
-            <EmojiText text={msg.content || ""} />
+            <MessageText text={msg.content || ""} />
           </div>
         )}
         <span
@@ -917,7 +918,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         <AudioFilePlayer attachment={audioAttachment} isOwn={isOwn} messageMeta={renderMetadata()} />
         {hasText && (
           <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
-            <EmojiText text={msg.content || ""} />
+            <MessageText text={msg.content || ""} />
           </div>
         )}
       </div>
@@ -973,7 +974,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             />
             {isLast && hasText && (
               <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current" data-testid="message-audio-group-caption">
-                <EmojiText text={msg.content || ""} />
+                <MessageText text={msg.content || ""} />
               </div>
             )}
             {isLast && hasTail && renderBubbleTail("message-audio-group-tail")}
@@ -990,7 +991,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           className="relative whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:normal]"
           data-message-content-rect
         >
-          <EmojiText text={msg.content || ""} />
+          <MessageText text={msg.content || ""} />
         </span>
         {renderInlineMetadata()}
       </div>
@@ -1021,7 +1022,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]"
                 data-testid="message-text-content"
               >
-                <EmojiText text={msg.content || ""} />
+                <MessageText text={msg.content || ""} />
               </div>
             )
         )}
@@ -1180,7 +1181,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 data-message-content-rect
                 className="relative whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:normal] text-[16px] leading-[21px]"
               >
-                <EmojiText text={msg.content || ""} />
+                <MessageText text={msg.content || ""} />
               </span>
               {renderInlineMetadata()}
             </div>
