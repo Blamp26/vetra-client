@@ -330,30 +330,51 @@ describe("MessageItem bubble layout", () => {
   });
 
   it("squares the top of a forwarded captioned single photo while preserving caption spacing", () => {
+    const attachment = {
+      id: "forwarded-caption-photo",
+      url: "/api/v1/media/forwarded-caption-photo",
+      mime_type: "image/jpeg",
+      original_name: "photo.jpg",
+      file_size: 1024,
+      kind: "photo" as const,
+      width: 640,
+      height: 480,
+    };
+
+    const withoutCaption = renderMessageItem({
+      forwarded_from: { source_display_name: "Original Alice" },
+      attachments: [attachment],
+    });
+    const noCaptionFrame = screen.getByTestId("message-media-shell").parentElement;
+    const noCaptionFrameStyle = noCaptionFrame?.getAttribute("style");
+    expect(noCaptionFrame).toHaveClass("mt-[4px]", "mb-[-6px]", "ml-[-8px]", "mr-[-8px]");
+    expect(noCaptionFrameStyle).toContain("width:");
+    expect(noCaptionFrameStyle).toContain("aspect-ratio:");
+    expect(noCaptionFrameStyle).toContain("max-width: calc(100% + 16px)");
+    withoutCaption.unmount();
+
     renderMessageItem({
       content: "Photo caption",
       forwarded_from: { source_display_name: "Original Alice" },
-      attachments: [{
-        id: "forwarded-caption-photo",
-        url: "/api/v1/media/forwarded-caption-photo",
-        mime_type: "image/jpeg",
-        original_name: "photo.jpg",
-        file_size: 1024,
-        kind: "photo" as const,
-        width: 640,
-        height: 480,
-      }],
+      attachments: [attachment],
     });
 
     const mediaFrame = screen.getByTestId("message-media-shell").parentElement;
     expect(mediaFrame).toHaveClass(
-      "mt-[-5px]",
+      "mt-[4px]",
       "mb-[6px]",
+      "ml-[-8px]",
+      "mr-[-8px]",
       "rounded-tl-[0px]",
       "rounded-tr-[0px]",
       "rounded-bl-[0px]",
       "rounded-br-[0px]",
     );
+    expect(mediaFrame).toHaveStyle({ maxWidth: "calc(100% + 16px)" });
+    expect(mediaFrame?.getAttribute("style")).toBe(noCaptionFrameStyle);
+    const contentRect = screen.getByTestId("message-bubble").querySelector("[data-message-content-rect]");
+    expect(contentRect?.firstElementChild).toBe(mediaFrame);
+    expect(contentRect?.lastElementChild).toBe(screen.getByTestId("message-text-content"));
     expect(screen.getByTestId("message-text-content")).toHaveTextContent("Photo caption");
   });
 

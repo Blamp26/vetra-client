@@ -28,6 +28,7 @@ interface VisualAttachmentGroupProps {
   albumMaxWidth: number;
   hasCaption: boolean;
   hasContentAboveMedia: boolean;
+  hasForwardedHeader: boolean;
   isTemporaryLayout: boolean;
   isDebugEnabled: boolean;
   runtimeMetricsByAttachmentId: Record<string, VisualRuntimeMetrics>;
@@ -54,6 +55,7 @@ export function VisualAttachmentGroup({
   albumMaxWidth,
   hasCaption,
   hasContentAboveMedia,
+  hasForwardedHeader,
   isTemporaryLayout,
   isDebugEnabled,
   runtimeMetricsByAttachmentId,
@@ -66,16 +68,20 @@ export function VisualAttachmentGroup({
 }: VisualAttachmentGroupProps) {
   const isAlbum = attachments.length > 1;
   const isSurroundedAlbum = isAlbum && hasContentAboveMedia && hasCaption;
-  const mediaFrameClassName = hasCaption
+  const isFullBleedSingleMedia = hasForwardedHeader && !isAlbum;
+  const mediaFrameClassName = isFullBleedSingleMedia
     ? cn(
-        "mb-[6px] ml-[-8px] mr-[-8px] overflow-hidden",
-        isSurroundedAlbum
-          ? "mt-[4px] rounded-none"
-          : hasContentAboveMedia
-            ? "mt-[-5px] rounded-t-none rounded-b-none"
-            : "mt-[-5px] rounded-t-[15px] rounded-b-none",
+        "mt-[4px] ml-[-8px] mr-[-8px] overflow-hidden",
+        hasCaption ? "mb-[6px]" : "mb-[-6px]",
       )
-    : "";
+    : hasCaption
+      ? cn(
+          "mb-[6px] ml-[-8px] mr-[-8px] overflow-hidden",
+          isSurroundedAlbum
+            ? "mt-[4px] rounded-none"
+            : "mt-[-5px] rounded-t-[15px] rounded-b-none",
+        )
+      : "";
   const albumShellClassName = cn(
     "relative max-w-full overflow-hidden border-0 p-0 shadow-none",
     isSurroundedAlbum
@@ -191,9 +197,9 @@ export function VisualAttachmentGroup({
     <div
       className={cn(mediaFrameClassName, !isAlbum && singleMediaCornerClassName)}
       style={{
-        width: hasCaption ? `${layout.width}px` : undefined,
-        maxWidth: hasCaption ? "calc(100% + 16px)" : undefined,
-        aspectRatio: hasCaption ? `${layout.width} / ${layout.height}` : undefined,
+        width: isFullBleedSingleMedia || hasCaption ? `${layout.width}px` : undefined,
+        maxWidth: isFullBleedSingleMedia || hasCaption ? "calc(100% + 16px)" : undefined,
+        aspectRatio: isFullBleedSingleMedia || hasCaption ? `${layout.width} / ${layout.height}` : undefined,
       }}
     >
       <VisualAttachmentTile
@@ -207,9 +213,9 @@ export function VisualAttachmentGroup({
         )}
         buttonTestId="message-media-shell"
         buttonStyle={{
-          width: !hasCaption ? `${layout.width}px` : undefined,
-          maxWidth: !hasCaption ? "100%" : undefined,
-          aspectRatio: !hasCaption ? `${layout.width} / ${layout.height}` : undefined,
+          width: !isFullBleedSingleMedia && !hasCaption ? `${layout.width}px` : undefined,
+          maxWidth: !isFullBleedSingleMedia && !hasCaption ? "100%" : undefined,
+          aspectRatio: !isFullBleedSingleMedia && !hasCaption ? `${layout.width} / ${layout.height}` : undefined,
         }}
         photoLayoutState={currentAttachment.dimensionSource === "fallback" ? "pending" : "resolved"}
         isDebugEnabled={isDebugEnabled}
