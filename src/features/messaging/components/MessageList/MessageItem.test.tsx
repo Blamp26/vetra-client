@@ -9,6 +9,10 @@ import {
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  fitEmojiToLargeCell,
+  getLargeEmojiLayout,
+} from "../../utils/largeEmojiGeometry";
 
 const { useAppStoreMock, getAttachmentLocalStateMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
@@ -247,10 +251,12 @@ describe("MessageItem bubble layout", () => {
     const emojiOnly = screen.getByTestId("message-emoji-only");
     expect(emojiOnly).toHaveClass("message-emoji-only--single");
     expect(emojiOnly.querySelector("img")).toHaveStyle({
-      width: "112px",
-      height: "112px",
+      width: "38px",
+      height: "38px",
     });
-    expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("message-emoji-only-metadata"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders two and three emoji graphemes as compact rows", () => {
@@ -260,14 +266,14 @@ describe("MessageItem bubble layout", () => {
     );
     expect(screen.getAllByRole("img")).toHaveLength(2);
     expect(screen.getAllByRole("img")[0]).toHaveStyle({
-      width: "40px",
-      height: "40px",
+      width: "38px",
+      height: "38px",
     });
 
     rerender(
       <MessageItem
         msg={makeMessage({ content: "😀😎👍" })}
-        isOwn={false}
+        isOwn
         isConsecutive={false}
         isGroupedWithNext={false}
         isSelected={false}
@@ -285,6 +291,9 @@ describe("MessageItem bubble layout", () => {
     );
     expect(screen.getByTestId("message-emoji-only")).toBeInTheDocument();
     expect(screen.getAllByRole("img")).toHaveLength(3);
+    expect(
+      screen.getByTestId("message-emoji-only-metadata"),
+    ).toBeInTheDocument();
   });
 
   it("returns four emoji and mixed emoji text to the normal message path", () => {
@@ -332,7 +341,29 @@ describe("MessageItem bubble layout", () => {
       screen.getByTestId("message-emoji-only").querySelector(
         '[data-testid="message-metadata"]',
       ),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses Telegram's intrinsic-ratio large emoji geometry", () => {
+    expect(getLargeEmojiLayout(1)).toEqual({
+      cellSize: 38,
+      contentWidth: 38,
+      contentHeight: 38,
+      gap: 2,
+    });
+    expect(getLargeEmojiLayout(3).contentWidth).toBe(118);
+    expect(fitEmojiToLargeCell({ width: 160, height: 90 })).toEqual({
+      width: 36,
+      height: 20,
+    });
+    expect(fitEmojiToLargeCell({ width: 2, height: 1 })).toEqual({
+      width: 36,
+      height: 18,
+    });
+    expect(fitEmojiToLargeCell({ width: 0, height: 0 })).toEqual({
+      width: 36,
+      height: 36,
+    });
   });
 
   it("renders forwarded attribution before the message content with the verified geometry", () => {

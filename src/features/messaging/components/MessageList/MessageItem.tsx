@@ -39,6 +39,7 @@ import {
   getMediaAlbumPackingRatio,
 } from "../../utils/mediaAlbumLayout";
 import { getEmojiOnlyGraphemes } from "../../utils/emojiOnly";
+import { getLargeEmojiLayout } from "../../utils/largeEmojiGeometry";
 
 interface MessageItemProps {
   msg: Message;
@@ -331,6 +332,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       emojiOnlyGraphemes.length <= 3 &&
       !msg.reply_to_id &&
       !msg.forwarded_from,
+    );
+    const emojiOnlyLayout = isEmojiOnlyMessage
+      ? getLargeEmojiLayout(emojiOnlyGraphemes?.length ?? 1)
+      : null;
+    const shouldShowEmojiMetadata = Boolean(
+      isEmojiOnlyMessage &&
+      isOwn &&
+      emojiOnlyGraphemes?.length === 3,
     );
     const authorName =
       msg.sender_display_name || msg.sender_username || "Unknown";
@@ -1509,19 +1518,27 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                   ? "message-emoji-only--single"
                   : "message-emoji-only--multiple",
               )}
+              style={{
+                gap: `${emojiOnlyLayout?.gap ?? 0}px`,
+              }}
               data-testid="message-emoji-only"
             >
-              {emojiOnlyGraphemes?.map((emoji) => (
+              {emojiOnlyGraphemes?.map((emoji, index) => (
                 <Emoji
-                  key={emoji}
+                  key={`${emoji}-${index}`}
                   emoji={emoji}
-                  size={emojiOnlyGraphemes.length === 1 ? 112 : 40}
+                  size={emojiOnlyLayout?.cellSize ?? 38}
                   className="message-emoji-only__emoji"
                 />
               ))}
-              <div className="message-emoji-only__metadata">
-                {renderMetadata("overlay")}
-              </div>
+              {shouldShowEmojiMetadata && (
+                <div
+                  className="message-emoji-only__metadata"
+                  data-testid="message-emoji-only-metadata"
+                >
+                  {renderMetadata("overlay")}
+                </div>
+              )}
             </div>
           ) : isTextOnly ? (
           <>

@@ -48,13 +48,12 @@
 }
 
 .message-emoji-only--single {
-  width: 112px;
-  height: 112px;
+  min-width: 38px;
+  min-height: 38px;
 }
 
 .message-emoji-only--multiple {
-  min-height: 40px;
-  gap: 4px;
+  min-height: 38px;
 }
 
 .message-emoji-only__emoji {
@@ -64,9 +63,9 @@
 }
 
 .message-emoji-only__metadata {
-  position: absolute;
-  right: 0;
-  bottom: 0;
+  position: static;
+  flex: 0 0 auto;
+  margin-left: 2px;
   pointer-events: none;
 }
 
