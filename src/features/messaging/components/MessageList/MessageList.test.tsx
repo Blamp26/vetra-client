@@ -145,7 +145,9 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
           renderedWidth: event.currentTarget.clientWidth,
           renderedHeight: event.currentTarget.clientHeight,
           devicePixelRatio: 1,
-          duration: Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : null,
+          duration: Number.isFinite(event.currentTarget.duration)
+            ? event.currentTarget.duration
+            : null,
         });
         onLoadedMetadata?.(event);
       }}
@@ -156,10 +158,22 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
 vi.mock("../ForwardModal", () => ({
   ForwardModal: ({ onForward }: { onForward: (target: unknown) => void }) => (
     <div data-testid="forward-modal-mock">
-      <button onClick={() => void Promise.resolve(onForward({ type: "direct", id: 9, ref: "user-9" })).catch(() => undefined)}>
+      <button
+        onClick={() =>
+          void Promise.resolve(
+            onForward({ type: "direct", id: 9, ref: "user-9" }),
+          ).catch(() => undefined)
+        }
+      >
         forward-direct
       </button>
-      <button onClick={() => void Promise.resolve(onForward({ type: "room", id: 7, ref: "room-7" })).catch(() => undefined)}>
+      <button
+        onClick={() =>
+          void Promise.resolve(
+            onForward({ type: "room", id: 7, ref: "room-7" }),
+          ).catch(() => undefined)
+        }
+      >
         forward-room
       </button>
     </div>
@@ -169,7 +183,9 @@ vi.mock("../ForwardModal", () => ({
 vi.mock("../../utils/attachmentDownloads", () => ({
   downloadAttachmentWithAuth: vi.fn(),
   getAttachmentLocalState: vi.fn(async () => false),
-  fetchAttachmentBlob: vi.fn(async () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" })),
+  fetchAttachmentBlob: vi.fn(
+    async () => new Blob([new Uint8Array([1, 2, 3])], { type: "audio/mpeg" }),
+  ),
 }));
 
 import * as attachmentDownloads from "../../utils/attachmentDownloads";
@@ -184,7 +200,8 @@ class ResizeObserverMock {
   }
 
   observe(target: Element) {
-    this.callback([
+    this.callback(
+      [
       {
         target,
         contentRect: {
@@ -199,7 +216,9 @@ class ResizeObserverMock {
           toJSON: () => ({}),
         },
       } as ResizeObserverEntry,
-    ], this);
+      ],
+      this,
+    );
   }
 
   disconnect() {}
@@ -247,7 +266,10 @@ function makeAlbumMessage(id: number, content: string | null) {
 }
 
 function makeAudioMessage(id: number, senderId = 2, count = 2) {
-  const mediaFileIds = Array.from({ length: count }, (_, index) => `audio-${id}-${index + 1}`);
+  const mediaFileIds = Array.from(
+    { length: count },
+    (_, index) => `audio-${id}-${index + 1}`,
+  );
   return makeMessage({
     id,
     sender_id: senderId,
@@ -293,7 +315,9 @@ describe("MessageList bubble layout", () => {
     Element.prototype.scrollIntoView = vi.fn();
     mockViewportWidth = 900;
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
-    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => mockViewportWidth);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
+      () => mockViewportWidth,
+    );
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
@@ -301,7 +325,8 @@ describe("MessageList bubble layout", () => {
       },
     });
     useAppStoreMock.mockReset();
-    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+    useAppStoreMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
       selector({
         selectionMode: false,
         selectedMessageIds: [],
@@ -337,13 +362,21 @@ describe("MessageList bubble layout", () => {
       }),
     ]);
 
-    expect(screen.getByText(new Date("2026-06-30T12:00:00Z").toLocaleDateString())).toBeInTheDocument();
-    expect(screen.getByText(new Date("2026-07-01T12:00:00Z").toLocaleDateString())).toBeInTheDocument();
+    expect(
+      screen.getByText(new Date("2026-06-30T12:00:00Z").toLocaleDateString()),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(new Date("2026-07-01T12:00:00Z").toLocaleDateString()),
+    ).toBeInTheDocument();
     expect(screen.getAllByTestId("message-bubble-row")).toHaveLength(2);
     expect(screen.getByTestId("message-list-scroll")).toHaveClass("px-3");
     expect(screen.getByTestId("message-list-scroll")).toHaveClass("py-4");
-    expect(screen.getByTestId("message-list-rail")).toHaveClass("max-w-[900px]");
-    expect(screen.getAllByTestId("message-date-group")[0]).toHaveClass("w-full");
+    expect(screen.getByTestId("message-list-rail")).toHaveClass(
+      "max-w-[900px]",
+    );
+    expect(screen.getAllByTestId("message-date-group")[0]).toHaveClass(
+      "w-full",
+    );
     expect(screen.getByText("First day")).toBeInTheDocument();
     expect(screen.getByText("Second day")).toBeInTheDocument();
   });
@@ -364,7 +397,8 @@ describe("MessageList bubble layout", () => {
         },
       },
     });
-    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+    useAppStoreMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
       selector({
         selectionMode: false,
         selectedMessageIds: [],
@@ -385,15 +419,21 @@ describe("MessageList bubble layout", () => {
       }),
     );
 
-    renderMessageList([makeMessage({
+    renderMessageList([
+      makeMessage({
       forwarded_from: {
         source_public_id: "user-alice",
         source_display_name: "Alice",
       },
-    })]);
+      }),
+    ]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open chat with Alice" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open chat with Alice" }),
+    );
 
     await waitFor(() => expect(getUserMock).toHaveBeenCalledTimes(1));
     expect(getUserMock).toHaveBeenCalledWith("user-alice");
@@ -417,7 +457,8 @@ describe("MessageList bubble layout", () => {
       status: "offline",
       last_seen_at: null,
     });
-    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+    useAppStoreMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
       selector({
         selectionMode: false,
         selectedMessageIds: [],
@@ -439,29 +480,45 @@ describe("MessageList bubble layout", () => {
     );
 
     renderMessageList(
-      [makeMessage({ forwarded_from: { source_public_id: "user-alice", source_display_name: "Alice" } })],
+      [
+        makeMessage({
+          forwarded_from: {
+            source_public_id: "user-alice",
+            source_display_name: "Alice",
+          },
+        }),
+      ],
       {},
       { wrapper: StrictMode },
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
-    await waitFor(() => expect(setActiveChat).toHaveBeenCalledWith({
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open chat with Alice" }),
+    );
+    await waitFor(() =>
+      expect(setActiveChat).toHaveBeenCalledWith({
       type: "direct",
       partnerId: 42,
       partnerRef: "user-alice",
-    }));
+      }),
+    );
     expect(getUserMock).toHaveBeenCalledWith("user-alice");
   });
 
   it("waits for latest history completion before performing the initial bottom scroll", async () => {
     const seededMessage = makeMessage({ id: 99, content: "Forwarded photo" });
-    const view = renderMessageList([seededMessage], { initialHistoryLoaded: false });
+    const view = renderMessageList([seededMessage], {
+      initialHistoryLoaded: false,
+    });
 
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
 
     view.rerender(
       <MessageList
-        messages={[seededMessage, makeMessage({ id: 100, content: "Newest history message" })]}
+        messages={[
+          seededMessage,
+          makeMessage({ id: 100, content: "Newest history message" }),
+        ]}
         currentUserId={1}
         isLoading={false}
         initialHistoryLoaded
@@ -472,7 +529,9 @@ describe("MessageList bubble layout", () => {
       />,
     );
 
-    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1),
+    );
   });
 
   it("applies a successful direct forwarding acknowledgement through the live store path", async () => {
@@ -503,7 +562,8 @@ describe("MessageList bubble layout", () => {
       }),
     };
 
-    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+    useAppStoreMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
       selector({
         selectionMode: false,
         selectedMessageIds: [],
@@ -532,11 +592,19 @@ describe("MessageList bubble layout", () => {
     fireEvent.click(screen.getByRole("button", { name: "forward-direct" }));
 
     await waitFor(() => expect(appendMessage).toHaveBeenCalledTimes(1));
-    expect(appendMessage).toHaveBeenCalledWith(9, expect.objectContaining({ id: 99, forwarded_from: { source_display_name: "Alice" } }));
-    expect(upsertPreview).toHaveBeenCalledWith(expect.objectContaining({
+    expect(appendMessage).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({
+        id: 99,
+        forwarded_from: { source_display_name: "Alice" },
+      }),
+    );
+    expect(upsertPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
       partner_id: 9,
       last_message: expect.objectContaining({ id: 99 }),
-    }));
+      }),
+    );
     expect(setActiveChat).toHaveBeenCalledTimes(1);
     expect(setActiveChat).toHaveBeenCalledWith({
       type: "direct",
@@ -565,7 +633,8 @@ describe("MessageList bubble layout", () => {
       sendRoomMessageViaChannel: vi.fn().mockResolvedValue(returnedMessage),
     };
 
-    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+    useAppStoreMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
       selector({
         selectionMode: false,
         selectedMessageIds: [],
@@ -594,12 +663,17 @@ describe("MessageList bubble layout", () => {
     fireEvent.click(screen.getByRole("button", { name: "forward-room" }));
 
     await waitFor(() => expect(appendRoomMessage).toHaveBeenCalledTimes(1));
-    expect(appendRoomMessage).toHaveBeenCalledWith(7, expect.objectContaining({ id: 100 }));
-    expect(upsertRoomPreview).toHaveBeenCalledWith(expect.objectContaining({
+    expect(appendRoomMessage).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ id: 100 }),
+    );
+    expect(upsertRoomPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
       id: 7,
       last_message_at: returnedMessage.inserted_at,
       last_message: expect.objectContaining({ id: 100 }),
-    }));
+      }),
+    );
     expect(setActiveChat).toHaveBeenCalledTimes(1);
     expect(setActiveChat).toHaveBeenCalledWith({
       type: "room",
@@ -627,7 +701,8 @@ describe("MessageList bubble layout", () => {
       }),
     };
 
-    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+    useAppStoreMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
       selector({
         selectionMode: false,
         selectedMessageIds: [],
@@ -680,7 +755,10 @@ describe("MessageList bubble layout", () => {
 
     const rows = screen.getAllByTestId("message-bubble-row");
 
-    expect(screen.getByTestId("message-list-rail")).toHaveAttribute("data-alignment-mode", "split");
+    expect(screen.getByTestId("message-list-rail")).toHaveAttribute(
+      "data-alignment-mode",
+      "split",
+    );
     expect(rows[0]).toHaveAttribute("data-alignment-mode", "split");
     expect(rows[0]).toHaveClass("justify-start");
     expect(rows[1]).toHaveClass("justify-end");
@@ -722,7 +800,9 @@ describe("MessageList bubble layout", () => {
 
     expect(screen.getByTestId("message-context-menu")).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Reply" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Copy Text" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Copy Text" }),
+    ).toBeInTheDocument();
   });
 
   it("positions the context popup outside the clicked own-message bubble", () => {
@@ -737,9 +817,13 @@ describe("MessageList bubble layout", () => {
     ]);
 
     const bubble = screen.getByTestId("message-bubble") as HTMLDivElement;
-    const contentRect = bubble.querySelector("[data-message-content-rect]") as HTMLElement;
-    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function getBoundingClientRect() {
+    const contentRect = bubble.querySelector(
+      "[data-message-content-rect]",
+    ) as HTMLElement;
+    const originalGetBoundingClientRect =
+      HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function getBoundingClientRect() {
       if (this === bubble) {
         return {
           x: 660,
@@ -783,7 +867,8 @@ describe("MessageList bubble layout", () => {
       }
 
       return originalGetBoundingClientRect.call(this);
-    });
+      },
+    );
 
     fireEvent.contextMenu(bubble, { clientX: 900, clientY: 260 });
 
@@ -813,13 +898,17 @@ describe("MessageList bubble layout", () => {
     expect(screen.getByTestId("message-context-menu")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByTestId("message-context-menu")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("message-context-menu"),
+    ).not.toBeInTheDocument();
 
     fireEvent.contextMenu(screen.getByTestId("message-bubble"));
     expect(screen.getByTestId("message-context-menu")).toBeInTheDocument();
 
     fireEvent.click(document.body);
-    expect(screen.queryByTestId("message-context-menu")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("message-context-menu"),
+    ).not.toBeInTheDocument();
   });
 
   it("resets the reactions picker to collapsed on every new context menu open", () => {
@@ -833,28 +922,49 @@ describe("MessageList bubble layout", () => {
     fireEvent.contextMenu(bubbles[0]);
     fireEvent.click(screen.getByTestId("message-context-reaction-more"));
 
-    expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
-    expect(screen.queryByTestId("message-context-reactions-surface")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("message-context-expanded-picker"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("message-context-reactions-surface"),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(document.body);
-    expect(screen.queryByTestId("message-context-menu")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("message-context-menu"),
+    ).not.toBeInTheDocument();
 
     fireEvent.contextMenu(bubbles[0]);
-    expect(screen.queryByTestId("message-context-expanded-picker")).not.toBeInTheDocument();
-    expect(screen.getByTestId("message-context-reactions-surface")).toBeInTheDocument();
-    expect(screen.getByTestId("message-context-reaction-more")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("message-context-expanded-picker"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("message-context-reactions-surface"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("message-context-reaction-more"),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("message-context-reaction-more"));
-    expect(screen.getByTestId("message-context-expanded-picker")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("message-context-expanded-picker"),
+    ).toBeInTheDocument();
 
     fireEvent.contextMenu(bubbles[1]);
-    expect(screen.queryByTestId("message-context-expanded-picker")).not.toBeInTheDocument();
-    expect(screen.getByTestId("message-context-reactions-surface")).toBeInTheDocument();
-    expect(screen.getByTestId("message-context-reaction-more")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("message-context-expanded-picker"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("message-context-reactions-surface"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("message-context-reaction-more"),
+    ).toBeInTheDocument();
   });
 
   it("keeps the popup positioned inside the viewport", () => {
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () => ({
       x: 0,
       y: 0,
       top: 0,
@@ -864,7 +974,8 @@ describe("MessageList bubble layout", () => {
       width: 216,
       height: 248,
       toJSON: () => ({}),
-    }));
+      }),
+    );
     renderMessageList([makeMessage({ content: "Context menu message" })]);
 
     fireEvent.contextMenu(screen.getByTestId("message-bubble"), {
@@ -893,8 +1004,18 @@ describe("MessageList bubble layout", () => {
 
   it("renders the existing reply relation in a compact preview and leaves un-replied messages unchanged", () => {
     renderMessageList([
-      makeMessage({ id: 10, content: "Original message", sender_id: 2, sender_display_name: "Original sender" }),
-      makeMessage({ id: 11, content: "My response", sender_id: 1, reply_to_id: 10 }),
+      makeMessage({
+        id: 10,
+        content: "Original message",
+        sender_id: 2,
+        sender_display_name: "Original sender",
+      }),
+      makeMessage({
+        id: 11,
+        content: "My response",
+        sender_id: 1,
+        reply_to_id: 10,
+      }),
       makeMessage({ id: 12, content: "No reply" }),
     ]);
 
@@ -905,10 +1026,10 @@ describe("MessageList bubble layout", () => {
     const quoted = screen.getByTestId("message-reply-preview-quoted");
 
     expect(wrapper).toHaveStyle({
-      height: "49px",
-      paddingTop: "2px",
-      paddingBottom: "2px",
-      gap: "4px",
+      height: "44px",
+      paddingTop: "0px",
+      paddingBottom: "0px",
+      gap: "0px",
     });
     expect(card).toHaveStyle({
       width: "100%",
@@ -918,9 +1039,22 @@ describe("MessageList bubble layout", () => {
       borderRadius: "6px",
       boxShadow: "none",
     });
-    expect(accent).toHaveStyle({ width: "3px", height: "100%", top: "0px", left: "0px" });
-    expect(sender).toHaveStyle({ fontSize: "14px", fontWeight: "500", lineHeight: "20px" });
-    expect(quoted).toHaveStyle({ fontSize: "14px", fontWeight: "400", lineHeight: "18px" });
+    expect(accent).toHaveStyle({
+      width: "3px",
+      height: "100%",
+      top: "0px",
+      left: "0px",
+    });
+    expect(sender).toHaveStyle({
+      fontSize: "14px",
+      fontWeight: "500",
+      lineHeight: "20px",
+    });
+    expect(quoted).toHaveStyle({
+      fontSize: "14px",
+      fontWeight: "400",
+      lineHeight: "18px",
+    });
     expect(sender).toHaveTextContent("Original sender");
     expect(quoted).toHaveTextContent("Original message");
     expect(card.style.boxShadow).toBe("none");
@@ -945,25 +1079,48 @@ describe("MessageList bubble layout", () => {
         media_file_id: "reply-document",
         media_mime_type: "application/pdf",
       }),
-      makeMessage({ id: 21, content: "Acknowledged", sender_id: 1, reply_to_id: 20 }),
+      makeMessage({
+        id: 21,
+        content: "Acknowledged",
+        sender_id: 1,
+        reply_to_id: 20,
+      }),
     ]);
 
     const card = screen.getByTestId("message-reply-preview-card");
-    expect(screen.getByTestId("message-reply-preview-sender")).toHaveTextContent("Document sender");
-    expect(screen.getByTestId("message-reply-preview-quoted")).toHaveTextContent("the-real-filename.pdf");
-    expect(screen.getByAltText("📎")).toHaveStyle({ width: "18px", height: "18px" });
+    expect(
+      screen.getByTestId("message-reply-preview-sender"),
+    ).toHaveTextContent("Document sender");
+    expect(
+      screen.getByTestId("message-reply-preview-quoted"),
+    ).toHaveTextContent("the-real-filename.pdf");
+    expect(screen.getByAltText("📎")).toHaveStyle({
+      width: "18px",
+      height: "18px",
+    });
 
     fireEvent.click(card);
 
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
-    expect(screen.getAllByTestId("message-bubble")[0]).toHaveAttribute("data-message-highlighted", "true");
-    expect(attachmentDownloads.downloadAttachmentWithAuth).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId("message-bubble")[0]).toHaveAttribute(
+      "data-message-highlighted",
+      "true",
+    );
+    expect(
+      attachmentDownloads.downloadAttachmentWithAuth,
+    ).not.toHaveBeenCalled();
   });
 
   it("uses the existing history loader when a reply target is not mounted", () => {
     const onLoadMore = vi.fn();
     renderMessageList(
-      [makeMessage({ id: 30, content: "Reply with unloaded target", reply_to_id: 999 })],
+      [
+        makeMessage({
+          id: 30,
+          content: "Reply with unloaded target",
+          reply_to_id: 999,
+        }),
+      ],
       { hasMore: true, onLoadMore },
     );
 
@@ -993,10 +1150,12 @@ describe("MessageList bubble layout", () => {
     fireEvent.contextMenu(screen.getByTestId("message-bubble"));
     fireEvent.click(screen.getByRole("menuitem", { name: "Download" }));
 
-    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith({
+    expect(attachmentDownloads.downloadAttachmentWithAuth).toHaveBeenCalledWith(
+      {
       attachment: expect.objectContaining({ id: "file-21" }),
       authToken: "secret-token",
-    });
+      },
+    );
   });
 
   it("opens VideoLightbox when clicking a grouped video tile", () => {
@@ -1180,15 +1339,16 @@ describe("MessageList bubble layout", () => {
     expect(rows[1]).toHaveAttribute("data-attachment-run", "true");
     expect(rows[1]).toHaveClass("mt-0.5");
     const bubbles = screen.getAllByTestId("message-bubble");
-    expect(within(bubbles[0]).queryByTestId("message-text-tail")).not.toBeInTheDocument();
-    expect(within(bubbles[1]).getByTestId("message-text-tail")).toBeInTheDocument();
+    expect(
+      within(bubbles[0]).queryByTestId("message-text-tail"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(bubbles[1]).getByTestId("message-text-tail"),
+    ).toBeInTheDocument();
   });
 
   it("keeps separate logical audio groups on normal outer spacing", () => {
-    renderMessageList([
-      makeAudioMessage(1, 2, 2),
-      makeAudioMessage(2, 2, 3),
-    ]);
+    renderMessageList([makeAudioMessage(1, 2, 2), makeAudioMessage(2, 2, 3)]);
 
     const rows = screen.getAllByTestId("message-row-spacing");
     expect(rows[1]).toHaveAttribute("data-attachment-run", "false");
@@ -1206,7 +1366,7 @@ describe("MessageList bubble layout", () => {
     expect(rows[1]).toHaveAttribute("data-attachment-run", "false");
     expect(rows[1]).toHaveAttribute("data-grouped-with-previous", "true");
     expect(rows[0]).toHaveAttribute("data-grouped-with-next", "true");
-    expect(rows[1]).toHaveClass("mt-1.5");
+    expect(rows[1]).toHaveClass("mt-0.5");
   });
 
   it("keeps grouped corners on the middle incoming bubble and full corners on its tail bubble", () => {
@@ -1216,8 +1376,8 @@ describe("MessageList bubble layout", () => {
     ]);
 
     const bubbles = screen.getAllByTestId("message-bubble");
-    expect(bubbles[0]).toHaveClass("rounded-bl-[6px]");
-    expect(bubbles[1]).toHaveClass("rounded-tl-[6px]", "rounded-bl-[0px]");
+    expect(bubbles[0]).toHaveClass("rounded-bl-[4px]");
+    expect(bubbles[1]).toHaveClass("rounded-tl-[4px]", "rounded-bl-[0px]");
   });
 
   it("keeps grouped corners on the middle outgoing bubble and full corners on its tail bubble", () => {
@@ -1227,8 +1387,8 @@ describe("MessageList bubble layout", () => {
     ]);
 
     const bubbles = screen.getAllByTestId("message-bubble");
-    expect(bubbles[0]).toHaveClass("rounded-br-[6px]");
-    expect(bubbles[1]).toHaveClass("rounded-tr-[6px]", "rounded-br-[0px]");
+    expect(bubbles[0]).toHaveClass("rounded-br-[4px]");
+    expect(bubbles[1]).toHaveClass("rounded-tr-[4px]", "rounded-br-[0px]");
   });
 
   it("uses middle group corners without rendering a tail", () => {
@@ -1239,19 +1399,35 @@ describe("MessageList bubble layout", () => {
     ]);
 
     const bubbles = screen.getAllByTestId("message-bubble");
-    expect(bubbles[1]).toHaveClass("rounded-tr-[6px]", "rounded-br-[6px]");
-    expect(within(bubbles[1]).queryByTestId("message-text-tail")).not.toBeInTheDocument();
-    expect(within(bubbles[2]).getByTestId("message-text-tail")).toBeInTheDocument();
+    expect(bubbles[1]).toHaveClass("rounded-tr-[4px]", "rounded-br-[4px]");
+    expect(
+      within(bubbles[1]).queryByTestId("message-text-tail"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(bubbles[2]).getByTestId("message-text-tail"),
+    ).toBeInTheDocument();
   });
 
   it("keeps inline text metadata inside the bubble without turning it into a footer capsule", () => {
     renderMessageList([makeMessage({ sender_id: 1, content: "Ok" })]);
 
     const bubble = screen.getByTestId("message-bubble");
-    const inlineMeta = within(bubble).getByTestId("message-text-inline-metadata");
+    const inlineMeta = within(bubble).getByTestId(
+      "message-text-inline-metadata",
+    );
 
-    expect(inlineMeta).toHaveClass("float-right", "top-[6px]", "h-[20px]", "ml-[7px]", "mr-[-6px]", "px-[4px]");
-    expect(within(bubble).getByTestId("message-metadata")).not.toHaveClass("rounded-full", "bg-black/[0.20]");
+    expect(inlineMeta).toHaveClass(
+      "float-right",
+      "top-[3px]",
+      "h-[16px]",
+      "ml-[5px]",
+      "mr-[-4px]",
+      "px-[4px]",
+    );
+    expect(within(bubble).getByTestId("message-metadata")).not.toHaveClass(
+      "rounded-full",
+      "bg-black/[0.20]",
+    );
   });
 
   it("renders a nine-photo grouped message as one Telegram-like album bubble", () => {
@@ -1260,7 +1436,10 @@ describe("MessageList bubble layout", () => {
         id: 1,
         content: null,
         sender_id: 1,
-        media_file_ids: Array.from({ length: 9 }, (_, index) => `photo-${index + 1}`),
+        media_file_ids: Array.from(
+          { length: 9 },
+          (_, index) => `photo-${index + 1}`,
+        ),
         media_mime_types: Array.from({ length: 9 }, () => "image/jpeg"),
         attachments: Array.from({ length: 9 }, (_, index) => ({
           id: `photo-${index + 1}`,
@@ -1335,7 +1514,9 @@ describe("MessageList bubble layout", () => {
   it("keeps a dedicated bottom spacer so the last message clears the composer", () => {
     renderMessageList([makeMessage({ content: "Last message" })]);
 
-    expect(screen.getByTestId("message-list-bottom-spacer")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("message-list-bottom-spacer"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("message-list-bottom-spacer")).toHaveClass("h-3");
   });
 });

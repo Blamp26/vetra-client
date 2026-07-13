@@ -11,10 +11,10 @@ export function MessageTail({ side, testId }: MessageTailProps) {
   return (
     <svg
       aria-hidden="true"
-      className={`pointer-events-none absolute bottom-[-1px] block box-border h-[18px] w-[9px] overflow-hidden m-0 border-0 p-0 rounded-none transform-none opacity-100 ${side === "left" ? "left-[-9px] right-auto" : "right-[-8.81667px] left-auto"}`}
+      className={`pointer-events-none absolute bottom-[-1px] block box-border h-[18px] w-[6px] overflow-hidden m-0 border-0 p-0 rounded-none transform-none opacity-100 ${side === "left" ? "left-[-6px] right-auto" : "right-[-6px] left-auto"}`}
       fill="none"
       height="20"
-      width="9"
+      width="6"
       xmlns="http://www.w3.org/2000/svg"
       data-testid={testId}
     >

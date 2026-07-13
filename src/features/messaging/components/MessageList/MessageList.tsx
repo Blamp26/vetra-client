@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, useCallback, useMemo, useLayoutEffect } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+  useLayoutEffect,
+} from "react";
 import type { Message, MessageReactionGroup, User } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
@@ -21,8 +28,14 @@ import {
 } from "../../utils/attachments";
 import { downloadAttachmentWithAuth } from "../../utils/attachmentDownloads";
 
-function optimisticReactions(current: MessageReactionGroup[], reaction: string) {
-  const normalized = current.map((item) => ({ ...item, reaction: item.reaction ?? item.emoji ?? "" }));
+function optimisticReactions(
+  current: MessageReactionGroup[],
+  reaction: string,
+) {
+  const normalized = current.map((item) => ({
+    ...item,
+    reaction: item.reaction ?? item.emoji ?? "",
+  }));
   const index = normalized.findIndex((item) => item.reaction === reaction);
   if (index < 0) {
     return [...normalized, { reaction, count: 1, chosen: true }].sort(
@@ -33,10 +46,14 @@ function optimisticReactions(current: MessageReactionGroup[], reaction: string) 
   if (item.chosen) {
     const next = item.count - 1;
     return next > 0
-      ? normalized.map((entry, i) => i === index ? { ...entry, count: next, chosen: false } : entry)
+      ? normalized.map((entry, i) =>
+          i === index ? { ...entry, count: next, chosen: false } : entry,
+        )
       : normalized.filter((_, i) => i !== index);
   }
-  return normalized.map((entry, i) => i === index ? { ...entry, count: entry.count + 1, chosen: true } : entry);
+  return normalized.map((entry, i) =>
+    i === index ? { ...entry, count: entry.count + 1, chosen: true } : entry,
+  );
 }
 
 import { MessageItem } from "./MessageItem";
@@ -113,7 +130,11 @@ function normalizeResolvedUser(response: unknown): User {
     candidate = (candidate as { user?: unknown }).user;
   }
 
-  if (!candidate || typeof candidate !== "object" || typeof (candidate as { id?: unknown }).id !== "number") {
+  if (
+    !candidate ||
+    typeof candidate !== "object" ||
+    typeof (candidate as { id?: unknown }).id !== "number"
+  ) {
     throw new Error("invalid_user_response");
   }
 
@@ -132,7 +153,9 @@ function toRect(rect: DOMRect | DOMRectReadOnly) {
 }
 
 function getSafeContentRect(bubble: HTMLDivElement) {
-  const contentEl = bubble.querySelector<HTMLElement>("[data-message-content-rect]");
+  const contentEl = bubble.querySelector<HTMLElement>(
+    "[data-message-content-rect]",
+  );
   if (contentEl) {
     return toRect(contentEl.getBoundingClientRect());
   }
@@ -195,7 +218,8 @@ export function MessageList({
     upsertRoomPreview,
     setMessageReactions,
     toggleRoomReaction,
-  } = useAppStore((s: RootState) => ({
+  } = useAppStore(
+    (s: RootState) => ({
     selectionMode: s.selectionMode,
     selectedMessageIds: s.selectedMessageIds,
     setSelectionMode: s.setSelectionMode,
@@ -217,27 +241,38 @@ export function MessageList({
     upsertRoomPreview: s.upsertRoomPreview,
     setMessageReactions: s.setMessageReactions,
     toggleRoomReaction: s.toggleRoomReaction,
-  }), true);
+    }),
+    true,
+  );
 
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [msgToDelete, setMsgToDelete] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [isPickerExpanded, setIsPickerExpanded] = useState(false);
-  const [lightboxData, setLightboxData] = useState<MediaViewerState | null>(null);
+  const [lightboxData, setLightboxData] = useState<MediaViewerState | null>(
+    null,
+  );
   const [chatViewportWidth, setChatViewportWidth] = useState(0);
-  const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    number | null
+  >(null);
   const pendingReplyTargetId = useRef<number | null>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialScrollDoneRef = useRef(false);
   const initialLayoutTrackingRef = useRef(false);
   const lastInitialScrollHeightRef = useRef<number | null>(null);
-  const olderScrollAnchorRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
+  const olderScrollAnchorRef = useRef<{
+    scrollTop: number;
+    scrollHeight: number;
+  } | null>(null);
   const forwardingOperationRef = useRef(0);
   const forwardedSenderNavigationRef = useRef<string | null>(null);
   const pendingReactionRef = useRef(new Set<string>());
   const isMountedRef = useRef(true);
-  const [forwardedSenderError, setForwardedSenderError] = useState<string | null>(null);
+  const [forwardedSenderError, setForwardedSenderError] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -251,7 +286,8 @@ export function MessageList({
     };
   }, []);
 
-  const handleOpenForwardedSender = useCallback(async (sourcePublicId: string) => {
+  const handleOpenForwardedSender = useCallback(
+    async (sourcePublicId: string) => {
     if (!isMountedRef.current) return;
     if (forwardedSenderNavigationRef.current) return;
 
@@ -261,10 +297,18 @@ export function MessageList({
     try {
       const response = await authApi.getUser(sourcePublicId);
       const user = normalizeResolvedUser(response);
-      if (!isMountedRef.current || forwardedSenderNavigationRef.current !== sourcePublicId) return;
+        if (
+          !isMountedRef.current ||
+          forwardedSenderNavigationRef.current !== sourcePublicId
+        )
+          return;
       setActiveChat(directChatForUser(user));
     } catch (error) {
-      if (!isMountedRef.current || forwardedSenderNavigationRef.current !== sourcePublicId) return;
+        if (
+          !isMountedRef.current ||
+          forwardedSenderNavigationRef.current !== sourcePublicId
+        )
+          return;
       console.error("[VETRA forwarded-sender] resolution failed", {
         sourcePublicId,
         stage: "get_user",
@@ -276,17 +320,20 @@ export function MessageList({
         forwardedSenderNavigationRef.current = null;
       }
     }
-  }, [setActiveChat]);
+    },
+    [setActiveChat],
+  );
 
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const readWidth = () => {
-      const nextWidth = container.clientWidth || container.getBoundingClientRect().width || 0;
-      setChatViewportWidth((currentWidth) => (
-        currentWidth === nextWidth ? currentWidth : nextWidth
-      ));
+      const nextWidth =
+        container.clientWidth || container.getBoundingClientRect().width || 0;
+      setChatViewportWidth((currentWidth) =>
+        currentWidth === nextWidth ? currentWidth : nextWidth,
+      );
     };
 
     readWidth();
@@ -335,11 +382,14 @@ export function MessageList({
     setHighlightedMessageId(messageId);
     if (highlightTimer.current) clearTimeout(highlightTimer.current);
     highlightTimer.current = setTimeout(() => {
-      setHighlightedMessageId((current) => current === messageId ? null : current);
+      setHighlightedMessageId((current) =>
+        current === messageId ? null : current,
+      );
     }, 1200);
   }, []);
 
-  const toggleReaction = useCallback(async (msgId: number, emoji: string) => {
+  const toggleReaction = useCallback(
+    async (msgId: number, emoji: string) => {
     if (!socketManager) return;
     const key = `${msgId}:${emoji}`;
     if (pendingReactionRef.current.has(key)) return;
@@ -350,7 +400,11 @@ export function MessageList({
     pendingReactionRef.current.add(key);
     const apply = (reactions: MessageReactionGroup[]) => {
       if (chatContext.type === "room") {
-        toggleRoomReaction({ message_id: msgId, room_id: chatContext.roomId, reactions });
+          toggleRoomReaction({
+            message_id: msgId,
+            room_id: chatContext.roomId,
+            reactions,
+          });
       } else {
         setMessageReactions(msgId, reactions);
       }
@@ -358,20 +412,38 @@ export function MessageList({
     apply(optimistic);
     try {
       if (chatContext.type === "room") {
-        const payload = await socketManager.toggleReaction(chatContext.roomId, msgId, emoji);
-        toggleRoomReaction({ message_id: msgId, room_id: chatContext.roomId, reactions: payload.reactions, updated_at: payload.updated_at });
+          const payload = await socketManager.toggleReaction(
+            chatContext.roomId,
+            msgId,
+            emoji,
+          );
+          toggleRoomReaction({
+            message_id: msgId,
+            room_id: chatContext.roomId,
+            reactions: payload.reactions,
+            updated_at: payload.updated_at,
+          });
       } else {
-        await socketManager.toggleDirectReaction(
+          await socketManager
+            .toggleDirectReaction(
           withFallbackRef(
             chatContext.partnerId,
             chatContext.partnerRef,
             conversationPreviews[chatContext.partnerId]
-              ? { id: chatContext.partnerId, public_id: conversationPreviews[chatContext.partnerId].partner_public_id }
+                  ? {
+                      id: chatContext.partnerId,
+                      public_id:
+                        conversationPreviews[chatContext.partnerId]
+                          .partner_public_id,
+                    }
               : undefined,
           ),
           msgId,
           emoji,
-        ).then((payload) => setMessageReactions(msgId, payload.reactions, payload.updated_at));
+            )
+            .then((payload) =>
+              setMessageReactions(msgId, payload.reactions, payload.updated_at),
+            );
       }
     } catch (err) {
       console.error("Toggle reaction failed:", err);
@@ -380,7 +452,17 @@ export function MessageList({
       pendingReactionRef.current.delete(key);
       setContextMenu(null);
     }
-  }, [socketManager, chatContext, conversationPreviews, messagesById, messageReactions, setMessageReactions, toggleRoomReaction]);
+    },
+    [
+      socketManager,
+      chatContext,
+      conversationPreviews,
+      messagesById,
+      messageReactions,
+      setMessageReactions,
+      toggleRoomReaction,
+    ],
+  );
 
   const handleLoadMore = useCallback(() => {
     const element = containerRef.current;
@@ -398,7 +480,8 @@ export function MessageList({
     const anchor = olderScrollAnchorRef.current;
     if (!element || !anchor || isLoading) return;
 
-    element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
+    element.scrollTop =
+      anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
     olderScrollAnchorRef.current = null;
   }, [messages, isLoading]);
 
@@ -421,7 +504,8 @@ export function MessageList({
 
     const element = containerRef.current;
     if (!element) return;
-    const isNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+    const isNearBottom =
+      element.scrollHeight - element.scrollTop - element.clientHeight < 120;
     if (isNearBottom) bottomRef.current?.scrollIntoView();
   }, [initialHistoryLoaded, isLoading, messages]);
 
@@ -430,13 +514,19 @@ export function MessageList({
     if (targetId == null || !messageRefs.current[targetId]) return;
 
     pendingReplyTargetId.current = null;
-    messageRefs.current[targetId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    messageRefs.current[targetId]?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
     brieflyHighlightMessage(targetId);
   }, [brieflyHighlightMessage, messages]);
 
-  useEffect(() => () => {
+  useEffect(
+    () => () => {
     if (highlightTimer.current) clearTimeout(highlightTimer.current);
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -449,7 +539,10 @@ export function MessageList({
     (e: React.MouseEvent<HTMLDivElement>, msg: Message) => {
       e.preventDefault();
       const bubble = e.currentTarget;
-      const author = msg.sender_display_name || msg.sender_username || `User #${msg.sender_id}`;
+      const author =
+        msg.sender_display_name ||
+        msg.sender_username ||
+        `User #${msg.sender_id}`;
       setIsPickerExpanded(false);
       setContextMenu({
         msgId: msg.id,
@@ -472,7 +565,8 @@ export function MessageList({
     const msg = messagesById.get(contextMenu.msgId);
     if (!msg) return;
     const chatType = chatContext.type;
-    const targetId = chatType === "direct" ? chatContext.partnerId : chatContext.roomId;
+    const targetId =
+      chatType === "direct" ? chatContext.partnerId : chatContext.roomId;
     startEditing(msg, chatType, targetId);
     setContextMenu(null);
   }, [contextMenu, messagesById, chatContext, startEditing]);
@@ -492,7 +586,11 @@ export function MessageList({
           chatContext.partnerId,
           chatContext.partnerRef,
           conversationPreviews[chatContext.partnerId]
-            ? { id: chatContext.partnerId, public_id: conversationPreviews[chatContext.partnerId].partner_public_id }
+            ? {
+                id: chatContext.partnerId,
+                public_id:
+                  conversationPreviews[chatContext.partnerId].partner_public_id,
+              }
             : undefined,
         );
         await socketManager.deleteMessage(partnerRef, msgToDelete);
@@ -507,7 +605,14 @@ export function MessageList({
     } finally {
       setIsDeleting(false);
     }
-  }, [msgToDelete, socketManager, chatContext, deleteMessage, deleteRoomMessage, conversationPreviews]);
+  }, [
+    msgToDelete,
+    socketManager,
+    chatContext,
+    deleteMessage,
+    deleteRoomMessage,
+    conversationPreviews,
+  ]);
 
   const handleCopy = useCallback(async () => {
     if (!contextMenu || !contextMenu.hasText || !contextMenu.content) return;
@@ -577,8 +682,17 @@ export function MessageList({
     setForwardingMessages([targetMessage.id]);
   }, [lightboxData, messagesById, setForwardingMessages]);
 
-  const handlePerformForward = useCallback(async (target: { type: 'direct' | 'room', id: number; ref?: string | number | null }) => {
-    if (!forwardingMessageIds || forwardingMessageIds.length === 0 || !socketManager) {
+  const handlePerformForward = useCallback(
+    async (target: {
+      type: "direct" | "room";
+      id: number;
+      ref?: string | number | null;
+    }) => {
+      if (
+        !forwardingMessageIds ||
+        forwardingMessageIds.length === 0 ||
+        !socketManager
+      ) {
       throw new Error("Forwarding is unavailable");
     }
     const operationId = ++forwardingOperationRef.current;
@@ -596,32 +710,39 @@ export function MessageList({
           mediaFileIds: msg.media_file_ids,
           forwardedFromMessageId: msg.id,
         };
-        if (target.type === 'direct') {
+          if (target.type === "direct") {
           const forwardedMessage = await sendMessageViaChannel(
             socketManager.userChannel,
             target.ref ?? target.id,
             payload,
           );
-          const normalizedMessage = normalizeMessageAttachments(forwardedMessage);
+            const normalizedMessage =
+              normalizeMessageAttachments(forwardedMessage);
           appendMessage(target.id, normalizedMessage);
           upsertPreview({
             partner_id: target.id,
             partner_public_id:
               normalizedMessage.recipient_public_id ??
               (typeof target.ref === "string" ? target.ref : null),
-            partner_username: normalizedMessage.recipient_username ?? "Unknown",
-            partner_display_name: normalizedMessage.recipient_display_name ?? null,
+              partner_username:
+                normalizedMessage.recipient_username ?? "Unknown",
+              partner_display_name:
+                normalizedMessage.recipient_display_name ?? null,
             unread_count: 0,
             last_message: buildPreviewMessage(normalizedMessage),
           });
           if (operationId !== forwardingOperationRef.current) return;
         } else {
-          const forwardedMessage = await socketManager.sendRoomMessageViaChannel(target.id, payload);
-          const normalizedMessage = normalizeMessageAttachments(forwardedMessage);
+            const forwardedMessage =
+              await socketManager.sendRoomMessageViaChannel(target.id, payload);
+            const normalizedMessage =
+              normalizeMessageAttachments(forwardedMessage);
           appendRoomMessage(target.id, normalizedMessage);
           upsertRoomPreview({
             id: target.id,
-            public_id: normalizedMessage.room_public_id ?? (typeof target.ref === "string" ? target.ref : null),
+              public_id:
+                normalizedMessage.room_public_id ??
+                (typeof target.ref === "string" ? target.ref : null),
             last_message_at: normalizedMessage.inserted_at,
             last_message: buildPreviewMessage(normalizedMessage),
           });
@@ -636,14 +757,23 @@ export function MessageList({
       clearSelection();
       setActiveChat(
         target.type === "direct"
-          ? { type: "direct", partnerId: target.id, partnerRef: target.ref ?? target.id }
-          : { type: "room", roomId: target.id, roomRef: target.ref ?? target.id },
+            ? {
+                type: "direct",
+                partnerId: target.id,
+                partnerRef: target.ref ?? target.id,
+              }
+            : {
+                type: "room",
+                roomId: target.id,
+                roomRef: target.ref ?? target.id,
+              },
       );
     } catch (err) {
       console.error("Forwarding failed:", err);
       throw err;
     }
-  }, [
+    },
+    [
     forwardingMessageIds,
     socketManager,
     messagesById,
@@ -654,7 +784,8 @@ export function MessageList({
     appendRoomMessage,
     upsertPreview,
     upsertRoomPreview,
-  ]);
+    ],
+  );
 
   const cancelForwarding = useCallback(() => {
     forwardingOperationRef.current += 1;
@@ -674,7 +805,11 @@ export function MessageList({
   );
 
   const formatTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    new Date(iso).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
 
   const formatDate = (iso: string) => {
     const date = new Date(iso);
@@ -685,14 +820,18 @@ export function MessageList({
     const replyTargetId = msg.reply_to_id;
     if (replyTargetId == null) return null;
     const target = messagesById.get(replyTargetId);
-    const author = target?.sender_display_name || target?.sender_username || (target ? `User #${target.sender_id}` : "Message");
+    const author =
+      target?.sender_display_name ||
+      target?.sender_username ||
+      (target ? `User #${target.sender_id}` : "Message");
 
     const targetAttachment = target ? getMessageAttachment(target) : null;
     const isDocument = targetAttachment?.kind === "file";
     const previewText = target
       ? (isDocument
         ? targetAttachment.original_name || getPreviewText(target, "Message")
-        : getPreviewText(target, "Message"))
+          : getPreviewText(target, "Message")
+        )
         .replace(/\s+/g, " ")
         .trim()
       : "Message";
@@ -712,16 +851,16 @@ export function MessageList({
 
     return (
       <div
-        className="box-border flex h-[49px] w-full flex-col justify-start gap-[4px] px-0 pb-[2px] pt-[2px]"
+        className="box-border flex h-[44px] w-full flex-col justify-start gap-0 px-0 py-0"
         data-testid="message-reply-preview-wrapper"
         style={{
           display: "flex",
           flexDirection: "column",
           justifyContent: "flex-start",
-          paddingTop: "2px",
-          paddingBottom: "2px",
-          gap: "4px",
-          height: "49px",
+          paddingTop: "0",
+          paddingBottom: "0",
+          gap: "0",
+          height: "44px",
         }}
       >
         <button
@@ -740,8 +879,12 @@ export function MessageList({
             borderRadius: "6px",
             overflow: "hidden",
             cursor: "pointer",
-            backgroundColor: isOwn ? "var(--bubble-outgoing-meta-bg)" : "var(--bubble-incoming-meta-bg)",
-            color: isOwn ? "var(--bubble-outgoing-meta)" : "var(--bubble-incoming-meta)",
+            backgroundColor: isOwn
+              ? "var(--bubble-outgoing-meta-bg)"
+              : "var(--bubble-incoming-meta-bg)",
+            color: isOwn
+              ? "var(--bubble-outgoing-meta)"
+              : "var(--bubble-incoming-meta)",
             boxShadow: "none",
           }}
           onClick={(event) => {
@@ -795,8 +938,12 @@ export function MessageList({
                 minWidth: "0",
               }}
             >
-              {isDocument && <Emoji emoji="📎" size={18} className="mr-px shrink-0" />}
-              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{previewText}</span>
+              {isDocument && (
+                <Emoji emoji="📎" size={18} className="mr-px shrink-0" />
+              )}
+              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                {previewText}
+              </span>
             </span>
           </span>
         </button>
@@ -818,7 +965,8 @@ export function MessageList({
     return groups;
   }, [messages]);
 
-  const alignmentMode = chatViewportWidth > WIDE_CHAT_LEFT_COLUMN_THRESHOLD
+  const alignmentMode =
+    chatViewportWidth > WIDE_CHAT_LEFT_COLUMN_THRESHOLD
     ? "left-column"
     : "split";
 
@@ -841,7 +989,11 @@ export function MessageList({
         >
           {hasMore && (
             <div className="flex justify-center p-2">
-              <button onClick={handleLoadMore} disabled={isLoading} className="vt-button">
+              <button
+                onClick={handleLoadMore}
+                disabled={isLoading}
+                className="vt-button"
+              >
                 {isLoading ? "Loading..." : "Older messages"}
               </button>
             </div>
@@ -850,7 +1002,9 @@ export function MessageList({
             <div className="vt-panel mx-auto max-w-md px-5 py-6 text-center">
               <div className="space-y-1.5">
                 <span className="vt-kicker">No messages yet</span>
-                <p className="text-sm text-muted-foreground">Start the conversation with a message or file.</p>
+                <p className="text-sm text-muted-foreground">
+                  Start the conversation with a message or file.
+                </p>
               </div>
             </div>
           )}
@@ -869,21 +1023,32 @@ export function MessageList({
                 const isConsecutive = prevMsg?.sender_id === msg.sender_id;
                 const isGroupedWithNext = nextMsg?.sender_id === msg.sender_id;
                 const messageAttachments = getMessageAttachments(msg);
-                const previousMessageAttachments = prevMsg ? getMessageAttachments(prevMsg) : [];
+                const previousMessageAttachments = prevMsg
+                  ? getMessageAttachments(prevMsg)
+                  : [];
                 const hasAttachment = messageAttachments.length > 0;
                 const prevHasAttachment = previousMessageAttachments.length > 0;
                 const isAlbum = messageAttachments.length > 1;
                 const prevIsAlbum = previousMessageAttachments.length > 1;
                 const isAlbumBoundary = isAlbum || prevIsAlbum;
-                const isAttachmentRun = isConsecutive && hasAttachment && prevHasAttachment && !isAlbumBoundary;
-                const isPlainTextGroup = isConsecutive && !hasAttachment && !prevHasAttachment;
+                const isAttachmentRun =
+                  isConsecutive &&
+                  hasAttachment &&
+                  prevHasAttachment &&
+                  !isAlbumBoundary;
+                const isPlainTextGroup =
+                  isConsecutive && !hasAttachment && !prevHasAttachment;
                 return (
                   <div
                     key={msg.id}
                     data-testid="message-row-spacing"
                     data-attachment-run={isAttachmentRun ? "true" : "false"}
-                    data-grouped-with-previous={isConsecutive ? "true" : "false"}
-                    data-grouped-with-next={isGroupedWithNext ? "true" : "false"}
+                    data-grouped-with-previous={
+                      isConsecutive ? "true" : "false"
+                    }
+                    data-grouped-with-next={
+                      isGroupedWithNext ? "true" : "false"
+                    }
                     className={cn(
                       idx === 0
                         ? "mt-0"
@@ -894,14 +1059,16 @@ export function MessageList({
                         : isAttachmentRun
                           ? "mt-0.5"
                           : isPlainTextGroup
-                            ? "mt-1.5"
+                              ? "mt-0.5"
                             : isConsecutive
                               ? "mt-0.5"
                             : "mt-2.5",
                     )}
                   >
                     <MessageItem
-                      ref={(el) => { messageRefs.current[msg.id] = el; }}
+                      ref={(el) => {
+                        messageRefs.current[msg.id] = el;
+                      }}
                       msg={msg}
                       isOwn={msg.sender_id === currentUserId}
                       alignmentMode={alignmentMode}
@@ -911,7 +1078,9 @@ export function MessageList({
                       isHighlighted={highlightedMessageId === msg.id}
                       selectionMode={selectionMode}
                       isRoom={chatContext.type === "room"}
-                      messageReactions={messageReactions[msg.id] || msg.reactions || []}
+                      messageReactions={
+                        messageReactions[msg.id] || msg.reactions || []
+                      }
                       currentUserId={currentUserId}
                       onContextMenu={handleContextMenu}
                       onToggleSelection={toggleMessageSelection}
@@ -926,7 +1095,11 @@ export function MessageList({
               })}
             </div>
           ))}
-          <div ref={bottomRef} className="h-3" data-testid="message-list-bottom-spacer" />
+          <div
+            ref={bottomRef}
+            className="h-3"
+            data-testid="message-list-bottom-spacer"
+          />
         </div>
       </div>
 
@@ -941,7 +1114,10 @@ export function MessageList({
       )}
 
       {forwardedSenderError && (
-        <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground" role="status">
+        <div
+          className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-md bg-destructive px-3 py-1.5 text-xs text-destructive-foreground"
+          role="status"
+        >
           {forwardedSenderError}
         </div>
       )}
@@ -949,17 +1125,32 @@ export function MessageList({
       {selectionMode && (
         <div className="border-t border-border bg-card px-4 py-3 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="font-medium">{selectedMessageIds.length} selected</span>
+            <span className="font-medium">
+              {selectedMessageIds.length} selected
+            </span>
             <div className="flex flex-wrap items-center gap-2">
             {selectedForwardBlocked && (
               <span className="text-[10px] text-muted-foreground">
                 One or more selected messages cannot be forwarded.
               </span>
             )}
-              <button onClick={() => selectedMessageIds.length > 0 && setMsgToDelete(selectedMessageIds[0])} className="vt-button vt-button--danger min-h-9 px-3 py-0 text-xs">Delete</button>
             <button
-              onClick={() => !selectedForwardBlocked && setForwardingMessages(selectedMessageIds)}
-              disabled={selectedForwardBlocked || selectedMessageIds.length === 0}
+                onClick={() =>
+                  selectedMessageIds.length > 0 &&
+                  setMsgToDelete(selectedMessageIds[0])
+                }
+                className="vt-button vt-button--danger min-h-9 px-3 py-0 text-xs"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() =>
+                  !selectedForwardBlocked &&
+                  setForwardingMessages(selectedMessageIds)
+                }
+                disabled={
+                  selectedForwardBlocked || selectedMessageIds.length === 0
+                }
                 className={cn(
                   "vt-button min-h-9 px-3 py-0 text-xs",
                   selectedForwardBlocked && "cursor-not-allowed opacity-50",
@@ -967,7 +1158,12 @@ export function MessageList({
             >
               Forward
             </button>
-              <button onClick={clearSelection} className="vt-button vt-button--ghost min-h-9 px-3 py-0 text-xs">Cancel</button>
+              <button
+                onClick={clearSelection}
+                className="vt-button vt-button--ghost min-h-9 px-3 py-0 text-xs"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
@@ -993,7 +1189,9 @@ export function MessageList({
           })()}
           canDownload={(() => {
             const contextMessage = messagesById.get(contextMenu.msgId);
-            return !!contextMessage && getMessageAttachment(contextMessage) != null;
+            return (
+              !!contextMessage && getMessageAttachment(contextMessage) != null
+            );
           })()}
           canForward={(() => {
             const contextMessage = messagesById.get(contextMenu.msgId);
@@ -1021,22 +1219,18 @@ export function MessageList({
           authorName={lightboxData.authorName}
           avatarSrc={lightboxData.avatarSrc}
           createdAt={lightboxData.createdAt}
-          onForward={
-            (() => {
+          onForward={(() => {
               const targetMessage = messagesById.get(lightboxData.messageId);
               return targetMessage && isMessageForwardable(targetMessage)
                 ? handleLightboxForward
                 : undefined;
-            })()
-          }
-          onDelete={
-            (() => {
+          })()}
+          onDelete={(() => {
               const targetMessage = messagesById.get(lightboxData.messageId);
               return targetMessage && targetMessage.sender_id === currentUserId
                 ? handleLightboxDelete
                 : undefined;
-            })()
-          }
+          })()}
           onClose={() => setLightboxData(null)}
         />
       )}
@@ -1047,22 +1241,18 @@ export function MessageList({
           authorName={lightboxData.authorName}
           avatarSrc={lightboxData.avatarSrc}
           createdAt={lightboxData.createdAt}
-          onForward={
-            (() => {
+          onForward={(() => {
               const targetMessage = messagesById.get(lightboxData.messageId);
               return targetMessage && isMessageForwardable(targetMessage)
                 ? handleLightboxForward
                 : undefined;
-            })()
-          }
-          onDelete={
-            (() => {
+          })()}
+          onDelete={(() => {
               const targetMessage = messagesById.get(lightboxData.messageId);
               return targetMessage && targetMessage.sender_id === currentUserId
                 ? handleLightboxDelete
                 : undefined;
-            })()
-          }
+          })()}
           onClose={() => setLightboxData(null)}
         />
       )}

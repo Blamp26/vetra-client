@@ -5,7 +5,9 @@ import { MessageReactions } from "./MessageReactions";
 
 describe("MessageReactions", () => {
   it("renders nothing for an empty reaction list", () => {
-    const { container } = render(<MessageReactions messageId={1} reactions={[]} onToggle={vi.fn()} />);
+    const { container } = render(
+      <MessageReactions messageId={1} reactions={[]} onToggle={vi.fn()} />,
+    );
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -27,14 +29,20 @@ describe("MessageReactions", () => {
     expect(group).toContainElement(buttons[0]);
     expect(buttons[0]).toHaveAttribute("type", "button");
     expect(buttons[0]).toHaveAttribute("aria-pressed", "true");
-    expect(buttons[0]).toHaveAttribute("aria-label", "Remove 👍 reaction, 4 reactions");
+    expect(buttons[0]).toHaveAttribute(
+      "aria-label",
+      "Remove 👍 reaction, 4 reactions",
+    );
     expect(buttons[1]).toHaveAttribute("aria-pressed", "false");
-    expect(buttons[1]).toHaveAttribute("aria-label", "Add ❤️ reaction, 2 reactions");
+    expect(buttons[1]).toHaveAttribute(
+      "aria-label",
+      "Add ❤️ reaction, 2 reactions",
+    );
     fireEvent.click(buttons[1]);
     expect(onToggle).toHaveBeenCalledWith("❤️");
   });
 
-  it("matches the captured reaction geometry and keeps metadata as the final child", () => {
+  it("uses the compact reaction structure and keeps metadata as the final child", () => {
     render(
       <MessageReactions
         messageId={8}
@@ -46,8 +54,12 @@ describe("MessageReactions", () => {
 
     const group = screen.getByTestId("message-reactions");
     const button = screen.getByRole("button");
-    const wrapper = group.querySelector(".message-reactions__emoji-wrapper") as HTMLElement;
-    const count = group.querySelector(".message-reactions__count") as HTMLElement;
+    const wrapper = group.querySelector(
+      ".message-reactions__emoji-wrapper",
+    ) as HTMLElement;
+    const count = group.querySelector(
+      ".message-reactions__count",
+    ) as HTMLElement;
     const metadata = screen.getByTestId("reaction-metadata");
 
     expect(group).toHaveClass("message-reactions");
@@ -55,6 +67,10 @@ describe("MessageReactions", () => {
     expect(button).not.toHaveClass("is-chosen");
     expect(wrapper).toHaveClass("message-reactions__emoji-wrapper");
     expect(count).toHaveClass("message-reactions__count");
+    expect(wrapper.querySelector("img")).toHaveStyle({
+      width: "18px",
+      height: "18px",
+    });
     expect(group.lastElementChild).toBe(metadata);
   });
 });

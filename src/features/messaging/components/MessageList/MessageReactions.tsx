@@ -9,7 +9,12 @@ interface Props {
   metadata?: ReactNode;
 }
 
-export function MessageReactions({ messageId, reactions, onToggle, metadata }: Props) {
+export function MessageReactions({
+  messageId,
+  reactions,
+  onToggle,
+  metadata,
+}: Props) {
   if (reactions.length === 0) return null;
 
   return (
@@ -34,7 +39,11 @@ export function MessageReactions({ messageId, reactions, onToggle, metadata }: P
             }}
           >
             <span className="message-reactions__emoji-wrapper">
-              <Emoji emoji={reaction} size={20} className="message-reactions__emoji" />
+              <Emoji
+                emoji={reaction}
+                size={18}
+                className="message-reactions__emoji"
+              />
             </span>
             <span className="message-reactions__count">{item.count}</span>
           </button>

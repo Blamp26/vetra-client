@@ -2,17 +2,22 @@ import React from "react";
 import type { Attachment, Message, MessageReactionGroup } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { MessageText } from "@/shared/components/MessageText/MessageText";
+import { Emoji } from "@/shared/components/Emoji/Emoji";
 import { useAppStore } from "@/store";
 import { StatusIcon } from "./StatusIcon";
 import { MessageTail } from "./MessageTail";
 import { MessageReactions } from "./MessageReactions";
 import "./MessageReactions.css";
+import "./MessageGeometry.css";
 import { DocumentAttachmentRow } from "./DocumentAttachmentRow";
 import { VoiceMessagePlayer } from "./VoiceMessagePlayer";
 import { AudioFilePlayer } from "./AudioFilePlayer";
 import { Avatar } from "@/shared/components/Avatar/Avatar";
 import { Forward as ForwardIcon } from "lucide-react";
-import { VisualAttachmentGroup, type ResolvedVisualAttachment } from "./VisualAttachmentGroup";
+import {
+  VisualAttachmentGroup,
+  type ResolvedVisualAttachment,
+} from "./VisualAttachmentGroup";
 import {
   getAttachmentDisplaySrc,
   getAttachmentOriginalSrc,
@@ -33,6 +38,7 @@ import {
   computeMediaAlbumLayout,
   getMediaAlbumPackingRatio,
 } from "../../utils/mediaAlbumLayout";
+import { getEmojiOnlyGraphemes } from "../../utils/emojiOnly";
 
 interface MessageItemProps {
   msg: Message;
@@ -49,9 +55,24 @@ interface MessageItemProps {
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, msg: Message) => void;
   onToggleSelection: (id: number) => void;
   onToggleReaction: (msgId: number, emoji: string) => void;
-  onLightbox: (data:
-    | { kind: "image"; src: string; authorName: string; createdAt: string; avatarSrc?: string | null; messageId: number }
-    | { kind: "video"; src: string; authorName: string; createdAt: string; avatarSrc?: string | null; messageId: number }
+  onLightbox: (
+    data:
+      | {
+          kind: "image";
+          src: string;
+          authorName: string;
+          createdAt: string;
+          avatarSrc?: string | null;
+          messageId: number;
+        }
+      | {
+          kind: "video";
+          src: string;
+          authorName: string;
+          createdAt: string;
+          avatarSrc?: string | null;
+          messageId: number;
+        },
   ) => void;
   onOpenForwardedSender?: (sourcePublicId: string) => void;
   renderReplyPreview: (msg: Message, isOwn: boolean) => React.ReactNode;
@@ -101,22 +122,53 @@ function getBubbleCornerClassName(
   isConsecutive: boolean,
   isGroupedWithNext: boolean,
   hasTail: boolean,
+  desktopScale = true,
 ) {
   const isLeftFacing = !isOwn || alignmentMode === "left-column";
-  const topTailRadius = isConsecutive ? "rounded-tl-[6px]" : "rounded-tl-[15px]";
-  const bottomTailRadius = hasTail ? "rounded-bl-[0px]" : isGroupedWithNext ? "rounded-bl-[6px]" : "rounded-bl-[15px]";
-  const rightTopTailRadius = isConsecutive ? "rounded-tr-[6px]" : "rounded-tr-[15px]";
-  const rightBottomTailRadius = hasTail ? "rounded-br-[0px]" : isGroupedWithNext ? "rounded-br-[6px]" : "rounded-br-[15px]";
+  const topTailRadius = desktopScale
+    ? isConsecutive
+      ? "rounded-tl-[4px]"
+      : "rounded-tl-[12px]"
+    : isConsecutive
+      ? "rounded-tl-[6px]"
+      : "rounded-tl-[15px]";
+  const bottomTailRadius = hasTail
+    ? "rounded-bl-[0px]"
+    : desktopScale
+      ? isGroupedWithNext
+        ? "rounded-bl-[4px]"
+        : "rounded-bl-[12px]"
+      : isGroupedWithNext
+        ? "rounded-bl-[6px]"
+        : "rounded-bl-[15px]";
+  const rightTopTailRadius = desktopScale
+    ? isConsecutive
+      ? "rounded-tr-[4px]"
+      : "rounded-tr-[12px]"
+    : isConsecutive
+      ? "rounded-tr-[6px]"
+      : "rounded-tr-[15px]";
+  const rightBottomTailRadius = hasTail
+    ? "rounded-br-[0px]"
+    : desktopScale
+      ? isGroupedWithNext
+        ? "rounded-br-[4px]"
+        : "rounded-br-[12px]"
+      : isGroupedWithNext
+        ? "rounded-br-[6px]"
+        : "rounded-br-[15px]";
 
   return cn(
-    "rounded-[15px]",
+    desktopScale ? "rounded-[12px]" : "rounded-[15px]",
     isLeftFacing
       ? [topTailRadius, bottomTailRadius]
       : [rightTopTailRadius, rightBottomTailRadius],
   );
 }
 
-function isVisualAttachment(attachment: Attachment): attachment is VisualAttachment {
+function isVisualAttachment(
+  attachment: Attachment,
+): attachment is VisualAttachment {
   return attachment.kind === "photo" || attachment.kind === "video";
 }
 
@@ -156,10 +208,13 @@ function getResolvedPhotoRatio(
 }
 
 function getResolvedPhotoPackingRatio(width?: number, height?: number) {
-  return getMediaAlbumPackingRatio({
+  return getMediaAlbumPackingRatio(
+    {
     width,
     height,
-  }, MESSAGE_ALBUM_LAYOUT_OPTIONS);
+    },
+    MESSAGE_ALBUM_LAYOUT_OPTIONS,
+  );
 }
 
 function hasCompleteAlbumLayout(
@@ -170,7 +225,8 @@ function hasCompleteAlbumLayout(
     layout.width > 0 &&
     layout.height > 0 &&
     layout.tiles.length === expectedTileCount &&
-    layout.tiles.every((tile) =>
+    layout.tiles.every(
+      (tile) =>
       Number.isFinite(tile.x) &&
       Number.isFinite(tile.y) &&
       Number.isFinite(tile.width) &&
@@ -181,7 +237,9 @@ function hasCompleteAlbumLayout(
   );
 }
 
-export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
+export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
+  (
+    {
   msg,
   isOwn,
   alignmentMode = "split",
@@ -199,12 +257,15 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   onOpenForwardedSender,
   renderReplyPreview,
   formatTime,
-}, ref) => {
+    },
+    ref,
+  ) => {
   const authToken = useAppStore((s) => s.authToken);
-  const [attachmentActionError, setAttachmentActionError] = React.useState<string | null>(null);
-  const [decodedVisualDimensions, setDecodedVisualDimensions] = React.useState<
-    Record<string, { width: number; height: number }>
-  >({});
+    const [attachmentActionError, setAttachmentActionError] = React.useState<
+      string | null
+    >(null);
+    const [decodedVisualDimensions, setDecodedVisualDimensions] =
+      React.useState<Record<string, { width: number; height: number }>>({});
   const [visualRuntimeMetrics, setVisualRuntimeMetrics] = React.useState<
     Record<string, VisualRuntimeMetrics>
   >({});
@@ -215,8 +276,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const attachment = getMessageAttachment(msg);
   const hasMedia = attachments.length > 0;
   const hasText = !!(msg.content && msg.content.trim().length > 0);
-  const isVisualMediaGroup = attachments.length > 1 && attachments.every(isVisualAttachment);
-  const isSingleVisualMessage = attachments.length === 1 && attachments.every(isVisualAttachment);
+    const isVisualMediaGroup =
+      attachments.length > 1 && attachments.every(isVisualAttachment);
+    const isSingleVisualMessage =
+      attachments.length === 1 && attachments.every(isVisualAttachment);
   const visualAttachments = isVisualMediaGroup
     ? attachments
     : isSingleVisualMessage
@@ -224,12 +287,29 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       : [];
   const isVisualMediaMessage = visualAttachments.length > 0;
   const isVisualAlbum = visualAttachments.length > 1;
-  const isVoiceMessage = attachments.length === 1 && attachments[0].kind === "voice";
-  const isSingleAudioMessage = attachments.length === 1 && attachments[0].kind === "audio";
-  const isAudioGroup = attachments.length >= 2 && attachments.every((currentAttachment) => currentAttachment.kind === "audio");
-  const isDocumentAttachment = attachments.length > 0 && !isVisualMediaMessage && !isVoiceMessage && !isSingleAudioMessage && attachments.some((currentAttachment) => currentAttachment.kind === "file");
-  const isSingleDocumentAttachment = attachments.length === 1 && isDocumentAttachment;
-  const isDocumentGroup = attachments.length >= 2 && attachments.every(isFileLikeAttachment) && !isAudioGroup;
+    const isVoiceMessage =
+      attachments.length === 1 && attachments[0].kind === "voice";
+    const isSingleAudioMessage =
+      attachments.length === 1 && attachments[0].kind === "audio";
+    const isAudioGroup =
+      attachments.length >= 2 &&
+      attachments.every(
+        (currentAttachment) => currentAttachment.kind === "audio",
+      );
+    const isDocumentAttachment =
+      attachments.length > 0 &&
+      !isVisualMediaMessage &&
+      !isVoiceMessage &&
+      !isSingleAudioMessage &&
+      attachments.some(
+        (currentAttachment) => currentAttachment.kind === "file",
+      );
+    const isSingleDocumentAttachment =
+      attachments.length === 1 && isDocumentAttachment;
+    const isDocumentGroup =
+      attachments.length >= 2 &&
+      attachments.every(isFileLikeAttachment) &&
+      !isAudioGroup;
   const isMediaOnly =
     isVisualMediaMessage &&
     (!msg.content || msg.content.trim().length === 0) &&
@@ -242,18 +322,43 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     Boolean(msg.forwarded_from);
   const shouldRenderMediaOnlyMetadata = isMediaOnly || isForwardedMediaOnly;
   const isTextOnly = hasText && !hasMedia;
-  const authorName = msg.sender_display_name || msg.sender_username || "Unknown";
+    const emojiOnlyGraphemes = isTextOnly
+      ? getEmojiOnlyGraphemes(msg.content || "")
+      : null;
+    const isEmojiOnlyMessage = Boolean(
+      emojiOnlyGraphemes &&
+      emojiOnlyGraphemes.length >= 1 &&
+      emojiOnlyGraphemes.length <= 3 &&
+      !msg.reply_to_id &&
+      !msg.forwarded_from,
+    );
+    const authorName =
+      msg.sender_display_name || msg.sender_username || "Unknown";
   const forwardedSource = msg.forwarded_from;
   const forwardedSourceName =
-    forwardedSource?.source_display_name || forwardedSource?.source_username || "Unknown source";
+      forwardedSource?.source_display_name ||
+      forwardedSource?.source_username ||
+      "Unknown source";
   const shouldRenderTail =
-    !isGroupedWithNext && (isTextOnly || isDocumentAttachment || isVisualMediaMessage || isVoiceMessage || isSingleAudioMessage);
-  const resolvedVisualAttachments = React.useMemo<ResolvedVisualAttachment[]>(() => (
+      !isGroupedWithNext &&
+      (isTextOnly ||
+        isDocumentAttachment ||
+        isVisualMediaMessage ||
+        isVoiceMessage ||
+        isSingleAudioMessage);
+    const resolvedVisualAttachments = React.useMemo<ResolvedVisualAttachment[]>(
+      () =>
     visualAttachments.map((currentAttachment) => {
-      const serverDimensions = getAttachmentIntrinsicSize(currentAttachment);
-      const decodedDimensions = decodedVisualDimensions[currentAttachment.id];
-      const hasServerDimensions = Boolean(serverDimensions.width && serverDimensions.height);
-      const hasDecodedDimensions = Boolean(decodedDimensions?.width && decodedDimensions?.height);
+          const serverDimensions =
+            getAttachmentIntrinsicSize(currentAttachment);
+          const decodedDimensions =
+            decodedVisualDimensions[currentAttachment.id];
+          const hasServerDimensions = Boolean(
+            serverDimensions.width && serverDimensions.height,
+          );
+          const hasDecodedDimensions = Boolean(
+            decodedDimensions?.width && decodedDimensions?.height,
+          );
 
       return {
         attachment: currentAttachment,
@@ -269,19 +374,30 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             ? "decoded"
             : "fallback",
       };
-    })
-  ), [decodedVisualDimensions, visualAttachments]);
-  const photoLayout = React.useMemo(() => computeMediaAlbumLayout(
+        }),
+      [decodedVisualDimensions, visualAttachments],
+    );
+    const photoLayout = React.useMemo(
+      () =>
+        computeMediaAlbumLayout(
     resolvedVisualAttachments.map((currentAttachment) => ({
       id: currentAttachment.attachment.id,
       width: currentAttachment.width,
       height: currentAttachment.height,
-      kind: currentAttachment.attachment.kind === "video" ? "video" as const : "image" as const,
+            kind:
+              currentAttachment.attachment.kind === "video"
+                ? ("video" as const)
+                : ("image" as const),
     })),
     isVisualAlbum
       ? MESSAGE_ALBUM_LAYOUT_OPTIONS
-      : { ...MESSAGE_ALBUM_LAYOUT_OPTIONS, maxHeight: SINGLE_MEDIA_MAX_HEIGHT },
-  ), [isVisualAlbum, resolvedVisualAttachments]);
+            : {
+                ...MESSAGE_ALBUM_LAYOUT_OPTIONS,
+                maxHeight: SINGLE_MEDIA_MAX_HEIGHT,
+              },
+        ),
+      [isVisualAlbum, resolvedVisualAttachments],
+    );
   const hasPendingDecodedVisualDimensions = resolvedVisualAttachments.some(
     (currentAttachment) => currentAttachment.dimensionSource === "fallback",
   );
@@ -290,11 +406,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     !hasCompleteAlbumLayout(photoLayout, resolvedVisualAttachments.length);
   const isOwnLeftColumn = isOwn && alignmentMode === "left-column";
   const showSenderName = isRoom && !isOwn && !isConsecutive;
-  const hasContentAboveMedia = Boolean(forwardedSource) || Boolean(msg.reply_to_id) || showSenderName;
+    const hasContentAboveMedia =
+      Boolean(forwardedSource) || Boolean(msg.reply_to_id) || showSenderName;
   const metadataClassName = isOwn
     ? "text-white/[0.533]"
     : "text-[color:var(--bubble-incoming-meta)]";
-  const overlayMetadataClassName = "h-[18px] rounded-[10px] bg-black/[0.20] py-0 pl-[6px] pr-[5px] text-white";
+    const overlayMetadataClassName =
+      "h-[18px] rounded-[10px] bg-black/[0.20] py-0 pl-[6px] pr-[5px] text-white";
   const textGroupRadiusClassName = getBubbleCornerClassName(
     isOwn,
     alignmentMode,
@@ -302,13 +420,23 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     isGroupedWithNext,
     shouldRenderTail,
   );
+    const mediaGroupRadiusClassName = getBubbleCornerClassName(
+      isOwn,
+      alignmentMode,
+      isConsecutive,
+      isGroupedWithNext,
+      shouldRenderTail,
+      false,
+    );
 
   React.useEffect(() => {
     if (!import.meta.env.DEV) return;
 
     const readDebugFlag = () => {
       try {
-        setIsMediaDebugEnabled(window.localStorage.getItem("vetra.mediaDebug") === "1");
+          setIsMediaDebugEnabled(
+            window.localStorage.getItem("vetra.mediaDebug") === "1",
+          );
       } catch {
         setIsMediaDebugEnabled(false);
       }
@@ -322,16 +450,29 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   React.useEffect(() => {
     if (!hasMedia) return;
 
-    logAttachmentDebug("message.render", {
+      logAttachmentDebug(
+        "message.render",
+        {
       ...summarizeMessageMedia(msg as unknown as Record<string, unknown>),
       renderAttachmentCount: attachments.length,
       treatedAsAlbum: isVisualAlbum,
       isPhotoAttachment: isVisualMediaMessage,
       isDocumentAttachment,
-    }, {
-      table: attachments.map((currentAttachment) => summarizeAttachmentLike(currentAttachment)),
-    });
-  }, [attachments, hasMedia, isDocumentAttachment, isVisualAlbum, isVisualMediaMessage, msg]);
+        },
+        {
+          table: attachments.map((currentAttachment) =>
+            summarizeAttachmentLike(currentAttachment),
+          ),
+        },
+      );
+    }, [
+      attachments,
+      hasMedia,
+      isDocumentAttachment,
+      isVisualAlbum,
+      isVisualMediaMessage,
+      msg,
+    ]);
 
   React.useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -343,29 +484,37 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       if (warnedMissingDimensionKeysRef.current.has(warningKey)) return;
       warnedMissingDimensionKeysRef.current.add(warningKey);
 
-      console.warn("[VETRA album-layout] Missing attachment dimensions at render boundary.", {
+        console.warn(
+          "[VETRA album-layout] Missing attachment dimensions at render boundary.",
+          {
         messageId: msg.id,
         attachmentId: currentAttachment.attachment.id,
         chosenImageSource: currentAttachment.displaySrc,
         width: currentAttachment.width ?? null,
         height: currentAttachment.height ?? null,
         dimensionSource: currentAttachment.dimensionSource,
-      });
+          },
+        );
     });
   }, [msg.id, resolvedVisualAttachments]);
 
   React.useEffect(() => {
     if (!import.meta.env.DEV || !isVisualMediaMessage) return;
 
-    logAttachmentDebug("message.album-layout", {
+      logAttachmentDebug(
+        "message.album-layout",
+        {
       messageId: msg.id,
       attachmentCount: resolvedVisualAttachments.length,
       isAlbum: resolvedVisualAttachments.length > 1,
-      pendingDimensionCount: resolvedVisualAttachments.filter((attachment) => attachment.dimensionSource === "fallback").length,
+          pendingDimensionCount: resolvedVisualAttachments.filter(
+            (attachment) => attachment.dimensionSource === "fallback",
+          ).length,
       layoutWidth: photoLayout.width,
       layoutHeight: photoLayout.height,
       layoutState: isTemporaryVisualLayout ? "pending" : "resolved",
-    }, {
+        },
+        {
       table: resolvedVisualAttachments.map((currentAttachment, index) => {
         const tile = photoLayout.tiles[index];
         return {
@@ -375,30 +524,55 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           width: currentAttachment.width ?? null,
           height: currentAttachment.height ?? null,
           dimensionSource: currentAttachment.dimensionSource,
-          sourceRatio: getResolvedPhotoRatio(currentAttachment.width, currentAttachment.height),
-          packingRatio: getResolvedPhotoPackingRatio(currentAttachment.width, currentAttachment.height),
-          naturalWidth: visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalWidth ?? null,
-          naturalHeight: visualRuntimeMetrics[currentAttachment.attachment.id]?.naturalHeight ?? null,
-          renderedWidth: visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedWidth ?? null,
-          renderedHeight: visualRuntimeMetrics[currentAttachment.attachment.id]?.renderedHeight ?? null,
+              sourceRatio: getResolvedPhotoRatio(
+                currentAttachment.width,
+                currentAttachment.height,
+              ),
+              packingRatio: getResolvedPhotoPackingRatio(
+                currentAttachment.width,
+                currentAttachment.height,
+              ),
+              naturalWidth:
+                visualRuntimeMetrics[currentAttachment.attachment.id]
+                  ?.naturalWidth ?? null,
+              naturalHeight:
+                visualRuntimeMetrics[currentAttachment.attachment.id]
+                  ?.naturalHeight ?? null,
+              renderedWidth:
+                visualRuntimeMetrics[currentAttachment.attachment.id]
+                  ?.renderedWidth ?? null,
+              renderedHeight:
+                visualRuntimeMetrics[currentAttachment.attachment.id]
+                  ?.renderedHeight ?? null,
           tileX: tile?.x ?? null,
           tileY: tile?.y ?? null,
           tileWidth: tile?.width ?? null,
           tileHeight: tile?.height ?? null,
         };
       }),
-    });
-  }, [isVisualMediaMessage, isTemporaryVisualLayout, msg.id, photoLayout, resolvedVisualAttachments, visualRuntimeMetrics]);
+        },
+      );
+    }, [
+      isVisualMediaMessage,
+      isTemporaryVisualLayout,
+      msg.id,
+      photoLayout,
+      resolvedVisualAttachments,
+      visualRuntimeMetrics,
+    ]);
 
   React.useEffect(() => {
     if (!import.meta.env.DEV) return;
 
     resolvedVisualAttachments.forEach((currentAttachment) => {
-      const runtimeMetrics = visualRuntimeMetrics[currentAttachment.attachment.id];
+        const runtimeMetrics =
+          visualRuntimeMetrics[currentAttachment.attachment.id];
       if (!runtimeMetrics) return;
 
-      const requiredWidth = runtimeMetrics.renderedWidth * runtimeMetrics.devicePixelRatio;
-      const requiredHeight = runtimeMetrics.renderedHeight * runtimeMetrics.devicePixelRatio;
+        const requiredWidth =
+          runtimeMetrics.renderedWidth * runtimeMetrics.devicePixelRatio;
+        const requiredHeight =
+          runtimeMetrics.renderedHeight * runtimeMetrics.devicePixelRatio;
       if (
         runtimeMetrics.naturalWidth >= requiredWidth &&
         runtimeMetrics.naturalHeight >= requiredHeight
@@ -410,7 +584,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       if (warnedSmallSourceKeysRef.current.has(warningKey)) return;
       warnedSmallSourceKeysRef.current.add(warningKey);
 
-      console.warn("[VETRA media-quality] Rendered image source is smaller than the visible tile.", {
+        console.warn(
+          "[VETRA media-quality] Rendered image source is smaller than the visible tile.",
+          {
         messageId: msg.id,
         attachmentId: currentAttachment.attachment.id,
         chosenImageSource: runtimeMetrics.chosenImageSource,
@@ -422,18 +598,23 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         renderedHeight: runtimeMetrics.renderedHeight,
         devicePixelRatio: runtimeMetrics.devicePixelRatio,
         duration: runtimeMetrics.duration,
-      });
+          },
+        );
     });
   }, [msg.id, resolvedVisualAttachments, visualRuntimeMetrics]);
 
   const handleDecodedVisualDimensions = React.useCallback(
     (attachmentId: string, naturalWidth: number, naturalHeight: number) => {
-      if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight)) return;
+        if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight))
+          return;
       if (naturalWidth <= 0 || naturalHeight <= 0) return;
 
       setDecodedVisualDimensions((current) => {
         const existing = current[attachmentId];
-        if (existing?.width === naturalWidth && existing.height === naturalHeight) {
+          if (
+            existing?.width === naturalWidth &&
+            existing.height === naturalHeight
+          ) {
           return current;
         }
 
@@ -450,7 +631,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   );
 
   const handleVisualDiagnostics = React.useCallback(
-    (attachmentId: string, chosenImageSource: string | null, diagnostics: MediaRuntimeDiagnostics) => {
+      (
+        attachmentId: string,
+        chosenImageSource: string | null,
+        diagnostics: MediaRuntimeDiagnostics,
+      ) => {
       setVisualRuntimeMetrics((current) => {
         const nextMetrics: VisualRuntimeMetrics = {
           ...diagnostics,
@@ -480,7 +665,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   const handleAttachmentAction = async (
     action: "download" | "open",
     currentAttachment: Attachment | null = attachment,
-    downloadOptions?: { signal?: AbortSignal; onProgress?: (progress: AttachmentDownloadProgress) => void },
+      downloadOptions?: {
+        signal?: AbortSignal;
+        onProgress?: (progress: AttachmentDownloadProgress) => void;
+      },
   ): Promise<boolean> => {
     if (!currentAttachment) return false;
 
@@ -506,9 +694,16 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           return true;
         }
 
-        await openAttachmentWithAuth({ attachment: currentAttachment, authToken });
+          await openAttachmentWithAuth({
+            attachment: currentAttachment,
+            authToken,
+          });
       } else {
-        await downloadAttachmentWithAuth({ attachment: currentAttachment, authToken, ...downloadOptions });
+          await downloadAttachmentWithAuth({
+            attachment: currentAttachment,
+            authToken,
+            ...downloadOptions,
+          });
       }
       return true;
     } catch (error) {
@@ -534,7 +729,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         inReactions && "message-reactions__metadata",
         variant === "overlay"
           ? overlayMetadataClassName
-          : cn("gap-0 text-[12px] leading-[16.2px]", metadataClassName),
+              : cn("gap-0 text-[12px] leading-[14px]", metadataClassName),
       )}
       data-testid="message-metadata"
     >
@@ -542,7 +737,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         className={cn(
           variant === "overlay"
             ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
-            : cn("mr-[4px] text-[12px] leading-[16.2px] font-normal", metadataClassName),
+                : cn(
+                    "mr-[4px] text-[12px] leading-[14px] font-normal",
+                    metadataClassName,
+                  ),
         )}
       >
         {formatTime(msg.inserted_at)}
@@ -552,48 +750,56 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           className={cn(
             variant === "overlay"
               ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
-              : cn("mr-[4px] text-[12px] leading-[16.2px] font-normal", metadataClassName),
+                  : cn(
+                      "mr-[4px] text-[12px] leading-[16.2px] font-normal",
+                      metadataClassName,
+                    ),
           )}
         >
           (ed.)
         </span>
       )}
-      {isOwn && !isRoom && (
-          variant === "overlay" ? (
+          {isOwn &&
+            !isRoom &&
+            (variant === "overlay" ? (
             <span
               className={cn(
-                "box-border ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[19px]",
+                  "box-border ml-[-2px] flex h-[16px] w-[16px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]",
                 isOwn ? "text-white opacity-100" : "text-current",
               )}
               data-testid="message-media-only-status"
             >
-              <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current opacity-100" />
+                <StatusIcon
+                  status={msg.status}
+                  className="ml-0 h-[16px] w-[16px] text-current opacity-100"
+                />
             </span>
           ) : (
             <span
               className={cn(
-                "box-border ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[19px]",
+                  "box-border ml-[-2px] flex h-[16px] w-[16px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]",
                 isOwn ? "text-white opacity-100" : "text-current",
               )}
               data-testid="message-inline-status"
             >
-              <StatusIcon status={msg.status} className="ml-0 h-[19px] w-[19px] text-current opacity-100" />
+                <StatusIcon
+                  status={msg.status}
+                  className="ml-0 h-[16px] w-[16px] text-current opacity-100"
+                />
             </span>
-          )
-      )}
+            ))}
     </span>
     );
   };
 
-  const renderInlineMetadata = () => (
+    const renderInlineMetadata = () =>
     hasReactions ? null : (
     <span
-      className="pointer-events-none relative box-border top-[6px] float-right ml-[7px] mr-[-6px] inline-flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0"
+          className="pointer-events-none relative box-border top-[3px] float-right ml-[5px] mr-[-4px] inline-flex h-[16px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0"
       data-testid="message-text-inline-metadata"
     >
       {renderMetadata()}
     </span>
-    )
   );
 
   const renderBubbleTail = (testId: string) => {
@@ -601,7 +807,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
     const isLeftFacing = !isOwn || alignmentMode === "left-column";
 
-    return <MessageTail side={isLeftFacing ? "left" : "right"} testId={testId} />;
+      return (
+        <MessageTail side={isLeftFacing ? "left" : "right"} testId={testId} />
+      );
   };
 
   const renderForwardedHeader = () => {
@@ -636,7 +844,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           aria-hidden="true"
           className="mr-[3px] h-[12px] w-[12px] shrink-0 p-0"
           data-testid="message-forwarded-icon"
-          style={{ width: "12px", height: "12px", flexShrink: 0, marginRight: "3px" }}
+            style={{
+              width: "12px",
+              height: "12px",
+              flexShrink: 0,
+              marginRight: "3px",
+            }}
         />
         <span
           className="mr-1 h-[20px] shrink-0 whitespace-nowrap text-[14px] font-normal leading-[20px]"
@@ -656,7 +869,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
         <span
           className="flex min-w-0 items-center overflow-hidden whitespace-nowrap"
           data-testid="message-forwarded-source"
-          style={{ display: "flex", alignItems: "center", minWidth: "0", height: "20px", overflow: "hidden" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              minWidth: "0",
+              height: "20px",
+              overflow: "hidden",
+            }}
         >
           {canOpenSource ? (
             <button
@@ -728,7 +947,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     );
   };
 
-  const handleVisualAttachmentOpen = React.useCallback(async (currentAttachment: VisualAttachment) => {
+    const handleVisualAttachmentOpen = React.useCallback(
+      async (currentAttachment: VisualAttachment) => {
     const viewerSrc = getAttachmentOriginalSrc(currentAttachment);
     if (!viewerSrc) {
       setAttachmentActionError("Attachment unavailable");
@@ -743,7 +963,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       avatarSrc: msg.sender?.avatar_url ?? null,
       messageId: msg.id,
     });
-  }, [authorName, msg.id, msg.inserted_at, msg.sender?.avatar_url, onLightbox]);
+      },
+      [authorName, msg.id, msg.inserted_at, msg.sender?.avatar_url, onLightbox],
+    );
 
   const renderPhotoMedia = () => (
     <VisualAttachmentGroup
@@ -757,7 +979,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       isDebugEnabled={isMediaDebugEnabled}
       runtimeMetricsByAttachmentId={visualRuntimeMetrics}
       getPackingRatio={getResolvedPhotoPackingRatio}
-      onOpen={(openedAttachment) => void handleVisualAttachmentOpen(openedAttachment)}
+        onOpen={(openedAttachment) =>
+          void handleVisualAttachmentOpen(openedAttachment)
+        }
       onDecodedDimensions={handleDecodedVisualDimensions}
       onDiagnostics={handleVisualDiagnostics}
       singleMediaCornerClassName={
@@ -765,20 +989,23 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           ? undefined
           : hasText
             ? cn(
-                textGroupRadiusClassName,
+                  mediaGroupRadiusClassName,
                 hasContentAboveMedia && "rounded-tl-[0px] rounded-tr-[0px]",
                 "rounded-bl-[0px] rounded-br-[0px]",
               )
             : cn(
-                textGroupRadiusClassName,
+                  mediaGroupRadiusClassName,
                 hasContentAboveMedia && "rounded-tl-[0px] rounded-tr-[0px]",
               )
       }
       albumShellCornerClassName={
         isVisualAlbum
           ? hasText
-            ? cn(textGroupRadiusClassName, "rounded-bl-[0px] rounded-br-[0px]")
-            : textGroupRadiusClassName
+              ? cn(
+                  mediaGroupRadiusClassName,
+                  "rounded-bl-[0px] rounded-br-[0px]",
+                )
+              : mediaGroupRadiusClassName
           : undefined
       }
     />
@@ -792,7 +1019,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           data-testid="message-document-group"
         >
           {attachments.map((currentAttachment, index) => {
-            const role = index === 0
+              const role =
+                index === 0
               ? "first"
               : index === attachments.length - 1
                 ? "last"
@@ -817,30 +1045,53 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 key={currentAttachment.id}
                 className={cn(
                   "relative box-border w-[275px] max-w-full bg-[var(--message-surface-color)]",
-                  role === "first" && "h-[70px] rounded-tl-[15px] rounded-tr-[15px] rounded-bl-[0px] rounded-br-[0px] px-2 pt-[6px] pb-[4px]",
+                    role === "first" &&
+                      "h-[70px] rounded-tl-[15px] rounded-tr-[15px] rounded-bl-[0px] rounded-br-[0px] px-2 pt-[6px] pb-[4px]",
                   role === "middle" && "rounded-none px-2 py-[4px]",
-                  role === "last" && cn("h-[72px] rounded-tl-[0px] rounded-tr-[0px] px-2 pt-[4px] pb-[8px]", bottomRadiusClassName),
+                    role === "last" &&
+                      cn(
+                        "h-[72px] rounded-tl-[0px] rounded-tr-[0px] px-2 pt-[4px] pb-[8px]",
+                        bottomRadiusClassName,
+                      ),
                 )}
                 data-testid={`message-document-segment-${role}`}
                 data-document-role={role}
-                style={{
-                  "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
-                } as React.CSSProperties}
+                  style={
+                    {
+                      "--message-surface-color": isOwn
+                        ? "var(--bubble-outgoing)"
+                        : "var(--bubble-incoming)",
+                    } as React.CSSProperties
+                  }
               >
                 {currentAttachment.kind === "audio" ? (
-                  <AudioFilePlayer attachment={currentAttachment} isOwn={isOwn} />
+                    <AudioFilePlayer
+                      attachment={currentAttachment}
+                      isOwn={isOwn}
+                    />
                 ) : (
                   <DocumentAttachmentRow
                     attachment={currentAttachment}
                     isOwn={isOwn}
                     isCompact
                     isGrouped
-                    onDownload={(options) => handleAttachmentAction(currentAttachment.kind === "video" ? "open" : "download", currentAttachment, options)}
+                      onDownload={(options) =>
+                        handleAttachmentAction(
+                          currentAttachment.kind === "video"
+                            ? "open"
+                            : "download",
+                          currentAttachment,
+                          options,
+                        )
+                      }
                   />
                 )}
                 {isLast && hasText && (
-                  <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
-                    <MessageText text={msg.content || ""} entities={msg.entities} />
+                    <div className="mt-1.5 whitespace-pre-wrap break-words message-text-scale text-current">
+                      <MessageText
+                        text={msg.content || ""}
+                        entities={msg.entities}
+                      />
                   </div>
                 )}
                 {isLast && !hasReactions && (
@@ -866,11 +1117,17 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           isOwn={isOwn}
           isCompact={isSingleDocumentAttachment}
           isGrouped={false}
-          onDownload={(options) => handleAttachmentAction(attachment?.kind === "video" ? "open" : "download", attachment, options)}
+            onDownload={(options) =>
+              handleAttachmentAction(
+                attachment?.kind === "video" ? "open" : "download",
+                attachment,
+                options,
+              )
+            }
         />
 
         {hasText && (
-          <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
+            <div className="mt-1.5 whitespace-pre-wrap break-words message-text-scale text-current">
             <MessageText text={msg.content || ""} entities={msg.entities} />
           </div>
         )}
@@ -884,7 +1141,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </span>
         )}
 
-        {(!isSingleDocumentAttachment || hasText) && !hasReactions && <div className="mt-1 flex justify-end">{renderMetadata()}</div>}
+          {(!isSingleDocumentAttachment || hasText) && !hasReactions && (
+            <div className="mt-1 flex justify-end">{renderMetadata()}</div>
+          )}
 
         {attachmentActionError && (
           <div className="mt-1.5 text-[10px] text-destructive">
@@ -900,23 +1159,30 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
     if (!voiceAttachment || voiceAttachment.kind !== "voice") return null;
 
     return (
-      <div className="relative h-[58px] w-full" data-testid="message-voice-attachment">
+        <div
+          className="relative h-[58px] w-full"
+          data-testid="message-voice-attachment"
+        >
         <VoiceMessagePlayer
           attachment={voiceAttachment}
           isOwn={isOwn}
-          showUnreadDot={isOwn && Boolean(msg.status) && msg.status !== "read"}
+            showUnreadDot={
+              isOwn && Boolean(msg.status) && msg.status !== "read"
+            }
         />
         {hasText && (
-          <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
+            <div className="mt-1.5 whitespace-pre-wrap break-words message-text-scale text-current">
             <MessageText text={msg.content || ""} entities={msg.entities} />
           </div>
         )}
-        {!hasReactions && <span
+          {!hasReactions && (
+            <span
           className="absolute right-0 bottom-0 flex h-[20px] items-center whitespace-nowrap bg-transparent px-[4px]"
           data-testid="message-voice-inline-metadata"
         >
           {renderMetadata()}
-        </span>}
+            </span>
+          )}
       </div>
     );
   };
@@ -927,9 +1193,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
     return (
       <div className="relative w-full" data-testid="message-audio-attachment">
-        <AudioFilePlayer attachment={audioAttachment} isOwn={isOwn} messageMeta={hasReactions ? undefined : renderMetadata()} />
+          <AudioFilePlayer
+            attachment={audioAttachment}
+            isOwn={isOwn}
+            messageMeta={hasReactions ? undefined : renderMetadata()}
+          />
         {hasText && (
-          <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current">
+            <div className="mt-1.5 whitespace-pre-wrap break-words message-text-scale text-current">
             <MessageText text={msg.content || ""} entities={msg.entities} />
           </div>
         )}
@@ -938,9 +1208,13 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
   };
 
   const renderAudioGroup = () => (
-    <div className="relative m-0 flex w-[320px] max-w-full flex-col gap-0 bg-transparent p-0" data-testid="message-audio-group">
+      <div
+        className="relative m-0 flex w-[320px] max-w-full flex-col gap-0 bg-transparent p-0"
+        data-testid="message-audio-group"
+      >
       {attachments.map((currentAttachment, index) => {
-        const role = index === 0
+          const role =
+            index === 0
           ? "first"
           : index === attachments.length - 1
             ? "last"
@@ -969,27 +1243,49 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             className={cn(
               "relative box-border w-[320px] max-w-full bg-[var(--message-surface-color)]",
               "flex min-h-[69px] items-center py-0",
-              role === "first" && cn("rounded-bl-[0px] rounded-br-[0px] px-2", topRadiusClassName),
+                role === "first" &&
+                  cn(
+                    "rounded-bl-[0px] rounded-br-[0px] px-2",
+                    topRadiusClassName,
+                  ),
               role === "middle" && "rounded-none px-2",
-              role === "last" && cn("rounded-tl-[0px] rounded-tr-[0px] px-2", bottomRadiusClassName),
+                role === "last" &&
+                  cn(
+                    "rounded-tl-[0px] rounded-tr-[0px] px-2",
+                    bottomRadiusClassName,
+                  ),
             )}
             data-testid={`message-audio-segment-${role}`}
             data-audio-role={role}
-            style={{
-              "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
-            } as React.CSSProperties}
+              style={
+                {
+                  "--message-surface-color": isOwn
+                    ? "var(--bubble-outgoing)"
+                    : "var(--bubble-incoming)",
+                } as React.CSSProperties
+              }
           >
             <AudioFilePlayer
               attachment={currentAttachment}
               isOwn={isOwn}
-              messageMeta={isLast && !hasReactions ? renderMetadata() : undefined}
+                messageMeta={
+                  isLast && !hasReactions ? renderMetadata() : undefined
+                }
             />
             {isLast && hasText && (
-              <div className="mt-1.5 whitespace-pre-wrap break-words text-[0.9375rem] leading-[1.45] text-current" data-testid="message-audio-group-caption">
-                <MessageText text={msg.content || ""} entities={msg.entities} />
+                <div
+                  className="mt-1.5 whitespace-pre-wrap break-words message-text-scale text-current"
+                  data-testid="message-audio-group-caption"
+                >
+                  <MessageText
+                    text={msg.content || ""}
+                    entities={msg.entities}
+                  />
               </div>
             )}
-            {isLast && hasTail && renderBubbleTail("message-audio-group-tail")}
+              {isLast &&
+                hasTail &&
+                renderBubbleTail("message-audio-group-tail")}
           </div>
         );
       })}
@@ -998,7 +1294,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
 
   const renderVisualCaption = () => {
     return (
-      <div className="relative text-[16px] font-normal leading-[21px] tracking-normal" data-testid="message-text-content">
+        <div
+          className="relative message-text-scale tracking-normal"
+          data-testid="message-text-content"
+        >
         <span
           className="relative whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:normal]"
           data-message-content-rect
@@ -1026,18 +1325,21 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                 : renderDocumentAttachment()}
           </>
         )}
-        {hasText && !isDocumentAttachment && !isSingleAudioMessage && !isAudioGroup && !isVoiceMessage && (
-          isVisualMediaMessage
-            ? renderVisualCaption()
-            : (
+          {hasText &&
+            !isDocumentAttachment &&
+            !isSingleAudioMessage &&
+            !isAudioGroup &&
+            !isVoiceMessage &&
+            (isVisualMediaMessage ? (
+              renderVisualCaption()
+            ) : (
               <div
-                className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[16px] leading-[21px]"
+                className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] message-text-scale"
                 data-testid="message-text-content"
               >
                 <MessageText text={msg.content || ""} entities={msg.entities} />
               </div>
-            )
-        )}
+            ))}
       </>
     );
   };
@@ -1073,7 +1375,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       <div
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
-          "relative box-border w-fit overflow-visible text-[16px] font-normal leading-[21px] tracking-normal",
+            "relative box-border w-fit overflow-visible message-text-scale tracking-normal",
+            isEmojiOnlyMessage && "message-emoji-only-bubble",
           isAudioGroup
             ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] rounded-none p-0"
             : isDocumentGroup
@@ -1081,24 +1384,23 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             : isMediaOnly
             ? cn(
                 "min-w-0 p-0",
-                isVisualAlbum
-                  ? "rounded-[15px]"
-                  : "rounded-[18px]",
+                      isVisualAlbum ? "rounded-[15px]" : "rounded-[18px]",
                 isVisualAlbum
                   ? "max-w-[min(480px,calc(100vw-6rem))]"
                   : "max-w-[min(480px,calc(100vw-6rem))]",
               )
             : isVisualMediaMessage
               ? cn(
-                  isVisualAlbum
-                    ? "min-w-[11rem]"
-                    : "min-w-0",
+                        isVisualAlbum ? "min-w-[11rem]" : "min-w-0",
                   "rounded-[15px] px-2 pb-[6px] pt-[5px]",
                   isVisualAlbum
                     ? "max-w-[min(480px,calc(100vw-6rem))]"
                     : "max-w-[min(480px,calc(100vw-6rem))]",
                 )
-            : isSingleDocumentAttachment || isVoiceMessage || isSingleAudioMessage || isAudioGroup
+                    : isSingleDocumentAttachment ||
+                        isVoiceMessage ||
+                        isSingleAudioMessage ||
+                        isAudioGroup
                 ? isSingleDocumentAttachment
                   ? "w-fit min-w-[268px] max-w-[min(430px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                   : isVoiceMessage
@@ -1108,58 +1410,83 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
                     : isAudioGroup
                       ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] px-2 py-0 flex items-center"
                   : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
-                : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]",
+                      : "message-text-bubble min-w-0 max-w-[min(480px,calc(100vw-6rem))]",
           isSelected && "ring-1 ring-primary",
-          isHighlighted && "outline outline-2 outline-primary outline-offset-1",
+            isHighlighted &&
+              "outline outline-2 outline-primary outline-offset-1",
           isDocumentGroup || isAudioGroup
             ? "rounded-none"
-            : isTextOnly || isVisualMediaMessage || isSingleDocumentAttachment || isVoiceMessage || isSingleAudioMessage || isAudioGroup
+              : isTextOnly ||
+                  isVisualMediaMessage ||
+                  isSingleDocumentAttachment ||
+                  isVoiceMessage ||
+                  isSingleAudioMessage ||
+                  isAudioGroup
+                ? isTextOnly
             ? textGroupRadiusClassName
+                  : mediaGroupRadiusClassName
             : isOwnLeftColumn
               ? cn(
-                  isConsecutive && "rounded-tl-[12px]",
-                  isGroupedWithNext && "rounded-bl-[12px]",
+                      isConsecutive && "rounded-tl-[4px]",
+                      isGroupedWithNext && "rounded-bl-[4px]",
                 )
               : isOwn
               ? cn(
-                  isConsecutive && "rounded-tr-[12px]",
-                  isGroupedWithNext && "rounded-br-[12px]",
+                        isConsecutive && "rounded-tr-[4px]",
+                        isGroupedWithNext && "rounded-br-[4px]",
                 )
               : cn(
-                  isConsecutive && "rounded-tl-[12px]",
-                  isGroupedWithNext && "rounded-bl-[12px]",
+                        isConsecutive && "rounded-tl-[4px]",
+                        isGroupedWithNext && "rounded-bl-[4px]",
                 ),
           isDocumentGroup || isAudioGroup
-            ? (isOwn ? "bg-transparent text-bubble-outgoing-text" : "bg-transparent text-bubble-incoming-text")
+              ? isOwn
+                ? "bg-transparent text-bubble-outgoing-text"
+                : "bg-transparent text-bubble-incoming-text"
             : isMediaOnly
             ? isVisualAlbum
-              ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
+                  ? isOwn
+                    ? "bg-bubble-outgoing text-bubble-outgoing-text"
+                    : "bg-bubble-incoming text-bubble-incoming-text"
               : isVisualMediaMessage
-                ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
-                : "bg-transparent text-white"
-            : isVisualMediaMessage
-              ? (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text")
-              : isDocumentAttachment
-                ? (
-                    isOwn
+                    ? isOwn
                       ? "bg-bubble-outgoing text-bubble-outgoing-text"
                       : "bg-bubble-incoming text-bubble-incoming-text"
-                  )
-                : (isOwn ? "bg-bubble-outgoing text-bubble-outgoing-text" : "bg-bubble-incoming text-bubble-incoming-text"),
+                : "bg-transparent text-white"
+            : isVisualMediaMessage
+                  ? isOwn
+                    ? "bg-bubble-outgoing text-bubble-outgoing-text"
+                    : "bg-bubble-incoming text-bubble-incoming-text"
+              : isDocumentAttachment
+                    ? isOwn
+                      ? "bg-bubble-outgoing text-bubble-outgoing-text"
+                      : "bg-bubble-incoming text-bubble-incoming-text"
+                    : isOwn
+                      ? "bg-bubble-outgoing text-bubble-outgoing-text"
+                      : "bg-bubble-incoming text-bubble-incoming-text",
         )}
         data-testid="message-bubble"
         data-message-highlighted={isHighlighted ? "true" : "false"}
-        style={{
-          "--message-surface-color": isOwn ? "var(--bubble-outgoing)" : "var(--bubble-incoming)",
-          backgroundColor: isDocumentGroup || isAudioGroup ? "transparent" : "var(--message-surface-color)",
-          ...(isSingleVisualMessage ? { width: `${photoLayout.width}px` } : {}),
+          style={
+            {
+              "--message-surface-color": isOwn
+                ? "var(--bubble-outgoing)"
+                : "var(--bubble-incoming)",
+              backgroundColor:
+                isDocumentGroup || isAudioGroup
+                  ? "transparent"
+                  : "var(--message-surface-color)",
+              ...(isSingleVisualMessage
+                ? { width: `${photoLayout.width}px` }
+                : {}),
           ...(isSingleDocumentAttachment
             ? {
                 minWidth: `${SINGLE_DOCUMENT_MIN_WIDTH}px`,
                 maxWidth: `min(${SINGLE_DOCUMENT_MAX_WIDTH}px, calc(100vw - 6rem))`,
               }
             : {}),
-        } as React.CSSProperties}
+            } as React.CSSProperties
+          }
       >
         {renderForwardedHeader()}
         {showSenderName && (
@@ -1167,15 +1494,43 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
             {authorName}
           </div>
         )}
-        {isTextOnly ? (
+          {isEmojiOnlyMessage ? (
+            <div
+              className={cn(
+                "message-emoji-only",
+                emojiOnlyGraphemes?.length === 1
+                  ? "message-emoji-only--single"
+                  : "message-emoji-only--multiple",
+              )}
+              data-testid="message-emoji-only"
+            >
+              {emojiOnlyGraphemes?.map((emoji) => (
+                <Emoji
+                  key={emoji}
+                  emoji={emoji}
+                  size={emojiOnlyGraphemes.length === 1 ? 112 : 40}
+                  className="message-emoji-only__emoji"
+                />
+              ))}
+              <div className="message-emoji-only__metadata">
+                {renderMetadata("overlay")}
+              </div>
+            </div>
+          ) : isTextOnly ? (
           <>
             {renderReplyPreview(msg, isOwn)}
-            <div className="relative text-[16px] leading-[21px]" data-testid="message-text-flow">
+              <div
+                className="relative message-text-scale"
+                data-testid="message-text-flow"
+              >
               <span
                 data-message-content-rect
-                className="relative whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:normal] text-[16px] leading-[21px]"
+                  className="relative whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:normal] message-text-scale"
               >
-                <MessageText text={msg.content || ""} entities={msg.entities} />
+                  <MessageText
+                    text={msg.content || ""}
+                    entities={msg.entities}
+                  />
               </span>
               {renderInlineMetadata()}
             </div>
@@ -1199,20 +1554,28 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
           </div>
         )}
 
-        {(isTextOnly || isDocumentAttachment) && !isDocumentGroup && renderBubbleTail("message-text-tail")}
+          {(isTextOnly || isDocumentAttachment) &&
+            !isDocumentGroup &&
+            renderBubbleTail("message-text-tail")}
 
         {isVisualMediaMessage && renderBubbleTail("message-media-tail")}
 
-        {!hasReactions && !isTextOnly && !isMediaOnly && !isVisualMediaMessage && !isDocumentAttachment && !isSingleAudioMessage && !isAudioGroup && !isVoiceMessage && (
-          <div className="mt-1.5 flex justify-end">
-            {renderMetadata()}
-          </div>
+          {!hasReactions &&
+            !isTextOnly &&
+            !isMediaOnly &&
+            !isVisualMediaMessage &&
+            !isDocumentAttachment &&
+            !isSingleAudioMessage &&
+            !isAudioGroup &&
+            !isVoiceMessage && (
+              <div className="mt-1.5 flex justify-end">{renderMetadata()}</div>
         )}
         
         {renderReactions()}
       </div>
     </div>
   );
-});
+  },
+);
 
 MessageItem.displayName = "MessageItem";
