@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo, useLayoutEffect } from "react";
-import type { Message } from "@/shared/types";
+import type { Message, User } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { ForwardModal } from "../ForwardModal";
@@ -83,6 +83,24 @@ type MediaViewerState =
     avatarSrc?: string | null;
     messageId: number;
   };
+
+function normalizeResolvedUser(response: unknown): User {
+  let candidate = response;
+
+  if (candidate && typeof candidate === "object" && "data" in candidate) {
+    candidate = (candidate as { data?: unknown }).data;
+  }
+
+  if (candidate && typeof candidate === "object" && "user" in candidate) {
+    candidate = (candidate as { user?: unknown }).user;
+  }
+
+  if (!candidate || typeof candidate !== "object" || typeof (candidate as { id?: unknown }).id !== "number") {
+    throw new Error("invalid_user_response");
+  }
+
+  return candidate as User;
+}
 
 function toRect(rect: DOMRect | DOMRectReadOnly) {
   return {
@@ -198,12 +216,16 @@ export function MessageList({
   const isMountedRef = useRef(true);
   const [forwardedSenderError, setForwardedSenderError] = useState<string | null>(null);
 
-  useEffect(() => () => {
-    isMountedRef.current = false;
-    forwardedSenderNavigationRef.current = null;
-    // A manual chat switch unmounts this list. Invalidate any completion that
-    // could otherwise navigate back after the user has chosen another chat.
-    forwardingOperationRef.current += 1;
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      forwardedSenderNavigationRef.current = null;
+      // A manual chat switch unmounts this list. Invalidate any completion that
+      // could otherwise navigate back after the user has chosen another chat.
+      forwardingOperationRef.current += 1;
+    };
   }, []);
 
   const handleOpenForwardedSender = useCallback(async (sourcePublicId: string) => {
@@ -214,12 +236,17 @@ export function MessageList({
     setForwardedSenderError(null);
 
     try {
-      const user = await authApi.getUser(sourcePublicId);
+      const response = await authApi.getUser(sourcePublicId);
+      const user = normalizeResolvedUser(response);
       if (!isMountedRef.current || forwardedSenderNavigationRef.current !== sourcePublicId) return;
       setActiveChat(directChatForUser(user));
     } catch (error) {
       if (!isMountedRef.current || forwardedSenderNavigationRef.current !== sourcePublicId) return;
-      console.error("Failed to open forwarded sender chat:", error);
+      console.error("[VETRA forwarded-sender] resolution failed", {
+        sourcePublicId,
+        stage: "get_user",
+        category: error instanceof Error ? error.message : "unknown_error",
+      });
       setForwardedSenderError("This user is unavailable.");
     } finally {
       if (forwardedSenderNavigationRef.current === sourcePublicId) {

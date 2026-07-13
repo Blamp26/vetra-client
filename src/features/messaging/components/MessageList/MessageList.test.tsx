@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import { StrictMode } from "react";
 import { within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -269,6 +270,7 @@ function makeAudioMessage(id: number, senderId = 2, count = 2) {
 function renderMessageList(
   messages = [makeMessage()],
   propOverrides: Partial<ComponentProps<typeof MessageList>> = {},
+  renderOptions: Parameters<typeof render>[1] = {},
 ) {
   return render(
     <MessageList
@@ -281,6 +283,7 @@ function renderMessageList(
       onReply={vi.fn()}
       {...propOverrides}
     />,
+    renderOptions,
   );
 }
 
@@ -348,14 +351,18 @@ describe("MessageList bubble layout", () => {
   it("opens a forwarded sender by stable public ID through the canonical direct chat action", async () => {
     const setActiveChat = vi.fn();
     getUserMock.mockResolvedValue({
-      id: 42,
-      public_id: "user-alice",
-      username: "alice",
-      display_name: "Alice",
-      bio: null,
-      avatar_url: null,
-      status: "offline",
-      last_seen_at: null,
+      data: {
+        user: {
+          id: 42,
+          public_id: "user-alice",
+          username: "alice",
+          display_name: "Alice",
+          bio: null,
+          avatar_url: null,
+          status: "offline",
+          last_seen_at: null,
+        },
+      },
     });
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
       selector({
@@ -396,6 +403,54 @@ describe("MessageList bubble layout", () => {
       partnerId: 42,
       partnerRef: "user-alice",
     });
+  });
+
+  it("keeps sender navigation active after the Strict Mode mount cycle", async () => {
+    const setActiveChat = vi.fn();
+    getUserMock.mockResolvedValue({
+      id: 42,
+      public_id: "user-alice",
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "offline",
+      last_seen_at: null,
+    });
+    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({
+        selectionMode: false,
+        selectedMessageIds: [],
+        setSelectionMode: vi.fn(),
+        toggleMessageSelection: vi.fn(),
+        clearSelection: vi.fn(),
+        forwardingMessageIds: null,
+        setForwardingMessages: vi.fn(),
+        setActiveChat,
+        socketManager: null,
+        deleteMessage: vi.fn(),
+        deleteRoomMessage: vi.fn(),
+        messageReactions: {},
+        startEditing: vi.fn(),
+        conversationPreviews: {},
+        roomPreviews: {},
+        authToken: "secret-token",
+      }),
+    );
+
+    renderMessageList(
+      [makeMessage({ forwarded_from: { source_public_id: "user-alice", source_display_name: "Alice" } })],
+      {},
+      { wrapper: StrictMode },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open chat with Alice" }));
+    await waitFor(() => expect(setActiveChat).toHaveBeenCalledWith({
+      type: "direct",
+      partnerId: 42,
+      partnerRef: "user-alice",
+    }));
+    expect(getUserMock).toHaveBeenCalledWith("user-alice");
   });
 
   it("waits for latest history completion before performing the initial bottom scroll", async () => {
