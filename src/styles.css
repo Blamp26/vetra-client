@@ -287,6 +287,63 @@ body[data-vt-shell-resizing="true"] {
   user-select: none;
 }
 
+.vt-composer-menu {
+  position: fixed;
+  z-index: 120;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: none;
+  border-radius: 8px;
+  background: #17212b;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.38);
+  color: #fff;
+}
+
+.vt-composer-menu--main { width: 156px; height: 313px; padding: 1px 0; }
+.vt-composer-menu--submenu { width: 209px; height: 368px; }
+.vt-composer-menu__row {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 34px;
+  align-items: center;
+  padding: 0 16px 0 17px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.vt-composer-menu__row.is-active:not(:disabled), .vt-composer-menu__row:hover:not(:disabled) { background: #232e3c; }
+.vt-composer-menu__row:disabled { color: #415469; cursor: default; }
+.vt-composer-menu__label { overflow: hidden; white-space: nowrap; font-size: 13px; line-height: 17px; font-weight: 400; }
+.vt-composer-menu__shortcut { margin-left: auto; white-space: nowrap; color: #6f8499; text-align: right; font-size: 12px; line-height: 16px; font-weight: 400; }
+.vt-composer-menu__row:disabled .vt-composer-menu__shortcut { color: #415469; }
+.vt-composer-menu__chevron { width: 14px; height: 14px; margin-left: auto; color: #6f8499; }
+.vt-composer-menu__separator { position: relative; width: 100%; height: 13px; flex-shrink: 0; }
+.vt-composer-menu__separator::after { position: absolute; top: 6px; right: 16px; left: 16px; height: 1px; background: #263442; content: ""; }
+.vt-composer-menu--submenu .vt-composer-menu__separator { height: 28px; }
+.vt-create-link-layer { position: fixed; z-index: 130; inset: 0; }
+.vt-create-link-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: rgba(0, 0, 0, 0.62); cursor: default; }
+.vt-create-link-dialog { position: absolute; top: 50%; left: 50%; box-sizing: border-box; width: 320px; height: 232px; transform: translate(-50%, -50%); overflow: hidden; border: none; border-radius: 8px; background: #17212b; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); color: #fff; }
+.vt-create-link-dialog h2 { position: absolute; top: 16px; left: 22px; margin: 0; color: #fff; font-size: 18px; line-height: 22px; font-weight: 500; }
+.vt-create-link-label, .vt-create-link-url-label { position: absolute; left: 22px; font-size: 13px; line-height: 17px; font-weight: 400; }
+.vt-create-link-label { top: 50px; color: #7f91a4; }
+.vt-create-link-selected-text { position: absolute; top: 70px; left: 22px; width: 276px; height: 25px; overflow: hidden; color: #fff; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; line-height: 20px; font-weight: 400; }
+.vt-create-link-divider { position: absolute; top: 102px; left: 22px; width: 276px; height: 1px; background: #313c49; }
+.vt-create-link-url-label { top: 124px; color: #6ab2f2; }
+.vt-create-link-url-input { position: absolute; top: 143px; left: 22px; box-sizing: border-box; width: 276px; height: 23px; padding: 0; border: 0; outline: 0; background: transparent; caret-color: #fff; color: #fff; font-size: 15px; line-height: 22px; font-weight: 400; }
+.vt-create-link-url-underline { position: absolute; top: 166px; left: 22px; width: 276px; height: 2px; background: #6396cb; }
+.vt-create-link-url-underline.is-invalid { background: var(--destructive, #e57373); }
+.vt-create-link-error { position: absolute; top: 169px; left: 22px; color: var(--destructive, #e57373); font-size: 10px; line-height: 12px; }
+.vt-create-link-actions { position: absolute; right: 20px; bottom: 14px; display: flex; height: 32px; align-items: center; gap: 18px; }
+.vt-create-link-actions button { height: 32px; padding: 0 2px; border: 0; border-radius: 4px; background: transparent; color: #6ab2f2; font-size: 14px; line-height: 18px; font-weight: 500; cursor: pointer; }
+.vt-create-link-actions button:hover { background: rgba(106, 178, 242, 0.12); }
+.vt-create-link-actions button:disabled { opacity: 0.5; cursor: default; }
+
 #root {
   min-height: 100dvh;
   isolation: isolate;

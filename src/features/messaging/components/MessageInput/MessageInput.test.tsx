@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -141,16 +141,58 @@ describe("MessageInput attachments", () => {
     fireEvent.change(textarea, { target: { value: "Открыть сайт" } });
     textarea.setSelectionRange(0, textarea.value.length);
     fireEvent.keyDown(textarea, { key: "k", ctrlKey: true });
-    expect(screen.getByTestId("message-link-editor")).toBeInTheDocument();
-    expect(screen.getByTestId("message-link-url")).toHaveFocus();
-    fireEvent.change(screen.getByTestId("message-link-url"), { target: { value: "https://example.com/" } });
-    fireEvent.keyDown(screen.getByTestId("message-link-url"), { key: "Enter" });
+    expect(screen.getByTestId("create-link-dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("create-link-url-input")).toHaveFocus();
+    fireEvent.change(screen.getByTestId("create-link-url-input"), { target: { value: "https://example.com/" } });
+    fireEvent.keyDown(screen.getByTestId("create-link-url-input"), { key: "Enter" });
     fireEvent.keyDown(textarea, { key: "Enter" });
     await waitFor(() => expect(onSend).toHaveBeenCalledWith({
       content: "Открыть сайт",
       entities: [{ type: "text_link", offset: 0, length: 12, url: "https://example.com/" }],
       mediaFileId: null,
     }, undefined));
+  });
+
+  it("opens the fixed formatting menus from a selected right-click", () => {
+    render(<MessageInput onSend={vi.fn()} />);
+    const textarea = screen.getByTestId("message-input-textarea") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "Open site" } });
+    textarea.setSelectionRange(0, 4);
+
+    fireEvent.contextMenu(textarea, { clientX: 100, clientY: 100 });
+
+    const main = screen.getByTestId("composer-context-menu");
+    expect(main).toHaveClass("vt-composer-menu--main");
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      "UndoCtrl+Z", "RedoCtrl+Y", "CutCtrl+X", "CopyCtrl+C", "PasteCtrl+V", "Delete", "Formatting", "Select AllCtrl+A",
+    ]);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Formatting" }));
+    const submenu = screen.getByTestId("composer-formatting-submenu");
+    expect(submenu).toHaveClass("vt-composer-menu--submenu");
+    expect(submenu).toHaveStyle({ left: "256px", top: "105px" });
+    expect(screen.getByRole("menuitem", { name: /Create link/ })).toBeInTheDocument();
+  });
+
+  it("does not suppress the native context menu for an empty selection", () => {
+    render(<MessageInput onSend={vi.fn()} />);
+    const textarea = screen.getByTestId("message-input-textarea");
+    const event = createEvent.contextMenu(textarea);
+    fireEvent(textarea, event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByTestId("composer-context-menu")).not.toBeInTheDocument();
+  });
+
+  it("cancels the create-link dialog without changing the visible text", () => {
+    render(<MessageInput onSend={vi.fn()} />);
+    const textarea = screen.getByTestId("message-input-textarea") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "Open site" } });
+    textarea.setSelectionRange(0, 4);
+    fireEvent.keyDown(textarea, { key: "k", ctrlKey: true });
+    expect(screen.getByTestId("create-link-dialog")).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId("create-link-url-input"), { key: "Escape" });
+    expect(screen.queryByTestId("create-link-dialog")).not.toBeInTheDocument();
+    expect(textarea).toHaveValue("Open site");
   });
 
   it("records, cancels, and releases microphone tracks without sending", async () => {

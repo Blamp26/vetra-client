@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
-import { Check, FileText, ImagePlus, Mic, Paperclip, SendHorizonal, Square, X } from "lucide-react";
+import { FileText, ImagePlus, Mic, Paperclip, SendHorizonal, Square, X } from "lucide-react";
 import { useAppStore, type RootState } from "@/store"; 
 import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
@@ -16,6 +16,8 @@ import {
   validateAttachmentFile,
 } from "../../utils/attachments";
 import { AttachmentReviewModal } from "./AttachmentReviewModal";
+import { ComposerContextMenu, type ComposerMenuItem } from "./ComposerContextMenu";
+import { CreateLinkDialog } from "./CreateLinkDialog";
 import {
   AttachmentUploadError,
   buildAttachmentSendUnits,
@@ -113,51 +115,6 @@ function AttachmentSourceMenu({
   );
 }
 
-function LinkEditor({
-  url,
-  invalid,
-  onChange,
-  onSave,
-  onCancel,
-}: {
-  url: string;
-  invalid: boolean;
-  onChange: (value: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div
-      className="absolute bottom-full left-1/2 z-50 flex h-12 w-[422px] max-w-[calc(100vw-12px)] -translate-x-1/2 items-center rounded-[15px] bg-[#212121] px-[6px] py-2 shadow-[rgba(16,16,16,0.61)_0_1px_2px]"
-      data-testid="message-link-editor"
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      <button type="button" className="mx-0.5 flex h-8 w-8 items-center justify-center rounded-[6px] p-1 text-[#aaa] hover:bg-white/10" aria-label="Cancel" onClick={onCancel}>
-        <X className="h-4 w-4" />
-      </button>
-      <span className="mx-1 h-7 w-px bg-[#303030]" />
-      <input
-        autoFocus
-        value={url}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") { event.preventDefault(); onSave(); }
-          if (event.key === "Escape") { event.preventDefault(); onCancel(); }
-        }}
-        className="h-[26px] w-[320px] border-0 bg-[#212121] px-0.5 py-px text-base font-normal leading-6 text-white outline-none"
-        placeholder="Enter URL..."
-        aria-label="URL"
-        data-testid="message-link-url"
-      />
-      <span className="mx-1 h-7 w-px bg-[#303030]" />
-      <button type="button" className="mx-0.5 flex h-8 w-8 items-center justify-center rounded-[6px] p-1 text-[#8774e1] hover:bg-white/10" aria-label="Save" onClick={onSave}>
-        <Check className="h-4 w-4" />
-      </button>
-      {invalid && <span className="sr-only">Invalid URL</span>}
-    </div>
-  );
-}
-
 interface ReplyTarget { id: number; content: string; author: string; }
 
 interface Props {
@@ -188,11 +145,15 @@ interface Props {
    onCancelReply, 
    focusBlocked = false,
  }: Props) { 
-   const [content, setContent] = useState("");
+  const [content, setContent] = useState("");
   const [entities, setEntities] = useState<TextLinkEntity[]>([]);
-  const [linkEditor, setLinkEditor] = useState<{ start: number; end: number } | null>(null);
-  const [linkUrl, setLinkUrl] = useState("");
-  const [linkInvalid, setLinkInvalid] = useState(false);
+  const [composerContextMenu, setComposerContextMenu] = useState<{ left: number; top: number; submenuOnLeft: boolean } | null>(null);
+  const [formattingOpen, setFormattingOpen] = useState(false);
+  const [activeMainMenuIndex, setActiveMainMenuIndex] = useState(6);
+  const [activeFormattingIndex, setActiveFormattingIndex] = useState(7);
+  const [createLinkDialog, setCreateLinkDialog] = useState<{ start: number; end: number; selectedText: string } | null>(null);
+  const [createLinkUrl, setCreateLinkUrl] = useState("");
+  const [createLinkInvalid, setCreateLinkInvalid] = useState(false);
    const [isSending, setIsSending] = useState(false); 
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "error">("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -220,6 +181,7 @@ interface Props {
   const voiceStartedAtRef = useRef(0);
   const voiceDiscardRef = useRef(false);
   const voiceSendLockRef = useRef(false);
+  const selectionRef = useRef<{ start: number; end: number; selectedText: string } | null>(null);
  
    const editingMessage = useAppStore((s: RootState) => s.editingMessage); 
    const cancelEditing = useAppStore((s: RootState) => s.cancelEditing); 
@@ -271,15 +233,33 @@ interface Props {
   }, [pendingAttachments]);
 
   useEffect(() => {
-    if (!linkEditor) return;
+    if (!composerContextMenu) return;
+    const focusMenu = window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[data-testid="composer-context-menu"]')?.focus();
+    });
     const handleOutsidePointer = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (target instanceof Element && target.closest('[data-testid="message-link-editor"]')) return;
-      setLinkEditor(null);
+      if (target instanceof Element && target.closest('[data-testid="composer-context-menu"], [data-testid="composer-formatting-submenu"]')) return;
+      setComposerContextMenu(null);
+      setFormattingOpen(false);
     };
     document.addEventListener("mousedown", handleOutsidePointer);
-    return () => document.removeEventListener("mousedown", handleOutsidePointer);
-  }, [linkEditor]);
+    return () => {
+      window.cancelAnimationFrame(focusMenu);
+      document.removeEventListener("mousedown", handleOutsidePointer);
+    };
+  }, [composerContextMenu]);
+
+  useEffect(() => {
+    if (!composerContextMenu) return;
+    const frame = window.requestAnimationFrame(() => {
+      const selector = formattingOpen
+        ? '[data-testid="composer-formatting-submenu"]'
+        : '[data-testid="composer-context-menu"]';
+      document.querySelector<HTMLElement>(selector)?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [composerContextMenu, formattingOpen]);
 
   useEffect(() => {
     if (pendingAttachments.length === 0) {
@@ -399,32 +379,97 @@ interface Props {
     } 
    }; 
 
-  const openLinkEditor = () => {
+  const captureSelection = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return null;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.slice(start, end);
+    if (start >= end || selectedText.trim().length === 0) return null;
+    const selection = { start, end, selectedText };
+    selectionRef.current = selection;
+    return selection;
+  };
+
+  const openCreateLinkDialog = (selection = selectionRef.current ?? captureSelection()) => {
+    if (!selection) return;
+    const existing = entities.find((entity) => entity.offset <= selection.start && entity.offset + entity.length >= selection.end);
+    setCreateLinkDialog(selection);
+    setCreateLinkUrl(existing?.url ?? "");
+    setCreateLinkInvalid(false);
+    setComposerContextMenu(null);
+    setFormattingOpen(false);
+  };
+
+  const saveCreateLinkDialog = () => {
+    if (!createLinkDialog) return;
+    const value = createLinkUrl.trim();
+    if (value && !isSafeExternalUrl(value)) {
+      setCreateLinkInvalid(true);
+      return;
+    }
+    const { start, end } = createLinkDialog;
+    const intersecting = entitiesIntersectingRange(entities, start, end);
+    const remaining = entities.filter((entity) => !intersecting.some((item) => item === entity));
+    const next = value
+      ? [...remaining, { type: "text_link" as const, offset: start, length: end - start, url: value }]
+      : remaining;
+    setEntities(normalizeTextLinkEntities(next, content));
+    setCreateLinkDialog(null);
+    setCreateLinkInvalid(false);
+    textareaRef.current?.focus();
+    textareaRef.current?.setSelectionRange(start, end);
+  };
+
+  const closeComposerMenus = () => {
+    setComposerContextMenu(null);
+    setFormattingOpen(false);
+  };
+
+  const replaceSelection = (replacement: string) => {
     const textarea = textareaRef.current;
     if (!textarea) return;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    if (start >= end || content.slice(start, end).trim().length === 0) return;
-    const existing = entities.find((entity) => entity.offset <= start && entity.offset + entity.length >= end);
-    setLinkEditor({ start, end });
-    setLinkUrl(existing?.url ?? "");
-    setLinkInvalid(false);
+    const next = content.slice(0, start) + replacement + content.slice(end);
+    textarea.setRangeText(replacement, start, end, "end");
+    handleChange(next);
   };
 
-  const saveLinkEditor = () => {
-    if (!linkEditor) return;
-    const value = linkUrl.trim();
-    if (value && !isSafeExternalUrl(value)) { setLinkInvalid(true); return; }
-    const intersecting = entitiesIntersectingRange(entities, linkEditor.start, linkEditor.end);
-    const remaining = entities.filter((entity) => !intersecting.some((item) => item === entity));
-    const next = value
-      ? [...remaining, { type: "text_link" as const, offset: linkEditor.start, length: linkEditor.end - linkEditor.start, url: value }]
-      : remaining;
-    setEntities(normalizeTextLinkEntities(next, content));
-    const { start, end } = linkEditor;
-    setLinkEditor(null);
-    textareaRef.current?.focus();
-    textareaRef.current?.setSelectionRange(start, end);
+  const runClipboardCommand = async (cut: boolean) => {
+    const textarea = textareaRef.current;
+    if (!textarea || textarea.selectionStart === textarea.selectionEnd) return;
+    const selected = content.slice(textarea.selectionStart, textarea.selectionEnd);
+    try { await navigator.clipboard?.writeText(selected); } catch { /* clipboard permissions are optional */ }
+    if (cut) replaceSelection("");
+    closeComposerMenus();
+  };
+
+  const pasteFromClipboard = async () => {
+    if (!navigator.clipboard?.readText) return;
+    try { replaceSelection(await navigator.clipboard.readText()); } catch { return; }
+    closeComposerMenus();
+  };
+
+  const positionComposerContextMenu = (clientX: number, clientY: number) => {
+    const groupWidth = 365;
+    const groupHeight = 373;
+    const submenuOnLeft = clientX + groupWidth > window.innerWidth;
+    const rawGroupLeft = submenuOnLeft ? clientX - 209 : clientX;
+    const groupLeft = Math.min(Math.max(0, rawGroupLeft), Math.max(0, window.innerWidth - groupWidth));
+    const mainLeft = submenuOnLeft ? groupLeft + 209 : groupLeft;
+    const groupTop = Math.min(Math.max(0, clientY), Math.max(0, window.innerHeight - groupHeight));
+    setComposerContextMenu({ left: mainLeft, top: groupTop, submenuOnLeft });
+    setFormattingOpen(false);
+    setActiveMainMenuIndex(6);
+    setActiveFormattingIndex(7);
+  };
+
+  const openContextMenu = (event: React.MouseEvent<HTMLTextAreaElement>) => {
+    const selection = captureSelection();
+    if (!selection) return;
+    event.preventDefault();
+    positionComposerContextMenu(event.clientX, event.clientY);
   };
 
   const handleSuccessfulSend = () => {
@@ -1145,18 +1190,84 @@ interface Props {
     clearPendingAttachments();
   };
  
-   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => { 
-     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-       const start = e.currentTarget.selectionStart;
-       const end = e.currentTarget.selectionEnd;
-       if (start < end && e.currentTarget.value.slice(start, end).trim().length > 0) {
-         e.preventDefault();
-         openLinkEditor();
-         return;
-       }
+   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+   const modifier = isMac ? "⌘" : "Ctrl+";
+   const shortcut = (key: string) => `${modifier}${key}`;
+   const selectedRangeIsUsable = () => {
+     const textarea = textareaRef.current;
+     return Boolean(textarea && textarea.selectionStart < textarea.selectionEnd && textarea.value.slice(textarea.selectionStart, textarea.selectionEnd).trim());
+   };
+   const mainItems: ComposerMenuItem[] = [
+     { label: "Undo", shortcut: shortcut("Z"), disabled: true },
+     { label: "Redo", shortcut: shortcut("Y"), disabled: true },
+     { label: "Cut", shortcut: shortcut("X"), action: () => void runClipboardCommand(true) },
+     { label: "Copy", shortcut: shortcut("C"), action: () => void runClipboardCommand(false) },
+     { label: "Paste", shortcut: shortcut("V"), disabled: !navigator.clipboard?.readText, action: () => void pasteFromClipboard() },
+     { label: "Delete", action: () => { replaceSelection(""); closeComposerMenus(); } },
+     { label: "Formatting", hasSubmenu: true, action: () => setFormattingOpen(true) },
+     { label: "Select All", shortcut: shortcut("A"), action: () => { textareaRef.current?.focus(); textareaRef.current?.select(); closeComposerMenus(); } },
+   ];
+   const formattingItems: ComposerMenuItem[] = [
+     { label: "Bold", shortcut: shortcut("B"), disabled: true },
+     { label: "Italic", shortcut: shortcut("I"), disabled: true },
+     { label: "Underline", shortcut: shortcut("U"), disabled: true },
+     { label: "Strikethrough", shortcut: `${modifier}Shift+X`, disabled: true },
+     { label: "Quote", shortcut: `${modifier}Shift+.`, disabled: true },
+     { label: "Monospace", shortcut: `${modifier}Shift+M`, disabled: true },
+     { label: "Spoiler", shortcut: `${modifier}Shift+P`, disabled: true },
+     { label: "Create link", shortcut: shortcut("K"), disabled: !selectedRangeIsUsable(), action: () => openCreateLinkDialog() },
+     { label: "Date", shortcut: `${modifier}Shift+D`, disabled: true },
+     { label: "Clear formatting", shortcut: `${modifier}Shift+N`, disabled: true },
+   ];
+   const enabledIndex = (items: ComposerMenuItem[], index: number, direction: number) => {
+     let next = index;
+     for (let i = 0; i < items.length; i += 1) {
+       next = (next + direction + items.length) % items.length;
+       if (!items[next]?.disabled) return next;
      }
-     if (linkEditor) {
-       if (e.key === "Escape") { e.preventDefault(); setLinkEditor(null); }
+     return index;
+   };
+   const handleMainMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+     if (event.key === "Escape") { event.preventDefault(); closeComposerMenus(); return; }
+     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+       event.preventDefault();
+       setActiveMainMenuIndex((index) => enabledIndex(mainItems, index, event.key === "ArrowDown" ? 1 : -1));
+       return;
+     }
+     if (event.key === "ArrowRight" || (event.key === "Enter" && activeMainMenuIndex === 6)) {
+       event.preventDefault();
+       setFormattingOpen(true);
+       setActiveFormattingIndex(7);
+       return;
+     }
+     if (event.key === "Enter") {
+       event.preventDefault();
+       mainItems[activeMainMenuIndex]?.action?.();
+     }
+   };
+   const handleSubmenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+     if (event.key === "Escape") { event.preventDefault(); closeComposerMenus(); return; }
+     if (event.key === "ArrowLeft") { event.preventDefault(); setFormattingOpen(false); return; }
+     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+       event.preventDefault();
+       setActiveFormattingIndex((index) => enabledIndex(formattingItems, index, event.key === "ArrowDown" ? 1 : -1));
+       return;
+     }
+     if (event.key === "Enter") {
+       event.preventDefault();
+       formattingItems[activeFormattingIndex]?.action?.();
+     }
+   };
+
+   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+       const selection = captureSelection();
+       if (selection) { e.preventDefault(); openCreateLinkDialog(selection); return; }
+     }
+     if (e.key === "Escape" && (composerContextMenu || createLinkDialog)) {
+       e.preventDefault();
+       if (createLinkDialog) setCreateLinkDialog(null);
+       closeComposerMenus();
        return;
      }
      if (e.key === "Enter" && !e.shiftKey) { 
@@ -1200,13 +1311,32 @@ interface Props {
        />
      )}
      <div className="relative flex flex-col border-t border-border bg-[color:var(--vetra-shell-chat-bg,var(--color-card))]" data-testid="message-composer-shell">
-       {linkEditor && (
-         <LinkEditor
-           url={linkUrl}
-           invalid={linkInvalid}
-           onChange={(value) => { setLinkUrl(value); setLinkInvalid(false); }}
-           onSave={saveLinkEditor}
-           onCancel={() => setLinkEditor(null)}
+       {composerContextMenu && (
+         <ComposerContextMenu
+           left={composerContextMenu.left}
+           top={composerContextMenu.top}
+           submenuOnLeft={composerContextMenu.submenuOnLeft}
+           submenuOpen={formattingOpen}
+           activeMainIndex={activeMainMenuIndex}
+           activeSubmenuIndex={activeFormattingIndex}
+           onOpenSubmenu={() => setFormattingOpen(true)}
+           onMainActive={setActiveMainMenuIndex}
+           onSubmenuActive={setActiveFormattingIndex}
+           onMainKeyDown={handleMainMenuKeyDown}
+           onSubmenuKeyDown={handleSubmenuKeyDown}
+           mainItems={mainItems}
+           submenuItems={formattingItems}
+         />
+       )}
+       {createLinkDialog && (
+         <CreateLinkDialog
+           selectedText={createLinkDialog.selectedText}
+           url={createLinkUrl}
+           invalid={createLinkInvalid}
+           allowEmpty={entities.some((entity) => entity.offset <= createLinkDialog.start && entity.offset + entity.length >= createLinkDialog.end)}
+           onUrlChange={(value) => { setCreateLinkUrl(value); setCreateLinkInvalid(false); }}
+           onCreate={saveCreateLinkDialog}
+           onCancel={() => setCreateLinkDialog(null)}
          />
        )}
        {isEditing && ( 
@@ -1344,6 +1474,7 @@ interface Props {
             value={content}
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onContextMenu={openContextMenu}
             onPaste={handlePaste}
             disabled={disabled || isSending || isUploading || pendingAttachments.length > 0 || voiceRecordingState !== "idle"}
             rows={1}
