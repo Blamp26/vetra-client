@@ -25,6 +25,13 @@
   padding-inline-end: var(--message-padding-inline-end);
 }
 
+/* EmojiText uses the shared image component, whose default block display is
+   correct for standalone emoji but must be inline inside ordinary messages. */
+[data-testid="message-text-flow"] [data-testid="message-rich-text"] img {
+  display: inline-block !important;
+  vertical-align: text-bottom;
+}
+
 .message-emoji-only {
   position: relative;
   display: flex;

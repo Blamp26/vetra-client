@@ -288,9 +288,14 @@ describe("MessageItem bubble layout", () => {
   });
 
   it("returns four emoji and mixed emoji text to the normal message path", () => {
-    const { rerender } = renderMessageItem({ content: "😀😎👍❤️" });
+    const { rerender } = renderMessageItem({ content: "😀😀😀😀" });
     expect(screen.queryByTestId("message-emoji-only")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-text-flow")).toBeInTheDocument();
+    expect(screen.getByTestId("message-bubble")).toHaveClass(
+      "message-text-bubble",
+      "bg-bubble-incoming",
+    );
+    expect(screen.queryByTestId("message-text-tail")).toBeInTheDocument();
 
     rerender(
       <MessageItem
@@ -313,6 +318,21 @@ describe("MessageItem bubble layout", () => {
     );
     expect(screen.queryByTestId("message-emoji-only")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-text-flow")).toBeInTheDocument();
+  });
+
+  it("keeps special emoji messages detached from ordinary bubble geometry", () => {
+    renderMessageItem({ content: "😀" }, { isOwn: true });
+
+    const bubble = screen.getByTestId("message-bubble");
+    expect(bubble).toHaveClass("message-emoji-only-bubble");
+    expect(bubble).not.toHaveClass("message-text-bubble");
+    expect(screen.getByTestId("message-emoji-only")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-text-tail")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("message-emoji-only").querySelector(
+        '[data-testid="message-metadata"]',
+      ),
+    ).toBeInTheDocument();
   });
 
   it("renders forwarded attribution before the message content with the verified geometry", () => {

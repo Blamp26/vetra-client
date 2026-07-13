@@ -340,6 +340,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       forwardedSource?.source_username ||
       "Unknown source";
   const shouldRenderTail =
+      !isEmojiOnlyMessage &&
       !isGroupedWithNext &&
       (isTextOnly ||
         isDocumentAttachment ||
@@ -1377,7 +1378,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
         className={cn(
             "relative box-border w-fit overflow-visible message-text-scale tracking-normal",
             isEmojiOnlyMessage && "message-emoji-only-bubble",
-          isAudioGroup
+          isEmojiOnlyMessage
+            ? "min-w-0 p-0"
+            : isAudioGroup
             ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] rounded-none p-0"
             : isDocumentGroup
               ? "min-w-0 w-[275px] max-w-[min(480px,calc(100vw-6rem))] rounded-none p-0"
@@ -1414,7 +1417,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           isSelected && "ring-1 ring-primary",
             isHighlighted &&
               "outline outline-2 outline-primary outline-offset-1",
-          isDocumentGroup || isAudioGroup
+          isEmojiOnlyMessage
+            ? "rounded-none"
+            : isDocumentGroup || isAudioGroup
             ? "rounded-none"
               : isTextOnly ||
                   isVisualMediaMessage ||
@@ -1439,7 +1444,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                         isConsecutive && "rounded-tl-[4px]",
                         isGroupedWithNext && "rounded-bl-[4px]",
                 ),
-          isDocumentGroup || isAudioGroup
+          isEmojiOnlyMessage
+            ? "bg-transparent text-current"
+            : isDocumentGroup || isAudioGroup
               ? isOwn
                 ? "bg-transparent text-bubble-outgoing-text"
                 : "bg-transparent text-bubble-incoming-text"
@@ -1473,7 +1480,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                 ? "var(--bubble-outgoing)"
                 : "var(--bubble-incoming)",
               backgroundColor:
-                isDocumentGroup || isAudioGroup
+                isEmojiOnlyMessage || isDocumentGroup || isAudioGroup
                   ? "transparent"
                   : "var(--message-surface-color)",
               ...(isSingleVisualMessage
@@ -1554,7 +1561,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           </div>
         )}
 
-          {(isTextOnly || isDocumentAttachment) &&
+          {shouldRenderTail &&
+            (isTextOnly || isDocumentAttachment) &&
             !isDocumentGroup &&
             renderBubbleTail("message-text-tail")}
 
