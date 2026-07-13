@@ -1,7 +1,9 @@
 export const LARGE_EMOJI_SIZE = 36;
 export const LARGE_EMOJI_OUTLINE = 1;
 export const LARGE_EMOJI_SKIP = 4;
-export const LARGE_EMOJI_SINGLE_SIZE = 112;
+// Telegram's sticker destination is 112px, but the browser emoji assets have
+// less transparent inset and therefore need a 96px calibrated destination.
+export const LARGE_EMOJI_SINGLE_SIZE = 96;
 
 export type IntrinsicEmojiSize = {
   width: number;

@@ -253,8 +253,8 @@ describe("MessageItem bubble layout", () => {
     const emojiOnly = screen.getByTestId("message-emoji-only");
     expect(emojiOnly).toHaveClass("message-emoji-only--single");
     expect(emojiOnly.querySelector("img")).toHaveStyle({
-      width: "112px",
-      height: "112px",
+      width: "96px",
+      height: "96px",
     });
     expect(
       screen.queryByTestId("message-emoji-only-metadata"),
@@ -366,10 +366,10 @@ describe("MessageItem bubble layout", () => {
       width: 36,
       height: 36,
     });
-    expect(getSingleLargeEmojiSize("😀")).toBe(112);
-    expect(getSingleLargeEmojiSize("❤️")).toBe(112);
-    expect(getSingleLargeEmojiSize("👍🏽")).toBe(112);
-    expect(getSingleLargeEmojiSize("👨‍👩‍👧‍👦")).toBe(112);
+    expect(getSingleLargeEmojiSize("😀")).toBe(96);
+    expect(getSingleLargeEmojiSize("❤️")).toBe(96);
+    expect(getSingleLargeEmojiSize("👍🏽")).toBe(96);
+    expect(getSingleLargeEmojiSize("👨‍👩‍👧‍👦")).toBe(96);
     expect(getSingleLargeEmojiSize("🇺🇦")).toBe(38);
     expect(hasLargeEmojiRepresentation("😀")).toBe(true);
     expect(hasLargeEmojiRepresentation("🇺🇦")).toBe(false);
