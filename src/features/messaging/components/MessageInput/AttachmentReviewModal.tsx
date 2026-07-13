@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Play, Plus, X } from "lucide-react";
 
 import { cn } from "@/shared/utils/cn";
+import { ComposerTextDecoration } from "./ComposerTextDecoration";
+import type { TextLinkEntity } from "@/shared/utils/textEntities";
 import {
   formatAttachmentSize,
   getAttachmentKindLabel,
@@ -20,6 +22,7 @@ interface AttachmentReviewModalProps {
   batchId?: string | null;
   attachments: PendingAttachment[];
   content: string;
+  entities: readonly TextLinkEntity[];
   isSending: boolean;
   isUploading: boolean;
   uploadStatus: "idle" | "uploading" | "error";
@@ -259,6 +262,7 @@ export function AttachmentReviewModal({
   batchId = null,
   attachments,
   content,
+  entities,
   isSending,
   isUploading,
   uploadStatus,
@@ -274,6 +278,7 @@ export function AttachmentReviewModal({
   onSend,
 }: AttachmentReviewModalProps) {
   const captionRef = useRef<HTMLTextAreaElement>(null);
+  const [captionScrollTop, setCaptionScrollTop] = useState(0);
   const isBusy = isSending || isUploading;
   const title = useMemo(() => getAttachmentReviewTitle(attachments), [attachments]);
   const sendLabel = useMemo(
@@ -416,17 +421,21 @@ export function AttachmentReviewModal({
               )}
 
               <div className="flex min-h-12 items-end gap-2">
-                <textarea
-                  id="attachment-review-caption"
-                  ref={captionRef}
-                  className="vt-attachment-review__caption min-h-12 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-2 py-[13px] text-[15px] leading-[21px] outline-none disabled:opacity-60"
-                  placeholder="Add a caption"
-                  rows={1}
-                  value={content}
-                  onChange={(event) => onContentChange(event.target.value)}
-                  disabled={isBusy}
-                  aria-label="Caption"
-                />
+                <div className="vt-attachment-review__caption-layer">
+                  <ComposerTextDecoration text={content} entities={entities} scrollTop={captionScrollTop} className="vt-attachment-review__caption-decoration" />
+                  <textarea
+                    id="attachment-review-caption"
+                    ref={captionRef}
+                    className="vt-attachment-review__caption min-h-12 w-full resize-none overflow-y-auto border-0 bg-transparent px-2 py-[13px] text-[15px] leading-[21px] outline-none disabled:opacity-60"
+                    placeholder="Add a caption"
+                    rows={1}
+                    value={content}
+                    onChange={(event) => onContentChange(event.target.value)}
+                    onScroll={(event) => setCaptionScrollTop(event.currentTarget.scrollTop)}
+                    disabled={isBusy}
+                    aria-label="Caption"
+                  />
+                </div>
 
                 <button
                   type="button"

@@ -18,6 +18,7 @@ import {
 import { AttachmentReviewModal } from "./AttachmentReviewModal";
 import { ComposerContextMenu, type ComposerMenuItem } from "./ComposerContextMenu";
 import { CreateLinkDialog } from "./CreateLinkDialog";
+import { ComposerTextDecoration } from "./ComposerTextDecoration";
 import {
   AttachmentUploadError,
   buildAttachmentSendUnits,
@@ -1289,6 +1290,7 @@ interface Props {
          batchId={attachmentBatchIdRef.current}
          attachments={pendingAttachments}
          content={content}
+         entities={entities}
          isSending={isSending}
          isUploading={isUploading}
          uploadStatus={uploadStatus}
@@ -1463,25 +1465,28 @@ interface Props {
             onChange={handleFileChange}
           />
 
-          <textarea
-            ref={textareaRef}
-            className={cn(
-              "min-h-8 max-h-44 flex-1 resize-none border-0 bg-transparent px-1 py-[6px] text-[15px] leading-5 text-foreground shadow-none outline-none ring-0",
-              "focus:border-0 focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
-              "placeholder:text-muted-foreground/85 disabled:cursor-not-allowed disabled:opacity-60",
-            )}
-            data-testid="message-input-textarea"
-            placeholder={pendingAttachments.length > 0 ? "Review attachments in dialog" : "Message..."}
-            value={content}
-            onChange={(e) => handleChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onContextMenu={openContextMenu}
-            onPaste={handlePaste}
-            disabled={disabled || isSending || isUploading || pendingAttachments.length > 0 || voiceRecordingState !== "idle"}
-            rows={1}
-            style={{ overflowY: "hidden" }}
-            aria-label="Message composer"
-          />
+          <div className="vt-composer-input-layer">
+            <ComposerTextDecoration text={content} entities={entities} />
+            <textarea
+              ref={textareaRef}
+              className={cn(
+                "min-h-8 max-h-44 flex-1 resize-none border-0 bg-transparent px-1 py-[6px] text-[15px] leading-5 text-foreground shadow-none outline-none ring-0",
+                "focus:border-0 focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
+                "placeholder:text-muted-foreground/85 disabled:cursor-not-allowed disabled:opacity-60",
+              )}
+              data-testid="message-input-textarea"
+              placeholder={pendingAttachments.length > 0 ? "Review attachments in dialog" : "Message..."}
+              value={content}
+              onChange={(e) => handleChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onContextMenu={openContextMenu}
+              onPaste={handlePaste}
+              disabled={disabled || isSending || isUploading || pendingAttachments.length > 0 || voiceRecordingState !== "idle"}
+              rows={1}
+              style={{ overflowY: "hidden" }}
+              aria-label="Message composer"
+            />
+          </div>
 
           <button
             type="button"

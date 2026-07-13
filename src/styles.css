@@ -351,6 +351,29 @@ body[data-vt-shell-resizing="true"] {
 .vt-create-link-actions button { height: 32px; padding: 0 2px; border: 0; border-radius: 4px; background: transparent; color: #6ab2f2; font-size: 14px; line-height: 18px; font-weight: 500; cursor: pointer; }
 .vt-create-link-actions button:hover { background: rgba(106, 178, 242, 0.12); }
 .vt-create-link-actions button:disabled { opacity: 0.5; cursor: default; }
+.vt-composer-text-decoration {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 6px 4px;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  font-size: 15px;
+  line-height: 20px;
+  pointer-events: none;
+}
+.vt-composer-text-decoration__link { color: #6ab2f2; }
+.vt-composer-input-layer { position: relative; min-width: 0; flex: 1 1 0%; }
+.vt-composer-input-layer > textarea { position: relative; z-index: 1; width: 100%; color: transparent; caret-color: var(--foreground); }
+.vt-composer-input-layer > textarea::selection { color: transparent; }
+.vt-attachment-review__caption-layer { position: relative; min-width: 0; flex: 1 1 0%; }
+.vt-attachment-review__caption-layer > textarea { position: relative; z-index: 1; color: transparent; caret-color: var(--foreground); }
+.vt-attachment-review__caption-layer > textarea::selection { color: transparent; }
+.vt-attachment-review__caption-decoration { padding: 13px 8px; line-height: 21px; }
 
 #root {
   min-height: 100dvh;
