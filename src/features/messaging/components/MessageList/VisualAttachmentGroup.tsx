@@ -27,6 +27,7 @@ interface VisualAttachmentGroupProps {
   layout: MediaAlbumLayout;
   albumMaxWidth: number;
   hasCaption: boolean;
+  hasHeaderAbove: boolean;
   isTemporaryLayout: boolean;
   isDebugEnabled: boolean;
   runtimeMetricsByAttachmentId: Record<string, VisualRuntimeMetrics>;
@@ -52,6 +53,7 @@ export function VisualAttachmentGroup({
   layout,
   albumMaxWidth,
   hasCaption,
+  hasHeaderAbove,
   isTemporaryLayout,
   isDebugEnabled,
   runtimeMetricsByAttachmentId,
@@ -63,12 +65,18 @@ export function VisualAttachmentGroup({
   albumShellCornerClassName,
 }: VisualAttachmentGroupProps) {
   const isAlbum = attachments.length > 1;
+  const isSurroundedAlbum = isAlbum && hasHeaderAbove && hasCaption;
   const mediaFrameClassName = hasCaption
-    ? "mb-[6px] mt-[-5px] ml-[-8px] mr-[-8px] overflow-hidden rounded-t-[15px] rounded-b-none"
+    ? cn(
+        "mb-[6px] ml-[-8px] mr-[-8px] overflow-hidden",
+        isSurroundedAlbum
+          ? "mt-[4px] rounded-none"
+          : "mt-[-5px] rounded-t-[15px] rounded-b-none",
+      )
     : "";
   const albumShellClassName = cn(
     "relative max-w-full overflow-hidden border-0 p-0 shadow-none",
-    albumShellCornerClassName,
+    isSurroundedAlbum ? "rounded-none" : albumShellCornerClassName,
   );
 
   if (attachments.length > 1) {
@@ -97,7 +105,7 @@ export function VisualAttachmentGroup({
                   attachmentName={attachmentName}
                   displaySrc={currentAttachment.displaySrc}
                   index={index}
-                  buttonClassName="relative m-0 aspect-square overflow-hidden border-0 p-0"
+                  buttonClassName="relative m-0 aspect-square overflow-hidden rounded-none border-0 p-0"
                   buttonTestId="message-photo-collage-tile"
                   isDebugEnabled={isDebugEnabled}
                   serverWidth={currentAttachment.serverWidth}
@@ -146,10 +154,10 @@ export function VisualAttachmentGroup({
                 attachmentName={attachmentName}
                 displaySrc={currentAttachment.displaySrc}
                 index={tile.index}
-                wrapperClassName="absolute m-0 overflow-hidden border-0 p-0"
+                wrapperClassName="absolute m-0 overflow-hidden rounded-none border-0 p-0"
                 wrapperTestId={`message-photo-collage-tile-${tile.index}`}
                 wrapperStyle={tileStyle}
-                buttonClassName="relative m-0 block h-full w-full overflow-hidden border-0 p-0"
+                buttonClassName="relative m-0 block h-full w-full overflow-hidden rounded-none border-0 p-0"
                 buttonTestId="message-photo-collage-tile"
                 isDebugEnabled={isDebugEnabled}
                 serverWidth={currentAttachment.serverWidth}

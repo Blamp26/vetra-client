@@ -261,6 +261,42 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-forwarded-source-name")).toHaveTextContent("Original Alice");
   });
 
+  it("uses square album geometry when a forwarded album has a caption", () => {
+    renderMessageItem({
+      content: "Album caption",
+      forwarded_from: {
+        source_display_name: "Original Alice",
+        source_avatar_url: null,
+      },
+      attachments: [1, 2].map((index) => ({
+        id: `forwarded-album-${index}`,
+        url: `/api/v1/media/forwarded-album-${index}`,
+        mime_type: "image/jpeg",
+        original_name: `photo-${index}.jpg`,
+        file_size: 1024,
+        kind: "photo" as const,
+        width: 1200,
+        height: 900,
+      })),
+    });
+
+    const bubble = screen.getByTestId("message-bubble");
+    const album = screen.getByTestId("message-photo-collage");
+    const tiles = screen.getAllByTestId("message-photo-collage-tile");
+
+    expect(bubble).toHaveClass("rounded-[15px]", "rounded-tl-[15px]", "rounded-bl-[0px]");
+    expect(album).toHaveClass("mt-[4px]", "mb-[6px]", "ml-[-8px]", "mr-[-8px]", "rounded-none", "overflow-hidden");
+    expect(album).toHaveStyle({ maxWidth: "calc(100% + 16px)" });
+    expect(album).not.toHaveClass("rounded-t-[15px]", "rounded-b-none");
+    expect(tiles).toHaveLength(2);
+    tiles.forEach((tile) => {
+      expect(tile).toHaveClass("rounded-none", "overflow-hidden");
+    });
+    expect(screen.getByTestId("message-forwarded-header")).toBeInTheDocument();
+    expect(screen.getByTestId("message-text-content")).toHaveTextContent("Album caption");
+    expect(screen.getByTestId("message-metadata")).toBeInTheDocument();
+  });
+
   it("keeps normal media metadata visible for an outgoing forwarded photo", () => {
     renderMessageItem(
       {

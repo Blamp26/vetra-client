@@ -687,6 +687,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(({
       layout={photoLayout}
       albumMaxWidth={MESSAGE_ALBUM_MAX_WIDTH}
       hasCaption={hasText}
+      hasHeaderAbove={Boolean(forwardedSource)}
       isTemporaryLayout={isTemporaryVisualLayout}
       isDebugEnabled={isMediaDebugEnabled}
       runtimeMetricsByAttachmentId={visualRuntimeMetrics}
