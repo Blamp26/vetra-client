@@ -191,9 +191,9 @@ export function MessageList({
   chatContext,
   onReply,
 }: Props) {
-  const bottomRef    = useRef<HTMLDivElement>(null);
+  const bottomRef    = useRef<HTMLDivElement | null>();
   const containerRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement | null>();
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const {
@@ -975,11 +975,14 @@ export function MessageList({
       <div 
         ref={containerRef} 
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-3 py-4 scrollbar-hide sm:px-4"
+        className="flex-1 overflow-y-auto px-3 pb-2 pt-4 scrollbar-hide sm:px-4"
         data-testid="message-list-scroll"
       >
         <div
-          ref={contentRef}
+          ref={(element) => {
+            contentRef.current = element;
+            bottomRef.current = element;
+          }}
           className={cn(
             "flex w-full max-w-[900px] flex-col",
             alignmentMode === "left-column" ? "mr-auto" : "mx-auto",
@@ -1095,11 +1098,6 @@ export function MessageList({
               })}
             </div>
           ))}
-          <div
-            ref={bottomRef}
-            className="h-3"
-            data-testid="message-list-bottom-spacer"
-          />
         </div>
       </div>
 

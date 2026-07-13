@@ -370,7 +370,10 @@ describe("MessageList bubble layout", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByTestId("message-bubble-row")).toHaveLength(2);
     expect(screen.getByTestId("message-list-scroll")).toHaveClass("px-3");
-    expect(screen.getByTestId("message-list-scroll")).toHaveClass("py-4");
+    expect(screen.getByTestId("message-list-scroll")).toHaveClass(
+      "pt-4",
+      "pb-2",
+    );
     expect(screen.getByTestId("message-list-rail")).toHaveClass(
       "max-w-[900px]",
     );
@@ -1511,12 +1514,13 @@ describe("MessageList bubble layout", () => {
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
 
-  it("keeps a dedicated bottom spacer so the last message clears the composer", () => {
+  it("uses the shared eight-pixel bottom inset without a redundant spacer", () => {
     renderMessageList([makeMessage({ content: "Last message" })]);
 
+    expect(screen.getByTestId("message-list-scroll")).toHaveClass("pb-2");
     expect(
-      screen.getByTestId("message-list-bottom-spacer"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("message-list-bottom-spacer")).toHaveClass("h-3");
+      screen.queryByTestId("message-list-bottom-spacer"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-list-rail")).toBeInTheDocument();
   });
 });
