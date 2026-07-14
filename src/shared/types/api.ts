@@ -28,7 +28,7 @@ export interface CustomEmojiEntity {
   length: number;
   custom_emoji_id: string;
   alt?: string;
-  custom_emoji?: StickerMessage | null;
+  custom_emoji?: CustomEmojiDocument | null;
 }
 
 export type MessageTextEntity = MessageTextLinkEntity | CustomEmojiEntity;
@@ -119,6 +119,18 @@ export interface StickerMessage {
   format: "png" | "webp" | "webm" | (string & {});
   emoji_tags: string[];
   alt?: string | null;
+  pack_title?: string | null;
+}
+
+export interface CustomEmojiDocument {
+  id: string;
+  pack_id: string;
+  media_file_id: string;
+  width: number;
+  height: number;
+  format: "png" | "webp" | "webm" | (string & {});
+  alt: string;
+  emoji_tags?: string[];
   pack_title?: string | null;
 }
 

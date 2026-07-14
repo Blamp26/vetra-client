@@ -234,7 +234,7 @@ interface Props {
     const nextEntities = entities
       .filter((entity) => entity.offset + entity.length <= start || entity.offset >= end)
       .map((entity) => ({ ...entity, offset: entity.offset >= end ? entity.offset + delta : entity.offset }))
-      .concat({ type: "custom_emoji" as const, offset: start, length: alt.length, custom_emoji_id: emoji.id, alt, custom_emoji: emoji });
+      .concat({ type: "custom_emoji" as const, offset: start, length: alt.length, custom_emoji_id: emoji.id, alt, custom_emoji: { ...emoji, alt } });
     textarea.value = nextContent;
     textarea.setSelectionRange(start + alt.length, start + alt.length);
     setContent(nextContent);

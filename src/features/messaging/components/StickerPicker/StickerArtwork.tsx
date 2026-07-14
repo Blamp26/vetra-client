@@ -1,13 +1,20 @@
 import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
 import { AuthenticatedVideo } from "@/shared/components/AuthenticatedVideo";
 import { API_BASE_URL } from "@/api/base";
-import type { StickerMessage } from "@/shared/types";
+import type { CustomEmojiDocument, StickerMessage } from "@/shared/types";
 import type { CSSProperties } from "react";
 import { MediaVisibilityContext } from "@/shared/components/MediaVisibilityContext";
 
-export function StickerArtwork({ sticker, className, style, visibilityRoot }: { sticker: StickerMessage; className?: string; style?: CSSProperties; visibilityRoot?: HTMLElement | null }) {
+export type StickerArtworkSource = StickerMessage | CustomEmojiDocument;
+
+export function stickerArtworkLabel(sticker: StickerArtworkSource): string {
+  return sticker.alt?.trim() || sticker.emoji_tags?.filter(Boolean).join(" ").trim() || "Custom emoji";
+}
+
+export function StickerArtwork({ sticker, className, style, visibilityRoot }: { sticker: StickerArtworkSource; className?: string; style?: CSSProperties; visibilityRoot?: HTMLElement | null }) {
   const src = `${API_BASE_URL}/media/${sticker.media_file_id}`;
   const aspectRatio = `${sticker.width} / ${sticker.height}`;
-  if (sticker.format === "webm") return <MediaVisibilityContext.Provider value={{ root: visibilityRoot ?? null, revision: 0 }}><AuthenticatedVideo src={src} animatedSticker aria-label={sticker.emoji_tags.join(" ")} className={className} style={{ aspectRatio, ...style }} /></MediaVisibilityContext.Provider>;
-  return <AuthenticatedImage src={src} alt={sticker.emoji_tags.join(" ")} className={className} style={{ aspectRatio, ...style }} />;
+  const label = stickerArtworkLabel(sticker);
+  if (sticker.format === "webm") return <MediaVisibilityContext.Provider value={{ root: visibilityRoot ?? null, revision: 0 }}><AuthenticatedVideo src={src} animatedSticker aria-label={label} className={className} style={{ aspectRatio, ...style }} /></MediaVisibilityContext.Provider>;
+  return <AuthenticatedImage src={src} alt={label} className={className} style={{ aspectRatio, ...style }} />;
 }
