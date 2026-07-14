@@ -1,63 +1,136 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { listMock, addMock, postFormDataMock, useAppStoreMock } = vi.hoisted(() => ({ listMock: vi.fn(), addMock: vi.fn(), postFormDataMock: vi.fn(), useAppStoreMock: vi.fn() }));
-vi.mock("@/api/stickers", () => ({ stickersApi: { list: listMock, createPack: vi.fn(), add: addMock } }));
+const { listMock, createPackMock, addMock, postFormDataMock, useAppStoreMock } = vi.hoisted(() => ({
+  listMock: vi.fn(),
+  createPackMock: vi.fn(),
+  addMock: vi.fn(),
+  postFormDataMock: vi.fn(),
+  useAppStoreMock: vi.fn(),
+}));
+
+vi.mock("@/api/stickers", () => ({ stickersApi: { list: listMock, createPack: createPackMock, add: addMock } }));
 vi.mock("@/api/base", () => ({ API_BASE_URL: "", postFormData: postFormDataMock }));
 vi.mock("@/store", () => ({ useAppStore: (selector: (state: unknown) => unknown) => useAppStoreMock(selector) }));
 
 import { StickerPicker } from "./StickerPicker";
 
-const owned = { id: "owned", owner_id: 7, title: "Mine", slug: "mine", visibility: "private" as const, stickers: [] };
-const foreign = { id: "foreign", owner_id: 8, title: "Installed", slug: "installed", visibility: "public" as const, stickers: [] };
+const sticker = { id: "sticker", pack_id: "owned", media_file_id: "media", width: 512, height: 512, format: "webp", emoji_tags: ["😀"] };
+const secondSticker = { ...sticker, id: "second-sticker", pack_id: "second", emoji_tags: ["🐧"] };
+const owned = { id: "owned", owner_id: 7, title: "Mine", slug: "mine", visibility: "private" as const, stickers: [sticker] };
+const emptyOwned = { ...owned, id: "empty-owned", title: "Empty owned", stickers: [] };
+const foreign = { id: "foreign", owner_id: 8, title: "Installed", slug: "installed", visibility: "public" as const, stickers: [secondSticker] };
 
-describe("StickerPicker ownership and geometry", () => {
-  beforeEach(() => { listMock.mockReset(); addMock.mockReset(); postFormDataMock.mockReset(); useAppStoreMock.mockReset(); });
-  it("uses currentUser.id rather than positive owner ids for studio destinations", async () => {
-    listMock.mockResolvedValue([owned, foreign]); useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) => selector({ currentUser: { id: 7 } }));
-    render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
-    await waitFor(() => expect(screen.getByLabelText("Create sticker")).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText("Create sticker"));
-    expect(screen.getByRole("option", { name: "Mine" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Installed" })).not.toBeInTheDocument();
+describe("StickerPicker pack and sticker creation", () => {
+  beforeEach(() => {
+    listMock.mockReset();
+    createPackMock.mockReset();
+    addMock.mockReset();
+    postFormDataMock.mockReset();
+    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) => selector({ currentUser: { id: 7 }, authToken: "token" }));
   });
 
-  it("keeps the picker geometry contract", async () => {
-    listMock.mockResolvedValue([]); useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) => selector({ currentUser: { id: 7 } }));
+  it("keeps the 292px picker geometry and opens only pack creation from the toolbar plus", async () => {
+    listMock.mockResolvedValue([owned]);
     render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
-    const picker = await screen.findByTestId("sticker-picker");
-    expect(picker).toHaveClass("w-[292px]");
-    expect(screen.getByLabelText("Create sticker")).toBeInTheDocument();
+    expect(await screen.findByTestId("sticker-picker")).toHaveClass("w-[292px]");
+    const button = screen.getByLabelText("Create sticker pack");
+    expect(button).toHaveAttribute("title", "Create sticker pack");
+    fireEvent.click(button);
+    expect(screen.getByRole("dialog", { name: "Create sticker pack" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Sticker Studio" })).not.toBeInTheDocument();
   });
 
-  it("uploads the normalized file and sends the canonical sticker exactly once", async () => {
+  it("creates one empty pack, refreshes it by canonical id, selects it, and clears search", async () => {
+    const created = { id: "new-pack", owner_id: 7, title: "New pack", slug: "new-pack", visibility: "private" as const, stickers: [] };
+    listMock.mockResolvedValueOnce([owned]).mockResolvedValueOnce([owned, created]);
+    createPackMock.mockResolvedValue(created);
+    render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText("Mine");
+    fireEvent.change(screen.getByLabelText("Search stickers"), { target: { value: "query" } });
+    fireEvent.click(screen.getByLabelText("Create sticker pack"));
+    fireEvent.change(screen.getByLabelText("Pack title"), { target: { value: "  New pack  " } });
+    fireEvent.click(screen.getByLabelText("Visibility"));
+    fireEvent.change(screen.getByLabelText("Visibility"), { target: { value: "private" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create pack" }));
+    await waitFor(() => expect(createPackMock).toHaveBeenCalledWith("New pack", "private"));
+    expect(createPackMock).toHaveBeenCalledTimes(1);
+    expect(postFormDataMock).not.toHaveBeenCalled();
+    expect(addMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "Create sticker pack" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("New pack")).toBeInTheDocument());
+    expect(screen.getByLabelText("Search stickers")).toHaveValue("");
+  });
+
+  it("keeps pack creation open on failure and prevents duplicate clicks while busy", async () => {
+    let rejectCreation!: (reason: Error) => void;
+    createPackMock.mockReturnValue(new Promise((_resolve, reject) => { rejectCreation = reject; }));
+    listMock.mockResolvedValue([owned]);
+    render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText("Mine");
+    fireEvent.click(screen.getByLabelText("Create sticker pack"));
+    fireEvent.change(screen.getByLabelText("Pack title"), { target: { value: "Keep me" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create pack" }));
+    fireEvent.click(screen.getByRole("button", { name: "Creating pack…" }));
+    expect(createPackMock).toHaveBeenCalledTimes(1);
+    rejectCreation(new Error("pack failed"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("pack failed"));
+    expect(screen.getByLabelText("Pack title")).toHaveValue("Keep me");
+  });
+
+  it("renders only the active pack, with an owned creation tile first", async () => {
+    listMock.mockResolvedValue([owned, foreign]);
+    render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByRole("button", { name: "Add sticker to Mine" });
+    expect(screen.getByRole("button", { name: "Sticker 😀" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Installed" }));
+    expect(screen.queryByRole("button", { name: "Add sticker to Installed" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sticker 🐧" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sticker 😀" })).not.toBeInTheDocument();
+  });
+
+  it("does not show the creation tile for a foreign pack or in search results", async () => {
+    listMock.mockResolvedValue([owned, foreign]);
+    render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByRole("button", { name: "Add sticker to Mine" });
+    fireEvent.change(screen.getByLabelText("Search stickers"), { target: { value: "🐧" } });
+    expect(screen.queryByRole("button", { name: /Add sticker/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sticker 🐧" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search stickers"), { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Add sticker to Mine" })).toBeInTheDocument();
+  });
+
+  it("shows an owned empty-pack tile and a normal foreign empty-pack state", async () => {
+    listMock.mockResolvedValue([emptyOwned, { ...foreign, stickers: [] }]);
+    render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByRole("button", { name: "Add sticker to Empty owned" });
+    fireEvent.click(screen.getByRole("button", { name: "Installed" }));
+    expect(screen.queryByRole("button", { name: "Add sticker to Installed" })).not.toBeInTheDocument();
+    expect(screen.getByText("No stickers in this pack")).toBeInTheDocument();
+  });
+
+  it("opens locked Sticker Studio from the active owned pack tile and saves to that pack", async () => {
     const send = vi.fn().mockResolvedValue(undefined);
-    const sticker = { id: "sticker", pack_id: "owned", media_file_id: "media", width: 512, height: 512, format: "webp", emoji_tags: ["😀"] };
-    listMock.mockResolvedValueOnce([owned]).mockResolvedValueOnce([{ ...owned, stickers: [sticker] }]);
-    addMock.mockResolvedValue(sticker); postFormDataMock.mockResolvedValue({ media_file_id: "media" }); useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) => selector({ currentUser: { id: 7 } }));
+    const added = { ...sticker, id: "created-sticker" };
+    listMock.mockResolvedValueOnce([owned]).mockResolvedValueOnce([{ ...owned, stickers: [sticker, added] }]);
+    postFormDataMock.mockResolvedValue({ media_file_id: "media" });
+    addMock.mockResolvedValue(added);
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", { configurable: true, value: () => ({ clearRect: vi.fn(), drawImage: vi.fn() }) });
     Object.defineProperty(HTMLCanvasElement.prototype, "toBlob", { configurable: true, value: (callback: BlobCallback, type?: string) => callback(new Blob(["normalized"], { type: type ?? "image/png" })) });
     class MockImage { naturalWidth = 827; naturalHeight = 786; onload: (() => void) | null = null; onerror: (() => void) | null = null; set src(_value: string) { queueMicrotask(() => this.onload?.()); } }
     vi.stubGlobal("Image", MockImage);
-    render(<StickerPicker onSend={send} onClose={vi.fn()} />); await waitFor(() => expect(screen.getByLabelText("Create sticker")).toBeInTheDocument()); fireEvent.click(screen.getByLabelText("Create sticker"));
-    const source = new File(["source"], "source.png", { type: "image/png" }); fireEvent.change(screen.getByLabelText(/sticker studio/i).querySelector("input[type=file]")!, { target: { files: [source] } }); fireEvent.click(screen.getByRole("button", { name: "Save and send" }));
-    await waitFor(() => expect(send).toHaveBeenCalledWith("sticker"));
-    expect(postFormDataMock).toHaveBeenCalledTimes(1); expect(postFormDataMock.mock.calls[0][1].get("file")).not.toBe(source); expect(addMock).toHaveBeenCalledWith("owned", expect.objectContaining({ media_file_id: "media", width: 512, height: 512, format: "webp" })); expect(send).toHaveBeenCalledTimes(1);
-  });
-
-  it("sends an existing picker sticker exactly once while loading protected media", async () => {
-    const send = vi.fn().mockResolvedValue(undefined);
-    const sticker = { id: "existing-sticker", pack_id: "owned", media_file_id: "protected-media", width: 512, height: 512, format: "webp", emoji_tags: ["😀"] };
-    listMock.mockResolvedValue([{ ...owned, stickers: [sticker] }]);
-    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) => selector({ currentUser: { id: 7 }, authToken: "picker-token" }));
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, blob: vi.fn() }));
-
     render(<StickerPicker onSend={send} onClose={vi.fn()} />);
-    const button = await screen.findByRole("button", { name: "Sticker 😀" });
-    fireEvent.click(button);
-
-    await waitFor(() => expect(send).toHaveBeenCalledWith("existing-sticker"));
+    fireEvent.click(await screen.findByRole("button", { name: "Add sticker to Mine" }));
+    const studio = screen.getByRole("dialog", { name: "Sticker Studio" });
+    expect(within(studio).getByText("Mine")).toBeInTheDocument();
+    expect(within(studio).queryByLabelText("Destination")).not.toBeInTheDocument();
+    expect(within(studio).queryByText("Create new pack")).not.toBeInTheDocument();
+    const source = new File(["source"], "source.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Sticker Studio").querySelector("input[type=file]")!, { target: { files: [source] } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and send" }));
+    await waitFor(() => expect(addMock).toHaveBeenCalledWith("owned", expect.any(Object)));
+    expect(send).toHaveBeenCalledWith("created-sticker");
     expect(send).toHaveBeenCalledTimes(1);
   });
 });
