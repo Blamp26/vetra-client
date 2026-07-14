@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   useUnifiedMessages,
   type ChatContext,
@@ -9,6 +9,7 @@ import { MessageList } from "../MessageList/MessageList";
 import { MessageInput } from "../MessageInput/MessageInput";
 import { MessageSearch } from "../MessageSearch/MessageSearch";
 import { StickerPicker } from "../StickerPicker/StickerPicker";
+import { StickerPackPreviewDialog, type StickerPackSelectionRequest } from "../StickerPicker/StickerPackPreviewDialog";
 import type { ActiveChat, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from "@/features/calling/components/CallButton";
@@ -85,6 +86,10 @@ export function ChatWindow({ activeChat, call }: Props) {
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
   const [callStartIssue, setCallStartIssue] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [stickerPreview, setStickerPreview] = useState<StickerPackSelectionRequest | null>(null);
+  const [pickerSelectionRequest, setPickerSelectionRequest] = useState<StickerPackSelectionRequest | null>(null);
+  const stickerRequestRevision = useRef(0);
+  const stickerTriggerRef = useRef<HTMLElement | null>(null);
   const activeChatType = activeChat.type;
   const activePartnerId =
     activeChat.type === "direct" ? activeChat.partnerId : null;
@@ -113,6 +118,45 @@ export function ChatWindow({ activeChat, call }: Props) {
       };
     return null;
   }, [activePartnerId, activePartnerRef, activeRoomId, activeRoomRef]);
+
+  const openStickerPreview = useCallback((packId: string, stickerId: string) => {
+    stickerTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    stickerRequestRevision.current += 1;
+    setStickerPreview({ packId, stickerId, revision: stickerRequestRevision.current });
+  }, []);
+
+  const closeStickerPreview = useCallback(() => {
+    setStickerPreview(null);
+  }, []);
+
+  const openStickerPack = useCallback((packId: string) => {
+    stickerRequestRevision.current += 1;
+    setPickerSelectionRequest({ packId, stickerId: "", revision: stickerRequestRevision.current });
+    setPickerOpen(true);
+    setStickerPreview(null);
+  }, []);
+
+  const handleSelectionHandled = useCallback((revision: number) => {
+    setPickerSelectionRequest((current) => current?.revision === revision ? null : current);
+  }, []);
+
+  useEffect(() => {
+    if (!stickerPreview) return;
+    const closePreview = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setStickerPreview(null);
+    };
+    window.addEventListener("keydown", closePreview, true);
+    return () => window.removeEventListener("keydown", closePreview, true);
+  }, [stickerPreview]);
+
+  useEffect(() => {
+    if (stickerPreview || !stickerTriggerRef.current) return;
+    stickerTriggerRef.current.focus();
+    stickerTriggerRef.current = null;
+  }, [stickerPreview]);
 
   const { messages, isLoading, hasMore, loadMore, initialHistoryLoaded, sendMessage } =
     useUnifiedMessages(chatContext);
@@ -393,6 +437,7 @@ export function ChatWindow({ activeChat, call }: Props) {
           onLoadMore={loadMore}
           chatContext={chatContext!}
           onReply={setReplyTo}
+          onOpenStickerPack={openStickerPreview}
         />
       </div>
 
@@ -418,7 +463,8 @@ export function ChatWindow({ activeChat, call }: Props) {
         />
       )}
       </div>
-      {pickerOpen && <StickerPicker onClose={() => setPickerOpen(false)} onSend={async (stickerId) => { await sendMessage({ stickerId }); }} />}
+      {pickerOpen && <StickerPicker selectionRequest={pickerSelectionRequest} onSelectionHandled={handleSelectionHandled} onClose={() => setPickerOpen(false)} onSend={async (stickerId) => { await sendMessage({ stickerId }); }} />}
+      {stickerPreview && <StickerPackPreviewDialog request={stickerPreview} onClose={closeStickerPreview} onOpenPack={openStickerPack} />}
     </div>
   );
 }

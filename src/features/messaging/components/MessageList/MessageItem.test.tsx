@@ -3423,4 +3423,42 @@ describe("MessageItem bubble layout", () => {
     }
     },
   );
+
+  it("opens a sticker pack from the sticker message without invoking the lightbox", () => {
+    const onOpenStickerPack = vi.fn();
+    const onLightbox = vi.fn();
+    renderMessageItem(
+      {
+        sticker: {
+          id: "sticker-1",
+          pack_id: "pack-1",
+          media_file_id: "media-1",
+          width: 512,
+          height: 512,
+          format: "webp",
+          emoji_tags: ["😀"],
+          pack_title: "Test pack",
+        },
+      },
+      { onOpenStickerPack, onLightbox },
+    );
+
+    const trigger = screen.getByRole("button", { name: "Open sticker pack Test pack" });
+    fireEvent.click(trigger);
+    expect(onOpenStickerPack).toHaveBeenCalledWith("pack-1", "sticker-1");
+    expect(onOpenStickerPack).toHaveBeenCalledTimes(1);
+    expect(onLightbox).not.toHaveBeenCalled();
+  });
+
+  it("keeps selection behavior instead of opening a pack in selection mode", () => {
+    const onOpenStickerPack = vi.fn();
+    const onToggleSelection = vi.fn();
+    renderMessageItem(
+      { sticker: { id: "sticker-1", pack_id: "pack-1", media_file_id: "media-1", width: 512, height: 512, format: "webp", emoji_tags: ["😀"] } },
+      { selectionMode: true, onOpenStickerPack, onToggleSelection },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open sticker pack" }));
+    expect(onOpenStickerPack).not.toHaveBeenCalled();
+    expect(onToggleSelection).toHaveBeenCalledWith(1);
+  });
 });

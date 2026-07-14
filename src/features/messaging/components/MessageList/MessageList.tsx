@@ -70,6 +70,7 @@ interface Props {
     | { type: "direct"; partnerId: number; partnerRef?: string | number }
     | { type: "room";   roomId: number; roomRef?: string | number };
   onReply?: (target: { id: number; content: string; author: string }) => void;
+  onOpenStickerPack?: (packId: string, stickerId: string) => void;
 }
 
 interface ContextMenu {
@@ -190,6 +191,7 @@ export function MessageList({
   onLoadMore,
   chatContext,
   onReply,
+  onOpenStickerPack,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1088,6 +1090,7 @@ export function MessageList({
                       onToggleSelection={toggleMessageSelection}
                       onToggleReaction={toggleReaction}
                       onLightbox={setLightboxData}
+                      onOpenStickerPack={onOpenStickerPack ?? (() => {})}
                       onOpenForwardedSender={handleOpenForwardedSender}
                       renderReplyPreview={renderReplyPreview}
                       formatTime={formatTime}

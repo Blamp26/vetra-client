@@ -2,15 +2,16 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { listMock, createPackMock, addMock, postFormDataMock, useAppStoreMock } = vi.hoisted(() => ({
+const { listMock, createPackMock, updatePackMock, addMock, postFormDataMock, useAppStoreMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
   createPackMock: vi.fn(),
+  updatePackMock: vi.fn(),
   addMock: vi.fn(),
   postFormDataMock: vi.fn(),
   useAppStoreMock: vi.fn(),
 }));
 
-vi.mock("@/api/stickers", () => ({ stickersApi: { list: listMock, createPack: createPackMock, add: addMock } }));
+vi.mock("@/api/stickers", () => ({ stickersApi: { list: listMock, createPack: createPackMock, updatePack: updatePackMock, add: addMock } }));
 vi.mock("@/api/base", () => ({ API_BASE_URL: "", postFormData: postFormDataMock }));
 vi.mock("@/store", () => ({ useAppStore: (selector: (state: unknown) => unknown) => useAppStoreMock(selector) }));
 
@@ -26,6 +27,7 @@ describe("StickerPicker pack and sticker creation", () => {
   beforeEach(() => {
     listMock.mockReset();
     createPackMock.mockReset();
+    updatePackMock.mockReset();
     addMock.mockReset();
     postFormDataMock.mockReset();
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) => selector({ currentUser: { id: 7 }, authToken: "token" }));
@@ -90,6 +92,33 @@ describe("StickerPicker pack and sticker creation", () => {
     expect(screen.queryByRole("button", { name: "Sticker 😀" })).not.toBeInTheDocument();
   });
 
+  it("removes the dock gear and edits an owned pack inline", async () => {
+    const updated = { ...owned, title: "Renamed", visibility: "unlisted" as const };
+    listMock.mockResolvedValueOnce([owned]).mockResolvedValueOnce([updated]);
+    updatePackMock.mockResolvedValue(updated);
+    render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByRole("button", { name: "Add sticker to Mine" });
+    expect(screen.queryByLabelText("Manage sticker packs")).not.toBeInTheDocument();
+    const edit = screen.getByRole("button", { name: "Edit Mine" });
+    expect(edit.previousElementSibling).toHaveTextContent("Mine");
+    fireEvent.click(edit);
+    expect(screen.getByRole("dialog", { name: "Edit Mine" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Pack title"), { target: { value: "  Renamed  " } });
+    fireEvent.change(screen.getByLabelText("Visibility"), { target: { value: "unlisted" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updatePackMock).toHaveBeenCalledWith("owned", { title: "Renamed", visibility: "unlisted" }));
+    expect(updatePackMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByText("Renamed")).toBeInTheDocument());
+  });
+
+  it("does not show edit for a foreign active pack", async () => {
+    listMock.mockResolvedValue([foreign]);
+    render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText("Installed");
+    expect(screen.queryByRole("button", { name: /Edit/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Manage sticker packs")).not.toBeInTheDocument();
+  });
+
   it("does not show the creation tile for a foreign pack or in search results", async () => {
     listMock.mockResolvedValue([owned, foreign]);
     render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
@@ -99,6 +128,16 @@ describe("StickerPicker pack and sticker creation", () => {
     expect(screen.getByRole("button", { name: "Sticker 🐧" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Search stickers"), { target: { value: "" } });
     expect(screen.getByRole("button", { name: "Add sticker to Mine" })).toBeInTheDocument();
+  });
+
+  it("selects a requested pack by id and clears search when opened from preview", async () => {
+    const handled = vi.fn();
+    listMock.mockResolvedValue([owned, foreign]);
+    render(<StickerPicker selectionRequest={{ packId: "foreign", stickerId: "second-sticker", revision: 4 }} onSelectionHandled={handled} onSend={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Installed")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Sticker 🐧" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add sticker to Installed" })).not.toBeInTheDocument();
+    expect(handled).toHaveBeenCalledWith(4);
   });
 
   it("shows an owned empty-pack tile and a normal foreign empty-pack state", async () => {

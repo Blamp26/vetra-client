@@ -80,6 +80,7 @@ interface MessageItemProps {
           messageId: number;
         },
   ) => void;
+  onOpenStickerPack?: (packId: string, stickerId: string) => void;
   onOpenForwardedSender?: (sourcePublicId: string) => void;
   renderReplyPreview: (msg: Message, isOwn: boolean) => React.ReactNode;
   formatTime: (iso: string) => string;
@@ -260,6 +261,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   onToggleSelection,
   onToggleReaction,
   onLightbox,
+  onOpenStickerPack,
   onOpenForwardedSender,
   renderReplyPreview,
   formatTime,
@@ -1328,7 +1330,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const renderContent = () => {
     if (msg.sticker) {
       const sticker = msg.sticker;
-      return <div className="relative flex max-w-[220px] flex-col items-end" data-testid="sticker-message"><AuthenticatedImage src={`${API_BASE_URL}/media/${sticker.media_file_id}`} alt={sticker.emoji_tags.join(" ")} className="max-h-[220px] max-w-[220px] object-contain" style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} />{renderMetadata("overlay")}</div>;
+      return <div className="relative flex max-w-[220px] flex-col items-end" data-testid="sticker-message"><button type="button" className="flex max-h-[220px] max-w-[220px] items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" aria-label={`Open sticker pack ${sticker.pack_title ?? ""}`.trim()} onClick={(event) => { if (selectionMode) return; event.stopPropagation(); onOpenStickerPack?.(sticker.pack_id, sticker.id); }}><AuthenticatedImage src={`${API_BASE_URL}/media/${sticker.media_file_id}`} alt={sticker.emoji_tags.join(" ")} className="max-h-[220px] max-w-[220px] object-contain" style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} /></button>{renderMetadata("overlay")}</div>;
     }
     return (
       <>
