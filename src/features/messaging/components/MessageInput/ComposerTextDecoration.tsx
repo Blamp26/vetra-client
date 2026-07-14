@@ -22,7 +22,7 @@ export function ComposerTextDecoration({ text, entities, className = "", scrollT
       segments.push(<span key={`text-${cursor}-${entity.offset}`}>{text.slice(cursor, entity.offset)}</span>);
     }
     if (entity.type === "custom_emoji" && entity.custom_emoji) {
-      segments.push(<span key={`custom-emoji-${entity.offset}-${end}`} className="inline-flex h-5 w-5 align-text-bottom" aria-label={entity.alt ?? text.slice(entity.offset, end)}><StickerArtwork sticker={entity.custom_emoji} className="h-5 w-5 object-contain" /></span>);
+      segments.push(<span key={`custom-emoji-${entity.custom_emoji_id}-${entity.offset}-${end}`} className="inline-flex h-5 w-5 align-text-bottom" aria-label={entity.alt ?? text.slice(entity.offset, end)}><StickerArtwork sticker={entity.custom_emoji} className="h-5 w-5 object-contain" /></span>);
     } else {
       segments.push(<span key={`text_link-${entity.offset}-${end}`} className="vt-composer-text-decoration__link" data-testid={`composer-text-link-${entity.offset}-${end}`}>{text.slice(entity.offset, end)}</span>);
     }

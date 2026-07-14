@@ -17,6 +17,7 @@ import {
   logAttachmentDebug,
   summarizeMessageMedia,
 } from "@/features/messaging/utils/attachmentDebug";
+import { serializeMessageEntitiesForRequest } from "@/shared/utils/textEntities";
 
 export function getDefaultSocketUrl(
   location: Pick<Location, "protocol" | "host"> = window.location,
@@ -135,7 +136,7 @@ export function buildSocketMessagePayload(
   return {
     ...extra,
     content: payload.content ?? null,
-    ...(payload.entities && payload.entities.length > 0 ? { entities: payload.entities } : {}),
+    ...(payload.entities && payload.entities.length > 0 ? { entities: serializeMessageEntitiesForRequest(payload.entities) } : {}),
     mediaFileId: primaryMediaFileId,
     mediaFileIds: groupedMediaFileIds,
     media_file_id: primaryMediaFileId,
@@ -560,7 +561,7 @@ export async function connectSocket(
           .push("edit_message", {
             message_id: messageId,
             content,
-            entities,
+            entities: serializeMessageEntitiesForRequest(entities),
             recipient_id: recipientRef,
           })
           .receive("ok", (p: MessageEditedPayload) => resolve(p))
@@ -712,7 +713,7 @@ export async function connectSocket(
           reject(new Error(`Not joined room ${roomId}`));
           return;
         }
-        ch.push("edit_message", { message_id: messageId, content, entities })
+        ch.push("edit_message", { message_id: messageId, content, entities: serializeMessageEntitiesForRequest(entities) })
           .receive("ok", (p: MessageEditedPayload) => resolve(p))
           .receive("error", (r) =>
             reject(new Error(r?.reason ?? "Edit failed")),

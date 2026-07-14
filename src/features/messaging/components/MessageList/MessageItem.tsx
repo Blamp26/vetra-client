@@ -44,6 +44,7 @@ import {
   getSingleLargeEmojiSize,
 } from "../../utils/largeEmojiGeometry";
 import { StickerArtwork } from "../StickerPicker/StickerArtwork";
+import { isValidCustomEmojiDocument } from "@/shared/utils/textEntities";
 import { GifMessageMedia } from "./GifMessageMedia";
 
 interface MessageItemProps {
@@ -345,6 +346,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const isTextOnly = hasText && !hasMedia;
     const customEmojiEntity = (msg.entities ?? []).find((entity) => entity.type === "custom_emoji" && entity.custom_emoji);
     const customEmoji = customEmojiEntity?.type === "custom_emoji" ? customEmojiEntity.custom_emoji : null;
+    const validCustomEmojiEntities = (msg.entities ?? []).filter(
+      (entity) => entity.type === "custom_emoji" && isValidCustomEmojiDocument(entity.custom_emoji),
+    );
+    const hasValidCustomEmojiEntities = validCustomEmojiEntities.length > 0;
     const isCustomEmojiOnlyMessage = Boolean(
       isTextOnly &&
       customEmojiEntity?.type === "custom_emoji" &&
@@ -353,13 +358,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       !msg.forwarded_from &&
       (msg.content || "").slice(0, customEmojiEntity.offset).trim() === "" &&
       (msg.content || "").slice(customEmojiEntity.offset + customEmojiEntity.length).trim() === "" &&
-      (msg.entities ?? []).filter((entity) => entity.type === "custom_emoji" && entity.custom_emoji).length === 1,
+      validCustomEmojiEntities.length === 1,
     );
     const emojiOnlyGraphemes = isTextOnly
       ? getEmojiOnlyGraphemes(msg.content || "")
       : null;
     const isEmojiOnlyMessage = Boolean(
       !isCustomEmojiOnlyMessage &&
+      !hasValidCustomEmojiEntities &&
       emojiOnlyGraphemes &&
       emojiOnlyGraphemes.length >= 1 &&
       emojiOnlyGraphemes.length <= 3 &&
@@ -368,7 +374,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
     );
     const hasInlineCustomEmoji = Boolean(
       !isCustomEmojiOnlyMessage &&
-      (msg.entities ?? []).some((entity) => entity.type === "custom_emoji" && entity.custom_emoji),
+      hasValidCustomEmojiEntities,
     );
     const emojiOnlyLayout = isEmojiOnlyMessage
       ? getLargeEmojiLayout(emojiOnlyGraphemes?.length ?? 1)

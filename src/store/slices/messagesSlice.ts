@@ -10,6 +10,7 @@ import {
   User,
   Server,
 } from "@/shared/types";
+import { mergeEditedMessageEntities } from "@/shared/utils/textEntities";
 
 function mergeReactions(existing: any[], incoming: any[]) {
   return incoming.map((item) => {
@@ -275,7 +276,7 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
         conversations: patchConv(state.conversations, partnerId, {
           messages: conv.messages.map((m: Message) =>
             m.id === id
-              ? { ...m, content, entities: entities ?? [], edited_at: edited_at ?? m.edited_at }
+              ? { ...m, content, entities: mergeEditedMessageEntities(m.entities, entities, content), edited_at: edited_at ?? m.edited_at }
               : m,
           ),
         }),

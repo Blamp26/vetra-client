@@ -6,7 +6,7 @@ import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { withFallbackRef } from "@/shared/utils/refs";
 import { isSafeExternalUrl, normalizeExternalUrl } from "@/shared/utils/externalLinks";
-import { entitiesIntersectingRange, normalizeTextLinkEntities, transformTextLinkEntities, trimTextAndEntities, type MessageTextEntity } from "@/shared/utils/textEntities";
+import { applyMessageTextEdit, entitiesIntersectingRange, normalizeTextLinkEntities, serializeMessageEntitiesForRequest, trimTextAndEntities, type MessageTextEntity } from "@/shared/utils/textEntities";
 import type { StickerMessage } from "@/shared/types";
 import {
   ALLOWED_ATTACHMENT_LABEL,
@@ -403,9 +403,10 @@ interface Props {
   const stopTyping = () => { onTypingStop?.() }; 
  
   const handleChange = (value: string) => {
-    setEntities((current) => transformTextLinkEntities(current, content, value));
-    setContent(value);
-    if (value.trim().length > 0) { 
+    const edited = applyMessageTextEdit(entities, content, value);
+    setEntities(edited.entities);
+    setContent(edited.text);
+    if (edited.text.trim().length > 0) {
         onTypingStart?.(); 
     } else { 
         stopTyping(); 
@@ -862,6 +863,7 @@ interface Props {
  
      try { 
        const trimmedData = trimTextAndEntities(content, entities);
+       const requestEntities = serializeMessageEntitiesForRequest(trimmedData.entities);
        const trimmed = trimmedData.text;
        if (pendingAttachments.length === 0 && isEditing && editingMessage && socketManager) { 
          const { id, chatType, targetId } = editingMessage; 
@@ -877,16 +879,16 @@ interface Props {
              ),
              id,
              trimmed,
-             trimmedData.entities,
+             requestEntities,
            ); 
          } else { 
-          await socketManager.editRoomMessage(targetId, id, trimmed, trimmedData.entities);
+          await socketManager.editRoomMessage(targetId, id, trimmed, requestEntities);
          } 
          cancelEditing(); 
          setContent("");
          resetUploadState();
        } else if (pendingAttachments.length === 0) { 
-        await onSend({ content: trimmed || null, ...(trimmedData.entities.length > 0 ? { entities: trimmedData.entities } : {}), mediaFileId: null }, replyTo?.id);
+        await onSend({ content: trimmed || null, ...(requestEntities.length > 0 ? { entities: requestEntities } : {}), mediaFileId: null }, replyTo?.id);
         setContent("");
         resetUploadState();
         handleSuccessfulSend();
@@ -998,7 +1000,7 @@ interface Props {
               shouldUseContent ? trimmed : null,
               debugMeta,
             ),
-            ...(shouldUseContent && trimmedData.entities.length > 0 ? { entities: trimmedData.entities } : {}),
+            ...(shouldUseContent && requestEntities.length > 0 ? { entities: requestEntities } : {}),
           };
 
           logAttachmentDebug("send.payload", {
@@ -1293,8 +1295,19 @@ interface Props {
      }
    };
 
-   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = textareaRef.current;
+    if (textarea && textarea.selectionStart === textarea.selectionEnd && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      const caret = textarea.selectionStart;
+      const entity = entities.find((candidate) => candidate.type === "custom_emoji" && caret > candidate.offset && caret < candidate.offset + candidate.length);
+      if (entity) {
+        e.preventDefault();
+        const nextCaret = e.key === "ArrowLeft" ? entity.offset : entity.offset + entity.length;
+        textarea.setSelectionRange(nextCaret, nextCaret);
+        return;
+      }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
        const selection = captureSelection();
        if (selection) { e.preventDefault(); openCreateLinkDialog(selection); return; }
      }

@@ -7,6 +7,7 @@ import {
   ConversationState,
   DEFAULT_CONV
 } from '@/shared/types';
+import { mergeEditedMessageEntities } from '@/shared/utils/textEntities';
 
 function mergeReactions(existing: any[], incoming: any[]) {
   return incoming.map((item) => {
@@ -172,7 +173,7 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
       return {
         roomConversations: patchConv(state.roomConversations, room_id, {
           messages: conv.messages.map((m: Message) =>
-            m.id === id ? { ...m, content, entities: entities ?? [], edited_at: edited_at ?? m.edited_at } : m
+            m.id === id ? { ...m, content, entities: mergeEditedMessageEntities(m.entities, entities, content), edited_at: edited_at ?? m.edited_at } : m
           ),
         }),
       };

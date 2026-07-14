@@ -242,6 +242,29 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-text-inline-metadata")).toHaveClass("float-none");
   });
 
+  it("renders adjacent custom emoji as inline artwork instead of Unicode emoji-only", () => {
+    const document = {
+      id: "emoji-1",
+      pack_id: "pack-1",
+      media_file_id: "media-1",
+      width: 512,
+      height: 512,
+      format: "webp" as const,
+      alt: "⚡️",
+    };
+    renderMessageItem({
+      content: "⚡️⚡️",
+      entities: [
+        { type: "custom_emoji", offset: 0, length: 2, custom_emoji_id: "emoji-1", custom_emoji: document },
+        { type: "custom_emoji", offset: 2, length: 2, custom_emoji_id: "emoji-2", custom_emoji: { ...document, id: "emoji-2" } },
+      ],
+    });
+    expect(screen.queryByTestId("message-emoji-only")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("custom-emoji-inline")).toHaveLength(2);
+    expect(screen.getAllByTestId("authenticated-image")).toHaveLength(2);
+    expect(screen.queryByText("⚡️⚡️")).not.toBeInTheDocument();
+  });
+
   it("renders GIF metadata once as the media overlay without a fallback row", () => {
     renderMessageItem({
       gif: {
