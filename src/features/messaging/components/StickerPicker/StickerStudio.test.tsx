@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { StickerStudio } from "./StickerStudio";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { exportStickerFile, StickerStudio } from "./StickerStudio";
 
 const file = new File([new Uint8Array([1, 2, 3])], "sticker.png", { type: "image/png" });
 const pack = { id: "owned", owner_id: 7, title: "Owned", slug: "owned", visibility: "private" as const, stickers: [] };
@@ -9,7 +9,38 @@ const foreign = { ...pack, id: "foreign", owner_id: 8, title: "Installed" };
 
 function selectImage() { fireEvent.change(screen.getByLabelText(/sticker studio/i).querySelector("input[type=file]")!, { target: { files: [file] } }); }
 
+beforeEach(() => {
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:sticker");
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  Object.defineProperty(HTMLCanvasElement.prototype, "getContext", { configurable: true, value: () => ({ clearRect: vi.fn(), drawImage: vi.fn() }) });
+  Object.defineProperty(HTMLCanvasElement.prototype, "toBlob", { configurable: true, value: (callback: BlobCallback, type?: string) => callback(new Blob(["normalized"], { type: type ?? "image/png" })) });
+  class MockImage { naturalWidth = 827; naturalHeight = 786; onload: (() => void) | null = null; onerror: (() => void) | null = null; set src(_value: string) { queueMicrotask(() => this.onload?.()); } }
+  vi.stubGlobal("Image", MockImage);
+});
+
 describe("StickerStudio first-pack destination", () => {
+  it("exports a contained 512 by 512 WebP file from an oversized source", async () => {
+    const exported = await exportStickerFile(file);
+    expect(exported.width).toBe(512);
+    expect(exported.height).toBe(512);
+    expect(exported.format).toBe("webp");
+    expect(exported.file.type).toBe("image/webp");
+    expect(exported.file.name).toBe("sticker.webp");
+  });
+
+  it("falls back to a PNG when WebP export is unavailable", async () => {
+    Object.defineProperty(HTMLCanvasElement.prototype, "toBlob", { configurable: true, value: (callback: BlobCallback, type?: string) => callback(type === "image/webp" ? null : new Blob(["png"], { type: "image/png" })) });
+    const exported = await exportStickerFile(file);
+    expect(exported.format).toBe("png");
+    expect(exported.file.type).toBe("image/png");
+    expect(exported.file.name).toBe("sticker.png");
+  });
+
+  it("renders the selected source image in the checkerboard preview", () => {
+    render(<StickerStudio packs={[]} onClose={vi.fn()} onSave={vi.fn()} />); selectImage();
+    expect(screen.getByAltText("Sticker preview")).toBeInTheDocument();
+  });
+
   it("starts in create-new-pack mode without an empty owned select", () => {
     render(<StickerStudio packs={[]} onClose={vi.fn()} onSave={vi.fn()} />);
     expect(screen.getByText("Create new pack")).toBeInTheDocument();
@@ -49,7 +80,7 @@ describe("StickerStudio first-pack destination", () => {
     render(<StickerStudio packs={[pack]} onClose={close} onSave={save} />); selectImage();
     fireEvent.click(screen.getByRole("button", { name: "Save and send" }));
     await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
-    expect(save).toHaveBeenCalledWith(file, { kind: "existing", packId: "owned" }, ["😀"]);
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ name: "sticker.webp", type: "image/webp" }), { kind: "existing", packId: "owned" }, ["😀"]);
   });
 
   it("does not expose foreign packs when the caller supplies only owned destinations", () => {
