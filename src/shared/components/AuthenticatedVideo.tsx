@@ -47,6 +47,19 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
   const authToken = useAppStore((s) => s.authToken);
   const { root: visibilityRoot, revision: visibilityRevision } = useMediaVisibility();
   const [playbackVisible, setPlaybackVisible] = useState(true);
+  const playbackVisibleRef = useRef(true);
+  const playPromiseRef = useRef<Promise<void> | null>(null);
+
+  const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  const playSafely = (video: HTMLVideoElement) => {
+    if (reducedMotion() || !playbackVisibleRef.current || !video.paused || playPromiseRef.current) return;
+    const pending = video.play();
+    if (!pending || typeof pending.then !== "function") return;
+    playPromiseRef.current = pending;
+    void pending.catch(() => undefined).finally(() => {
+      if (playPromiseRef.current === pending) playPromiseRef.current = null;
+    });
+  };
 
   const notifyDiagnostics = React.useCallback((video: HTMLVideoElement) => {
     const diagnostics = {
@@ -99,12 +112,25 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
     if (!animatedSticker || !objectUrl) return;
     const video = videoRef.current;
     if (!video) return;
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const update = (visible: boolean) => { setPlaybackVisible(visible); if (reduced) return; if (visible && video.paused) void video.play().catch(() => undefined); else if (!visible && !video.paused) video.pause(); };
+    const update = (visible: boolean) => {
+      playbackVisibleRef.current = visible;
+      setPlaybackVisible(visible);
+      if (visible) playSafely(video);
+      else if (!video.paused) video.pause();
+    };
     if (typeof IntersectionObserver === "undefined") { update(true); return; }
     const observer = new IntersectionObserver(entries => update(Boolean(entries[0]?.isIntersecting)), { root: visibilityRoot, rootMargin: "0px" });
     observer.observe(video); return () => observer.disconnect();
   }, [animatedSticker, objectUrl, visibilityRoot, visibilityRevision]);
+
+  useEffect(() => {
+    if (!animatedSticker || !objectUrl || !videoRef.current) return;
+    const video = videoRef.current;
+    video.loop = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.controls = false;
+  }, [animatedSticker, objectUrl]);
 
   useEffect(() => {
     if (!isInView || !src) return;
@@ -167,6 +193,14 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
     props.onLoadedMetadata?.(event);
   };
 
+  const handleEnded: React.ReactEventHandler<HTMLVideoElement> = (event) => {
+    props.onEnded?.(event);
+    const video = event.currentTarget;
+    if (!animatedSticker || !playbackVisibleRef.current || reducedMotion()) return;
+    video.currentTime = 0;
+    playSafely(video);
+  };
+
   if (error) {
     return (
       <div
@@ -193,10 +227,13 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
       ref={videoRef}
       src={objectUrl}
       preload={preload}
-      muted={muted}
-      playsInline={playsInline}
+      muted={animatedSticker ? true : muted}
+      playsInline={animatedSticker ? true : playsInline}
+      loop={animatedSticker ? true : props.loop}
+      controls={animatedSticker ? false : props.controls}
       onLoadedMetadata={handleLoadedMetadata}
-      autoPlay={animatedSticker && playbackVisible && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches}
+      onEnded={animatedSticker ? handleEnded : props.onEnded}
+      autoPlay={animatedSticker && playbackVisible && !reducedMotion()}
       style={{ display: "block", width: "100%", height: "100%", ...props.style }}
     />
   );

@@ -188,4 +188,35 @@ describe("AuthenticatedVideo", () => {
     render(<MediaVisibilityContext.Provider value={{ root, revision: 0 }}><AuthenticatedVideo src="/api/v1/media/root-video" data-testid="root-video" /></MediaVisibilityContext.Provider>);
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
+
+  it("sets native looping and sticker-safe video properties", async () => {
+    vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["webm"], { type: "video/webm" }) } as Response);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:sticker-loop");
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    render(<AuthenticatedVideo src="/api/v1/media/sticker" animatedSticker data-testid="sticker-video" />);
+    const video = await screen.findByTestId("sticker-video");
+
+    expect(video).toHaveProperty("loop", true);
+    expect(video).toHaveProperty("muted", true);
+    expect(video).toHaveProperty("playsInline", true);
+    expect(video).toHaveProperty("controls", false);
+  });
+
+  it("restarts a visible sticker safely after natural end without refetching", async () => {
+    vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["webm"], { type: "video/webm" }) } as Response);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:sticker-ended");
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    render(<AuthenticatedVideo src="/api/v1/media/sticker" animatedSticker data-testid="sticker-ended" />);
+    const video = await screen.findByTestId("sticker-ended");
+    Object.defineProperty(video, "currentTime", { configurable: true, writable: true, value: 0.4 });
+    fireEvent.ended(video);
+
+    expect(video).toHaveProperty("currentTime", 0);
+    expect(play).toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });
