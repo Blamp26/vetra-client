@@ -85,9 +85,11 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
   const [gifOffset, setGifOffset] = useState(0);
   const [gifError, setGifError] = useState<string | null>(null);
   const gifRootRef = useRef<HTMLDivElement | null>(null);
+  const gifSentinelRef = useRef<HTMLDivElement | null>(null);
   const [gifMosaicWidth, setGifMosaicWidth] = useState(0);
   const gifRequestRef = useRef(0);
   const gifAbortRef = useRef<AbortController | null>(null);
+  const gifPageInFlightRef = useRef<{ identity: string; offset: number } | null>(null);
   const gifViewRef = useRef({ activeTab, query: gifQuery, category: gifCategory });
   gifViewRef.current = { activeTab, query: gifQuery, category: gifCategory };
   const currentUser = useAppStore((state) => state.currentUser);
@@ -188,9 +190,25 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
       const result = query ? await giphyApi.search(query, offset, controller.signal) : await giphyApi.trending(offset, controller.signal);
       const currentQuery = gifViewRef.current.query.trim() || gifViewRef.current.category;
       if (requestId !== gifRequestRef.current || gifViewRef.current.activeTab !== "gifs" || currentQuery !== query) return;
-      mergeGifs(result.results, replace); setGifHasMore(result.hasMore); setGifOffset(offset + result.results.length);
+      mergeGifs(result.results, replace); setGifHasMore(result.hasMore); setGifOffset(result.nextOffset);
     } catch (cause) { if ((cause as Error).name !== "AbortError" && requestId === gifRequestRef.current) setGifError(cause instanceof Error ? cause.message : "Unable to load GIFs"); }
     finally { if (requestId === gifRequestRef.current) setGifLoading(false); }
+  };
+
+  const requestNextGifPage = async () => {
+    if (activeTab !== "gifs" || !gifQuery.trim() && gifCategory === "recent" || !gifHasMore || gifLoading) return;
+    const identity = gifQuery.trim() || gifCategory;
+    const offset = gifOffset;
+    const inFlight = gifPageInFlightRef.current;
+    if (inFlight && inFlight.identity === identity && inFlight.offset === offset) return;
+    gifPageInFlightRef.current = { identity, offset };
+    try {
+      await loadGifPage(identity, offset);
+    } finally {
+      if (gifPageInFlightRef.current?.identity === identity && gifPageInFlightRef.current.offset === offset) {
+        gifPageInFlightRef.current = null;
+      }
+    }
   };
 
   useEffect(() => {
@@ -205,12 +223,42 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
 
   useEffect(() => () => gifAbortRef.current?.abort(), []);
 
+  const requestNextGifPageRef = useRef<() => void>(() => undefined);
+  requestNextGifPageRef.current = () => { void requestNextGifPage(); };
+
   useEffect(() => {
+    if (activeTab !== "gifs") return;
     const root = gifRootRef.current;
-    if (!root || activeTab !== "gifs" || !gifHasMore) return;
-    const onScroll = () => { if (root.scrollHeight - root.scrollTop - root.clientHeight < 260 && !gifLoading) void loadGifPage(gifQuery.trim() || gifCategory, gifOffset); };
-    root.addEventListener("scroll", onScroll); return () => root.removeEventListener("scroll", onScroll);
-  }, [activeTab, gifHasMore, gifLoading, gifOffset, gifQuery, gifCategory]);
+    const sentinel = gifSentinelRef.current;
+    if (!root || !sentinel || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach((entry) => { if (entry.isIntersecting) requestNextGifPageRef.current(); }),
+      { root, rootMargin: "260px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "gifs" || !gifQuery.trim() && gifCategory === "recent" || typeof IntersectionObserver !== "undefined") return;
+    const root = gifRootRef.current;
+    if (!root) return;
+    const onScroll = () => {
+      if (root.scrollHeight - root.scrollTop - root.clientHeight < 260) requestNextGifPageRef.current();
+    };
+    root.addEventListener("scroll", onScroll);
+    return () => root.removeEventListener("scroll", onScroll);
+  }, [activeTab, gifCategory]);
+
+  useEffect(() => {
+    if (activeTab !== "gifs" || !gifQuery.trim() && gifCategory === "recent" || !gifHasMore || gifLoading) return;
+    const root = gifRootRef.current;
+    if (!root) return;
+    const frame = requestAnimationFrame(() => {
+      if (root.scrollHeight <= root.clientHeight + 260) requestNextGifPageRef.current();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab, gifCategory, gifQuery, gifHasMore, gifLoading, gifOffset, gifResults.length, gifMosaicWidth]);
 
   useEffect(() => {
     if (activeTab !== "gifs") return;
@@ -279,7 +327,7 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
   return <aside className="sticker-picker flex h-full w-[292px] shrink-0 flex-col border-l border-border bg-card" data-testid="sticker-picker">
     <div className="flex h-[43px] border-b"><button className="w-1/3 text-sm text-muted-foreground" disabled>Emoji</button><button type="button" className={`relative w-1/3 text-sm ${activeTab === "stickers" ? "font-medium" : "text-muted-foreground"}`} onClick={() => setActiveTab("stickers")}>Stickers{activeTab === "stickers" && <span className="absolute bottom-0 left-1/2 h-[3px] w-[54px] -translate-x-1/2 rounded bg-primary" />}</button><button type="button" className={`relative w-1/3 text-sm ${activeTab === "gifs" ? "font-medium" : "text-muted-foreground"}`} onClick={() => setActiveTab("gifs")}>GIFs{activeTab === "gifs" && <span className="absolute bottom-0 left-1/2 h-[3px] w-[54px] -translate-x-1/2 rounded bg-primary" />}</button></div>
     <div className="flex h-[53px] items-center gap-[6px] px-[14px]"><div className="flex h-[32px] w-[228px] items-center gap-2 rounded bg-muted px-2"><Search className="h-4 w-4" /><input aria-label={activeTab === "gifs" ? "Search GIFs" : "Search stickers"} placeholder={activeTab === "gifs" ? "Search GIFs" : undefined} className="min-w-0 flex-1 bg-transparent text-sm outline-none" value={activeTab === "gifs" ? gifQuery : query} onChange={(event) => activeTab === "gifs" ? setGifQuery(event.target.value) : setQuery(event.target.value)} />{activeTab === "gifs" && gifQuery && <button type="button" aria-label="Clear GIF search" onClick={() => { setGifQuery(""); setGifCategory("recent"); }}><X className="h-4 w-4" /></button>}</div>{activeTab === "stickers" && <button aria-label="Create sticker pack" title="Create sticker pack" className="flex h-8 w-8 items-center justify-center rounded hover:bg-muted" onClick={() => setPackDialogOpen(true)}><Plus className="h-[18px] w-[18px]" /></button>}</div>
-    {activeTab === "gifs" ? <><div className="px-3 pb-1 text-center text-[10px] font-medium text-muted-foreground">Powered by GIPHY</div><div ref={gifRootRef} className="min-h-0 flex-1 overflow-y-auto px-2 [scrollbar-gutter:stable]"><div className="relative w-full" style={{ height: gifMosaicLayout.height }}>{gifResults.map((gif, index) => { const layout = gifMosaicLayout.tiles[index]; return layout ? <ExternalGifTile key={gif.providerId} gif={gif} layout={layout} root={gifRootRef.current} onSend={async () => { if (onSendGif) { await onSendGif(gif); if (!gifQuery.trim() && gifCategory === "recent") await loadSavedGifs(); } }} /> : null; })}</div>{gifLoading && <p className="p-4 text-center text-xs text-muted-foreground">Loading GIFs…</p>}{gifError && <p role="alert" className="p-4 text-center text-xs text-destructive">{gifError}</p>}{!gifLoading && !gifError && gifResults.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">{gifCategory === "recent" ? "No saved GIFs" : "No GIFs found"}</p>}</div><div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto border-t px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{[["recent", "Recent"], ["👍", "👍"], ["😘", "😘"], ["😍", "😍"], ["😡", "😡"], ["🎉", "🎉"], ["😂", "😂"], ["😮", "😮"], ["😢", "😢"]].map(([key, label]) => <button type="button" key={key} aria-label={label} className={`h-8 min-w-8 rounded px-1 text-base ${gifCategory === key ? "bg-primary/20" : "hover:bg-muted"}`} onClick={() => { setGifCategory(key); setGifQuery(""); }}>{key === "recent" ? <Clock className="mx-auto h-4 w-4" /> : label}</button>)}</div></> : error ? <div className="p-4 text-sm text-destructive">{error}</div> : <><div className="flex h-10 items-center px-3 text-xs font-medium"><span>{currentPack?.title ?? "Stickers"}</span>{currentPackIsOwned && currentPack && <button type="button" aria-label={`Edit ${currentPack.title}`} className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2" onClick={() => setEditPack(currentPack)}>edit</button>}</div><div className="min-h-0 flex-1 overflow-y-auto px-[14px] py-2"><div className="grid grid-cols-4 gap-[6px]">{!normalizedQuery && currentPackIsOwned && <button type="button" aria-label={`Add sticker to ${currentPack?.title}`} title="Create sticker" className="flex h-[62px] w-[62px] items-center justify-center rounded bg-muted/60 hover:bg-muted focus-visible:outline focus-visible:outline-2" onClick={() => currentPack && setStudioPack(currentPack)}><Plus className="h-6 w-6" /></button>}{visibleStickers.map((sticker) => <button type="button" key={sticker.id} aria-label={`Sticker ${sticker.emoji_tags.join(" ")}`} className="flex h-[62px] w-[62px] items-center justify-center rounded hover:bg-muted focus-visible:outline focus-visible:outline-2" onClick={() => void onSend(sticker.id)}><AuthenticatedImage alt={sticker.emoji_tags.join(" ")} className="max-h-full max-w-full object-contain" src={`${API_BASE_URL}/media/${sticker.media_file_id}`} /></button>)}</div>{!visibleStickers.length && !(currentPackIsOwned && !normalizedQuery) && <p className="py-8 text-center text-sm text-muted-foreground">{normalizedQuery ? "No stickers found" : packs.length ? "No stickers in this pack" : "No sticker packs"}</p>}</div><div className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-t px-2">{packs.map((pack) => { const cover = pack.stickers[0]; return <button type="button" key={pack.id} aria-label={pack.title} className={`h-8 w-8 shrink-0 rounded p-0.5 ${pack.id === currentPack?.id ? "bg-primary/20" : ""}`} onClick={() => { setActivePackId(pack.id); setQuery(""); }}>{cover && <AuthenticatedImage alt={pack.title} className="h-full w-full object-contain" src={`${API_BASE_URL}/media/${cover.media_file_id}`} />}</button>; })}</div></>}
+    {activeTab === "gifs" ? <><div className="px-3 pb-1 text-center text-[10px] font-medium text-muted-foreground">Powered by GIPHY</div><div ref={gifRootRef} className="min-h-0 flex-1 overflow-y-auto px-2 [scrollbar-gutter:stable]"><div className="relative w-full" style={{ height: gifMosaicLayout.height }}>{gifResults.map((gif, index) => { const layout = gifMosaicLayout.tiles[index]; return layout ? <ExternalGifTile key={gif.providerId} gif={gif} layout={layout} root={gifRootRef.current} onSend={async () => { if (onSendGif) { await onSendGif(gif); if (!gifQuery.trim() && gifCategory === "recent") await loadSavedGifs(); } }} /> : null; })}</div><div ref={gifSentinelRef} data-testid="gif-pagination-sentinel" aria-hidden="true" className="h-px w-full" />{gifLoading && <p className="p-4 text-center text-xs text-muted-foreground">Loading GIFs…</p>}{gifError && <p role="alert" className="p-4 text-center text-xs text-destructive">{gifError}</p>}{!gifLoading && !gifError && gifResults.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">{gifCategory === "recent" ? "No saved GIFs" : "No GIFs found"}</p>}</div><div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto border-t px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{[["recent", "Recent"], ["👍", "👍"], ["😘", "😘"], ["😍", "😍"], ["😡", "😡"], ["🎉", "🎉"], ["😂", "😂"], ["😮", "😮"], ["😢", "😢"]].map(([key, label]) => <button type="button" key={key} aria-label={label} className={`h-8 min-w-8 rounded px-1 text-base ${gifCategory === key ? "bg-primary/20" : "hover:bg-muted"}`} onClick={() => { setGifCategory(key); setGifQuery(""); }}>{key === "recent" ? <Clock className="mx-auto h-4 w-4" /> : label}</button>)}</div></> : error ? <div className="p-4 text-sm text-destructive">{error}</div> : <><div className="flex h-10 items-center px-3 text-xs font-medium"><span>{currentPack?.title ?? "Stickers"}</span>{currentPackIsOwned && currentPack && <button type="button" aria-label={`Edit ${currentPack.title}`} className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2" onClick={() => setEditPack(currentPack)}>edit</button>}</div><div className="min-h-0 flex-1 overflow-y-auto px-[14px] py-2"><div className="grid grid-cols-4 gap-[6px]">{!normalizedQuery && currentPackIsOwned && <button type="button" aria-label={`Add sticker to ${currentPack?.title}`} title="Create sticker" className="flex h-[62px] w-[62px] items-center justify-center rounded bg-muted/60 hover:bg-muted focus-visible:outline focus-visible:outline-2" onClick={() => currentPack && setStudioPack(currentPack)}><Plus className="h-6 w-6" /></button>}{visibleStickers.map((sticker) => <button type="button" key={sticker.id} aria-label={`Sticker ${sticker.emoji_tags.join(" ")}`} className="flex h-[62px] w-[62px] items-center justify-center rounded hover:bg-muted focus-visible:outline focus-visible:outline-2" onClick={() => void onSend(sticker.id)}><AuthenticatedImage alt={sticker.emoji_tags.join(" ")} className="max-h-full max-w-full object-contain" src={`${API_BASE_URL}/media/${sticker.media_file_id}`} /></button>)}</div>{!visibleStickers.length && !(currentPackIsOwned && !normalizedQuery) && <p className="py-8 text-center text-sm text-muted-foreground">{normalizedQuery ? "No stickers found" : packs.length ? "No stickers in this pack" : "No sticker packs"}</p>}</div><div className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-t px-2">{packs.map((pack) => { const cover = pack.stickers[0]; return <button type="button" key={pack.id} aria-label={pack.title} className={`h-8 w-8 shrink-0 rounded p-0.5 ${pack.id === currentPack?.id ? "bg-primary/20" : ""}`} onClick={() => { setActivePackId(pack.id); setQuery(""); }}>{cover && <AuthenticatedImage alt={pack.title} className="h-full w-full object-contain" src={`${API_BASE_URL}/media/${cover.media_file_id}`} />}</button>; })}</div></>}
     {packDialogOpen && <CreateStickerPackDialog onClose={() => setPackDialogOpen(false)} onCreated={createPack} />}{editPack && <EditStickerPackDialog pack={editPack} onClose={() => setEditPack(null)} onSaved={updatePack} />}{studioPack && <StickerStudio pack={studioPack} onClose={() => setStudioPack(null)} onSave={saveSticker} />}
   </aside>;
 }

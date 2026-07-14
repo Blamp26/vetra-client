@@ -18,6 +18,12 @@ export type VetraGif = {
   analytics: GiphyAnalytics;
 };
 
+export type GiphyPage = {
+  results: VetraGif[];
+  nextOffset: number;
+  hasMore: boolean;
+};
+
 export class GiphyError extends Error {
   constructor(message: string, public readonly kind: "not_configured" | "unauthorized" | "rate_limited" | "offline" | "malformed" | "request") {
     super(message);
@@ -84,15 +90,33 @@ async function request(path: string, params: Record<string, string>, signal?: Ab
   return body;
 }
 
+function pageResult(body: any, offset: number): GiphyPage {
+  const count = Number.isInteger(body.pagination?.count) && body.pagination.count > 0
+    ? body.pagination.count
+    : 0;
+  const totalCount = Number.isInteger(body.pagination?.total_count) && body.pagination.total_count > 0
+    ? body.pagination.total_count
+    : 0;
+  const results = (Array.isArray(body.data) ? body.data : [])
+    .map(normalize)
+    .filter(Boolean) as VetraGif[];
+  const nextOffset = offset + count;
+  return {
+    results,
+    nextOffset,
+    hasMore: count > 0 && totalCount > nextOffset,
+  };
+}
+
 export const giphyApi = {
   isConfigured: () => Boolean(apiKey()),
-  async search(query: string, offset = 0, signal?: AbortSignal) {
+  async search(query: string, offset = 0, signal?: AbortSignal): Promise<GiphyPage> {
     const body = await request("/gifs/search", { q: query, limit: "25", offset: String(offset) }, signal);
-    return { results: (Array.isArray(body.data) ? body.data : []).map(normalize).filter(Boolean) as VetraGif[], hasMore: Boolean(body.pagination?.count && body.pagination?.total_count > offset + body.pagination.count) };
+    return pageResult(body, offset);
   },
-  async trending(offset = 0, signal?: AbortSignal) {
+  async trending(offset = 0, signal?: AbortSignal): Promise<GiphyPage> {
     const body = await request("/gifs/trending", { limit: "25", offset: String(offset) }, signal);
-    return { results: (Array.isArray(body.data) ? body.data : []).map(normalize).filter(Boolean) as VetraGif[], hasMore: Boolean(body.pagination?.count && body.pagination?.total_count > offset + body.pagination.count) };
+    return pageResult(body, offset);
   },
   async getByIds(ids: string[], signal?: AbortSignal) {
     if (ids.length === 0) return [];

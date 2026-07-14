@@ -51,7 +51,7 @@ describe("StickerPicker GIF result state", () => {
   });
 
   it("keeps the active search results after a successful send and refreshes Recent separately", async () => {
-    searchMock.mockResolvedValue({ results: [result("cat-1"), result("cat-2")], hasMore: false });
+    searchMock.mockResolvedValue({ results: [result("cat-1"), result("cat-2")], nextOffset: 25, hasMore: false });
     sendMock.mockResolvedValue(undefined);
     render(<StickerPicker onSend={vi.fn()} onSendGif={sendMock} onClose={vi.fn()} />);
 
@@ -70,5 +70,20 @@ describe("StickerPicker GIF result state", () => {
     await waitFor(() => expect(screen.getByText("No saved GIFs")).toBeInTheDocument());
     expect(savedMock).toHaveBeenCalledTimes(1);
     expect(within(screen.getByTestId("sticker-picker")).getByRole("button", { name: "Recent" })).toHaveClass("bg-primary\/20");
+  });
+
+  it("bootstraps the next page when the first page does not overflow the viewport", async () => {
+    searchMock.mockImplementation(async (_query: string, offset: number) => offset === 0
+      ? { results: [result("page-1")], nextOffset: 25, hasMore: true }
+      : { results: [result("page-2")], nextOffset: 50, hasMore: false });
+    render(<StickerPicker onSend={vi.fn()} onSendGif={sendMock} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "GIFs" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Search GIFs" }), { target: { value: "cat" } });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "page-2" })).toBeInTheDocument(), { timeout: 1500 });
+    expect(searchMock.mock.calls.map((call) => call[1])).toEqual([0, 25]);
+    expect(screen.getByRole("button", { name: "page-1" })).toBeInTheDocument();
+    expect(screen.getByTestId("gif-pagination-sentinel")).toBeInTheDocument();
   });
 });
