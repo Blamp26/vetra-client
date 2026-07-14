@@ -82,7 +82,7 @@ export function StickerPackPreviewDialog({ request, onClose, onOpenPack }: Props
         if (!busy && event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[calc(100vh-48px)] w-[365px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-xl bg-card shadow-xl">
+      <div className="flex max-h-[min(424px,calc(100vh-48px))] w-[365px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-xl bg-card shadow-xl">
         <header className="flex h-[54px] shrink-0 items-center justify-between border-b px-4">
           <h2 id="sticker-pack-preview-title" className="truncate text-base font-semibold">{title}</h2>
           <button type="button" aria-label="Close sticker pack preview" onClick={onClose} disabled={busy} className="rounded p-1 hover:bg-muted focus-visible:outline focus-visible:outline-2">
