@@ -25,6 +25,18 @@
   padding-inline-end: var(--message-padding-inline-end);
 }
 
+.message-text-flow {
+  --message-meta-reservation-gap: 12px;
+  --message-meta-inline-delta: 2px;
+  --message-final-line-reservation: calc(
+    var(--message-meta-reservation-gap) - var(--message-meta-inline-delta)
+  );
+}
+
+.message-text-bubble--has-custom-emoji {
+  padding-block: 7px;
+}
+
 /* EmojiText uses the shared image component, whose default block display is
    correct for standalone emoji but must be inline inside ordinary messages. */
 [data-testid="message-text-flow"] [data-testid="message-rich-text"] img {
@@ -74,5 +86,19 @@
   padding: 0 4px;
   border-radius: 10px;
   background: rgb(0 0 0 / 20%);
+  color: white;
+}
+
+.message-custom-emoji-metadata {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 5px 0 6px;
+  border-radius: 10px;
+  background: rgb(72 87 97 / 40%);
   color: white;
 }

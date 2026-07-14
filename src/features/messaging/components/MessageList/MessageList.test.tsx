@@ -1425,10 +1425,9 @@ describe("MessageList bubble layout", () => {
     );
 
     expect(inlineMeta).toHaveClass(
-      "float-right",
+      "float-none",
       "top-[3px]",
       "h-[16px]",
-      "ml-[5px]",
       "mr-[-4px]",
       "px-[4px]",
     );

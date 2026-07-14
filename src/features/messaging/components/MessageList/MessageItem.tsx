@@ -343,21 +343,10 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
     Boolean(msg.forwarded_from);
   const shouldRenderMediaOnlyMetadata = isMediaOnly || isForwardedMediaOnly || isGif;
   const isTextOnly = hasText && !hasMedia;
-    const emojiOnlyGraphemes = isTextOnly
-      ? getEmojiOnlyGraphemes(msg.content || "")
-      : null;
-    const isEmojiOnlyMessage = Boolean(
-      emojiOnlyGraphemes &&
-      emojiOnlyGraphemes.length >= 1 &&
-      emojiOnlyGraphemes.length <= 3 &&
-      !msg.reply_to_id &&
-      !msg.forwarded_from,
-    );
     const customEmojiEntity = (msg.entities ?? []).find((entity) => entity.type === "custom_emoji" && entity.custom_emoji);
     const customEmoji = customEmojiEntity?.type === "custom_emoji" ? customEmojiEntity.custom_emoji : null;
     const isCustomEmojiOnlyMessage = Boolean(
       isTextOnly &&
-      !isEmojiOnlyMessage &&
       customEmojiEntity?.type === "custom_emoji" &&
       customEmojiEntity.custom_emoji &&
       !msg.reply_to_id &&
@@ -365,6 +354,21 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       (msg.content || "").slice(0, customEmojiEntity.offset).trim() === "" &&
       (msg.content || "").slice(customEmojiEntity.offset + customEmojiEntity.length).trim() === "" &&
       (msg.entities ?? []).filter((entity) => entity.type === "custom_emoji" && entity.custom_emoji).length === 1,
+    );
+    const emojiOnlyGraphemes = isTextOnly
+      ? getEmojiOnlyGraphemes(msg.content || "")
+      : null;
+    const isEmojiOnlyMessage = Boolean(
+      !isCustomEmojiOnlyMessage &&
+      emojiOnlyGraphemes &&
+      emojiOnlyGraphemes.length >= 1 &&
+      emojiOnlyGraphemes.length <= 3 &&
+      !msg.reply_to_id &&
+      !msg.forwarded_from,
+    );
+    const hasInlineCustomEmoji = Boolean(
+      !isCustomEmojiOnlyMessage &&
+      (msg.entities ?? []).some((entity) => entity.type === "custom_emoji" && entity.custom_emoji),
     );
     const emojiOnlyLayout = isEmojiOnlyMessage
       ? getLargeEmojiLayout(emojiOnlyGraphemes?.length ?? 1)
@@ -761,7 +765,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const hasReactions = messageReactions.length > 0;
 
   const renderMetadata = (
-    variant: "inline" | "overlay" = "inline",
+    variant: "inline" | "overlay" | "custom-emoji-overlay" = "inline",
     inReactions = false,
   ) => {
     if (hasReactions && !inReactions) return null;
@@ -771,15 +775,17 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       className={cn(
         "inline-flex max-w-full items-center whitespace-nowrap",
         inReactions && "message-reactions__metadata",
-        variant === "overlay"
-          ? overlayMetadataClassName
+        (variant === "overlay" || variant === "custom-emoji-overlay")
+          ? variant === "custom-emoji-overlay"
+            ? "message-custom-emoji-metadata"
+            : overlayMetadataClassName
               : cn("gap-0 text-[12px] leading-[14px]", metadataClassName),
       )}
-      data-testid="message-metadata"
+      data-testid={variant === "custom-emoji-overlay" ? "message-custom-emoji-metadata" : "message-metadata"}
     >
       <span
         className={cn(
-          variant === "overlay"
+          (variant === "overlay" || variant === "custom-emoji-overlay")
             ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
                 : cn(
                     "mr-[4px] text-[12px] leading-[14px] font-normal",
@@ -792,7 +798,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       {msg.edited_at && (
         <span
           className={cn(
-            variant === "overlay"
+            (variant === "overlay" || variant === "custom-emoji-overlay")
               ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
                   : cn(
                       "mr-[4px] text-[12px] leading-[16.2px] font-normal",
@@ -805,17 +811,19 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       )}
           {isOwn &&
             !isRoom &&
-            (variant === "overlay" ? (
+            (variant === "overlay" || variant === "custom-emoji-overlay" ? (
             <span
               className={cn(
-                  "box-border ml-[-2px] flex h-[16px] w-[16px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]",
+                  variant === "custom-emoji-overlay"
+                    ? "box-border ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]"
+                    : "box-border ml-[-2px] flex h-[16px] w-[16px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]",
                 isOwn ? "text-white opacity-100" : "text-current",
               )}
-              data-testid="message-media-only-status"
+                  data-testid={variant === "custom-emoji-overlay" ? "custom-emoji-status" : "message-media-only-status"}
             >
                 <StatusIcon
                   status={msg.status}
-                  className="ml-0 h-[16px] w-[16px] text-current opacity-100"
+                  className={variant === "custom-emoji-overlay" ? "ml-0 h-[19px] w-[19px] text-current opacity-100" : "ml-0 h-[16px] w-[16px] text-current opacity-100"}
                 />
             </span>
           ) : (
@@ -836,10 +844,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
     );
   };
 
-    const renderInlineMetadata = () =>
+    const renderInlineMetadata = (textFlow = false) =>
     hasReactions ? null : (
     <span
-          className="pointer-events-none relative box-border top-[3px] float-right ml-[5px] mr-[-4px] inline-flex h-[16px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0"
+          className={cn("pointer-events-none relative box-border top-[3px] mr-[-4px] inline-flex h-[16px] shrink-0 items-center whitespace-nowrap rounded-[10px] bg-transparent px-[4px] py-0", textFlow ? "float-none" : "float-right ml-[5px]")}
+          style={textFlow ? { marginLeft: "var(--message-final-line-reservation)" } : undefined}
       data-testid="message-text-inline-metadata"
     >
       {renderMetadata()}
@@ -1468,10 +1477,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                       ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] px-2 py-0 flex items-center"
                   : "min-w-0 max-w-[min(480px,calc(100vw-6rem))] px-2 pt-[5px] pb-[6px]"
                       : "message-text-bubble min-w-0 max-w-[min(480px,calc(100vw-6rem))]",
+          isTextOnly && hasInlineCustomEmoji && "message-text-bubble--has-custom-emoji",
           isSelected && "ring-1 ring-primary",
             isHighlighted &&
               "outline outline-2 outline-primary outline-offset-1",
-          isEmojiOnlyMessage
+          isEmojiOnlyMessage || isCustomEmojiOnlyMessage
             ? "rounded-none"
             : isSticker
             ? "rounded-none"
@@ -1500,7 +1510,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                         isConsecutive && "rounded-tl-[4px]",
                         isGroupedWithNext && "rounded-bl-[4px]",
                 ),
-          isEmojiOnlyMessage
+          isEmojiOnlyMessage || isCustomEmojiOnlyMessage
             ? "bg-transparent text-current"
             : isDocumentGroup || isAudioGroup
               ? isOwn
@@ -1560,7 +1570,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           {isCustomEmojiOnlyMessage ? (
             <div className="relative inline-flex h-[112px] w-[112px] items-center justify-center overflow-hidden bg-transparent leading-[0]" data-testid="custom-emoji-standalone">
               <StickerArtwork sticker={customEmoji!} className="h-[112px] w-[112px] object-contain" />
-              <div className="pointer-events-none absolute bottom-[4px] right-[4px] z-[1]">{renderMetadata("overlay")}</div>
+              {renderMetadata("custom-emoji-overlay")}
             </div>
           ) : isEmojiOnlyMessage ? (
             <div
@@ -1600,7 +1610,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           <>
             {renderReplyPreview(msg, isOwn)}
               <div
-                className="relative message-text-scale"
+                className="relative message-text-scale message-text-flow"
                 data-testid="message-text-flow"
               >
               <span
@@ -1612,7 +1622,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                     entities={msg.entities}
                   />
               </span>
-              {renderInlineMetadata()}
+              {renderInlineMetadata(true)}
             </div>
           </>
         ) : (

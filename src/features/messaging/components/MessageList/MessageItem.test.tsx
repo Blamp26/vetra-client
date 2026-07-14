@@ -181,6 +181,67 @@ describe("MessageItem bubble layout", () => {
     window.localStorage.removeItem("vetra.mediaDebug");
   });
 
+  it("prioritizes one canonical custom emoji over Unicode emoji-only rendering", () => {
+    renderMessageItem({
+      content: "⚡️",
+      entities: [{
+        type: "custom_emoji",
+        offset: 0,
+        length: 2,
+        custom_emoji_id: "emoji-1",
+        custom_emoji: {
+          id: "emoji-1",
+          pack_id: "pack-1",
+          media_file_id: "media-1",
+          width: 512,
+          height: 512,
+          format: "webp",
+          alt: "⚡️",
+        },
+      }],
+    });
+
+    expect(screen.getByTestId("custom-emoji-standalone")).toBeInTheDocument();
+    expect(screen.getByTestId("authenticated-image")).toHaveAttribute("alt", "⚡️");
+    expect(screen.queryByTestId("message-emoji-only")).not.toBeInTheDocument();
+    expect(screen.getByTestId("message-bubble")).toHaveClass("message-emoji-only-bubble");
+    expect(screen.getByTestId("message-custom-emoji-metadata")).toHaveClass("message-custom-emoji-metadata");
+    expect(screen.queryByTestId("message-text-tail")).not.toBeInTheDocument();
+  });
+
+  it("keeps custom emoji inline geometry scoped to text bubbles", () => {
+    renderMessageItem({
+      content: "Hi ⚡️",
+      entities: [{
+        type: "custom_emoji",
+        offset: 3,
+        length: 2,
+        custom_emoji_id: "emoji-1",
+        custom_emoji: {
+          id: "emoji-1",
+          pack_id: "pack-1",
+          media_file_id: "media-1",
+          width: 512,
+          height: 512,
+          format: "webm",
+          alt: "⚡️",
+        },
+      }],
+    });
+
+    expect(screen.getByTestId("custom-emoji-inline")).toHaveClass("h-5", "w-5", "flex-[0_0_20px]");
+    expect(screen.getByTestId("message-bubble")).toHaveClass("message-text-bubble--has-custom-emoji");
+    expect(screen.getByTestId("message-bubble")).not.toHaveClass("message-emoji-only-bubble");
+    expect(screen.getByTestId("authenticated-video")).toHaveAttribute("aria-label", "⚡️");
+    expect(screen.getByTestId("message-text-inline-metadata")).toHaveClass("float-none");
+  });
+
+  it("does not add custom emoji geometry to ordinary text", () => {
+    renderMessageItem({ content: "ordinary text" });
+    expect(screen.getByTestId("message-bubble")).not.toHaveClass("message-text-bubble--has-custom-emoji");
+    expect(screen.getByTestId("message-text-inline-metadata")).toHaveClass("float-none");
+  });
+
   it("renders GIF metadata once as the media overlay without a fallback row", () => {
     renderMessageItem({
       gif: {
@@ -282,9 +343,8 @@ describe("MessageItem bubble layout", () => {
     expect(paths[0]).not.toHaveAttribute("filter");
     expect(tail.querySelector("filter")).not.toBeInTheDocument();
     expect(inlineMeta).toHaveClass(
-      "float-right",
+      "float-none",
       "top-[3px]",
-      "ml-[5px]",
       "mr-[-4px]",
       "px-[4px]",
     );
@@ -1031,10 +1091,9 @@ describe("MessageItem bubble layout", () => {
     expect(inlineMeta).toHaveClass(
       "relative",
       "box-border",
-      "float-right",
+      "float-none",
       "top-[3px]",
       "h-[16px]",
-      "ml-[5px]",
       "mr-[-4px]",
       "px-[4px]",
       "py-0",
