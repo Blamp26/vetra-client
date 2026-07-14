@@ -1,6 +1,6 @@
 import React from "react";
 import { API_BASE_URL } from "@/api/base";
-import type { Attachment, Message, MessageReactionGroup } from "@/shared/types";
+import type { Attachment, Message, MessageReactionGroup, StickerMessage } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { MessageText } from "@/shared/components/MessageText/MessageText";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
@@ -189,6 +189,16 @@ function readPositiveNumber(value: unknown) {
     : undefined;
 }
 
+function getStickerDisplaySize(sticker: StickerMessage) {
+  const width = readPositiveNumber(sticker.width) ?? 512;
+  const height = readPositiveNumber(sticker.height) ?? 512;
+  const scale = Math.min(1, 220 / width, 220 / height);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
 function getAttachmentIntrinsicSize(attachment: Attachment) {
   const source = attachment as AttachmentWithVisualMetadata;
 
@@ -285,6 +295,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const hasMedia = attachments.length > 0;
   const hasText = !!(msg.content && msg.content.trim().length > 0);
   const isSticker = Boolean(msg.sticker);
+  const stickerDisplaySize = msg.sticker ? getStickerDisplaySize(msg.sticker) : null;
     const isVisualMediaGroup =
       attachments.length > 1 && attachments.every(isVisualAttachment);
     const isSingleVisualMessage =
@@ -1330,7 +1341,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const renderContent = () => {
     if (msg.sticker) {
       const sticker = msg.sticker;
-      return <div className="relative flex max-w-[220px] flex-col items-end" data-testid="sticker-message"><button type="button" className="flex max-h-[220px] max-w-[220px] items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" aria-label={`Open sticker pack ${sticker.pack_title ?? ""}`.trim()} onClick={(event) => { if (selectionMode) return; event.stopPropagation(); onOpenStickerPack?.(sticker.pack_id, sticker.id); }}><AuthenticatedImage src={`${API_BASE_URL}/media/${sticker.media_file_id}`} alt={sticker.emoji_tags.join(" ")} className="max-h-[220px] max-w-[220px] object-contain" style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} /></button>{renderMetadata("overlay")}</div>;
+      return <div className="relative flex flex-col items-end" data-testid="sticker-message" style={{ width: `${stickerDisplaySize?.width ?? 220}px`, height: `${stickerDisplaySize?.height ?? 220}px` }}><button type="button" className="flex h-full w-full items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" aria-label={`Open sticker pack ${sticker.pack_title ?? ""}`.trim()} onClick={(event) => { if (selectionMode) return; event.stopPropagation(); onOpenStickerPack?.(sticker.pack_id, sticker.id); }}><AuthenticatedImage src={`${API_BASE_URL}/media/${sticker.media_file_id}`} alt={sticker.emoji_tags.join(" ")} className="h-full w-full object-contain" style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} /></button>{renderMetadata("overlay")}</div>;
     }
     return (
       <>

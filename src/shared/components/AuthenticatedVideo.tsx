@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/store";
+import { useMediaVisibility } from "./MediaVisibilityContext";
 
 export interface AuthenticatedVideoDiagnostics {
   naturalWidth: number;
@@ -13,6 +14,19 @@ export interface AuthenticatedVideoDiagnostics {
 interface AuthenticatedVideoProps extends React.VideoHTMLAttributes<HTMLVideoElement> {
   src: string;
   onMediaDiagnostics?: (diagnostics: AuthenticatedVideoDiagnostics) => void;
+}
+
+const MEDIA_PRELOAD_MARGIN = 200;
+
+function isWithinVisibilityMargin(target: HTMLElement, root: HTMLElement | null): boolean {
+  const targetRect = target.getBoundingClientRect();
+  const rootRect = root
+    ? root.getBoundingClientRect()
+    : { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight };
+  return targetRect.bottom >= rootRect.top - MEDIA_PRELOAD_MARGIN
+    && targetRect.top <= rootRect.bottom + MEDIA_PRELOAD_MARGIN
+    && targetRect.right >= rootRect.left - MEDIA_PRELOAD_MARGIN
+    && targetRect.left <= rootRect.right + MEDIA_PRELOAD_MARGIN;
 }
 
 export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
@@ -29,6 +43,7 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const authToken = useAppStore((s) => s.authToken);
+  const { root: visibilityRoot, revision: visibilityRevision } = useMediaVisibility();
 
   const notifyDiagnostics = React.useCallback((video: HTMLVideoElement) => {
     const diagnostics = {
@@ -49,6 +64,19 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
   useEffect(() => {
     if (objectUrl || error || isInView) return;
 
+    if (typeof IntersectionObserver === "undefined") {
+      setIsInView(true);
+      return;
+    }
+
+    const target = containerRef.current;
+    if (!target) return;
+
+    if (isWithinVisibilityMargin(target, visibilityRoot)) {
+      setIsInView(true);
+      return;
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
@@ -56,15 +84,13 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
           observer.disconnect();
         }
       },
-      { rootMargin: "200px" },
+      { root: visibilityRoot, rootMargin: `${MEDIA_PRELOAD_MARGIN}px` },
     );
 
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
+    observer.observe(target);
 
     return () => observer.disconnect();
-  }, [error, isInView, objectUrl]);
+  }, [error, isInView, objectUrl, visibilityRevision, visibilityRoot]);
 
   useEffect(() => {
     if (!isInView || !src) return;

@@ -12,6 +12,7 @@ vi.mock("@/store", () => ({
 }));
 
 import { AuthenticatedVideo } from "./AuthenticatedVideo";
+import { MediaVisibilityContext } from "./MediaVisibilityContext";
 
 class IdleIntersectionObserver {
   observe() {}
@@ -166,5 +167,25 @@ describe("AuthenticatedVideo", () => {
     unmount();
 
     expect(revokeSpy).toHaveBeenCalledWith("blob:video-ok");
+  });
+
+  it("loads immediately when IntersectionObserver is unavailable", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["video"]) } as Response);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:no-observer-video");
+    render(<AuthenticatedVideo src="/api/v1/media/no-observer-video" data-testid="no-observer-video" />);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  });
+
+  it("uses the explicit scroll root for an immediate visibility check", async () => {
+    vi.stubGlobal("IntersectionObserver", IdleIntersectionObserver);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["video"]) } as Response);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:root-video");
+    const root = document.createElement("div");
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this === root ? { top: 100, left: 0, right: 400, bottom: 300 } as DOMRect : { top: 200, left: 0, right: 100, bottom: 300 } as DOMRect;
+    });
+    render(<MediaVisibilityContext.Provider value={{ root, revision: 0 }}><AuthenticatedVideo src="/api/v1/media/root-video" data-testid="root-video" /></MediaVisibilityContext.Provider>);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
 });

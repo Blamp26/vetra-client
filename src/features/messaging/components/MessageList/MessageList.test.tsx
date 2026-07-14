@@ -1566,4 +1566,12 @@ describe("MessageList bubble layout", () => {
     expect(scrollTargets.every((target) => target === anchor || target === screen.getByTestId("message-list-bottom-anchor"))).toBe(true);
     expect(scrollTargets.every((target) => target !== screen.getByTestId("message-list-rail"))).toBe(true);
   });
+
+  it("publishes a media visibility revision after the initial bottom scroll", async () => {
+    renderMessageList([makeMessage({ content: "Visible latest message" })], {
+      initialHistoryLoaded: true,
+    });
+    await waitFor(() => expect(Number(screen.getByTestId("message-list-scroll").getAttribute("data-media-visibility-revision"))).toBeGreaterThan(0));
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
 });

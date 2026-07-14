@@ -12,6 +12,7 @@ vi.mock("@/store", () => ({
 }));
 
 import { AuthenticatedImage } from "./AuthenticatedImage";
+import { MediaVisibilityContext } from "./MediaVisibilityContext";
 
 class IdleIntersectionObserver {
   observe() {}
@@ -125,5 +126,33 @@ describe("AuthenticatedImage", () => {
     await waitFor(() => expect(screen.getByAltText("Second preview")).toBeInTheDocument());
     unmount();
     expect(revokeMock).toHaveBeenCalledWith("blob:preview");
+  });
+
+  it("checks the MessageList root immediately and retries when its layout revision changes", async () => {
+    vi.stubGlobal("IntersectionObserver", IdleIntersectionObserver);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(["image-bytes"], { type: "image/jpeg" }),
+    } as Response);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:root-image");
+    const root = document.createElement("div");
+    let targetRect = { top: 900, left: 0, right: 100, bottom: 1000 };
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this === root ? { top: 100, left: 0, right: 400, bottom: 300 } as DOMRect : targetRect as DOMRect;
+    });
+    const view = render(<MediaVisibilityContext.Provider value={{ root, revision: 0 }}><AuthenticatedImage src="/api/v1/media/root-image" alt="Root image" /></MediaVisibilityContext.Provider>);
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+    expect(fetch).not.toHaveBeenCalled();
+    targetRect = { top: 200, left: 0, right: 100, bottom: 300 };
+    view.rerender(<MediaVisibilityContext.Provider value={{ root, revision: 1 }}><AuthenticatedImage src="/api/v1/media/root-image" alt="Root image" /></MediaVisibilityContext.Provider>);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  });
+
+  it("loads immediately when IntersectionObserver is unavailable", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:no-observer");
+    render(<AuthenticatedImage src="/api/v1/media/no-observer" alt="No observer image" />);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
 });

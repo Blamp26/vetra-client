@@ -58,6 +58,7 @@ function optimisticReactions(
 
 import { MessageItem } from "./MessageItem";
 import { MessageContextMenu } from "./MessageContextMenu";
+import { MediaVisibilityContext } from "@/shared/components/MediaVisibilityContext";
 
 interface Props {
   messages:      Message[];
@@ -194,9 +195,17 @@ export function MessageList({
   onOpenStickerPack,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>();
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [mediaVisibilityRoot, setMediaVisibilityRoot] = useState<HTMLElement | null>(null);
+  const [mediaVisibilityRevision, setMediaVisibilityRevision] = useState(0);
+  const registerMediaVisibilityRoot = useCallback((element: HTMLDivElement | null) => {
+    setMediaVisibilityRoot((current) => current === element ? current : element);
+  }, []);
+  const refreshMediaVisibility = useCallback(() => {
+    setMediaVisibilityRevision((revision) => revision + 1);
+  }, []);
 
   const {
     selectionMode,
@@ -349,6 +358,7 @@ export function MessageList({
       const nextScrollHeight = container.scrollHeight;
       if (nextScrollHeight === lastInitialScrollHeightRef.current) return;
       bottomRef.current?.scrollIntoView();
+      refreshMediaVisibility();
       lastInitialScrollHeightRef.current = nextScrollHeight;
     });
 
@@ -356,7 +366,7 @@ export function MessageList({
     if (contentRef.current) observer.observe(contentRef.current);
 
     return () => observer.disconnect();
-  }, []);
+  }, [refreshMediaVisibility]);
 
   const handleScroll = () => {
     const el = containerRef.current;
@@ -370,6 +380,7 @@ export function MessageList({
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView();
+    refreshMediaVisibility();
   };
 
   const messagesById = useMemo(() => {
@@ -485,7 +496,8 @@ export function MessageList({
     element.scrollTop =
       anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
     olderScrollAnchorRef.current = null;
-  }, [messages, isLoading]);
+    refreshMediaVisibility();
+  }, [messages, isLoading, refreshMediaVisibility]);
 
   useLayoutEffect(() => {
     if (olderScrollAnchorRef.current) return;
@@ -497,6 +509,7 @@ export function MessageList({
         const element = containerRef.current;
         if (!element || initialScrollDoneRef.current) return;
         bottomRef.current?.scrollIntoView();
+        refreshMediaVisibility();
         initialScrollDoneRef.current = true;
         initialLayoutTrackingRef.current = true;
         lastInitialScrollHeightRef.current = element.scrollHeight;
@@ -508,8 +521,11 @@ export function MessageList({
     if (!element) return;
     const isNearBottom =
       element.scrollHeight - element.scrollTop - element.clientHeight < 120;
-    if (isNearBottom) bottomRef.current?.scrollIntoView();
-  }, [initialHistoryLoaded, isLoading, messages]);
+    if (isNearBottom) {
+      bottomRef.current?.scrollIntoView();
+      refreshMediaVisibility();
+    }
+  }, [initialHistoryLoaded, isLoading, messages, refreshMediaVisibility]);
 
   useEffect(() => {
     const targetId = pendingReplyTargetId.current;
@@ -520,8 +536,9 @@ export function MessageList({
       behavior: "smooth",
       block: "center",
     });
+    refreshMediaVisibility();
     brieflyHighlightMessage(targetId);
-  }, [brieflyHighlightMessage, messages]);
+  }, [brieflyHighlightMessage, messages, refreshMediaVisibility]);
 
   useEffect(
     () => () => {
@@ -848,6 +865,7 @@ export function MessageList({
       }
 
       element.scrollIntoView({ behavior: "smooth", block: "center" });
+      refreshMediaVisibility();
       brieflyHighlightMessage(targetId);
     };
 
@@ -974,11 +992,16 @@ export function MessageList({
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <MediaVisibilityContext.Provider value={{ root: mediaVisibilityRoot, revision: mediaVisibilityRevision }}>
       <div 
-        ref={containerRef} 
+        ref={(element) => {
+          containerRef.current = element;
+          registerMediaVisibilityRoot(element);
+        }}
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-3 pb-2 pt-4 scrollbar-hide sm:px-4"
         data-testid="message-list-scroll"
+        data-media-visibility-revision={mediaVisibilityRevision}
       >
         <div
           ref={(element) => {
@@ -1108,6 +1131,8 @@ export function MessageList({
           data-testid="message-list-bottom-anchor"
         />
       </div>
+
+    </MediaVisibilityContext.Provider>
 
       {showScrollBottom && (
         <button

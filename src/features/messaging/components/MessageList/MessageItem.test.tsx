@@ -3461,4 +3461,9 @@ describe("MessageItem bubble layout", () => {
     expect(onOpenStickerPack).not.toHaveBeenCalled();
     expect(onToggleSelection).toHaveBeenCalledWith(1);
   });
+
+  it("reserves a contained non-square sticker box before authenticated media loads", () => {
+    renderMessageItem({ sticker: { id: "sticker-1", pack_id: "pack-1", media_file_id: "media-1", width: 512, height: 256, format: "webp", emoji_tags: ["😀"] } });
+    expect(screen.getByTestId("sticker-message")).toHaveStyle({ width: "220px", height: "110px" });
+  });
 });

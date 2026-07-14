@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '@/store';
+import { useMediaVisibility } from './MediaVisibilityContext';
 
 export interface AuthenticatedImageDiagnostics {
   naturalWidth: number;
@@ -12,6 +13,19 @@ export interface AuthenticatedImageDiagnostics {
 interface AuthenticatedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
   onMediaDiagnostics?: (diagnostics: AuthenticatedImageDiagnostics) => void;
+}
+
+const MEDIA_PRELOAD_MARGIN = 200;
+
+function isWithinVisibilityMargin(target: HTMLElement, root: HTMLElement | null): boolean {
+  const targetRect = target.getBoundingClientRect();
+  const rootRect = root
+    ? root.getBoundingClientRect()
+    : { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight };
+  return targetRect.bottom >= rootRect.top - MEDIA_PRELOAD_MARGIN
+    && targetRect.top <= rootRect.bottom + MEDIA_PRELOAD_MARGIN
+    && targetRect.right >= rootRect.left - MEDIA_PRELOAD_MARGIN
+    && targetRect.left <= rootRect.right + MEDIA_PRELOAD_MARGIN;
 }
 
 /**
@@ -29,6 +43,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const authToken = useAppStore((s) => s.authToken);
+  const { root: visibilityRoot, revision: visibilityRevision } = useMediaVisibility();
   const objectUrlRef = useRef<string | null>(null);
   const requestKeyRef = useRef({ src, authToken });
 
@@ -67,11 +82,20 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
     }
   }, [onMediaDiagnostics, src]);
 
-  // Intersection Observer for lazy loading
+  // Intersection Observer for lazy loading. The explicit MessageList root and
+  // the geometry check cover WebViews that miss the first post-scroll update.
   useEffect(() => {
     if (objectUrl || error || isInView) return;
 
     if (typeof IntersectionObserver === "undefined") {
+      setIsInView(true);
+      return;
+    }
+
+    const target = containerRef.current;
+    if (!target) return;
+
+    if (isWithinVisibilityMargin(target, visibilityRoot)) {
       setIsInView(true);
       return;
     }
@@ -83,15 +107,13 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
           observer.disconnect();
         }
       },
-      { rootMargin: '200px' } // Start loading 200px before appearing in viewport
+      { root: visibilityRoot, rootMargin: `${MEDIA_PRELOAD_MARGIN}px` },
     );
 
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
+    observer.observe(target);
 
     return () => observer.disconnect();
-  }, [objectUrl, error, isInView]);
+  }, [error, isInView, objectUrl, visibilityRevision, visibilityRoot]);
 
   useEffect(() => {
     if (!isInView || !src) return;
