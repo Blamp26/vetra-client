@@ -1625,6 +1625,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
 
           {!hasReactions &&
             !isTextOnly &&
+            !isGif &&
             !isMediaOnly &&
             !isVisualMediaMessage &&
             !isDocumentAttachment &&

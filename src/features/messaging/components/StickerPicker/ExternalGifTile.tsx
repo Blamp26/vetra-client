@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { VetraGif } from "@/api/giphy";
 import { giphyApi } from "@/api/giphy";
+import type { GifMosaicTile } from "./gifMosaicLayout";
 
-export function ExternalGifTile({ gif, root, onSend, onLoaded, onClick }: { gif: VetraGif; root?: HTMLElement | null; onSend?: () => Promise<void>; onLoaded?: () => void; onClick?: () => void }) {
+export function ExternalGifTile({ gif, layout, root, onSend, onLoaded, onClick }: { gif: VetraGif; layout: GifMosaicTile; root?: HTMLElement | null; onSend?: () => Promise<void>; onLoaded?: () => void; onClick?: () => void }) {
   const containerRef = useRef<HTMLButtonElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [eligible, setEligible] = useState(false);
@@ -10,8 +11,6 @@ export function ExternalGifTile({ gif, root, onSend, onLoaded, onClick }: { gif:
   const [paused, setPaused] = useState(true);
   const [sendError, setSendError] = useState<string | null>(null);
   const loadedRef = useRef(false);
-  const ratio = gif.width / Math.max(1, gif.height);
-  const height = Math.max(56, Math.min(180, Math.round(88 / Math.max(0.55, Math.min(2.4, ratio)))));
 
   useEffect(() => {
     const element = containerRef.current;
@@ -59,7 +58,7 @@ export function ExternalGifTile({ gif, root, onSend, onLoaded, onClick }: { gif:
     onClick?.();
   };
 
-  return <button ref={containerRef} type="button" aria-label={gif.title || "GIF"} disabled={busy} title={sendError || undefined} onClick={() => void handleClick()} className="relative min-w-0 overflow-hidden rounded bg-muted/40 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ height, gridRowEnd: `span ${Math.max(8, Math.ceil(height / 4))}` }}>
+  return <button ref={containerRef} type="button" aria-label={gif.title || "GIF"} disabled={busy} title={sendError || undefined} onClick={() => void handleClick()} className="absolute overflow-hidden rounded bg-muted/40 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: layout.left, top: layout.top, width: layout.width, height: layout.height }}>
     {eligible && (gif.previewMp4Url || gif.messageMp4Url) ? <video ref={videoRef} src={gif.previewMp4Url || gif.messageMp4Url || undefined} poster={gif.previewStillUrl || undefined} muted loop playsInline preload="metadata" className="h-full w-full object-cover" aria-label={gif.title || "GIF"} /> : gif.previewStillUrl ? <img src={gif.previewStillUrl} alt={gif.title || "GIF"} className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-xs text-muted-foreground">GIF</span>}
     {paused && eligible && <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/45 px-1 text-[10px] text-white">GIF</span>}
   </button>;

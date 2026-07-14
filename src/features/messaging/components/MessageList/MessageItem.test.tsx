@@ -104,6 +104,10 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
   ),
 }));
 
+vi.mock("./GifMessageMedia", () => ({
+  GifMessageMedia: () => <div data-testid="gif-message-media" />,
+}));
+
 vi.mock("../../utils/attachmentDownloads", () => ({
   downloadAttachmentWithAuth: vi.fn(),
   openAttachmentWithAuth: vi.fn(),
@@ -175,6 +179,44 @@ describe("MessageItem bubble layout", () => {
       selector({ authToken: "secret-token" }),
     );
     window.localStorage.removeItem("vetra.mediaDebug");
+  });
+
+  it("renders GIF metadata once as the media overlay without a fallback row", () => {
+    renderMessageItem({
+      gif: {
+        provider: "giphy",
+        provider_id: "gif-1",
+        width: 480,
+        height: 270,
+        title: "Cat",
+      },
+    });
+
+    expect(screen.getByTestId("gif-message-media")).toBeInTheDocument();
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+    expect(screen.getByTestId("message-metadata")).toHaveClass("h-[18px]");
+  });
+
+  it("keeps GIF metadata in the established reaction row when reactions exist", () => {
+    renderMessageItem(
+      {
+        gif: {
+          provider: "giphy",
+          provider_id: "gif-1",
+          width: 480,
+          height: 270,
+          title: "Cat",
+        },
+      },
+      {
+        messageReactions: [{ reaction: "👍", count: 1, chosen: false }],
+      },
+    );
+
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
+    expect(screen.getByTestId("message-reactions")).toContainElement(
+      screen.getByTestId("message-metadata"),
+    );
   });
 
   it("renders incoming direct messages as left-aligned bubbles without sender labels", () => {
