@@ -29,6 +29,16 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const authToken = useAppStore((s) => s.authToken);
+  const objectUrlRef = useRef<string | null>(null);
+  const requestKeyRef = useRef({ src, authToken });
+
+  const revokeObjectUrl = React.useCallback(() => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    setObjectUrl(null);
+  }, []);
 
   const notifyDiagnostics = React.useCallback((image: HTMLImageElement) => {
     const diagnostics = {
@@ -60,6 +70,11 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
   // Intersection Observer for lazy loading
   useEffect(() => {
     if (objectUrl || error || isInView) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setIsInView(true);
+      return;
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -93,7 +108,9 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
         const blob = await response.blob();
         if (!cancelled) {
+          revokeObjectUrl();
           const url = URL.createObjectURL(blob);
+          objectUrlRef.current = url;
           setObjectUrl(url);
           setError(false);
         }
@@ -107,9 +124,21 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [src, authToken, isInView]);
+  }, [src, authToken, isInView, revokeObjectUrl]);
+
+  useEffect(() => {
+    if (requestKeyRef.current.src === src && requestKeyRef.current.authToken === authToken) {
+      return;
+    }
+
+    requestKeyRef.current = { src, authToken };
+    setError(false);
+    setIsInView(false);
+    revokeObjectUrl();
+  }, [src, authToken, revokeObjectUrl]);
+
+  useEffect(() => () => revokeObjectUrl(), [revokeObjectUrl]);
 
   useEffect(() => {
     if (!objectUrl || !imageRef.current) return;

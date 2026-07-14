@@ -44,6 +44,7 @@ import {
   getLargeEmojiLayout,
   getSingleLargeEmojiSize,
 } from "../../utils/largeEmojiGeometry";
+import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
 
 interface MessageItemProps {
   msg: Message;
@@ -1327,7 +1328,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const renderContent = () => {
     if (msg.sticker) {
       const sticker = msg.sticker;
-      return <div className="relative flex max-w-[220px] flex-col items-end" data-testid="sticker-message"><img src={`${API_BASE_URL}/media/${sticker.media_file_id}`} alt={sticker.emoji_tags.join(" ")} className="max-h-[220px] max-w-[220px] object-contain" style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} />{renderMetadata("overlay")}</div>;
+      return <div className="relative flex max-w-[220px] flex-col items-end" data-testid="sticker-message"><AuthenticatedImage src={`${API_BASE_URL}/media/${sticker.media_file_id}`} alt={sticker.emoji_tags.join(" ")} className="max-h-[220px] max-w-[220px] object-contain" style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} />{renderMetadata("overlay")}</div>;
     }
     return (
       <>

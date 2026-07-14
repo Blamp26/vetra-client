@@ -45,4 +45,19 @@ describe("StickerPicker ownership and geometry", () => {
     await waitFor(() => expect(send).toHaveBeenCalledWith("sticker"));
     expect(postFormDataMock).toHaveBeenCalledTimes(1); expect(postFormDataMock.mock.calls[0][1].get("file")).not.toBe(source); expect(addMock).toHaveBeenCalledWith("owned", expect.objectContaining({ media_file_id: "media", width: 512, height: 512, format: "webp" })); expect(send).toHaveBeenCalledTimes(1);
   });
+
+  it("sends an existing picker sticker exactly once while loading protected media", async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const sticker = { id: "existing-sticker", pack_id: "owned", media_file_id: "protected-media", width: 512, height: 512, format: "webp", emoji_tags: ["😀"] };
+    listMock.mockResolvedValue([{ ...owned, stickers: [sticker] }]);
+    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) => selector({ currentUser: { id: 7 }, authToken: "picker-token" }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, blob: vi.fn() }));
+
+    render(<StickerPicker onSend={send} onClose={vi.fn()} />);
+    const button = await screen.findByRole("button", { name: "Sticker 😀" });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(send).toHaveBeenCalledWith("existing-sticker"));
+    expect(send).toHaveBeenCalledTimes(1);
+  });
 });

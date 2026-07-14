@@ -76,10 +76,11 @@ describe("AuthenticatedImage", () => {
   it("renders a loaded image that still fills the tile and reports diagnostics", async () => {
     vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       blob: async () => new Blob(["image-bytes"], { type: "image/jpeg" }),
     } as Response);
+    const revokeMock = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 
     const diagnosticsSpy = vi.fn();
 
@@ -93,6 +94,9 @@ describe("AuthenticatedImage", () => {
     );
 
     await waitFor(() => expect(screen.getByAltText("Loaded preview")).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/media/photo-2", {
+      headers: { Authorization: "Bearer secret-token" },
+    });
 
     const image = screen.getByAltText("Loaded preview");
     Object.defineProperties(image, {
@@ -116,5 +120,10 @@ describe("AuthenticatedImage", () => {
       renderedWidth: 320,
       renderedHeight: 180,
     }));
+
+    const { unmount } = render(<AuthenticatedImage src="/api/v1/media/photo-3" alt="Second preview" />);
+    await waitFor(() => expect(screen.getByAltText("Second preview")).toBeInTheDocument());
+    unmount();
+    expect(revokeMock).toHaveBeenCalledWith("blob:preview");
   });
 });
