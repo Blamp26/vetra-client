@@ -463,7 +463,7 @@ export function ChatWindow({ activeChat, call }: Props) {
         />
       )}
       </div>
-      {pickerOpen && <StickerPicker selectionRequest={pickerSelectionRequest} onSelectionHandled={handleSelectionHandled} onClose={() => setPickerOpen(false)} onSend={async (stickerId) => { await sendMessage({ stickerId }); }} />}
+      {pickerOpen && <StickerPicker selectionRequest={pickerSelectionRequest} onSelectionHandled={handleSelectionHandled} onClose={() => setPickerOpen(false)} onSend={async (stickerId) => { await sendMessage({ stickerId }); }} onSendGif={async (gif) => { await sendMessage({ gif: { provider: "giphy", provider_id: gif.providerId, width: gif.width, height: gif.height, title: gif.title } }); }} />}
       {stickerPreview && <StickerPackPreviewDialog request={stickerPreview} onClose={closeStickerPreview} onOpenPack={openStickerPack} />}
     </div>
   );

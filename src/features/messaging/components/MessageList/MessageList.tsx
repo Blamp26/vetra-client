@@ -59,6 +59,7 @@ function optimisticReactions(
 import { MessageItem } from "./MessageItem";
 import { MessageContextMenu } from "./MessageContextMenu";
 import { MediaVisibilityContext } from "@/shared/components/MediaVisibilityContext";
+import { GifResolverProvider } from "./GifResolverContext";
 
 interface Props {
   messages:      Message[];
@@ -993,6 +994,7 @@ export function MessageList({
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
     <MediaVisibilityContext.Provider value={{ root: mediaVisibilityRoot, revision: mediaVisibilityRevision }}>
+    <GifResolverProvider>
       <div 
         ref={(element) => {
           containerRef.current = element;
@@ -1132,6 +1134,7 @@ export function MessageList({
         />
       </div>
 
+    </GifResolverProvider>
     </MediaVisibilityContext.Provider>
 
       {showScrollBottom && (

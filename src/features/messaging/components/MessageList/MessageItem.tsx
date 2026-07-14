@@ -45,6 +45,7 @@ import {
   getSingleLargeEmojiSize,
 } from "../../utils/largeEmojiGeometry";
 import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
+import { GifMessageMedia } from "./GifMessageMedia";
 
 interface MessageItemProps {
   msg: Message;
@@ -295,6 +296,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const hasMedia = attachments.length > 0;
   const hasText = !!(msg.content && msg.content.trim().length > 0);
   const isSticker = Boolean(msg.sticker);
+  const isGif = Boolean(msg.gif);
   const stickerDisplaySize = msg.sticker ? getStickerDisplaySize(msg.sticker) : null;
     const isVisualMediaGroup =
       attachments.length > 1 && attachments.every(isVisualAttachment);
@@ -1339,6 +1341,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   };
 
   const renderContent = () => {
+    if (msg.gif) {
+      return <div className="relative flex flex-col items-end" data-testid="gif-message"><GifMessageMedia gif={msg.gif} selectionMode={selectionMode} />{renderMetadata("overlay")}</div>;
+    }
     if (msg.sticker) {
       const sticker = msg.sticker;
       return <div className="relative flex flex-col items-end" data-testid="sticker-message" style={{ width: `${stickerDisplaySize?.width ?? 220}px`, height: `${stickerDisplaySize?.height ?? 220}px` }}><button type="button" className="flex h-full w-full items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" aria-label={`Open sticker pack ${sticker.pack_title ?? ""}`.trim()} onClick={(event) => { if (selectionMode) return; event.stopPropagation(); onOpenStickerPack?.(sticker.pack_id, sticker.id); }}><AuthenticatedImage src={`${API_BASE_URL}/media/${sticker.media_file_id}`} alt={sticker.emoji_tags.join(" ")} className="h-full w-full object-contain" style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} /></button>{renderMetadata("overlay")}</div>;
@@ -1414,6 +1419,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
             ? "min-w-0 p-0"
             : isSticker
               ? "min-w-0 rounded-none bg-transparent p-0"
+            : isGif
+              ? "min-w-0 rounded-[15px] p-0"
             : isAudioGroup
             ? "min-w-0 w-[320px] max-w-[min(320px,calc(100vw-6rem))] rounded-none p-0"
             : isDocumentGroup

@@ -87,6 +87,7 @@ type PreviewLike = AttachmentLike & {
   attachment_kind?: AttachmentKind | null;
   attachment_name?: string | null;
   attachment_mime_type?: string | null;
+  gif_provider?: string | null;
 };
 
 function normalizeMimeType(mimeType?: string | null) {
@@ -487,6 +488,8 @@ export function getPreviewText(
   const content = source.content?.trim();
   if (content) return content;
 
+  if (("gif" in source && source.gif) || source.gif_provider) return "GIF";
+
   return attachmentOnlyPreview(source) || emptyFallback;
 }
 
@@ -521,6 +524,7 @@ export function buildPreviewMessage(
     attachment_name: attachment?.original_name ?? null,
     attachment_size: attachment?.file_size ?? null,
     attachment_mime_type: attachment?.mime_type ?? message.media_mime_type ?? null,
+    gif: message.gif ?? null,
   };
 
   logAttachmentDebug("preview.build", {
@@ -555,6 +559,7 @@ export function buildPreviewMessageFromSummary(
     attachment_name: summary.attachment_name ?? null,
     attachment_size: summary.attachment_size ?? null,
     attachment_mime_type: summary.attachment_mime_type ?? summary.media_type ?? null,
+    gif: summary.gif ?? null,
   };
 }
 

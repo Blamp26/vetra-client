@@ -88,6 +88,15 @@ export interface Message {
   sender?:                 User;
   reactions?:              MessageReactionGroup[];
   sticker?: StickerMessage | null;
+  gif?: GifMessage | null;
+}
+
+export interface GifMessage {
+  provider: "giphy";
+  provider_id: string;
+  width: number;
+  height: number;
+  title?: string | null;
 }
 
 export interface StickerMessage {
@@ -159,12 +168,13 @@ export interface RoomMessageSummary {
   sender_username?: string | null;
   inserted_at: string;
   preview: string;
-  message_type: "text" | "media" | "mixed";
+  message_type: "text" | "media" | "mixed" | "gif";
   media_type?: string | null;
   attachment_kind?: AttachmentKind | null;
   attachment_name?: string | null;
   attachment_size?: number | null;
   attachment_mime_type?: string | null;
+  gif?: GifMessage | null;
   unread_delta?: number;
   mention?: boolean;
 }
@@ -178,6 +188,7 @@ export interface PreviewMessage {
   sender_id: number;
   sender_public_id?: string | null;
   status: MessageStatus;
+  gif?: GifMessage | null;
   media_file_id?: string | null;
   media_file_ids?: string[] | null;
   media_mime_type?: string | null;
