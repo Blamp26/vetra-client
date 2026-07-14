@@ -242,7 +242,7 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("message-text-inline-metadata")).toHaveClass("float-none");
   });
 
-  it("renders adjacent custom emoji as inline artwork instead of Unicode emoji-only", () => {
+  it("renders adjacent custom emoji as a zero-gap 80px artwork row", () => {
     const document = {
       id: "emoji-1",
       pack_id: "pack-1",
@@ -260,7 +260,9 @@ describe("MessageItem bubble layout", () => {
       ],
     });
     expect(screen.queryByTestId("message-emoji-only")).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("custom-emoji-inline")).toHaveLength(2);
+    expect(screen.getByTestId("custom-emoji-multiple")).toBeInTheDocument();
+    expect(screen.getAllByTestId("custom-emoji-only-item")).toHaveLength(2);
+    expect(screen.getByTestId("custom-emoji-multiple-artwork")).toHaveStyle({ gap: "0px" });
     expect(screen.getAllByTestId("authenticated-image")).toHaveLength(2);
     expect(screen.queryByText("⚡️⚡️")).not.toBeInTheDocument();
   });

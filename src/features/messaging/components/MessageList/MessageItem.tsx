@@ -45,6 +45,7 @@ import {
 } from "../../utils/largeEmojiGeometry";
 import { StickerArtwork } from "../StickerPicker/StickerArtwork";
 import { isValidCustomEmojiDocument } from "@/shared/utils/textEntities";
+import { getCustomEmojiOnlyLayout, getPureCustomEmojiSequence } from "../../utils/customEmojiGeometry";
 import { GifMessageMedia } from "./GifMessageMedia";
 
 interface MessageItemProps {
@@ -344,27 +345,29 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
     Boolean(msg.forwarded_from);
   const shouldRenderMediaOnlyMetadata = isMediaOnly || isForwardedMediaOnly || isGif;
   const isTextOnly = hasText && !hasMedia;
-    const customEmojiEntity = (msg.entities ?? []).find((entity) => entity.type === "custom_emoji" && entity.custom_emoji);
-    const customEmoji = customEmojiEntity?.type === "custom_emoji" ? customEmojiEntity.custom_emoji : null;
+    const pureCustomEmojiSequence = getPureCustomEmojiSequence(msg.content || "", msg.entities);
+    const customEmojiEntity = pureCustomEmojiSequence.entities[0];
+    const customEmoji = customEmojiEntity?.custom_emoji ?? null;
     const validCustomEmojiEntities = (msg.entities ?? []).filter(
       (entity) => entity.type === "custom_emoji" && isValidCustomEmojiDocument(entity.custom_emoji),
     );
     const hasValidCustomEmojiEntities = validCustomEmojiEntities.length > 0;
-    const isCustomEmojiOnlyMessage = Boolean(
+    const isAnyCustomEmojiOnlyMessage = Boolean(
       isTextOnly &&
-      customEmojiEntity?.type === "custom_emoji" &&
-      customEmojiEntity.custom_emoji &&
       !msg.reply_to_id &&
       !msg.forwarded_from &&
-      (msg.content || "").slice(0, customEmojiEntity.offset).trim() === "" &&
-      (msg.content || "").slice(customEmojiEntity.offset + customEmojiEntity.length).trim() === "" &&
-      validCustomEmojiEntities.length === 1,
+      !msg.sticker &&
+      !msg.gif &&
+      pureCustomEmojiSequence.isPureCustomEmoji &&
+      pureCustomEmojiSequence.count >= 1 &&
+      pureCustomEmojiSequence.count <= 4,
     );
+    const isCustomEmojiOnlyMessage = isAnyCustomEmojiOnlyMessage && pureCustomEmojiSequence.count === 1;
+    const isMultiCustomEmojiOnlyMessage = isAnyCustomEmojiOnlyMessage && pureCustomEmojiSequence.count >= 2 && pureCustomEmojiSequence.count <= 4;
     const emojiOnlyGraphemes = isTextOnly
       ? getEmojiOnlyGraphemes(msg.content || "")
       : null;
     const isEmojiOnlyMessage = Boolean(
-      !isCustomEmojiOnlyMessage &&
       !hasValidCustomEmojiEntities &&
       emojiOnlyGraphemes &&
       emojiOnlyGraphemes.length >= 1 &&
@@ -373,9 +376,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       !msg.forwarded_from,
     );
     const hasInlineCustomEmoji = Boolean(
-      !isCustomEmojiOnlyMessage &&
+      !isAnyCustomEmojiOnlyMessage &&
       hasValidCustomEmojiEntities,
     );
+    const customEmojiOnlyLayout = isAnyCustomEmojiOnlyMessage
+      ? getCustomEmojiOnlyLayout(pureCustomEmojiSequence.count)
+      : null;
     const emojiOnlyLayout = isEmojiOnlyMessage
       ? getLargeEmojiLayout(emojiOnlyGraphemes?.length ?? 1)
       : null;
@@ -393,7 +399,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       "Unknown source";
   const shouldRenderTail =
       !isEmojiOnlyMessage &&
-      !isCustomEmojiOnlyMessage &&
+      !isAnyCustomEmojiOnlyMessage &&
       !isGroupedWithNext &&
       (isTextOnly ||
         isDocumentAttachment ||
@@ -771,7 +777,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const hasReactions = messageReactions.length > 0;
 
   const renderMetadata = (
-    variant: "inline" | "overlay" | "custom-emoji-overlay" = "inline",
+    variant: "inline" | "overlay" | "custom-emoji-overlay" | "custom-emoji-trailing" = "inline",
     inReactions = false,
   ) => {
     if (hasReactions && !inReactions) return null;
@@ -781,17 +787,17 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       className={cn(
         "inline-flex max-w-full items-center whitespace-nowrap",
         inReactions && "message-reactions__metadata",
-        (variant === "overlay" || variant === "custom-emoji-overlay")
-          ? variant === "custom-emoji-overlay"
-            ? "message-custom-emoji-metadata"
+        (variant === "overlay" || variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing")
+          ? variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing"
+            ? cn("message-custom-emoji-metadata", variant === "custom-emoji-trailing" && "message-custom-emoji-metadata--trailing")
             : overlayMetadataClassName
               : cn("gap-0 text-[12px] leading-[14px]", metadataClassName),
       )}
-      data-testid={variant === "custom-emoji-overlay" ? "message-custom-emoji-metadata" : "message-metadata"}
+      data-testid={variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing" ? "message-custom-emoji-metadata" : "message-metadata"}
     >
       <span
         className={cn(
-          (variant === "overlay" || variant === "custom-emoji-overlay")
+          (variant === "overlay" || variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing")
             ? "mr-[4px] text-[12px] leading-[12px] font-normal text-white"
                 : cn(
                     "mr-[4px] text-[12px] leading-[14px] font-normal",
@@ -817,19 +823,19 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       )}
           {isOwn &&
             !isRoom &&
-            (variant === "overlay" || variant === "custom-emoji-overlay" ? (
+            (variant === "overlay" || variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing" ? (
             <span
               className={cn(
-                  variant === "custom-emoji-overlay"
+                  variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing"
                     ? "box-border ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]"
                     : "box-border ml-[-2px] flex h-[16px] w-[16px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]",
                 isOwn ? "text-white opacity-100" : "text-current",
               )}
-                  data-testid={variant === "custom-emoji-overlay" ? "custom-emoji-status" : "message-media-only-status"}
+                  data-testid={variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing" ? "custom-emoji-status" : "message-media-only-status"}
             >
                 <StatusIcon
                   status={msg.status}
-                  className={variant === "custom-emoji-overlay" ? "ml-0 h-[19px] w-[19px] text-current opacity-100" : "ml-0 h-[16px] w-[16px] text-current opacity-100"}
+                  className={variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing" ? "ml-0 h-[19px] w-[19px] text-current opacity-100" : "ml-0 h-[16px] w-[16px] text-current opacity-100"}
                 />
             </span>
           ) : (
@@ -1442,8 +1448,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
             "relative box-border w-fit overflow-visible message-text-scale tracking-normal",
-            (isEmojiOnlyMessage || isCustomEmojiOnlyMessage) && "message-emoji-only-bubble",
-          isEmojiOnlyMessage || isCustomEmojiOnlyMessage
+            (isEmojiOnlyMessage || isAnyCustomEmojiOnlyMessage) && "message-emoji-only-bubble",
+                  isEmojiOnlyMessage || isAnyCustomEmojiOnlyMessage
             ? "min-w-0 p-0"
             : isSticker
               ? "min-w-0 rounded-none bg-transparent p-0"
@@ -1487,7 +1493,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           isSelected && "ring-1 ring-primary",
             isHighlighted &&
               "outline outline-2 outline-primary outline-offset-1",
-          isEmojiOnlyMessage || isCustomEmojiOnlyMessage
+          isEmojiOnlyMessage || isAnyCustomEmojiOnlyMessage
             ? "rounded-none"
             : isSticker
             ? "rounded-none"
@@ -1516,7 +1522,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                         isConsecutive && "rounded-tl-[4px]",
                         isGroupedWithNext && "rounded-bl-[4px]",
                 ),
-          isEmojiOnlyMessage || isCustomEmojiOnlyMessage
+          isEmojiOnlyMessage || isAnyCustomEmojiOnlyMessage
             ? "bg-transparent text-current"
             : isDocumentGroup || isAudioGroup
               ? isOwn
@@ -1552,7 +1558,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                 ? "var(--bubble-outgoing)"
                 : "var(--bubble-incoming)",
               backgroundColor:
-                isEmojiOnlyMessage || isCustomEmojiOnlyMessage || isSticker || isGif || isDocumentGroup || isAudioGroup
+                isEmojiOnlyMessage || isAnyCustomEmojiOnlyMessage || isSticker || isGif || isDocumentGroup || isAudioGroup
                   ? "transparent"
                   : "var(--message-surface-color)",
               ...(isSingleVisualMessage
@@ -1577,6 +1583,27 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
             <div className="relative inline-flex h-[112px] w-[112px] items-center justify-center overflow-hidden bg-transparent leading-[0]" data-testid="custom-emoji-standalone">
               <StickerArtwork sticker={customEmoji!} className="h-[112px] w-[112px] object-contain" />
               {renderMetadata("custom-emoji-overlay")}
+            </div>
+          ) : isMultiCustomEmojiOnlyMessage ? (
+            <div className="custom-emoji-only-group" data-testid="custom-emoji-multiple">
+              <div className="custom-emoji-only-group__artwork" data-testid="custom-emoji-multiple-artwork" style={{ gap: customEmojiOnlyLayout?.gap ?? 0 }}>
+                {pureCustomEmojiSequence.entities.map((entity) => (
+                  <span
+                    key={`custom-emoji-only-${entity.custom_emoji_id}-${entity.offset}`}
+                    className="custom-emoji-only-group__item"
+                    style={{
+                      width: `${customEmojiOnlyLayout?.itemSize ?? 20}px`,
+                      height: `${customEmojiOnlyLayout?.itemSize ?? 20}px`,
+                      flexBasis: `${customEmojiOnlyLayout?.itemSize ?? 20}px`,
+                    }}
+                    data-testid="custom-emoji-only-item"
+                    aria-label={entity.alt ?? entity.custom_emoji?.alt ?? "Custom emoji"}
+                  >
+                    <StickerArtwork sticker={entity.custom_emoji!} className="h-full w-full object-contain" />
+                  </span>
+                ))}
+              </div>
+              {renderMetadata("custom-emoji-trailing")}
             </div>
           ) : isEmojiOnlyMessage ? (
             <div

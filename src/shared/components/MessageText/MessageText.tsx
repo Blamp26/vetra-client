@@ -76,12 +76,12 @@ export function parseMessageText(text: string, explicitEntities: readonly Messag
   return entities.length ? entities : [{ kind: "text", text, start: 0, end: text.length }];
 }
 
-export function MessageText({ text, entities: explicitEntities = [], className = "" }: { text: string; entities?: readonly MessageTextEntity[]; className?: string }) {
+export function MessageText({ text, entities: explicitEntities = [], className = "", context = "message" }: { text: string; entities?: readonly MessageTextEntity[]; className?: string; context?: "message" | "composer" | "edit-preview" }) {
   return (
-    <span className={className} data-testid="message-rich-text">
+    <span className={`${className} ${context === "edit-preview" ? "whitespace-nowrap" : ""}`.trim()} data-testid="message-rich-text">
       {parseMessageText(text, explicitEntities).map((entity) =>
         entity.kind === "custom_emoji" ? (
-          <span key={`custom-emoji-${entity.start}-${entity.end}`} className="inline-flex h-5 w-5 flex-[0_0_20px] items-center justify-center align-text-bottom" aria-label={entity.alt} data-testid="custom-emoji-inline">
+          <span key={`custom-emoji-${entity.sticker.id}-${entity.start}-${entity.end}`} className="inline-flex h-5 w-5 flex-[0_0_20px] shrink-0 items-center justify-center align-text-bottom whitespace-nowrap" aria-label={entity.alt} data-testid="custom-emoji-inline">
             <StickerArtwork sticker={entity.sticker} className="h-5 w-5 object-contain" />
           </span>
         ) : entity.kind === "url" || entity.kind === "text_link" ? (

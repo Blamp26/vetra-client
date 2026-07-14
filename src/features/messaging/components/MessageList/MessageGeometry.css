@@ -102,3 +102,35 @@
   background: rgb(72 87 97 / 40%);
   color: white;
 }
+
+.message-custom-emoji-metadata--trailing {
+  position: static;
+  margin-left: 8px;
+  margin-bottom: 0;
+  flex: 0 0 auto;
+}
+
+.custom-emoji-only-group {
+  display: inline-flex;
+  width: fit-content;
+  align-items: flex-end;
+  background: transparent;
+}
+
+.custom-emoji-only-group__artwork {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0;
+  overflow: visible;
+  line-height: 0;
+}
+
+.custom-emoji-only-group__item {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  line-height: 0;
+}

@@ -107,6 +107,39 @@ describe("MessageInput attachments", () => {
     );
   });
 
+  it("renders hydrated custom emoji artwork in the compact edit preview", () => {
+    const document = (id: string) => ({
+      id,
+      pack_id: "pack-1",
+      media_file_id: `media-${id}`,
+      width: 512,
+      height: 512,
+      format: "webp" as const,
+      alt: "⚡️",
+    });
+    const state = {
+      ...makeState(),
+      editingMessage: {
+        id: 7,
+        content: "123⚡️⚡️",
+        entities: [
+          { type: "custom_emoji" as const, offset: 3, length: 2, custom_emoji_id: "emoji-1", custom_emoji: document("emoji-1") },
+          { type: "custom_emoji" as const, offset: 5, length: 2, custom_emoji_id: "emoji-2", custom_emoji: document("emoji-2") },
+        ],
+        chatType: "direct" as const,
+        targetId: 2,
+      },
+    };
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+
+    render(<MessageInput onSend={vi.fn()} />);
+
+    const preview = screen.getByTestId("message-rich-text");
+    expect(preview).toHaveClass("whitespace-nowrap");
+    expect(within(preview).getAllByTestId("custom-emoji-inline")).toHaveLength(2);
+    expect(preview).not.toHaveTextContent("⚡️⚡️");
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });

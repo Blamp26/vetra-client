@@ -4,6 +4,7 @@ import { useAppStore, type RootState } from "@/store";
 import { API_BASE_URL } from "@/api/base";
 import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
+import { MessageText } from "@/shared/components/MessageText/MessageText";
 import { withFallbackRef } from "@/shared/utils/refs";
 import { isSafeExternalUrl, normalizeExternalUrl } from "@/shared/utils/externalLinks";
 import { applyMessageTextEdit, entitiesIntersectingRange, normalizeTextLinkEntities, serializeMessageEntitiesForRequest, trimTextAndEntities, type MessageTextEntity } from "@/shared/utils/textEntities";
@@ -1389,11 +1390,11 @@ interface Props {
        )}
        {isEditing && ( 
          <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-2.5"> 
-           <div className="flex flex-col text-xs"> 
-             <span className="font-medium">Editing</span> 
-             <span className="text-muted-foreground truncate max-w-md"> 
-               <EmojiText text={editingMessage!.content} /> 
-             </span> 
+           <div className="min-w-0 flex-1 text-xs">
+             <span className="font-medium">Editing</span>
+             <div className="h-5 min-w-0 max-w-md overflow-hidden whitespace-nowrap text-muted-foreground">
+               <MessageText text={editingMessage!.content} entities={editingMessage!.entities} context="edit-preview" />
+             </div>
            </div>
           <button className="vt-button min-h-8 px-3 py-0 text-xs" onClick={cancelEditing}>Cancel</button> 
          </div> 
