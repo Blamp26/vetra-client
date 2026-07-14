@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
+import { useState, useRef, useEffect, useCallback, type KeyboardEvent, type ChangeEvent } from "react";
 import { FileText, ImagePlus, Mic, Paperclip, SendHorizonal, Square, X, Smile } from "lucide-react";
 import { useAppStore, type RootState } from "@/store"; 
 import { API_BASE_URL } from "@/api/base";
@@ -6,7 +6,8 @@ import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { withFallbackRef } from "@/shared/utils/refs";
 import { isSafeExternalUrl, normalizeExternalUrl } from "@/shared/utils/externalLinks";
-import { entitiesIntersectingRange, normalizeTextLinkEntities, transformTextLinkEntities, trimTextAndEntities, type TextLinkEntity } from "@/shared/utils/textEntities";
+import { entitiesIntersectingRange, normalizeTextLinkEntities, transformTextLinkEntities, trimTextAndEntities, type MessageTextEntity } from "@/shared/utils/textEntities";
+import type { StickerMessage } from "@/shared/types";
 import {
   ALLOWED_ATTACHMENT_LABEL,
   classifyPendingAttachment,
@@ -124,7 +125,7 @@ interface Props {
       content?: string | null;
       mediaFileId?: string | null;
       mediaFileIds?: string[] | null;
-      entities?: TextLinkEntity[];
+      entities?: MessageTextEntity[];
       __attachmentDebug?: AttachmentDebugMeta | null;
       stickerId?: string | null;
     },
@@ -138,6 +139,7 @@ interface Props {
   focusBlocked?: boolean;
   onOpenPicker?: () => void;
   pickerOpen?: boolean;
+  onRegisterCustomEmojiInserter?: (inserter: (emoji: StickerMessage) => void) => void;
  } 
  
  export function MessageInput({ 
@@ -150,9 +152,10 @@ interface Props {
  focusBlocked = false,
  onOpenPicker,
  pickerOpen = false,
+ onRegisterCustomEmojiInserter,
 }: Props) {
   const [content, setContent] = useState("");
-  const [entities, setEntities] = useState<TextLinkEntity[]>([]);
+  const [entities, setEntities] = useState<MessageTextEntity[]>([]);
   const [composerContextMenu, setComposerContextMenu] = useState<{ left: number; top: number; submenuOnLeft: boolean } | null>(null);
   const [formattingOpen, setFormattingOpen] = useState(false);
   const [activeMainMenuIndex, setActiveMainMenuIndex] = useState(6);
@@ -219,6 +222,30 @@ interface Props {
        setEntities([]);
      } 
    }, [isEditing, editingMessage]); 
+
+  const insertCustomEmoji = useCallback((emoji: StickerMessage) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const alt = emoji.alt || emoji.emoji_tags[0] || "�";
+    const nextContent = content.slice(0, start) + alt + content.slice(end);
+    const delta = alt.length - (end - start);
+    const nextEntities = entities
+      .filter((entity) => entity.offset + entity.length <= start || entity.offset >= end)
+      .map((entity) => ({ ...entity, offset: entity.offset >= end ? entity.offset + delta : entity.offset }))
+      .concat({ type: "custom_emoji" as const, offset: start, length: alt.length, custom_emoji_id: emoji.id, alt, custom_emoji: emoji });
+    textarea.value = nextContent;
+    textarea.setSelectionRange(start + alt.length, start + alt.length);
+    setContent(nextContent);
+    setEntities(normalizeTextLinkEntities(nextEntities, nextContent));
+    textarea.focus();
+  }, [content, entities]);
+
+  useEffect(() => {
+    onRegisterCustomEmojiInserter?.(insertCustomEmoji);
+    return () => onRegisterCustomEmojiInserter?.(() => undefined);
+  }, [insertCustomEmoji, onRegisterCustomEmojiInserter]);
  
   useEffect(() => { 
     if (editingMessage && activeChat) { 
@@ -401,7 +428,7 @@ interface Props {
     if (!selection) return;
     const existing = entities.find((entity) => entity.offset <= selection.start && entity.offset + entity.length >= selection.end);
     setCreateLinkDialog(selection);
-    setCreateLinkUrl(existing?.url ?? "");
+    setCreateLinkUrl(existing?.type === "text_link" ? existing.url : "");
     setCreateLinkInvalid(false);
     setComposerContextMenu(null);
     setFormattingOpen(false);

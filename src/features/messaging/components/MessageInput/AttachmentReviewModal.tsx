@@ -3,7 +3,7 @@ import { Play, Plus, X } from "lucide-react";
 
 import { cn } from "@/shared/utils/cn";
 import { ComposerTextDecoration } from "./ComposerTextDecoration";
-import type { TextLinkEntity } from "@/shared/utils/textEntities";
+import type { MessageTextEntity } from "@/shared/utils/textEntities";
 import {
   formatAttachmentSize,
   getAttachmentKindLabel,
@@ -22,7 +22,7 @@ interface AttachmentReviewModalProps {
   batchId?: string | null;
   attachments: PendingAttachment[];
   content: string;
-  entities: readonly TextLinkEntity[];
+  entities: readonly MessageTextEntity[];
   isSending: boolean;
   isUploading: boolean;
   uploadStatus: "idle" | "uploading" | "error";

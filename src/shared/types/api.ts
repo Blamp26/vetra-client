@@ -22,6 +22,17 @@ export interface MessageTextLinkEntity {
   url: string;
 }
 
+export interface CustomEmojiEntity {
+  type: "custom_emoji";
+  offset: number;
+  length: number;
+  custom_emoji_id: string;
+  alt?: string;
+  custom_emoji?: StickerMessage | null;
+}
+
+export type MessageTextEntity = MessageTextLinkEntity | CustomEmojiEntity;
+
 export type AttachmentKind = "photo" | "video" | "file" | "audio" | "voice";
 
 export interface Attachment {
@@ -61,7 +72,7 @@ export interface ForwardedAttribution {
 export interface Message {
   id:                      number;
   content:                 string | null;
-  entities?:               MessageTextLinkEntity[];
+  entities?:               MessageTextEntity[];
   sender_id:               number;
   sender_public_id?:       string | null;
   recipient_id:            number | null;
@@ -107,6 +118,7 @@ export interface StickerMessage {
   height: number;
   format: "png" | "webp" | "webm" | (string & {});
   emoji_tags: string[];
+  alt?: string | null;
   pack_title?: string | null;
 }
 
@@ -116,6 +128,7 @@ export interface StickerPack {
   slug: string;
   visibility: "private" | "unlisted" | "public";
   owner_id: number;
+  kind?: "sticker" | "custom_emoji";
   stickers: StickerMessage[];
 }
 
@@ -126,7 +139,7 @@ export interface StickerPack {
 export interface MessageEditedPayload {
   id:            number;
   content:       string;
-  entities?:     MessageTextLinkEntity[];
+  entities?:     MessageTextEntity[];
   edited_at:     string;
   recipient_id?: number | null;
   recipient_public_id?: string | null;
@@ -182,7 +195,7 @@ export interface RoomMessageSummary {
 export interface PreviewMessage {
   id: number;
   content: string | null;
-  entities?: MessageTextLinkEntity[];
+  entities?: MessageTextEntity[];
   preview?: string | null;
   inserted_at: string;
   sender_id: number;

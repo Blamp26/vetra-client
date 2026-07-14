@@ -1,38 +1,36 @@
-export interface TextLinkEntity {
-  type: "text_link";
-  offset: number;
-  length: number;
-  url: string;
-}
+import type { MessageTextLinkEntity, MessageTextEntity } from "@/shared/types";
 
-export type MessageTextEntity = TextLinkEntity;
+export type TextLinkEntity = MessageTextLinkEntity;
+export type { MessageTextEntity };
 
 export function utf16Length(text: string): number {
   return text.length;
 }
 
-export function normalizeTextLinkEntities(
+export function normalizeMessageEntities(
   entities: readonly MessageTextEntity[] | null | undefined,
   text: string,
-): TextLinkEntity[] {
+): MessageTextEntity[] {
   const max = utf16Length(text);
   return (entities ?? [])
     .filter((entity) =>
-      entity?.type === "text_link" &&
       Number.isInteger(entity.offset) && entity.offset >= 0 &&
       Number.isInteger(entity.length) && entity.length > 0 &&
       entity.offset + entity.length <= max &&
-      typeof entity.url === "string",
+      ((entity.type === "text_link" && typeof entity.url === "string") ||
+       (entity.type === "custom_emoji" && typeof entity.custom_emoji_id === "string")),
     )
     .map((entity) => ({ ...entity }))
     .sort((a, b) => a.offset - b.offset);
 }
 
+export const normalizeTextLinkEntities = normalizeMessageEntities;
+
 export function transformTextLinkEntities(
   entities: readonly MessageTextEntity[],
   oldText: string,
   newText: string,
-): TextLinkEntity[] {
+): MessageTextEntity[] {
   let start = 0;
   while (start < oldText.length && start < newText.length && oldText[start] === newText[start]) start += 1;
   let oldEnd = oldText.length;
@@ -62,7 +60,7 @@ export function transformTextLinkEntities(
 export function trimTextAndEntities(
   text: string,
   entities: readonly MessageTextEntity[],
-): { text: string; entities: TextLinkEntity[] } {
+): { text: string; entities: MessageTextEntity[] } {
   const leading = text.length - text.trimStart().length;
   const trimmed = text.trim();
   const trailingEnd = leading + trimmed.length;
@@ -80,6 +78,6 @@ export function entitiesIntersectingRange(
   entities: readonly MessageTextEntity[],
   start: number,
   end: number,
-): TextLinkEntity[] {
+): MessageTextEntity[] {
   return entities.filter((entity) => entity.offset < end && entity.offset + entity.length > start).map((entity) => ({ ...entity }));
 }

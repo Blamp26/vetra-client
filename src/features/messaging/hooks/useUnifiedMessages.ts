@@ -7,6 +7,7 @@ import { useMessagePagination } from "@/shared/hooks/useMessagePagination";
 import { withFallbackRef } from "@/shared/utils/refs";
 import { buildPreviewMessage, getMessageAttachments } from "../utils/attachments";
 import { logAttachmentDebug, summarizeMessageMedia } from "../utils/attachmentDebug";
+import type { MessageTextEntity } from "@/shared/types";
 
 export type ChatContext =
   | { type: "direct"; partnerId: number; partnerRef?: string | number }
@@ -296,7 +297,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
         content?: string | null;
         mediaFileId?: string | null;
         mediaFileIds?: string[] | null;
-        entities?: import("@/shared/types").MessageTextLinkEntity[];
+        entities?: MessageTextEntity[];
         __attachmentDebug?: {
           batchId: string;
           sendUnitId?: string | null;

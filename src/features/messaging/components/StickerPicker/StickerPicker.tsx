@@ -68,15 +68,15 @@ function EditStickerPackDialog({ pack, onClose, onSaved }: { pack: StickerPack; 
   </div></div>;
 }
 
-export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, onSelectionHandled }: { onSend: (id: string) => Promise<void>; onSendGif?: (gif: VetraGif) => Promise<void>; onClose: () => void; selectionRequest?: StickerPackSelectionRequest | null; onSelectionHandled?: (revision: number) => void }) {
+export function StickerPicker({ onSend, onInsertCustomEmoji, onSendGif, onClose, selectionRequest, onSelectionHandled }: { onSend: (id: string) => Promise<void>; onInsertCustomEmoji?: (emoji: StickerMessage) => void; onSendGif?: (gif: VetraGif) => Promise<void>; onClose: () => void; selectionRequest?: StickerPackSelectionRequest | null; onSelectionHandled?: (revision: number) => void }) {
   const [packs, setPacks] = useState<StickerPack[]>([]);
-  const [activePackId, setActivePackId] = useState<string | null>(null);
+  const [activePackIds, setActivePackIds] = useState<Record<"sticker" | "custom_emoji", string | null>>({ sticker: null, custom_emoji: null });
   const [query, setQuery] = useState("");
   const [packDialogOpen, setPackDialogOpen] = useState(false);
   const [editPack, setEditPack] = useState<StickerPack | null>(null);
   const [studioPack, setStudioPack] = useState<StickerPack | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"stickers" | "gifs">("stickers");
+  const [activeTab, setActiveTab] = useState<"stickers" | "emoji" | "gifs">("stickers");
   const [gifQuery, setGifQuery] = useState("");
   const [gifCategory, setGifCategory] = useState("recent");
   const [gifResults, setGifResults] = useState<VetraGif[]>([]);
@@ -99,14 +99,16 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
 
   useEffect(() => {
     let cancelled = false;
-    stickersApi.list().then((loaded) => {
+    const kind = activeTab === "emoji" ? "custom_emoji" : "sticker";
+    if (activeTab === "gifs") return;
+    stickersApi.list(kind).then((loaded) => {
       if (cancelled) return;
       setPacks(loaded);
       const requested = selectionRequest?.packId;
       const next = requested && loaded.some((pack) => pack.id === requested) ? requested : loaded[0]?.id ?? null;
-      setActivePackId((previous) => {
-        if (requested && next === requested) return next;
-        return previous && loaded.some((pack) => pack.id === previous) ? previous : next;
+      setActivePackIds((previous) => {
+        const previousId = previous[kind];
+        return { ...previous, [kind]: requested && next === requested ? next : previousId && loaded.some((pack) => pack.id === previousId) ? previousId : next };
       });
       if (requested && next === requested) onSelectionHandled?.(selectionRequest!.revision);
     }).catch(() => {
@@ -115,7 +117,7 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
     return () => {
       cancelled = true;
     };
-  }, [onClose, onSelectionHandled, selectionRequest]);
+  }, [activeTab, onClose, onSelectionHandled, selectionRequest]);
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
@@ -134,15 +136,18 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
   }, [studioPack]);
 
   const refreshPacks = async (preferredId?: string) => {
-    const refreshed = await stickersApi.list();
+    const kind = activeTab === "emoji" ? "custom_emoji" : "sticker";
+    const refreshed = await stickersApi.list(kind);
     setPacks(refreshed);
-    setActivePackId((previous) => {
-      const candidate = preferredId ?? previous;
-      return candidate && refreshed.some((pack) => pack.id === candidate) ? candidate : refreshed[0]?.id ?? null;
+    setActivePackIds((previous) => {
+      const candidate = preferredId ?? previous[kind];
+      return { ...previous, [kind]: candidate && refreshed.some((pack) => pack.id === candidate) ? candidate : refreshed[0]?.id ?? null };
     });
     return refreshed;
   };
 
+  const currentKind = activeTab === "emoji" ? "custom_emoji" : "sticker";
+  const activePackId = activePackIds[currentKind];
   const currentPack = packs.find((pack) => pack.id === activePackId) ?? packs[0] ?? null;
   const currentPackIsOwned = Boolean(currentPack && currentUser && currentPack.owner_id === currentUser.id);
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -278,7 +283,9 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
   }, [activeTab]);
 
   const createPack = async (title: string, visibility: PackVisibility) => {
-    const created = await stickersApi.createPack(title, visibility);
+    const created = currentKind === "custom_emoji"
+      ? await stickersApi.createPack(title, visibility, currentKind)
+      : await stickersApi.createPack(title, visibility);
     if (!created?.id) throw new Error("Pack response missing pack id");
     await refreshPacks(created.id);
     setQuery("");
@@ -313,7 +320,7 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
       if (!session.mediaId) throw new Error("Upload response missing media_file_id");
     }
     if (!session.stickerId) {
-      const sticker = await stickersApi.add(session.packId!, { media_file_id: session.mediaId, width: prepared.width, height: prepared.height, format: prepared.format, emoji_tags: tags }) as unknown as StickerMessage;
+      const sticker = await stickersApi.add(session.packId!, { media_file_id: session.mediaId, width: prepared.width, height: prepared.height, format: prepared.format, emoji_tags: tags, ...(packs.find((pack) => pack.id === destination.packId)?.kind === "custom_emoji" ? { alt: tags[0] ?? "" } : {}) }) as unknown as StickerMessage;
       if (!sticker?.id) throw new Error("Sticker response missing sticker id");
       session.stickerId = sticker.id;
     }
@@ -328,9 +335,9 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
   );
 
   return <aside className="sticker-picker flex h-full w-[292px] shrink-0 flex-col border-l border-border bg-card" data-testid="sticker-picker">
-    <div className="flex h-[43px] border-b"><button className="w-1/3 text-sm text-muted-foreground" disabled>Emoji</button><button type="button" className={`relative w-1/3 text-sm ${activeTab === "stickers" ? "font-medium" : "text-muted-foreground"}`} onClick={() => setActiveTab("stickers")}>Stickers{activeTab === "stickers" && <span className="absolute bottom-0 left-1/2 h-[3px] w-[54px] -translate-x-1/2 rounded bg-primary" />}</button><button type="button" className={`relative w-1/3 text-sm ${activeTab === "gifs" ? "font-medium" : "text-muted-foreground"}`} onClick={() => setActiveTab("gifs")}>GIFs{activeTab === "gifs" && <span className="absolute bottom-0 left-1/2 h-[3px] w-[54px] -translate-x-1/2 rounded bg-primary" />}</button></div>
-    <div className="flex h-[53px] items-center gap-[6px] px-[14px]"><div className="flex h-[32px] w-[228px] items-center gap-2 rounded bg-muted px-2"><Search className="h-4 w-4" /><input aria-label={activeTab === "gifs" ? "Search GIFs" : "Search stickers"} placeholder={activeTab === "gifs" ? "Search GIFs" : undefined} className="min-w-0 flex-1 bg-transparent text-sm outline-none" value={activeTab === "gifs" ? gifQuery : query} onChange={(event) => activeTab === "gifs" ? setGifQuery(event.target.value) : setQuery(event.target.value)} />{activeTab === "gifs" && gifQuery && <button type="button" aria-label="Clear GIF search" onClick={() => { setGifQuery(""); setGifCategory("recent"); }}><X className="h-4 w-4" /></button>}</div>{activeTab === "stickers" && <button aria-label="Create sticker pack" title="Create sticker pack" className="flex h-8 w-8 items-center justify-center rounded hover:bg-muted" onClick={() => setPackDialogOpen(true)}><Plus className="h-[18px] w-[18px]" /></button>}</div>
-    {activeTab === "gifs" ? <><div className="px-3 pb-1 text-center text-[10px] font-medium text-muted-foreground">Powered by GIPHY</div><div ref={gifRootRef} className="min-h-0 flex-1 overflow-y-auto px-2 [scrollbar-gutter:stable]"><div className="relative w-full" style={{ height: gifMosaicLayout.height }}>{gifResults.map((gif, index) => { const layout = gifMosaicLayout.tiles[index]; return layout ? <ExternalGifTile key={gif.providerId} gif={gif} layout={layout} root={gifRootRef.current} onSend={async () => { if (onSendGif) { await onSendGif(gif); if (!gifQuery.trim() && gifCategory === "recent") await loadSavedGifs(); } }} /> : null; })}</div><div ref={gifSentinelRef} data-testid="gif-pagination-sentinel" aria-hidden="true" className="h-px w-full" />{gifLoading && <p className="p-4 text-center text-xs text-muted-foreground">Loading GIFs…</p>}{gifError && <p role="alert" className="p-4 text-center text-xs text-destructive">{gifError}</p>}{!gifLoading && !gifError && gifResults.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">{gifCategory === "recent" ? "No saved GIFs" : "No GIFs found"}</p>}</div><div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto border-t px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{[["recent", "Recent"], ["👍", "👍"], ["😘", "😘"], ["😍", "😍"], ["😡", "😡"], ["🎉", "🎉"], ["😂", "😂"], ["😮", "😮"], ["😢", "😢"]].map(([key, label]) => <button type="button" key={key} aria-label={label} className={`h-8 min-w-8 rounded px-1 text-base ${gifCategory === key ? "bg-primary/20" : "hover:bg-muted"}`} onClick={() => { setGifCategory(key); setGifQuery(""); }}>{key === "recent" ? <Clock className="mx-auto h-4 w-4" /> : label}</button>)}</div></> : error ? <div className="p-4 text-sm text-destructive">{error}</div> : <><div className="flex h-10 items-center px-3 text-xs font-medium"><span>{currentPack?.title ?? "Stickers"}</span>{currentPackIsOwned && currentPack && <button type="button" aria-label={`Edit ${currentPack.title}`} className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2" onClick={() => setEditPack(currentPack)}>edit</button>}</div><div ref={setStickerRoot} className="min-h-0 flex-1 overflow-y-auto px-[14px] py-2"><div className="grid grid-cols-4 gap-[6px]">{!normalizedQuery && currentPackIsOwned && <button type="button" aria-label={`Add sticker to ${currentPack?.title}`} title="Create sticker" className="flex h-[62px] w-[62px] items-center justify-center rounded bg-muted/60 hover:bg-muted focus-visible:outline focus-visible:outline-2" onClick={() => currentPack && setStudioPack(currentPack)}><Plus className="h-6 w-6" /></button>}{visibleStickers.map((sticker) => <button type="button" key={sticker.id} aria-label={`Sticker ${sticker.emoji_tags.join(" ")}`} className="flex h-[62px] w-[62px] items-center justify-center rounded hover:bg-muted focus-visible:outline focus-visible:outline-2" onClick={() => void onSend(sticker.id)}><StickerArtwork sticker={sticker} visibilityRoot={stickerRoot} className="h-full w-full object-contain" /></button>)}</div>{!visibleStickers.length && !(currentPackIsOwned && !normalizedQuery) && <p className="py-8 text-center text-sm text-muted-foreground">{normalizedQuery ? "No stickers found" : packs.length ? "No stickers in this pack" : "No sticker packs"}</p>}</div><div ref={setDockRoot} className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-t px-2">{packs.map((pack) => { const cover = pack.stickers[0]; return <button type="button" key={pack.id} aria-label={pack.title} className={`h-8 w-8 shrink-0 rounded p-0.5 ${pack.id === currentPack?.id ? "bg-primary/20" : ""}`} onClick={() => { setActivePackId(pack.id); setQuery(""); }}>{cover && <StickerArtwork sticker={cover} visibilityRoot={dockRoot} className="h-full w-full object-contain" />}</button>; })}</div></>}
+    <div className="flex h-[43px] border-b"><button type="button" className={`relative w-1/3 text-sm ${activeTab === "emoji" ? "font-medium" : "text-muted-foreground"}`} onClick={() => setActiveTab("emoji")}>Emoji{activeTab === "emoji" && <span className="absolute bottom-0 left-1/2 h-[3px] w-[54px] -translate-x-1/2 rounded bg-primary" />}</button><button type="button" className={`relative w-1/3 text-sm ${activeTab === "stickers" ? "font-medium" : "text-muted-foreground"}`} onClick={() => setActiveTab("stickers")}>Stickers{activeTab === "stickers" && <span className="absolute bottom-0 left-1/2 h-[3px] w-[54px] -translate-x-1/2 rounded bg-primary" />}</button><button type="button" className={`relative w-1/3 text-sm ${activeTab === "gifs" ? "font-medium" : "text-muted-foreground"}`} onClick={() => setActiveTab("gifs")}>GIFs{activeTab === "gifs" && <span className="absolute bottom-0 left-1/2 h-[3px] w-[54px] -translate-x-1/2 rounded bg-primary" />}</button></div>
+    <div className="flex h-[53px] items-center gap-[6px] px-[14px]"><div className="flex h-[32px] w-[228px] items-center gap-2 rounded bg-muted px-2"><Search className="h-4 w-4" /><input aria-label={activeTab === "gifs" ? "Search GIFs" : activeTab === "emoji" ? "Search custom emoji" : "Search stickers"} placeholder={activeTab === "gifs" ? "Search GIFs" : undefined} className="min-w-0 flex-1 bg-transparent text-sm outline-none" value={activeTab === "gifs" ? gifQuery : query} onChange={(event) => activeTab === "gifs" ? setGifQuery(event.target.value) : setQuery(event.target.value)} />{activeTab === "gifs" && gifQuery && <button type="button" aria-label="Clear GIF search" onClick={() => { setGifQuery(""); setGifCategory("recent"); }}><X className="h-4 w-4" /></button>}</div>{activeTab !== "gifs" && <button aria-label={`Create ${activeTab === "emoji" ? "custom emoji" : "sticker"} pack`} title={activeTab === "emoji" ? "Create custom emoji pack" : "Create sticker pack"} className="flex h-8 w-8 items-center justify-center rounded hover:bg-muted" onClick={() => setPackDialogOpen(true)}><Plus className="h-[18px] w-[18px]" /></button>}</div>
+    {activeTab === "gifs" ? <><div className="px-3 pb-1 text-center text-[10px] font-medium text-muted-foreground">Powered by GIPHY</div><div ref={gifRootRef} className="min-h-0 flex-1 overflow-y-auto px-2 [scrollbar-gutter:stable]"><div className="relative w-full" style={{ height: gifMosaicLayout.height }}>{gifResults.map((gif, index) => { const layout = gifMosaicLayout.tiles[index]; return layout ? <ExternalGifTile key={gif.providerId} gif={gif} layout={layout} root={gifRootRef.current} onSend={async () => { if (onSendGif) { await onSendGif(gif); if (!gifQuery.trim() && gifCategory === "recent") await loadSavedGifs(); } }} /> : null; })}</div><div ref={gifSentinelRef} data-testid="gif-pagination-sentinel" aria-hidden="true" className="h-px w-full" />{gifLoading && <p className="p-4 text-center text-xs text-muted-foreground">Loading GIFs…</p>}{gifError && <p role="alert" className="p-4 text-center text-xs text-destructive">{gifError}</p>}{!gifLoading && !gifError && gifResults.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">{gifCategory === "recent" ? "No saved GIFs" : "No GIFs found"}</p>}</div><div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto border-t px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{[["recent", "Recent"], ["👍", "👍"], ["😘", "😘"], ["😍", "😍"], ["😡", "😡"], ["🎉", "🎉"], ["😂", "😂"], ["😮", "😮"], ["😢", "😢"]].map(([key, label]) => <button type="button" key={key} aria-label={label} className={`h-8 min-w-8 rounded px-1 text-base ${gifCategory === key ? "bg-primary/20" : "hover:bg-muted"}`} onClick={() => { setGifCategory(key); setGifQuery(""); }}>{key === "recent" ? <Clock className="mx-auto h-4 w-4" /> : label}</button>)}</div></> : error ? <div className="p-4 text-sm text-destructive">{error}</div> : <><div className="flex h-10 items-center px-3 text-xs font-medium"><span>{currentPack?.title ?? (activeTab === "emoji" ? "Custom emoji" : "Stickers")}</span>{currentPackIsOwned && currentPack && <button type="button" aria-label={`Edit ${currentPack.title}`} className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2" onClick={() => setEditPack(currentPack)}>edit</button>}</div><div ref={setStickerRoot} className="min-h-0 flex-1 overflow-y-auto px-[14px] py-2"><div className="grid grid-cols-4 gap-[6px]">{!normalizedQuery && currentPackIsOwned && <button type="button" aria-label={`Add ${activeTab === "emoji" ? "custom emoji" : "sticker"} to ${currentPack?.title}`} title="Create item" className="flex h-[62px] w-[62px] items-center justify-center rounded bg-muted/60 hover:bg-muted focus-visible:outline focus-visible:outline-2" onClick={() => currentPack && setStudioPack(currentPack)}><Plus className="h-6 w-6" /></button>}{visibleStickers.map((sticker) => <button type="button" key={sticker.id} aria-label={`${activeTab === "emoji" ? "Custom emoji" : "Sticker"} ${sticker.emoji_tags.join(" ")}`} className="flex h-[62px] w-[62px] items-center justify-center rounded hover:bg-muted focus-visible:outline focus-visible:outline-2" onClick={() => activeTab === "emoji" ? onInsertCustomEmoji?.(sticker) : void onSend(sticker.id)}><StickerArtwork sticker={sticker} visibilityRoot={stickerRoot} className="h-full w-full object-contain" /></button>)}</div>{!visibleStickers.length && !(currentPackIsOwned && !normalizedQuery) && <p className="py-8 text-center text-sm text-muted-foreground">{normalizedQuery ? activeTab === "emoji" ? "No custom emoji found" : "No stickers found" : packs.length ? (activeTab === "emoji" ? "No custom emoji in this pack" : "No stickers in this pack") : (activeTab === "emoji" ? "No custom emoji packs" : "No sticker packs")}</p>}</div><div ref={setDockRoot} className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-t px-2">{packs.map((pack) => { const cover = pack.stickers[0]; return <button type="button" key={pack.id} aria-label={pack.title} className={`h-8 w-8 shrink-0 rounded p-0.5 ${pack.id === currentPack?.id ? "bg-primary/20" : ""}`} onClick={() => { setActivePackIds((previous) => ({ ...previous, [currentKind]: pack.id })); setQuery(""); }}>{cover && <StickerArtwork sticker={cover} visibilityRoot={dockRoot} className="h-full w-full object-contain" />}</button>; })}</div></>}
     {packDialogOpen && <CreateStickerPackDialog onClose={() => setPackDialogOpen(false)} onCreated={createPack} />}{editPack && <EditStickerPackDialog pack={editPack} onClose={() => setEditPack(null)} onSaved={updatePack} />}{studioPack && <StickerStudio pack={studioPack} onClose={() => setStudioPack(null)} onSave={saveSticker} />}
   </aside>;
 }

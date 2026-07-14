@@ -10,7 +10,7 @@ import { MessageInput } from "../MessageInput/MessageInput";
 import { MessageSearch } from "../MessageSearch/MessageSearch";
 import { StickerPicker } from "../StickerPicker/StickerPicker";
 import { StickerPackPreviewDialog, type StickerPackSelectionRequest } from "../StickerPicker/StickerPackPreviewDialog";
-import type { ActiveChat, User } from "@/shared/types";
+import type { ActiveChat, StickerMessage, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { CallButton } from "@/features/calling/components/CallButton";
 import { ActiveCallDock } from "@/features/calling/components/ActiveCallDock";
@@ -90,6 +90,7 @@ export function ChatWindow({ activeChat, call }: Props) {
   const [pickerSelectionRequest, setPickerSelectionRequest] = useState<StickerPackSelectionRequest | null>(null);
   const stickerRequestRevision = useRef(0);
   const stickerTriggerRef = useRef<HTMLElement | null>(null);
+  const customEmojiInserterRef = useRef<(emoji: StickerMessage) => void>(() => undefined);
   const activeChatType = activeChat.type;
   const activePartnerId =
     activeChat.type === "direct" ? activeChat.partnerId : null;
@@ -452,6 +453,7 @@ export function ChatWindow({ activeChat, call }: Props) {
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
         focusBlocked={isSearchOpen}
+        onRegisterCustomEmojiInserter={(inserter) => { customEmojiInserterRef.current = inserter; }}
       />
 
       {isSearchOpen && (
@@ -463,7 +465,7 @@ export function ChatWindow({ activeChat, call }: Props) {
         />
       )}
       </div>
-      {pickerOpen && <StickerPicker selectionRequest={pickerSelectionRequest} onSelectionHandled={handleSelectionHandled} onClose={() => setPickerOpen(false)} onSend={async (stickerId) => { await sendMessage({ stickerId }); }} onSendGif={async (gif) => { await sendMessage({ gif: { provider: "giphy", provider_id: gif.providerId, width: gif.width, height: gif.height, title: gif.title } }); }} />}
+      {pickerOpen && <StickerPicker selectionRequest={pickerSelectionRequest} onSelectionHandled={handleSelectionHandled} onClose={() => setPickerOpen(false)} onInsertCustomEmoji={(emoji) => customEmojiInserterRef.current(emoji)} onSend={async (stickerId) => { await sendMessage({ stickerId }); }} onSendGif={async (gif) => { await sendMessage({ gif: { provider: "giphy", provider_id: gif.providerId, width: gif.width, height: gif.height, title: gif.title } }); }} />}
       {stickerPreview && <StickerPackPreviewDialog request={stickerPreview} onClose={closeStickerPreview} onOpenPack={openStickerPack} />}
     </div>
   );

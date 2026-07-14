@@ -10,7 +10,7 @@ import type {
   ReactionUpdatedPayload,
   RoomMessageSummary,
   ResourceRef,
-  MessageTextLinkEntity,
+  MessageTextEntity,
 } from "@/shared/types";
 import { callSignalingService } from "@/features/calling/services/callSignalingService";
 import {
@@ -103,7 +103,7 @@ export type ChannelCreatedHandler = (payload: {
 
 export type OutgoingMessagePayload = {
   content?: string | null;
-  entities?: MessageTextLinkEntity[];
+  entities?: MessageTextEntity[];
   mediaFileId?: string | null;
   mediaFileIds?: string[] | null;
   replyToId?: number | null;
@@ -188,7 +188,7 @@ export interface SocketManager {
     recipientRef: ResourceRef,
     messageId: number,
     content: string,
-    entities?: MessageTextLinkEntity[],
+    entities?: MessageTextEntity[],
   ) => Promise<MessageEditedPayload>;
   deleteMessage: (
     recipientRef: ResourceRef,
@@ -225,7 +225,7 @@ export interface SocketManager {
     roomId: number,
     messageId: number,
     content: string,
-    entities?: MessageTextLinkEntity[],
+    entities?: MessageTextEntity[],
   ) => Promise<MessageEditedPayload>;
   deleteRoomMessage: (
     roomId: number,

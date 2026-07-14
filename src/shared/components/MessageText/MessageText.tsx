@@ -1,12 +1,14 @@
 import React from "react";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { openExternalUrl } from "@/shared/utils/externalLinks";
-import type { MessageTextLinkEntity } from "@/shared/types";
+import type { MessageTextEntity } from "@/shared/types";
 import { normalizeTextLinkEntities } from "@/shared/utils/textEntities";
+import { StickerArtwork } from "@/features/messaging/components/StickerPicker/StickerArtwork";
 
 export type TextEntity =
   | { kind: "text"; text: string; start: number; end: number }
-  | { kind: "url" | "text_link"; text: string; start: number; end: number; href?: string };
+  | { kind: "url" | "text_link"; text: string; start: number; end: number; href?: string }
+  | { kind: "custom_emoji"; text: string; start: number; end: number; alt: string; sticker: NonNullable<Extract<MessageTextEntity, { type: "custom_emoji" }>['custom_emoji']> };
 
 const URL_CANDIDATE = /https?:\/\/[^\s<>"']+/gi;
 const TRAILING_PUNCTUATION = /[.,!;:]+$/;
@@ -35,12 +37,10 @@ function trimUrlPunctuation(candidate: string): string {
   return value;
 }
 
-export function parseMessageText(text: string, explicitEntities: readonly MessageTextLinkEntity[] = []): TextEntity[] {
+export function parseMessageText(text: string, explicitEntities: readonly MessageTextEntity[] = []): TextEntity[] {
   const entities: TextEntity[] = [];
   let cursor = 0;
-  const claimed = normalizeTextLinkEntities(explicitEntities, text).filter((entity) => {
-      return isSafeTextLinkUrl(entity.url);
-  });
+  const claimed = normalizeTextLinkEntities(explicitEntities, text).filter((entity) => entity.type === "custom_emoji" || (entity.type === "text_link" && isSafeTextLinkUrl(entity.url)));
   const pushTextAndAutomaticUrls = (segment: string, segmentStart: number) => {
     for (const match of segment.matchAll(URL_CANDIDATE)) {
       const raw = match[0];
@@ -61,7 +61,13 @@ export function parseMessageText(text: string, explicitEntities: readonly Messag
   for (const entity of claimed) {
     if (entity.offset > cursor) pushTextAndAutomaticUrls(text.slice(cursor, entity.offset), cursor);
     if (cursor < entity.offset) entities.push({ kind: "text", text: text.slice(cursor, entity.offset), start: cursor, end: entity.offset });
-    entities.push({ kind: "text_link", text: text.slice(entity.offset, entity.offset + entity.length), href: entity.url, start: entity.offset, end: entity.offset + entity.length });
+    if (entity.type === "custom_emoji" && entity.custom_emoji) {
+      entities.push({ kind: "custom_emoji", text: text.slice(entity.offset, entity.offset + entity.length), alt: entity.alt ?? text.slice(entity.offset, entity.offset + entity.length), sticker: entity.custom_emoji, start: entity.offset, end: entity.offset + entity.length });
+    } else if (entity.type === "text_link") {
+      entities.push({ kind: "text_link", text: text.slice(entity.offset, entity.offset + entity.length), href: entity.url, start: entity.offset, end: entity.offset + entity.length });
+    } else {
+      entities.push({ kind: "text", text: text.slice(entity.offset, entity.offset + entity.length), start: entity.offset, end: entity.offset + entity.length });
+    }
     cursor = entity.offset + entity.length;
   }
   pushTextAndAutomaticUrls(text.slice(cursor), cursor);
@@ -70,11 +76,15 @@ export function parseMessageText(text: string, explicitEntities: readonly Messag
   return entities.length ? entities : [{ kind: "text", text, start: 0, end: text.length }];
 }
 
-export function MessageText({ text, entities: explicitEntities = [], className = "" }: { text: string; entities?: readonly MessageTextLinkEntity[]; className?: string }) {
+export function MessageText({ text, entities: explicitEntities = [], className = "" }: { text: string; entities?: readonly MessageTextEntity[]; className?: string }) {
   return (
     <span className={className} data-testid="message-rich-text">
       {parseMessageText(text, explicitEntities).map((entity) =>
-        entity.kind === "url" || entity.kind === "text_link" ? (
+        entity.kind === "custom_emoji" ? (
+          <span key={`custom-emoji-${entity.start}-${entity.end}`} className="inline-flex h-5 w-5 flex-[0_0_20px] items-center justify-center align-text-bottom" aria-label={entity.alt} data-testid="custom-emoji-inline">
+            <StickerArtwork sticker={entity.sticker} className="h-5 w-5 object-contain" />
+          </span>
+        ) : entity.kind === "url" || entity.kind === "text_link" ? (
           <a
             key={`${entity.kind}-${entity.start}-${entity.end}`}
             href={entity.href ?? entity.text}

@@ -353,6 +353,19 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       !msg.reply_to_id &&
       !msg.forwarded_from,
     );
+    const customEmojiEntity = (msg.entities ?? []).find((entity) => entity.type === "custom_emoji" && entity.custom_emoji);
+    const customEmoji = customEmojiEntity?.type === "custom_emoji" ? customEmojiEntity.custom_emoji : null;
+    const isCustomEmojiOnlyMessage = Boolean(
+      isTextOnly &&
+      !isEmojiOnlyMessage &&
+      customEmojiEntity?.type === "custom_emoji" &&
+      customEmojiEntity.custom_emoji &&
+      !msg.reply_to_id &&
+      !msg.forwarded_from &&
+      (msg.content || "").slice(0, customEmojiEntity.offset).trim() === "" &&
+      (msg.content || "").slice(customEmojiEntity.offset + customEmojiEntity.length).trim() === "" &&
+      (msg.entities ?? []).filter((entity) => entity.type === "custom_emoji" && entity.custom_emoji).length === 1,
+    );
     const emojiOnlyLayout = isEmojiOnlyMessage
       ? getLargeEmojiLayout(emojiOnlyGraphemes?.length ?? 1)
       : null;
@@ -370,6 +383,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       "Unknown source";
   const shouldRenderTail =
       !isEmojiOnlyMessage &&
+      !isCustomEmojiOnlyMessage &&
       !isGroupedWithNext &&
       (isTextOnly ||
         isDocumentAttachment ||
@@ -1413,8 +1427,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
             "relative box-border w-fit overflow-visible message-text-scale tracking-normal",
-            isEmojiOnlyMessage && "message-emoji-only-bubble",
-          isEmojiOnlyMessage
+            (isEmojiOnlyMessage || isCustomEmojiOnlyMessage) && "message-emoji-only-bubble",
+          isEmojiOnlyMessage || isCustomEmojiOnlyMessage
             ? "min-w-0 p-0"
             : isSticker
               ? "min-w-0 rounded-none bg-transparent p-0"
@@ -1522,7 +1536,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                 ? "var(--bubble-outgoing)"
                 : "var(--bubble-incoming)",
               backgroundColor:
-                isEmojiOnlyMessage || isSticker || isGif || isDocumentGroup || isAudioGroup
+                isEmojiOnlyMessage || isCustomEmojiOnlyMessage || isSticker || isGif || isDocumentGroup || isAudioGroup
                   ? "transparent"
                   : "var(--message-surface-color)",
               ...(isSingleVisualMessage
@@ -1543,7 +1557,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
             {authorName}
           </div>
         )}
-          {isEmojiOnlyMessage ? (
+          {isCustomEmojiOnlyMessage ? (
+            <div className="relative inline-flex h-[112px] w-[112px] items-center justify-center overflow-hidden bg-transparent leading-[0]" data-testid="custom-emoji-standalone">
+              <StickerArtwork sticker={customEmoji!} className="h-[112px] w-[112px] object-contain" />
+              <div className="pointer-events-none absolute bottom-[4px] right-[4px] z-[1]">{renderMetadata("overlay")}</div>
+            </div>
+          ) : isEmojiOnlyMessage ? (
             <div
               className={cn(
                 "message-emoji-only",
