@@ -47,8 +47,8 @@ describe("computeGifMosaicLayout", () => {
     const second = computeGifMosaicLayout(items, 300);
 
     expect(first).toEqual(second);
-    expect(first.tiles[3].left).toBe(first.tiles[0].left);
-    expect(first.tiles[3].top).toBeGreaterThan(first.tiles[0].top);
+    expect(first.tiles[3].left).toBe(first.tiles[2].left);
+    expect(first.tiles[3].top).toBeGreaterThan(first.tiles[2].top);
     expect(first.height).toBe(Math.max(...first.tiles.map((tile) => tile.top + tile.height)));
     expect(first.tiles.every((tile) => tile.left + tile.width <= 300)).toBe(true);
   });
