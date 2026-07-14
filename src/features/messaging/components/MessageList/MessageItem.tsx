@@ -342,7 +342,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
     (!msg.content || msg.content.trim().length === 0) &&
     !msg.reply_to_id &&
     Boolean(msg.forwarded_from);
-  const shouldRenderMediaOnlyMetadata = isMediaOnly || isForwardedMediaOnly;
+  const shouldRenderMediaOnlyMetadata = isMediaOnly || isForwardedMediaOnly || isGif;
   const isTextOnly = hasText && !hasMedia;
     const emojiOnlyGraphemes = isTextOnly
       ? getEmojiOnlyGraphemes(msg.content || "")
@@ -1342,7 +1342,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
 
   const renderContent = () => {
     if (msg.gif) {
-      return <div className="relative flex flex-col items-end" data-testid="gif-message"><GifMessageMedia gif={msg.gif} selectionMode={selectionMode} />{renderMetadata("overlay")}</div>;
+      return <div className="relative" data-testid="gif-message"><GifMessageMedia gif={msg.gif} selectionMode={selectionMode} /></div>;
     }
     if (msg.sticker) {
       const sticker = msg.sticker;
@@ -1523,7 +1523,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                 ? "var(--bubble-outgoing)"
                 : "var(--bubble-incoming)",
               backgroundColor:
-                isEmojiOnlyMessage || isSticker || isDocumentGroup || isAudioGroup
+                isEmojiOnlyMessage || isSticker || isGif || isDocumentGroup || isAudioGroup
                   ? "transparent"
                   : "var(--message-surface-color)",
               ...(isSingleVisualMessage

@@ -108,4 +108,14 @@ describe("ExternalGifTile media lifecycle", () => {
     expect(tile.querySelector("video")).toBe(firstVideo);
     expect(analyticsMock).toHaveBeenCalledTimes(1);
   });
+
+  it("renders the message WebP fallback when a preview rendition is absent", async () => {
+    const root = document.createElement("div");
+    rectangles.set(root, new DOMRect(0, 0, 292, 300));
+    const fallbackGif = { ...gif, previewMp4Url: null, messageMp4Url: null, previewWebpUrl: null, messageWebpUrl: "https://media.giphy.com/cat.webp" };
+    const { container } = render(<ExternalGifTile gif={fallbackGif} layout={{ providerId: gif.providerId, left: 0, top: 0, width: 96, height: 100 }} root={root} />, { container: root });
+
+    await waitFor(() => expect(container.querySelector("img")).toBeTruthy());
+    expect(container.querySelector("img")).toHaveAttribute("src", fallbackGif.messageWebpUrl);
+  });
 });

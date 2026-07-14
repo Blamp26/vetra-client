@@ -14,6 +14,7 @@ export function ExternalGifTile({ gif, layout, root, onSend, onLoaded, onClick }
   const loadedRef = useRef(false);
   const playRequestRef = useRef(0);
   const videoUrl = gif.previewMp4Url || gif.messageMp4Url;
+  const fallbackImageUrl = gif.previewWebpUrl || gif.messageWebpUrl || gif.previewStillUrl;
   const sourceKey = `${gif.providerId}:${videoUrl || gif.previewWebpUrl || gif.previewStillUrl || "fallback"}`;
 
   useEffect(() => {
@@ -120,7 +121,7 @@ export function ExternalGifTile({ gif, layout, root, onSend, onLoaded, onClick }
   };
 
   return <button ref={containerRef} type="button" aria-label={gif.title || "GIF"} disabled={busy} title={sendError || undefined} onClick={() => void handleClick()} className="absolute overflow-hidden rounded bg-muted/40 text-left [contain:layout_paint] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: layout.left, top: layout.top, width: layout.width, height: layout.height }}>
-    {shouldLoad && videoUrl ? <video key={sourceKey} ref={videoRef} src={videoUrl} poster={gif.previewStillUrl || undefined} muted loop playsInline preload="metadata" className="h-full w-full object-cover" aria-label={gif.title || "GIF"} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onError={() => setIsPlaying(false)} /> : shouldLoad && (gif.previewWebpUrl || gif.previewStillUrl) ? <img src={gif.previewWebpUrl || gif.previewStillUrl || undefined} alt={gif.title || "GIF"} className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-xs text-muted-foreground">GIF</span>}
+    {shouldLoad && videoUrl ? <video key={sourceKey} ref={videoRef} src={videoUrl} poster={gif.previewStillUrl || undefined} muted loop playsInline preload="metadata" className="h-full w-full object-cover" aria-label={gif.title || "GIF"} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onError={() => setIsPlaying(false)} /> : shouldLoad && fallbackImageUrl ? <img src={fallbackImageUrl} alt={gif.title || "GIF"} className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-xs text-muted-foreground">GIF</span>}
     {!isPlaying && shouldLoad && <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/45 px-1 text-[10px] text-white">GIF</span>}
   </button>;
 }

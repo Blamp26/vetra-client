@@ -48,7 +48,7 @@ function normalize(data: any): VetraGif | null {
   const images = data?.images;
   if (!id || !images) return null;
   const rendition = (name: string) => images[name] ?? null;
-  const grid = rendition("fixed_width_small") ?? rendition("fixed_width");
+  const grid = rendition("fixed_width_small") ?? rendition("fixed_width") ?? rendition("original");
   const message = rendition("original") ?? rendition("fixed_width");
   const width = Number(message?.width ?? grid?.width);
   const height = Number(message?.height ?? grid?.height);
@@ -60,8 +60,8 @@ function normalize(data: any): VetraGif | null {
     width,
     height,
     previewMp4Url: grid?.mp4 ?? rendition("fixed_width")?.mp4 ?? null,
-    previewWebpUrl: grid?.webp ?? rendition("fixed_width")?.webp ?? null,
-    previewStillUrl: grid?.url ?? rendition("fixed_width").url ?? null,
+    previewWebpUrl: grid?.webp ?? rendition("fixed_width")?.webp ?? rendition("original")?.webp ?? null,
+    previewStillUrl: grid?.url ?? rendition("fixed_width")?.url ?? rendition("original")?.url ?? null,
     messageMp4Url: message?.mp4 ?? null,
     messageWebpUrl: message?.webp ?? null,
     analytics: {

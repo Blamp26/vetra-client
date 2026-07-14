@@ -195,6 +195,10 @@ describe("MessageItem bubble layout", () => {
     expect(screen.getByTestId("gif-message-media")).toBeInTheDocument();
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
     expect(screen.getByTestId("message-metadata")).toHaveClass("h-[18px]");
+    expect(screen.getByTestId("message-media-only-overlay")).toContainElement(
+      screen.getByTestId("message-metadata"),
+    );
+    expect(screen.queryByTestId("message-text-inline-metadata")).not.toBeInTheDocument();
   });
 
   it("keeps GIF metadata in the established reaction row when reactions exist", () => {
