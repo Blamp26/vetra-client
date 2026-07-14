@@ -44,7 +44,7 @@ describe("StickerStudio locked destination", () => {
     selectImage();
     fireEvent.click(screen.getByRole("button", { name: "Save and send" }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({ name: "sticker.webp", type: "image/webp" }), { kind: "existing", packId: "owned" }, ["😀"]);
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ kind: "static", format: "webp", uploadKind: "photo", file: expect.objectContaining({ name: "sticker.webp", type: "image/webp" }) }), { kind: "existing", packId: "owned" }, ["😀"]);
   });
 
   it("keeps the Studio open and preserves input after a failed save", async () => {

@@ -14,6 +14,7 @@ export interface AuthenticatedVideoDiagnostics {
 interface AuthenticatedVideoProps extends React.VideoHTMLAttributes<HTMLVideoElement> {
   src: string;
   onMediaDiagnostics?: (diagnostics: AuthenticatedVideoDiagnostics) => void;
+  animatedSticker?: boolean;
 }
 
 const MEDIA_PRELOAD_MARGIN = 200;
@@ -35,6 +36,7 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
   preload = "metadata",
   muted = true,
   playsInline = true,
+  animatedSticker = false,
   ...props
 }) => {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
@@ -44,6 +46,7 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const authToken = useAppStore((s) => s.authToken);
   const { root: visibilityRoot, revision: visibilityRevision } = useMediaVisibility();
+  const [playbackVisible, setPlaybackVisible] = useState(true);
 
   const notifyDiagnostics = React.useCallback((video: HTMLVideoElement) => {
     const diagnostics = {
@@ -91,6 +94,17 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
 
     return () => observer.disconnect();
   }, [error, isInView, objectUrl, visibilityRevision, visibilityRoot]);
+
+  useEffect(() => {
+    if (!animatedSticker || !objectUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const update = (visible: boolean) => { setPlaybackVisible(visible); if (reduced) return; if (visible && video.paused) void video.play().catch(() => undefined); else if (!visible && !video.paused) video.pause(); };
+    if (typeof IntersectionObserver === "undefined") { update(true); return; }
+    const observer = new IntersectionObserver(entries => update(Boolean(entries[0]?.isIntersecting)), { root: visibilityRoot, rootMargin: "0px" });
+    observer.observe(video); return () => observer.disconnect();
+  }, [animatedSticker, objectUrl, visibilityRoot, visibilityRevision]);
 
   useEffect(() => {
     if (!isInView || !src) return;
@@ -182,6 +196,7 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
       muted={muted}
       playsInline={playsInline}
       onLoadedMetadata={handleLoadedMetadata}
+      autoPlay={animatedSticker && playbackVisible && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches}
       style={{ display: "block", width: "100%", height: "100%", ...props.style }}
     />
   );

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { stickersApi } from "@/api/stickers";
-import { API_BASE_URL } from "@/api/base";
-import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
+import { StickerArtwork } from "./StickerArtwork";
 import { useAppStore } from "@/store";
 import type { StickerPack } from "@/shared/types";
 
@@ -97,7 +96,7 @@ export function StickerPackPreviewDialog({ request, onClose, onOpenPack }: Props
             <div className="grid grid-cols-5 gap-[7px]" data-testid="sticker-pack-preview-grid">
               {grid.map((sticker) => (
                 <div key={sticker.id} className={`flex h-[52px] w-[52px] items-center justify-center rounded-md p-1 ${sticker.id === request.stickerId ? "bg-primary/15 outline outline-2 outline-primary" : "hover:bg-muted"}`}>
-                  <AuthenticatedImage alt={sticker.emoji_tags.join(" ")} className="max-h-full max-w-full object-contain" src={`${API_BASE_URL}/media/${sticker.media_file_id}`} />
+                  <StickerArtwork sticker={sticker} className="max-h-full max-w-full object-contain" />
                 </div>
               ))}
             </div>

@@ -105,7 +105,7 @@ export interface StickerMessage {
   media_file_id: string;
   width: number;
   height: number;
-  format: string;
+  format: "png" | "webp" | "webm" | (string & {});
   emoji_tags: string[];
   pack_title?: string | null;
 }

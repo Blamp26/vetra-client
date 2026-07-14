@@ -4,7 +4,7 @@ import { stickersApi } from "@/api/stickers";
 import { API_BASE_URL, postFormData } from "@/api/base";
 import { useAppStore } from "@/store";
 import type { StickerMessage, StickerPack } from "@/shared/types";
-import { StickerStudio, type StickerDestination } from "./StickerStudio";
+import { StickerStudio, type PreparedSticker, type StickerDestination } from "./StickerStudio";
 import type { StickerPackSelectionRequest } from "./StickerPackPreviewDialog";
 import { AuthenticatedImage } from "@/shared/components/AuthenticatedImage";
 import { giphyApi, type VetraGif } from "@/api/giphy";
@@ -93,7 +93,7 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
   const gifViewRef = useRef({ activeTab, query: gifQuery, category: gifCategory });
   gifViewRef.current = { activeTab, query: gifQuery, category: gifCategory };
   const currentUser = useAppStore((state) => state.currentUser);
-  const saveSession = useRef<{ destinationKey: string; sourceFile?: File; tagsKey: string; packId?: string; mediaId?: string; stickerId?: string }>({ destinationKey: "", tagsKey: "" });
+  const saveSession = useRef<{ destinationKey: string; sourceFile?: File; tagsKey: string; packId?: string; mediaId?: string; stickerId?: string; prepared?: PreparedSticker }>({ destinationKey: "", tagsKey: "" });
 
   useEffect(() => {
     let cancelled = false;
@@ -291,26 +291,27 @@ export function StickerPicker({ onSend, onSendGif, onClose, selectionRequest, on
     setEditPack(null);
   };
 
-  const saveSticker = async (file: File, destination: StickerDestination, tags: string[]) => {
+  const saveSticker = async (prepared: PreparedSticker, destination: StickerDestination, tags: string[]) => {
+    const file = prepared.file;
     const destinationKey = `existing:${destination.packId}`;
     const tagsKey = tags.join(" ");
-    if (saveSession.current.destinationKey !== destinationKey) saveSession.current = { destinationKey, sourceFile: file, tagsKey, packId: destination.packId };
+    if (saveSession.current.destinationKey !== destinationKey) saveSession.current = { destinationKey, sourceFile: file, tagsKey, packId: destination.packId, prepared };
     else {
-      if (saveSession.current.sourceFile !== file) { saveSession.current.sourceFile = file; saveSession.current.mediaId = undefined; saveSession.current.stickerId = undefined; }
+      const preparedChanged = saveSession.current.prepared?.kind !== prepared.kind || saveSession.current.prepared?.format !== prepared.format || saveSession.current.prepared?.width !== prepared.width || saveSession.current.prepared?.height !== prepared.height;
+      if (saveSession.current.sourceFile !== file || preparedChanged) { saveSession.current.sourceFile = file; saveSession.current.prepared = prepared; saveSession.current.mediaId = undefined; saveSession.current.stickerId = undefined; }
       if (saveSession.current.tagsKey !== tagsKey) { saveSession.current.tagsKey = tagsKey; saveSession.current.stickerId = undefined; }
     }
     const session = saveSession.current;
     if (!session.mediaId) {
       const form = new FormData();
       form.append("file", file);
-      form.append("kind", "photo");
+      form.append("kind", prepared.uploadKind);
       const response = await postFormData<{ media_file_id?: string; data?: { media_file_id?: string } }>("/media", form);
       session.mediaId = response.data?.media_file_id ?? response.media_file_id;
       if (!session.mediaId) throw new Error("Upload response missing media_file_id");
     }
     if (!session.stickerId) {
-      const format = file.type === "image/webp" ? "webp" : "png";
-      const sticker = await stickersApi.add(session.packId!, { media_file_id: session.mediaId, width: 512, height: 512, format, emoji_tags: tags }) as unknown as StickerMessage;
+      const sticker = await stickersApi.add(session.packId!, { media_file_id: session.mediaId, width: prepared.width, height: prepared.height, format: prepared.format, emoji_tags: tags }) as unknown as StickerMessage;
       if (!sticker?.id) throw new Error("Sticker response missing sticker id");
       session.stickerId = sticker.id;
     }
