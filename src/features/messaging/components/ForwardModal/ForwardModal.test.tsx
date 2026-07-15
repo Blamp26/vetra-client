@@ -71,15 +71,39 @@ describe("ForwardModal", () => {
 
   it("uses a named dialog and focuses its search field", () => {
     render(<ForwardModal onForward={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByRole("dialog", { name: "Forward" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Forward" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).not.toHaveClass("bg-card");
+    expect(dialog).not.toHaveClass("border");
+    expect(screen.getByRole("textbox", { name: "Search forwarding destinations" })).not.toHaveClass("bg-background");
+    expect(screen.getByRole("textbox", { name: "Search forwarding destinations" })).not.toHaveClass("border");
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Search forwarding destinations" }));
     expect(screen.getByRole("button", { name: "Close forward dialog" })).toBeInTheDocument();
   });
 
+  it("uses direct and group destination labels without decorative overlays", () => {
+    const { container } = render(<ForwardModal onForward={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getAllByText("Direct message")).toHaveLength(2);
+    expect(screen.getByText("Group")).toBeInTheDocument();
+    expect(screen.queryByText("DM")).not.toBeInTheDocument();
+    expect(screen.queryByText("Room")).not.toBeInTheDocument();
+    expect(container.querySelector(".lucide-user")).not.toBeInTheDocument();
+    expect(container.querySelector(".lucide-send")).not.toBeInTheDocument();
+  });
+
+  it("exposes no results as a polite status", () => {
+    render(<ForwardModal onForward={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search forwarding destinations" }), {
+      target: { value: "missing" },
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("No results");
+  });
+
   it("allows only one pending destination submission and keeps the modal on failure", async () => {
     let rejectForward!: (reason: Error) => void;
+    const onCancel = vi.fn();
     const onForward = vi.fn(() => new Promise<void>((_, reject) => { rejectForward = reject; }));
-    render(<ForwardModal onForward={onForward} onCancel={vi.fn()} />);
+    render(<ForwardModal onForward={onForward} onCancel={onCancel} />);
 
     const button = screen.getByTestId("forward-destination-direct-2");
     fireEvent.click(button);
@@ -91,6 +115,9 @@ describe("ForwardModal", () => {
     );
     expect(button).toHaveAttribute("data-pending", "true");
     expect(screen.getByTestId("forward-destination-direct-1")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close forward dialog" })).toBeDisabled();
+    fireEvent.mouseDown(screen.getByTestId("dialog-backdrop"));
+    expect(onCancel).not.toHaveBeenCalled();
 
     rejectForward(new Error("forbidden"));
     expect(await screen.findByRole("alert")).toHaveTextContent("forbidden");

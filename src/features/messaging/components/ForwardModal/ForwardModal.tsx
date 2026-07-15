@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
-import { X, Search, Send, User } from "lucide-react";
+import { X, Search } from "lucide-react";
 import { Avatar } from "@/shared/components/Avatar/Avatar";
 import { sortConversationItems } from "../../utils/conversationOrdering";
 import { cn } from "@/shared/utils/cn";
@@ -88,12 +88,11 @@ export function ForwardModal({ onForward, onCancel }: Props) {
       labelledBy={titleId}
       initialFocusRef={searchInputRef}
       closeOnBackdrop={!pendingKey}
-      backdropClassName="absolute inset-0 bg-background/50"
-      className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden border border-border bg-card"
+      className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden"
     >
         <div className="flex h-[56px] shrink-0 items-center justify-between border-b border-border px-4">
           <h3 id={titleId} className="text-lg font-normal">Forward</h3>
-          <IconButton label="Close forward dialog" size="compact" tone="neutral" onClick={onCancel} disabled={Boolean(pendingKey)} className="p-1 text-muted-foreground hover:text-foreground">
+          <IconButton label="Close forward dialog" size="compact" onClick={onCancel} disabled={Boolean(pendingKey)}>
             <X className="h-5 w-5" />
           </IconButton>
         </div>
@@ -103,7 +102,7 @@ export function ForwardModal({ onForward, onCancel }: Props) {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <TextInput
               ref={searchInputRef}
-              className="h-9 w-full border border-border bg-background pl-10 pr-4 text-sm focus:border-primary"
+              className="h-9 w-full pl-10 pr-4"
               placeholder="Search..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -126,31 +125,27 @@ export function ForwardModal({ onForward, onCancel }: Props) {
                 type="button"
                 onClick={() => void handleTargetClick(target)}
                 disabled={Boolean(pendingKey)}
+                aria-busy={isPending}
                 className={cn(
-                  "group flex h-[62px] w-full items-center gap-[11px] border-b border-transparent px-[10px] text-left transition-colors",
+                  "group flex h-[62px] w-full items-center gap-[11px] px-[10px] text-left transition-colors",
                   isPending ? "bg-accent" : "hover:bg-accent",
                   pendingKey && !isPending && "cursor-not-allowed opacity-60",
                 )}
                 data-testid={`forward-destination-${key}`}
                 data-pending={isPending ? "true" : "false"}
               >
-                <div className="relative shrink-0">
-                  <Avatar name={target.name} src={target.avatar} size="small" />
-                  <div className="absolute -bottom-1 -right-1 bg-background p-0.5">
-                    {isPending ? <Send className="h-2.5 w-2.5 animate-pulse" /> : <User className="h-2 w-2" />}
-                  </div>
-                </div>
+                <Avatar name={target.name} src={target.avatar} size="small" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-normal">{target.name}</div>
-                  <div className="text-[10px] uppercase text-muted-foreground">
-                    {target.type === "direct" ? "DM" : "Room"}
+                  <div className="text-sm text-muted-foreground">
+                    {target.type === "direct" ? "Direct message" : "Group"}
                   </div>
                 </div>
               </button>
             );
           })}
           {visibleTargets.length === 0 && (
-            <div className="py-8 text-center text-xs text-muted-foreground">No results</div>
+            <div role="status" aria-live="polite" className="py-8 text-center text-xs text-muted-foreground">No results</div>
           )}
         </div>
     </Dialog>
