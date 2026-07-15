@@ -12,6 +12,8 @@ import { roomRef, serverRef } from "@/shared/utils/refs";
 import { EmptyPane } from "@/shared/components/EmptyPane";
 import { TextInput } from "@/shared/components/Field";
 import { Button } from "@/shared/components/Button";
+import { IconButton } from "@/shared/components/IconButton";
+import { Avatar } from "@/shared/components/Avatar";
 
 interface Props {
   serverId: number;
@@ -179,51 +181,52 @@ export function ChannelPanel({ serverId }: Props) {
 
   return (
     <>
-      <div className="w-[320px] bg-background border-r border-border flex-shrink-0 flex flex-col overflow-hidden h-full">
+      <div data-testid="channel-panel" className="w-full min-w-0 bg-background border-r border-border flex-shrink-0 flex flex-col overflow-hidden h-full">
         {/* Header */}
-        <div className="p-4 border-b border-border flex items-center justify-between">
+        <div className="p-3 border-b border-border flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="w-8 h-8 bg-primary text-primary-foreground text-xs font-normal inline-flex items-center justify-center shrink-0 border border-border">
-              {server?.name?.[0]?.toUpperCase() ?? "?"}
-            </span>
+            <Avatar name={server?.name ?? "Server"} size="small" />
             <span className="text-sm font-normal truncate text-foreground">
               {server?.name ?? "Server"}
             </span>
           </div>
           {server && (
-            <button
-              className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-accent"
+            <IconButton
+              size="compact"
+              label="Open server settings"
+              title="Open server settings"
               onClick={() => setShowSettings(true)}
-              title="Settings"
             >
               <Settings className="h-4 w-4" />
-            </button>
+            </IconButton>
           )}
         </div>
 
         {/* Section label + add button */}
-        <div className="flex items-center justify-between p-4 pb-1">
-          <span className="text-[10px] uppercase text-muted-foreground">Channels</span>
-          <button
-            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:bg-accent"
+        <div className="flex items-center justify-between px-3 py-2">
+          <h2 className="text-xs font-semibold text-muted-foreground">Channels</h2>
+          <IconButton
+            size="compact"
+            label="Create channel"
+            title="Create channel"
+            pressed={showCreate}
             onClick={() => { setShowCreate((v) => !v); setCreateError(null); setNewChannelName(""); }}
-            title="Create"
           >
             <Plus className="h-4 w-4" />
-          </button>
+          </IconButton>
         </div>
 
         {/* Inline create form */}
         {showCreate && (
-          <div className="p-4 border-b border-border flex-shrink-0">
+          <div className="px-3 pb-3 border-b border-border flex-shrink-0">
             {createError && (
-              <div id={createValidationError ? channelNameErrorId : undefined} role="alert" className="bg-destructive/10 border border-destructive/20 p-2 text-destructive text-[10px] mb-2">
+              <div id={createValidationError ? channelNameErrorId : undefined} role="alert" className="mb-2 text-xs text-destructive">
                 {createError}
               </div>
             )}
             <TextInput
               size="compact"
-              className="w-full px-2 py-1 bg-background border border-border text-sm focus:border-primary"
+              className="w-full"
               type="text"
               placeholder="channel-name"
               aria-label="Channel name"
@@ -247,7 +250,7 @@ export function ChannelPanel({ serverId }: Props) {
                 disabled={isCreating || !newChannelName.trim()}
                 loading={isCreating}
               >
-                {isCreating ? "..." : "Create"}
+                Create
               </Button>
               <Button
                 size="compact"
@@ -282,11 +285,12 @@ export function ChannelPanel({ serverId }: Props) {
                   <div key={ch.id} className="relative group/channel">
                     <button
                       className={cn(
-                        "flex items-center gap-2 w-full p-2 text-left text-sm border",
+                        "group flex items-center gap-2 w-full rounded-[8px] px-2 py-2 pr-10 text-left text-sm transition-colors",
                         activeChannelId === ch.id
-                          ? "bg-accent border-border text-foreground"
-                          : "bg-transparent border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          ? "bg-accent/70 text-foreground"
+                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       )}
+                      data-state={activeChannelId === ch.id ? "active" : "inactive"}
                       onClick={() => handleChannelClick(ch)}
                     >
                       <span className="text-muted-foreground opacity-50">#</span>
@@ -297,16 +301,19 @@ export function ChannelPanel({ serverId }: Props) {
                     </button>
 
                     {isOwner && (
-                      <button
-                        className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-destructive opacity-0 group-hover/channel:opacity-100 hover:bg-destructive hover:text-white"
+                      <IconButton
+                        size="compact"
+                        tone="danger"
+                        label={`Delete channel ${ch.name}`}
+                        title={`Delete channel ${ch.name}`}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-60 group-hover/channel:opacity-100 focus-visible:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation();
                           setChannelToDelete(ch);
                         }}
-                        title="Delete"
                       >
                         <Trash2 className="h-3 w-3" />
-                      </button>
+                      </IconButton>
                     )}
                   </div>
                 );
