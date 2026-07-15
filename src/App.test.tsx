@@ -192,7 +192,13 @@ describe("App hash sync", () => {
 
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Pick a conversation" })).toBeInTheDocument();
+    const heading = screen.getByRole("heading", { name: "Pick a conversation" });
+    const emptyPane = heading.closest('[data-density="workspace"]');
+    expect(heading).toBeInTheDocument();
+    expect(emptyPane).toBeInTheDocument();
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:text-[1.625rem]");
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:font-semibold");
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:tracking-tight");
     expect(screen.getByText("Select a chat or start a new one.")).toBeInTheDocument();
     expect(screen.queryByText("Inbox")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start a new conversation" }));
@@ -207,9 +213,16 @@ describe("App hash sync", () => {
 
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Choose a channel" })).toBeInTheDocument();
+    const heading = screen.getByRole("heading", { name: "Choose a channel" });
+    const emptyPane = heading.closest('[data-density="workspace"]');
+    expect(heading).toBeInTheDocument();
+    expect(emptyPane).toBeInTheDocument();
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:text-[1.625rem]");
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:font-semibold");
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:tracking-tight");
     expect(screen.getByText("Open any channel to start messaging.")).toBeInTheDocument();
     expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start a new conversation" })).not.toBeInTheDocument();
   });
 
   it("resolves a channel hash to a channel active chat directly", async () => {

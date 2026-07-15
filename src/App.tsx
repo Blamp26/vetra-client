@@ -620,15 +620,15 @@ function AppShell() {
               title="Choose a channel"
               description="Open any channel to start messaging."
               density="workspace"
-              className="flex flex-1 flex-col items-center justify-center px-8 py-10 [&_.vt-empty-pane__title]:text-[1.625rem] [&_.vt-empty-pane__title]:font-semibold [&_.vt-empty-pane__title]:tracking-tight"
+              className="flex flex-1 flex-col items-center justify-center px-8 py-10"
             />
           ) : !isSettingsRoute ? (
             <EmptyPane
               title="Pick a conversation"
               description="Select a chat or start a new one."
-              action={<Button variant="primary" type="button" onClick={() => openModal("CREATE_PICKER")}>Start a new conversation</Button>}
+              action={<Button variant="secondary" type="button" onClick={() => openModal("CREATE_PICKER")}>Start a new conversation</Button>}
               density="workspace"
-              className="flex flex-1 flex-col items-center justify-center px-8 py-10 [&_.vt-empty-pane__title]:text-[1.625rem] [&_.vt-empty-pane__title]:font-semibold [&_.vt-empty-pane__title]:tracking-tight"
+              className="flex flex-1 flex-col items-center justify-center px-8 py-10"
             />
           ) : null}
         </div>
