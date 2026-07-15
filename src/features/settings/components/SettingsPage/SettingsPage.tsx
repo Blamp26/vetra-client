@@ -6,6 +6,10 @@ import { ConfirmModal } from '@/shared/components/ConfirmModal/ConfirmModal';
 import { cn } from '@/shared/utils/cn';
 import { Tabs, Tab, TabList, TabPanel } from '@/shared/components/Tabs';
 import { Dialog } from '@/shared/components/Dialog';
+import { Button } from '@/shared/components/Button';
+import { IconButton } from '@/shared/components/IconButton';
+import { Avatar } from '@/shared/components/Avatar';
+import { X } from 'lucide-react';
 import { themeLabels, type Theme } from "@/themes";
 import {
   getNotificationPermissionStatus,
@@ -346,92 +350,81 @@ export function SettingsPage({ onClose }: Props) {
           className="flex h-full w-full"
         >
         <div className="flex w-72 flex-col border-r border-border bg-sidebar/60 px-4 py-5">
-          <div className="mb-5">
-            <span className="vt-kicker">Preferences</span>
-            <h2 id={titleId} className="mt-1 text-xl font-semibold tracking-tight">Settings</h2>
+          <div className="mb-5 flex items-start justify-between gap-3">
+            <h2 id={titleId} className="text-xl font-semibold tracking-tight">Settings</h2>
+            <IconButton label="Close settings" size="compact" onClick={onClose}>
+              <X aria-hidden="true" className="h-4 w-4" />
+            </IconButton>
           </div>
           <TabList aria-label="Settings sections" className="flex flex-col gap-1">
             {tabs.map((t) => (
               <Tab
                 key={t.id}
                 value={t.id}
+                ref={t.id === 'account' ? accountTabRef : undefined}
                 className={cn(
-                  "vt-button min-h-10 justify-start px-3 text-left text-sm",
-                  tab === t.id ? "vt-button--primary" : "vt-button--ghost border-transparent",
+                  "min-h-9 w-full justify-start rounded-[var(--radius-sm)] border border-transparent bg-transparent px-3 py-2 text-left text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground",
+                  tab === t.id && "bg-accent text-foreground",
                 )}
               >{t.label}</Tab>
             ))}
           </TabList>
-          <div className="mt-auto flex flex-col gap-2">
-            <button onClick={() => setShowLogoutConfirm(true)} className="vt-button vt-button--danger justify-start">Log Out</button>
-            <button onClick={onClose} className="vt-button justify-start">Back</button>
-          </div>
         </div>
         <div className="flex-1 overflow-y-auto px-8 py-7">
-          <TabPanel value="account" className="max-w-xl space-y-4">
+          <TabPanel value="account" className="max-w-xl space-y-6">
           {currentUser && (
-            <div className="max-w-xl space-y-4">
+            <div className="space-y-6">
               <h3 className="text-xl font-semibold tracking-tight">Account</h3>
-              <div className="vt-panel flex items-center gap-4 p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-primary text-primary-foreground">
-                  {(currentUser.display_name || currentUser.username)[0].toUpperCase()}
-                </div>
+              <div className="flex items-center gap-4 border-b border-border pb-5">
+                <Avatar
+                  name={currentUser.display_name || currentUser.username}
+                  src={currentUser.avatar_url}
+                  size="large"
+                />
                 <div className="flex-1">
                   <div className="font-medium">{currentUser.display_name || currentUser.username}</div>
                   <div className="text-xs text-muted-foreground">@{currentUser.username}</div>
                 </div>
-                <button ref={profileTriggerRef} onClick={() => setShowEditProfile(true)} className="vt-button">Edit</button>
+                <Button ref={profileTriggerRef} type="button" variant="secondary" onClick={() => setShowEditProfile(true)}>Edit</Button>
               </div>
-              <div className="vt-panel overflow-hidden">
-                <div className="flex justify-between border-b border-border px-4 py-3 text-sm">
-                  <span className="text-muted-foreground">Username</span>
-                  <span>@{currentUser.username}</span>
-                </div>
-                <div className="flex justify-between px-4 py-3 text-sm">
-                  <span className="text-muted-foreground">Display Name</span>
-                  <span>{currentUser.display_name || '—'}</span>
-                </div>
+              <div className="border-t border-border pt-5">
+                <Button type="button" variant="danger" onClick={() => setShowLogoutConfirm(true)}>Log Out</Button>
               </div>
             </div>
           )}
           </TabPanel>
-          <TabPanel value="appearance" className="max-w-xl space-y-4">
-            <div className="max-w-xl space-y-4">
-              <h3 className="text-xl font-semibold tracking-tight">Appearance</h3>
-              <div className="flex gap-2">
-                {(['light', 'dark'] as Theme[]).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTheme(t)}
-                    className={cn("vt-button flex-1", theme === t ? "vt-button--primary" : "")}
-                  >{themeLabels[t]}</button>
-                ))}
-              </div>
+          <TabPanel value="appearance" className="max-w-xl space-y-6">
+            <h3 className="text-xl font-semibold tracking-tight">Appearance</h3>
+            <div role="group" aria-label="Theme" className="flex gap-2">
+              {(['light', 'dark'] as Theme[]).map((t) => (
+                <Button
+                  key={t}
+                  type="button"
+                  variant={theme === t ? "primary" : "secondary"}
+                  className="flex-1"
+                  onClick={() => setTheme(t)}
+                >{themeLabels[t]}</Button>
+              ))}
             </div>
           </TabPanel>
-          <TabPanel value="notifications" className="max-w-xl space-y-4">
-            <div className="max-w-xl space-y-4">
-              <h3 className="text-xl font-semibold tracking-tight">Notifications</h3>
-              <div className="vt-panel space-y-3 p-4">
-                <div>
-                  <div className="text-sm font-medium">Desktop notifications</div>
-                  <p className="text-xs text-muted-foreground">
-                    {notificationPermission === 'granted' && 'Desktop notifications are enabled.'}
-                    {notificationPermission === 'default' && 'Desktop notifications are off until you enable them here.'}
-                    {notificationPermission === 'denied' && 'Desktop notifications are blocked. Update your browser or system notification settings to re-enable them.'}
-                    {notificationPermission === 'unsupported' && 'This environment does not support desktop notifications.'}
-                    {notificationPermission === 'loading' && 'Checking notification support...'}
-                  </p>
-                </div>
-                {notificationPermission === 'default' && (
-                  <button
-                    onClick={() => { void handleNotificationPermissionRequest(); }}
-                    className="vt-button"
-                  >
-                    Enable notifications
-                  </button>
-                )}
+          <TabPanel value="notifications" className="max-w-xl space-y-6">
+            <h3 className="text-xl font-semibold tracking-tight">Notifications</h3>
+            <div className="space-y-3">
+              <div>
+                <div className="text-sm font-medium">Desktop notifications</div>
+                <p className="text-xs text-muted-foreground">
+                  {notificationPermission === 'granted' && 'Desktop notifications are enabled.'}
+                  {notificationPermission === 'default' && 'Desktop notifications are off until you enable them here.'}
+                  {notificationPermission === 'denied' && 'Desktop notifications are blocked. Update your browser or system notification settings to re-enable them.'}
+                  {notificationPermission === 'unsupported' && 'This environment does not support desktop notifications.'}
+                  {notificationPermission === 'loading' && 'Checking notification support...'}
+                </p>
               </div>
+              {notificationPermission === 'default' && (
+                <Button type="button" variant="secondary" onClick={() => { void handleNotificationPermissionRequest(); }}>
+                  Enable notifications
+                </Button>
+              )}
             </div>
           </TabPanel>
           <TabPanel value="audioVideo">

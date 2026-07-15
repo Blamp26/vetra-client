@@ -19,11 +19,25 @@ vi.mock("@/store", () => ({
 }));
 
 vi.mock("@/features/profile/components/ProfileModal/ProfileModal", () => ({
-  ProfileModal: () => null,
+  ProfileModal: ({ onClose }: { onClose: () => void }) => (
+    <div role="dialog" aria-label="Profile modal">
+      <button type="button" onClick={onClose}>Close profile</button>
+    </div>
+  ),
 }));
 
 vi.mock("@/shared/components/ConfirmModal/ConfirmModal", () => ({
-  ConfirmModal: () => null,
+  ConfirmModal: ({ title, onCancel, onConfirm }: {
+    title: string;
+    onCancel: () => void;
+    onConfirm: () => void;
+  }) => (
+    <div role="dialog" aria-label={title}>
+      <h2>{title}</h2>
+      <button type="button" onClick={onCancel}>Cancel logout</button>
+      <button type="button" onClick={onConfirm}>Confirm logout</button>
+    </div>
+  ),
 }));
 
 vi.mock("@/services/notifications", () => ({
@@ -114,6 +128,10 @@ describe("SettingsPage audio settings", () => {
   it("exposes vertical settings tabs with a single initially focusable selection", () => {
     render(<SettingsPage onClose={vi.fn()} />);
 
+    expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.queryByText("Preferences")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
     const tablist = screen.getByRole("tablist", { name: "Settings sections" });
     const tabs = screen.getAllByRole("tab");
     expect(tablist).toHaveAttribute("aria-orientation", "vertical");
@@ -121,6 +139,52 @@ describe("SettingsPage audio settings", () => {
     expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0")).toHaveLength(1);
     expect(screen.queryByRole("tab", { name: "Profile" })).not.toBeInTheDocument();
     tabs.forEach((tab) => expect(document.getElementById(tab.getAttribute("aria-controls")!)).toBeInTheDocument());
+  });
+
+  it("closes through the visible close control", () => {
+    const onClose = vi.fn();
+    render(<SettingsPage onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("consolidates account identity and keeps profile and logout actions in Account", () => {
+    render(<SettingsPage onClose={vi.fn()} />);
+
+    expect(screen.getByRole("heading", { name: "Account" })).toBeInTheDocument();
+    expect(screen.getByText("Tester")).toBeInTheDocument();
+    expect(screen.getAllByText("@tester")).toHaveLength(1);
+    expect(screen.queryByText("Display Name")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Log Out" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("dialog", { name: "Profile modal" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Log Out" })).toBeInTheDocument();
+  });
+
+  it("keeps logout confirmation and closes Settings after confirmation", () => {
+    const onClose = vi.fn();
+    render(<SettingsPage onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Log Out" }));
+    expect(screen.getByRole("dialog", { name: "Log out?" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm logout" }));
+    expect(storeState.logout).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the Light and Dark theme actions wired to the store", () => {
+    render(<SettingsPage onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Appearance" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    fireEvent.click(screen.getByRole("button", { name: "Light" }));
+
+    expect(storeState.setTheme).toHaveBeenNthCalledWith(1, "dark");
+    expect(storeState.setTheme).toHaveBeenNthCalledWith(2, "light");
   });
 
   it("uses the shared named dialog and focuses the Account tab initially", () => {
