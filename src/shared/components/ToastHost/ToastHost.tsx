@@ -8,6 +8,8 @@ type ToastPayload = {
 
 type ToastState = ToastPayload & { id: number };
 
+let nextToastId = 0;
+
 export function ToastHost() {
   const [toast, setToast] = useState<ToastState | null>(null);
 
@@ -19,7 +21,7 @@ export function ToastHost() {
       if (!payload?.title) return;
 
       const next: ToastState = {
-        id: Date.now(),
+        id: ++nextToastId,
         title: payload.title,
         body: payload.body,
         durationMs: payload.durationMs ?? 4000,
@@ -41,23 +43,20 @@ export function ToastHost() {
 
   return (
     <div
+      role="status"
       className="fixed left-6 bottom-24 z-toast pointer-events-none"
       aria-live="polite"
+      aria-atomic="true"
     >
-      <div className="max-w-[340px] bg-card border border-border p-4 pointer-events-auto">
-        <div className="flex items-start gap-3">
-          <div className="w-1 self-stretch bg-primary shrink-0" />
-          <div className="flex flex-col gap-0.5">
-            <div className="text-sm text-foreground">
-              {toast.title}
-            </div>
-            {toast.body && (
-              <div className="text-xs text-muted-foreground">
-                {toast.body}
-              </div>
-            )}
-          </div>
+      <div className="max-w-[340px] bg-card border border-border p-3">
+        <div className="text-sm font-medium text-foreground">
+          {toast.title}
         </div>
+        {toast.body && (
+          <div className="text-sm text-muted-foreground">
+            {toast.body}
+          </div>
+        )}
       </div>
     </div>
   );
