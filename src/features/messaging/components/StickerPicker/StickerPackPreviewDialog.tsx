@@ -4,6 +4,7 @@ import { stickersApi } from "@/api/stickers";
 import { StickerArtwork } from "./StickerArtwork";
 import { useAppStore } from "@/store";
 import type { StickerPack } from "@/shared/types";
+import { IconButton } from "@/shared/components/IconButton";
 
 export interface StickerPackSelectionRequest {
   packId: string;
@@ -84,9 +85,9 @@ export function StickerPackPreviewDialog({ request, onClose, onOpenPack }: Props
       <div className="flex max-h-[min(424px,calc(100vh-48px))] w-[365px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-xl bg-card shadow-xl">
         <header className="flex h-[54px] shrink-0 items-center justify-between border-b px-4">
           <h2 id="sticker-pack-preview-title" className="truncate text-base font-semibold">{title}</h2>
-          <button type="button" aria-label="Close sticker pack preview" onClick={onClose} disabled={busy} className="rounded p-1 hover:bg-muted focus-visible:outline focus-visible:outline-2">
+          <IconButton label="Close sticker pack preview" onClick={onClose} disabled={busy} className="h-7 w-7 min-h-0 min-w-0 rounded p-1 hover:bg-muted focus-visible:outline focus-visible:outline-2">
             <X className="h-5 w-5" />
-          </button>
+          </IconButton>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-[19px] py-3" aria-busy={loading}>
           {loading && <p className="py-12 text-center text-sm text-muted-foreground">Loading sticker pack…</p>}

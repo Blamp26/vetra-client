@@ -41,6 +41,7 @@ describe("StickerPackPreviewDialog", () => {
     expect(screen.getByTestId("sticker-pack-preview-grid")).toHaveClass("grid-cols-5");
     expect(screen.getByTestId("authenticated-sticker-image")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add stickers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close sticker pack preview" })).toHaveClass("vt-icon-button");
   });
 
   it("installs exactly once, refreshes, and opens the selected pack", async () => {
