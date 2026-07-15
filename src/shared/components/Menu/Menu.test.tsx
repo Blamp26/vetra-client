@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Menu, MenuItem, MenuSeparator } from "./Menu";
 
@@ -103,6 +103,47 @@ describe("Menu", () => {
   it("focuses the container when there are no enabled items", async () => {
     render(<Menu activeValue="none" onActiveValueChange={vi.fn()} autoFocus><MenuItem value="none" disabled>None</MenuItem></Menu>);
     await waitFor(() => expect(screen.getByRole("menu")).toHaveFocus());
+  });
+
+  it("falls back from an undefined active value without activating an item", async () => {
+    const onActiveValueChange = vi.fn();
+    const onSelect = vi.fn();
+    render(
+      <Menu activeValue={undefined} onActiveValueChange={onActiveValueChange} autoFocus>
+        <MenuItem value="disabled" disabled onSelect={onSelect}>Disabled</MenuItem>
+        <MenuItem value="first" onSelect={onSelect}>First</MenuItem>
+        <MenuItem value="second" onSelect={onSelect}>Second</MenuItem>
+      </Menu>,
+    );
+    const first = screen.getByRole("menuitem", { name: "First" });
+    await waitFor(() => expect(first).toHaveFocus());
+    expect(onActiveValueChange).toHaveBeenCalledWith("first");
+    expect(onSelect).not.toHaveBeenCalled();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(screen.getByRole("menuitem", { name: "Second" })).toHaveFocus();
+  });
+
+  it("falls back from an invalid value while preserving a valid value", async () => {
+    const onInvalidActiveChange = vi.fn();
+    const onValidActiveChange = vi.fn();
+    const { unmount } = render(
+      <Menu activeValue="missing" onActiveValueChange={onInvalidActiveChange} autoFocus>
+        <MenuItem value="first">First</MenuItem>
+        <MenuItem value="second">Second</MenuItem>
+      </Menu>,
+    );
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "First" })).toHaveFocus());
+    expect(onInvalidActiveChange).toHaveBeenCalledWith("first");
+
+    unmount();
+    render(
+      <Menu activeValue="second" onActiveValueChange={onValidActiveChange} autoFocus>
+        <MenuItem value="first">First</MenuItem>
+        <MenuItem value="second">Second</MenuItem>
+      </Menu>,
+    );
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Second" })).toHaveFocus());
+    expect(onValidActiveChange).toHaveBeenCalledWith("second");
   });
 
   it("removes an unmounted item from navigation", () => {

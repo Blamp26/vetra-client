@@ -25,8 +25,8 @@ function useMenuContext() {
 }
 
 export interface MenuProps extends React.HTMLAttributes<HTMLDivElement> {
-  activeValue: string;
-  onActiveValueChange: (value: string) => void;
+  activeValue?: string;
+  onActiveValueChange?: (value: string) => void;
   onEscape?: () => void;
   onArrowRight?: () => void;
   onArrowLeft?: () => void;
@@ -52,7 +52,7 @@ export const Menu = React.forwardRef<HTMLDivElement, MenuProps>(function Menu(
 ) {
   const menuRef = useRef<HTMLDivElement | null>(null) as React.MutableRefObject<HTMLDivElement | null>;
   const registrationsRef = useRef<MenuRegistration[]>([]);
-  const setActive = (value: string) => onActiveValueChange(value);
+  const setActive = (value: string) => onActiveValueChange?.(value);
 
   const context = useMemo<MenuContextValue>(() => ({
     activeValue,
