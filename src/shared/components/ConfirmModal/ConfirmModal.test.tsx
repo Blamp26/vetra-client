@@ -22,6 +22,8 @@ describe("ConfirmModal", () => {
     expect(screen.getByRole("dialog", { name: "Delete room" })).toHaveAccessibleDescription(
       "This cannot be undone.",
     );
+    expect(screen.queryByText("Destructive action")).not.toBeInTheDocument();
+    expect(screen.queryByText("Confirm action")).not.toBeInTheDocument();
   });
 
   it("calls the appropriate actions and uses the danger variant", () => {
@@ -42,6 +44,29 @@ describe("ConfirmModal", () => {
     expect(screen.getByRole("button", { name: "Confirm" })).toHaveClass(
       "vt-button--danger",
     );
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
+      "vt-button--secondary",
+    );
+  });
+
+  it("preserves custom action labels and uses the primary non-danger variant", () => {
+    render(
+      <ConfirmModal
+        title="Save changes"
+        message="Apply these changes?"
+        confirmLabel="Apply"
+        cancelLabel="Keep editing"
+        isDanger={false}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const buttons = screen.getAllByRole("button");
+    expect(buttons.map((button) => button.textContent)).toEqual(["Keep editing", "Apply"]);
+    expect(screen.getByRole("button", { name: "Keep editing" })).toHaveClass("vt-button--secondary");
+    expect(screen.getByRole("button", { name: "Apply" })).toHaveClass("vt-button--primary");
+    expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
   });
 
   it("keeps focus contained and follows cancel semantics for Escape", () => {
@@ -85,8 +110,11 @@ describe("ConfirmModal", () => {
       />,
     );
     const confirm = screen.getByRole("button", { name: "Confirm" });
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toBeDisabled();
     expect(confirm).toBeDisabled();
     expect(confirm).toHaveAttribute("aria-busy", "true");
+    expect(confirm).toHaveTextContent("Confirm");
     fireEvent.click(confirm);
     expect(onConfirm).not.toHaveBeenCalled();
   });

@@ -35,7 +35,6 @@ export function ConfirmModal({
     >
       <div className="flex w-full max-w-md flex-col gap-5 p-5">
         <div className="flex flex-col gap-2">
-          <span className="vt-kicker">{isDanger ? "Destructive action" : "Confirm action"}</span>
           <h3 id={titleId} className="text-xl font-semibold tracking-tight">
             {title}
           </h3>
@@ -47,6 +46,7 @@ export function ConfirmModal({
         <div className="flex justify-end gap-2">
           <Button
             type="button"
+            variant="secondary"
             onClick={onCancel}
             disabled={isLoading}
           >
