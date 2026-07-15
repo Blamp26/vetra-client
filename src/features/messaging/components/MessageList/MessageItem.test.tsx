@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fitEmojiToLargeCell,
@@ -105,7 +105,11 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
 }));
 
 vi.mock("./GifMessageMedia", () => ({
-  GifMessageMedia: () => <div data-testid="gif-message-media" />,
+  GifMessageMedia: ({ mediaOnlyMetadata }: { mediaOnlyMetadata?: ReactNode }) => (
+    <button type="button" data-testid="gif-message-media" data-gif-visual-anchor>
+      {mediaOnlyMetadata}
+    </button>
+  ),
 }));
 
 vi.mock("../../utils/attachmentDownloads", () => ({
@@ -279,6 +283,15 @@ describe("MessageItem bubble layout", () => {
     });
 
     expect(screen.getByTestId("gif-message-media")).toBeInTheDocument();
+    expect(screen.getByTestId("gif-message-media")).toContainElement(
+      screen.getByTestId("message-media-only-overlay"),
+    );
+    expect(screen.getByTestId("message-media-only-overlay").parentElement).toBe(
+      screen.getByTestId("gif-message-media"),
+    );
+    expect(screen.getByTestId("message-bubble")).not.toBe(
+      screen.getByTestId("message-media-only-overlay").parentElement,
+    );
     expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
     expect(screen.getByTestId("message-metadata")).toHaveClass("h-[18px]");
     expect(screen.getByTestId("message-media-only-overlay")).toContainElement(
@@ -1370,6 +1383,8 @@ describe("MessageItem bubble layout", () => {
       aspectRatio: "324 / 432",
     });
     expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
+    expect(screen.getByTestId("message-media-shell")).toContainElement(overlay);
+    expect(overlay.parentElement).toBe(screen.getByTestId("message-media-shell"));
     expect(screen.getByTestId("message-media-tail")).toHaveClass(
       "right-[-6px]",
       "bottom-[-1px]",
@@ -3611,10 +3626,77 @@ describe("MessageItem bubble layout", () => {
       status: "read",
     }, { isOwn: true });
 
-    const sticker = screen.getByTestId("sticker-message");
+    const sticker = screen.getByTestId("sticker-artwork-anchor");
     const overlay = screen.getByTestId("message-media-only-overlay");
     expect(sticker).toContainElement(overlay);
     expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
     expect(screen.queryByTestId("message-media-only-status")).toBeInTheDocument();
+  });
+
+  it.each([2, 3, 4])("anchors a %s-item visual album overlay to the album shell", (count) => {
+    renderMessageItem(
+      {
+        attachments: Array.from({ length: count }, (_, index) => ({
+          id: `album-anchor-${count}-${index}`,
+          url: `/api/v1/media/album-anchor-${count}-${index}`,
+          mime_type: "image/jpeg",
+          original_name: `photo-${index}.jpg`,
+          file_size: 1024,
+          kind: "photo" as const,
+          width: 1200,
+          height: 900,
+        })),
+      },
+      { isOwn: true },
+    );
+
+    const bubble = screen.getByTestId("message-bubble");
+    const album = screen.getByTestId("message-photo-collage");
+    const overlay = screen.getByTestId("message-media-only-overlay");
+
+    expect(screen.getAllByTestId("message-photo-collage-tile")).toHaveLength(count);
+    expect(album).toContainElement(overlay);
+    expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
+    expect(bubble.querySelectorAll('[data-testid="message-media-only-overlay"]')).toHaveLength(1);
+    expect(overlay.parentElement).toBe(album);
+  });
+
+  it("preserves the intentional left-column rail while anchoring media metadata", () => {
+    renderMessageItem(
+      {
+        attachments: [
+          {
+            id: "left-column-media",
+            url: "/api/v1/media/left-column-media",
+            mime_type: "image/jpeg",
+            original_name: "photo.jpg",
+            file_size: 1024,
+            kind: "photo" as const,
+            width: 900,
+            height: 600,
+          },
+          {
+            id: "left-column-media-2",
+            url: "/api/v1/media/left-column-media-2",
+            mime_type: "image/jpeg",
+            original_name: "photo-2.jpg",
+            file_size: 1024,
+            kind: "photo" as const,
+            width: 900,
+            height: 600,
+          },
+        ],
+      },
+      { isOwn: true, alignmentMode: "left-column" },
+    );
+
+    expect(screen.getByTestId("message-bubble-row")).toHaveClass("justify-start");
+    expect(screen.getByTestId("message-bubble-row")).toHaveAttribute(
+      "data-alignment-mode",
+      "left-column",
+    );
+    expect(screen.getByTestId("message-photo-collage")).toContainElement(
+      screen.getByTestId("message-media-only-overlay"),
+    );
   });
 });

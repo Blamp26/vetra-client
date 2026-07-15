@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Film, Play } from "lucide-react";
 import type { Attachment } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
@@ -41,6 +41,7 @@ interface VisualAttachmentTileProps {
     chosenImageSource: string | null,
     diagnostics: VisualTileRuntimeMetrics,
   ) => void;
+  mediaOnlyMetadata?: ReactNode;
 }
 
 function shortenAttachmentId(attachmentId: string) {
@@ -87,6 +88,7 @@ export function VisualAttachmentTile({
   onOpen,
   onDecodedDimensions,
   onDiagnostics,
+  mediaOnlyMetadata,
 }: VisualAttachmentTileProps) {
   const durationLabel =
     attachment.kind === "video" ? formatVideoDuration(runtimeMetrics?.duration ?? null) : null;
@@ -198,6 +200,7 @@ export function VisualAttachmentTile({
           <div>ratio:{computedRatio.toFixed(2)}</div>
         </div>
       )}
+      {mediaOnlyMetadata}
     </button>
   );
 

@@ -1040,6 +1040,11 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       hasCaption={hasText}
       hasContentAboveMedia={hasContentAboveMedia}
       hasForwardedHeader={Boolean(forwardedSource)}
+      mediaOnlyMetadata={
+        shouldRenderMediaOnlyMetadata && !hasReactions
+          ? renderMetadata("overlay")
+          : undefined
+      }
       isTemporaryLayout={isTemporaryVisualLayout}
       isDebugEnabled={isMediaDebugEnabled}
       runtimeMetricsByAttachmentId={visualRuntimeMetrics}
@@ -1376,11 +1381,27 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
 
   const renderContent = () => {
     if (msg.gif) {
-      return <div className="relative" data-testid="gif-message"><GifMessageMedia gif={msg.gif} selectionMode={selectionMode} /></div>;
+      return (
+        <div
+          className="relative overflow-hidden rounded-[15px]"
+          data-testid="gif-message"
+          data-gif-visual-anchor
+        >
+          <GifMessageMedia
+            gif={msg.gif}
+            selectionMode={selectionMode}
+            mediaOnlyMetadata={shouldRenderMediaOnlyMetadata && !hasReactions ? (
+              <div className="pointer-events-none absolute bottom-[4px] right-[4px]" data-testid="message-media-only-overlay">
+                {renderMetadata("overlay")}
+              </div>
+            ) : undefined}
+          />
+        </div>
+      );
     }
     if (msg.sticker) {
       const sticker = msg.sticker;
-      return <div className="relative flex flex-col items-end" data-testid="sticker-message" style={{ width: `${stickerDisplaySize?.width ?? 220}px`, height: `${stickerDisplaySize?.height ?? 220}px` }}><button type="button" className="flex h-full w-full items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" aria-label={`Open sticker pack ${sticker.pack_title ?? ""}`.trim()} onClick={(event) => { if (selectionMode) return; event.stopPropagation(); onOpenStickerPack?.(sticker.pack_id, sticker.id); }}><StickerArtwork sticker={sticker} className="h-full w-full object-contain" /></button><div className="pointer-events-none absolute bottom-[4px] right-[4px]" data-testid="message-media-only-overlay">{renderMetadata("overlay")}</div></div>;
+      return <div className="relative flex flex-col items-end" data-testid="sticker-message" style={{ width: `${stickerDisplaySize?.width ?? 220}px`, height: `${stickerDisplaySize?.height ?? 220}px` }}><button type="button" className="relative flex h-full w-full items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" data-testid="sticker-artwork-anchor" aria-label={`Open sticker pack ${sticker.pack_title ?? ""}`.trim()} onClick={(event) => { if (selectionMode) return; event.stopPropagation(); onOpenStickerPack?.(sticker.pack_id, sticker.id); }}><StickerArtwork sticker={sticker} className="h-full w-full object-contain" /><div className="pointer-events-none absolute bottom-[4px] right-[4px]" data-testid="message-media-only-overlay">{renderMetadata("overlay")}</div></button></div>;
     }
     return (
       <>
@@ -1667,15 +1688,6 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
 
         {isVoiceMessage && renderBubbleTail("message-voice-tail")}
         {isSingleAudioMessage && renderBubbleTail("message-audio-tail")}
-
-        {shouldRenderMediaOnlyMetadata && !hasReactions && (
-          <div
-            className="pointer-events-none absolute bottom-[4px] right-[4px]"
-            data-testid="message-media-only-overlay"
-          >
-            {renderMetadata("overlay")}
-          </div>
-        )}
 
           {shouldRenderTail &&
             (isTextOnly || isDocumentAttachment) &&

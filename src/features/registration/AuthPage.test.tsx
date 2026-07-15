@@ -31,14 +31,17 @@ vi.mock("./components/RegisterForm/RegisterForm", () => ({
 import { AuthPage } from "./AuthPage";
 
 describe("AuthPage", () => {
-  it("renders a focused login surface without promotional content", () => {
+  it("renders one centered, cardless auth composition without promotional content", () => {
     render(<AuthPage />);
 
     expect(screen.getByRole("heading", { name: "Log in" })).toBeInTheDocument();
     expect(screen.getByLabelText("Username")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
-    expect(screen.getAllByText("Vetra")).toHaveLength(2);
-    expect(screen.getByRole("main")).toHaveClass("lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]");
+    expect(screen.getAllByText("Vetra")).toHaveLength(1);
+    expect(screen.getByTestId("auth-composition")).toHaveClass("w-full", "max-w-[360px]", "-translate-y-3", "sm:-translate-y-6");
+    expect(screen.getByTestId("auth-brand")).toBeInTheDocument();
+    expect(screen.getByRole("main")).not.toHaveClass("lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]");
+    expect(screen.getByRole("main").querySelector(".vt-pane")).not.toBeInTheDocument();
     for (const text of [
       "Tauri-first messenger",
       "Calm desktop messaging for daily work.",

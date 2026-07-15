@@ -39,9 +39,35 @@ describe("StickerPicker pack and sticker creation", () => {
     expect(await screen.findByTestId("sticker-picker")).toHaveClass("w-[292px]");
     const button = screen.getByLabelText("Create sticker pack");
     expect(button).toHaveAttribute("title", "Create sticker pack");
+    expect(button).toHaveClass("vt-icon-button", "vt-icon-button--compact");
     fireEvent.click(button);
     expect(screen.getByRole("dialog", { name: "Create sticker pack" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Sticker Studio" })).not.toBeInTheDocument();
+  });
+
+  it("uses the shared compact search field with tab-specific placeholders and clear action", async () => {
+    listMock.mockResolvedValue([owned]);
+    render(<StickerPicker onSend={vi.fn()} onClose={vi.fn()} />);
+
+    const stickersInput = await screen.findByRole("textbox", { name: "Search stickers" });
+    expect(stickersInput).toHaveAttribute("placeholder", "Search stickers");
+    expect(stickersInput).toHaveClass("vt-input", "vt-input--compact", "w-full");
+    expect(stickersInput.parentElement).toHaveClass("min-w-0", "flex-1");
+    fireEvent.change(stickersInput, { target: { value: "cats" } });
+    fireEvent.click(screen.getByRole("button", { name: "Clear sticker search" }));
+    expect(stickersInput).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Emoji" }));
+    const emojiInput = await screen.findByRole("textbox", { name: "Search emoji" });
+    expect(emojiInput).toHaveAttribute("placeholder", "Search emoji");
+    fireEvent.change(emojiInput, { target: { value: "smile" } });
+    expect(screen.getByRole("button", { name: "Clear emoji search" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "GIFs" }));
+    const gifInput = await screen.findByRole("textbox", { name: "Search GIFs" });
+    expect(gifInput).toHaveAttribute("placeholder", "Search GIFs");
+    fireEvent.change(gifInput, { target: { value: "cats" } });
+    expect(screen.getByRole("button", { name: "Clear GIF search" })).toBeInTheDocument();
   });
 
   it("creates one empty pack, refreshes it by canonical id, selects it, and clears search", async () => {

@@ -38,7 +38,7 @@ export function LoginForm({ onSwitchToRegister }: Props) {
   const isInvalid = !!usernameError || !!passwordError || !username.trim() || !password.trim();
 
   return (
-    <div className="vt-pane w-full px-6 py-7">
+    <div className="w-full">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Log in</h1>
         <p className="mt-1 text-sm text-muted-foreground">Sign in to Vetra.</p>

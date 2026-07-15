@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMediaVisibility } from "@/shared/components/MediaVisibilityContext";
 import type { GifMessage } from "@/shared/types";
 import { useGifResolver } from "./GifResolverContext";
 
-export function GifMessageMedia({ gif, onClick, selectionMode = false }: { gif: GifMessage; onClick?: () => void; selectionMode?: boolean }) {
+export function GifMessageMedia({ gif, onClick, selectionMode = false, mediaOnlyMetadata }: { gif: GifMessage; onClick?: () => void; selectionMode?: boolean; mediaOnlyMetadata?: ReactNode }) {
   const { root, revision } = useMediaVisibility();
   const { gifs, register } = useGifResolver();
   const ref = useRef<HTMLButtonElement | null>(null);
@@ -29,7 +29,8 @@ export function GifMessageMedia({ gif, onClick, selectionMode = false }: { gif: 
   useEffect(() => { const video = videoRef.current; if (!video || !eligible || manualPaused || !resolved?.messageMp4Url) return; void video.play().catch(() => undefined); return () => video.pause(); }, [eligible, manualPaused, resolved?.messageMp4Url]);
 
   const toggle = () => { if (!resolved) return; const video = videoRef.current; if (video) { if (video.paused) { setManualPaused(false); void video.play(); } else { video.pause(); setManualPaused(true); } } onClick?.(); };
-  return <button ref={ref} type="button" data-testid="gif-message-media" aria-label="GIF" onClick={(event) => { if (selectionMode) return; event.stopPropagation(); toggle(); }} className="relative block overflow-hidden rounded-[15px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ width, height }}>
+  return <button ref={ref} type="button" data-testid="gif-message-media" data-gif-visual-anchor aria-label="GIF" onClick={(event) => { if (selectionMode) return; event.stopPropagation(); toggle(); }} className="relative block overflow-hidden rounded-[15px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ width, height }}>
     {resolved?.messageMp4Url ? <video ref={videoRef} src={resolved.messageMp4Url} poster={resolved.previewStillUrl || undefined} muted loop playsInline preload="metadata" className="h-full w-full object-cover" /> : resolved?.messageWebpUrl ? <img src={resolved.messageWebpUrl} alt={resolved.title || "GIF"} className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center bg-muted text-xs text-muted-foreground">GIF</span>}
+    {mediaOnlyMetadata}
   </button>;
 }

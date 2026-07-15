@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "@/shared/utils/cn";
 import { getAttachmentDisplayName } from "../../utils/attachments";
 import type { MediaAlbumLayout } from "../../utils/mediaAlbumLayout";
@@ -42,6 +43,7 @@ interface VisualAttachmentGroupProps {
     chosenImageSource: string | null,
     diagnostics: VisualTileRuntimeMetrics,
   ) => void;
+  mediaOnlyMetadata?: ReactNode;
 }
 
 function toPercent(value: number, total: number) {
@@ -65,6 +67,7 @@ export function VisualAttachmentGroup({
   onDiagnostics,
   singleMediaCornerClassName,
   albumShellCornerClassName,
+  mediaOnlyMetadata,
 }: VisualAttachmentGroupProps) {
   const isAlbum = attachments.length > 1;
   const isSurroundedAlbum = isAlbum && hasContentAboveMedia && hasCaption;
@@ -132,6 +135,11 @@ export function VisualAttachmentGroup({
               );
             })}
           </div>
+          {mediaOnlyMetadata && (
+            <div className="pointer-events-none absolute bottom-[4px] right-[4px]" data-testid="message-media-only-overlay">
+              {mediaOnlyMetadata}
+            </div>
+          )}
         </div>
       );
     }
@@ -184,6 +192,11 @@ export function VisualAttachmentGroup({
             );
           })}
         </div>
+        {mediaOnlyMetadata && (
+          <div className="pointer-events-none absolute bottom-[4px] right-[4px]" data-testid="message-media-only-overlay">
+            {mediaOnlyMetadata}
+          </div>
+        )}
       </div>
     );
   }
@@ -227,6 +240,13 @@ export function VisualAttachmentGroup({
         onOpen={onOpen}
         onDecodedDimensions={onDecodedDimensions}
         onDiagnostics={onDiagnostics}
+        mediaOnlyMetadata={
+          mediaOnlyMetadata ? (
+            <div className="pointer-events-none absolute bottom-[4px] right-[4px]" data-testid="message-media-only-overlay">
+              {mediaOnlyMetadata}
+            </div>
+          ) : undefined
+        }
       />
     </div>
   );
