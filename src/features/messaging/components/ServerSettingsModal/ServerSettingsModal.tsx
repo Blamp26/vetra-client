@@ -12,6 +12,8 @@ import {
 } from "@/shared/components/Combobox";
 import { Dialog } from "@/shared/components/Dialog";
 import { Tab as TabsTab, TabList, TabPanel, Tabs } from "@/shared/components/Tabs";
+import { Button } from "@/shared/components/Button";
+import { IconButton } from "@/shared/components/IconButton";
 import type { Server } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { Avatar } from "@/shared/components/Avatar";
@@ -83,7 +85,7 @@ function MembersPanel({ server, currentUser }: MembersPanelProps) {
             onActiveValueChange={setActiveMemberValue}
             className="relative flex flex-col gap-1"
           >
-            <label className="text-[10px] uppercase text-muted-foreground" htmlFor={memberInputId}>Invite Member</label>
+            <label className="vt-label" htmlFor={memberInputId}>Invite Member</label>
             <ComboboxInput
               id={memberInputId}
               aria-describedby={searchError ? searchErrorId : undefined}
@@ -113,20 +115,28 @@ function MembersPanel({ server, currentUser }: MembersPanelProps) {
         )}
 
         <div className="space-y-2">
-          <label className="text-[10px] uppercase text-muted-foreground">Server Members</label>
-          {isLoading && <div className="text-xs text-muted-foreground py-4">Loading...</div>}
-          {error && <div className="p-2 bg-destructive/10 border border-destructive text-destructive text-xs">{error}</div>}
-          <div className="flex flex-col gap-1">
+          {isLoading && <div className="py-4 text-xs text-muted-foreground" role="status" aria-live="polite">Loading...</div>}
+          {error && <div className="text-xs text-destructive" role="alert">{error}</div>}
+          <div className="flex flex-col divide-y divide-border">
             {(members || []).map((m) => (
-              <div key={m.user_id} className="flex items-center gap-2 p-2 border border-border group">
+              <div key={m.user_id} className="flex items-center gap-2 py-3">
                 <Avatar name={m.display_name || m.username} src={m.avatar_url} size="medium" />
                 <div className="flex-1 min-w-0 text-sm">
                   <div className="truncate">{m.display_name || m.username}</div>
                   <div className="text-[10px] text-muted-foreground">@{m.username}</div>
                 </div>
-                {m.is_owner && <span className="text-[10px] uppercase border border-primary px-1">Owner</span>}
+                {m.is_owner && <span className="text-xs text-muted-foreground">Owner</span>}
                 {isOwner && !m.is_owner && currentUser?.id !== m.user_id && (
-                  <button className="px-2 py-1 text-xs border border-destructive text-destructive opacity-0 group-hover:opacity-100 hover:bg-destructive hover:text-white" onClick={() => setMemberToKick(m.user_id)}>Kick</button>
+                  <Button
+                    type="button"
+                    size="compact"
+                    variant="secondary"
+                    aria-label={`Kick ${m.display_name || `@${m.username}`}`}
+                    className="border-destructive/40 text-destructive hover:text-destructive"
+                    onClick={() => setMemberToKick(m.user_id)}
+                  >
+                    Kick
+                  </Button>
                 )}
               </div>
             ))}
@@ -202,11 +212,10 @@ export function ServerSettingsModal({ server, onClose }: Props) {
       className="bg-card border border-border w-full max-w-lg max-h-[85vh] flex flex-col rounded-none shadow-none overflow-hidden"
     >
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase text-muted-foreground">Settings</span>
-            <h3 id={titleId} className="text-lg font-normal">{server.name}{" "}<span className="sr-only">settings</span></h3>
-          </div>
-          <button type="button" aria-label="Close server settings" onClick={onClose} className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><X className="h-5 w-5" aria-hidden="true" /></button>
+          <h3 id={titleId} className="text-lg font-semibold">{server.name} settings</h3>
+          <IconButton label="Close server settings" size="compact" onClick={onClose}>
+            <X aria-hidden="true" className="h-5 w-5" />
+          </IconButton>
         </div>
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="flex min-h-0 flex-1 flex-col">
@@ -239,21 +248,20 @@ export function ServerSettingsModal({ server, onClose }: Props) {
 
             <TabPanel value="danger">
               <div className="space-y-4">
-                <label className="text-[10px] uppercase text-destructive">Danger Zone</label>
-                <div className="p-4 border border-destructive/20 bg-destructive/5 space-y-4">
-                  <div className="text-sm">
-                    <div className="font-normal text-destructive">{isOwner ? "Delete Server" : "Leave Server"}</div>
-                    <p className="text-muted-foreground text-xs">{isOwner ? "Permanent deletion of all data." : "Lose access to all channels."}</p>
-                  </div>
-                  {deleteError && <div className="text-destructive text-xs">{deleteError}</div>}
-                  <button
-                    className="px-4 py-2 bg-destructive text-white border border-destructive text-sm disabled:opacity-50"
-                    onClick={() => isOwner ? setShowConfirmDelete(true) : setShowConfirmLeave(true)}
-                    disabled={deleting || leaving}
-                  >
-                    {deleting || leaving ? "..." : (isOwner ? "Delete" : "Leave")}
-                  </button>
+                <div className="text-sm">
+                  <div className="font-medium text-destructive">{isOwner ? "Delete Server" : "Leave Server"}</div>
+                  <p className="text-xs text-muted-foreground">{isOwner ? "Permanent deletion of all data." : "Lose access to all channels."}</p>
                 </div>
+                {deleteError && <div className="text-xs text-destructive" role="alert">{deleteError}</div>}
+                <Button
+                  type="button"
+                  variant="danger"
+                  loading={deleting || leaving}
+                  disabled={deleting || leaving}
+                  onClick={() => isOwner ? setShowConfirmDelete(true) : setShowConfirmLeave(true)}
+                >
+                  {isOwner ? "Delete" : "Leave"}
+                </Button>
               </div>
             </TabPanel>
           </div>
