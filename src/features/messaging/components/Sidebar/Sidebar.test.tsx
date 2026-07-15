@@ -189,7 +189,8 @@ describe("Sidebar attachment previews", () => {
 
     const directRow = await screen.findByTestId("sidebar-item-direct-2");
     expect(directRow).toHaveClass("h-[62px]");
-    expect(directRow).toHaveClass("bg-accent");
+    expect(directRow).toHaveClass("bg-accent/70");
+    expect(directRow).toHaveAttribute("data-state", "active");
     expect(directRow).toHaveAttribute("data-presence-status", "online");
     expect(directRow).toHaveAttribute("title", "Online");
     expect(screen.getByText("1")).toBeInTheDocument();
@@ -249,10 +250,41 @@ describe("Sidebar attachment previews", () => {
     const directRow = await screen.findByTestId("sidebar-item-direct-2");
     const search = screen.getByTestId("user-search");
 
-    expect(search.parentElement?.parentElement).toHaveClass("h-[54px]", "px-[11px]", "pt-[9px]");
-    expect(search.parentElement?.parentElement).not.toHaveClass("border-b");
+    expect(search.parentElement).toHaveClass("h-[54px]", "px-[11px]", "pt-[9px]");
+    expect(search.parentElement).not.toHaveClass("border-b");
     expect(directRow).toHaveClass("px-[10px]", "gap-[11px]");
+    expect(directRow).toHaveAttribute("data-state", "inactive");
     expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
+  });
+
+  it("hides search while collapsed or in server mode", async () => {
+    const state = makeState();
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    const { rerender } = render(<Sidebar isCollapsed />);
+    expect(screen.queryByTestId("user-search")).not.toBeInTheDocument();
+
+    rerender(<Sidebar isServerMode />);
+    expect(screen.queryByTestId("user-search")).not.toBeInTheDocument();
+  });
+
+  it("keeps unread badges compact and visible in collapsed and server modes", async () => {
+    const state = makeState();
+
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    const { rerender } = render(<Sidebar isCollapsed />);
+    const collapsedBadge = screen.getByText("1");
+    expect(collapsedBadge).toHaveClass("min-w-5", "rounded-full");
+
+    rerender(<Sidebar isServerMode />);
+    const serverBadge = screen.getByText("1");
+    expect(serverBadge).toHaveClass("min-w-5", "rounded-full");
   });
 
   it("uses measured geometry for regular conversation content", async () => {

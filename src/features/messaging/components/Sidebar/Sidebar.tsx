@@ -159,11 +159,11 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
 
   const listRowClass = (isActive: boolean, collapsed: boolean) =>
     cn(
-      "relative flex w-full items-center transition-colors",
+      "relative flex w-full items-center rounded-[8px] transition-colors",
       collapsed
-        ? "justify-center rounded-[12px] px-2 py-2.5"
-        : "h-[62px] gap-[11px] border-b border-transparent px-[10px] text-left",
-      isActive ? "bg-accent" : "hover:bg-card/70",
+        ? "justify-center px-2 py-2.5"
+        : "h-[62px] gap-[11px] px-[10px] text-left",
+      isActive ? "bg-accent/70" : "hover:bg-card/70",
     );
 
   const hasListContent = serverList.length > 0 || allItems.length > 0;
@@ -177,9 +177,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
     >
       {!isServerMode && !isCollapsed && (
         <div className="h-[54px] px-[11px] pt-[9px]">
-          <div className="[&_input]:h-[35px] [&_input]:w-full [&_input]:rounded-[18px] [&_input]:border-0 [&_input]:bg-card/80 [&_input]:px-9 [&_input]:pr-10 [&_input]:text-sm [&_input]:shadow-none">
-            <UserSearch />
-          </div>
+          <UserSearch />
         </div>
       )}
 
@@ -207,6 +205,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                     onClick={() => setActiveChat(serverChatForServer(server))}
                     className={listRowClass(isActive, isCollapsed)}
                     data-testid={`sidebar-item-server-${server.id}`}
+                    data-state={isActive ? "active" : "inactive"}
                     title={server.name}
                   >
                     <Avatar
@@ -230,6 +229,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                   onClick={() => handleItemClick(item)}
                   className={listRowClass(isActive, isServerMode || isCollapsed)}
                   data-testid={`sidebar-item-${item.kind}-${item.id}`}
+                  data-state={isActive ? "active" : "inactive"}
                   data-presence-status={item.kind === "direct" ? item.status ?? "offline" : undefined}
                   title={
                     isServerMode || isCollapsed
@@ -266,12 +266,12 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                     </div>
                   )}
                   {(isServerMode || isCollapsed) && item.unread > 0 && (
-                    <span className="absolute right-1.5 top-1.5 rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
+                    <span className="absolute right-1.5 top-1.5 flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
                       {item.unread}
                     </span>
                   )}
                   {!isCollapsed && !isServerMode && item.unread > 0 && (
-                    <span className="rounded-full bg-primary px-2 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
+                    <span className="flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
                       {item.unread}
                     </span>
                   )}
