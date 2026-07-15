@@ -159,8 +159,8 @@ interface Props {
   const [entities, setEntities] = useState<MessageTextEntity[]>([]);
   const [composerContextMenu, setComposerContextMenu] = useState<{ left: number; top: number; submenuOnLeft: boolean } | null>(null);
   const [formattingOpen, setFormattingOpen] = useState(false);
-  const [activeMainMenuIndex, setActiveMainMenuIndex] = useState(6);
-  const [activeFormattingIndex, setActiveFormattingIndex] = useState(7);
+  const [activeMainMenuValue, setActiveMainMenuValue] = useState("");
+  const [activeFormattingValue, setActiveFormattingValue] = useState("create-link");
   const [createLinkDialog, setCreateLinkDialog] = useState<{ start: number; end: number; selectedText: string } | null>(null);
   const [createLinkUrl, setCreateLinkUrl] = useState("");
   const [createLinkInvalid, setCreateLinkInvalid] = useState(false);
@@ -460,6 +460,7 @@ interface Props {
   const closeComposerMenus = () => {
     setComposerContextMenu(null);
     setFormattingOpen(false);
+    textareaRef.current?.focus({ preventScroll: true });
   };
 
   const replaceSelection = (replacement: string) => {
@@ -497,8 +498,8 @@ interface Props {
     const groupTop = Math.min(Math.max(0, clientY), Math.max(0, window.innerHeight - groupHeight));
     setComposerContextMenu({ left: mainLeft, top: groupTop, submenuOnLeft });
     setFormattingOpen(false);
-    setActiveMainMenuIndex(6);
-    setActiveFormattingIndex(7);
+    setActiveMainMenuValue("");
+    setActiveFormattingValue("create-link");
   };
 
   const openContextMenu = (event: React.MouseEvent<HTMLTextAreaElement>) => {
@@ -1235,66 +1236,27 @@ interface Props {
      return Boolean(textarea && textarea.selectionStart < textarea.selectionEnd && textarea.value.slice(textarea.selectionStart, textarea.selectionEnd).trim());
    };
    const mainItems: ComposerMenuItem[] = [
-     { label: "Undo", shortcut: shortcut("Z"), disabled: true },
-     { label: "Redo", shortcut: shortcut("Y"), disabled: true },
-     { label: "Cut", shortcut: shortcut("X"), action: () => void runClipboardCommand(true) },
-     { label: "Copy", shortcut: shortcut("C"), action: () => void runClipboardCommand(false) },
-     { label: "Paste", shortcut: shortcut("V"), disabled: !navigator.clipboard?.readText, action: () => void pasteFromClipboard() },
-     { label: "Delete", action: () => { replaceSelection(""); closeComposerMenus(); } },
-     { label: "Formatting", hasSubmenu: true, action: () => setFormattingOpen(true) },
-     { label: "Select All", shortcut: shortcut("A"), action: () => { textareaRef.current?.focus(); textareaRef.current?.select(); closeComposerMenus(); } },
+     { value: "undo", label: "Undo", shortcut: shortcut("Z"), disabled: true },
+     { value: "redo", label: "Redo", shortcut: shortcut("Y"), disabled: true },
+     { value: "cut", label: "Cut", shortcut: shortcut("X"), action: () => void runClipboardCommand(true) },
+     { value: "copy", label: "Copy", shortcut: shortcut("C"), action: () => void runClipboardCommand(false) },
+     { value: "paste", label: "Paste", shortcut: shortcut("V"), disabled: !navigator.clipboard?.readText, action: () => void pasteFromClipboard() },
+     { value: "delete", label: "Delete", action: () => { replaceSelection(""); closeComposerMenus(); } },
+     { value: "formatting", label: "Formatting", hasSubmenu: true },
+     { value: "select-all", label: "Select All", shortcut: shortcut("A"), action: () => { textareaRef.current?.focus(); textareaRef.current?.select(); closeComposerMenus(); } },
    ];
    const formattingItems: ComposerMenuItem[] = [
-     { label: "Bold", shortcut: shortcut("B"), disabled: true },
-     { label: "Italic", shortcut: shortcut("I"), disabled: true },
-     { label: "Underline", shortcut: shortcut("U"), disabled: true },
-     { label: "Strikethrough", shortcut: `${modifier}Shift+X`, disabled: true },
-     { label: "Quote", shortcut: `${modifier}Shift+.`, disabled: true },
-     { label: "Monospace", shortcut: `${modifier}Shift+M`, disabled: true },
-     { label: "Spoiler", shortcut: `${modifier}Shift+P`, disabled: true },
-     { label: "Create link", shortcut: shortcut("K"), disabled: !selectedRangeIsUsable(), action: () => openCreateLinkDialog() },
-     { label: "Date", shortcut: `${modifier}Shift+D`, disabled: true },
-     { label: "Clear formatting", shortcut: `${modifier}Shift+N`, disabled: true },
+     { value: "bold", label: "Bold", shortcut: shortcut("B"), disabled: true },
+     { value: "italic", label: "Italic", shortcut: shortcut("I"), disabled: true },
+     { value: "underline", label: "Underline", shortcut: shortcut("U"), disabled: true },
+     { value: "strikethrough", label: "Strikethrough", shortcut: `${modifier}Shift+X`, disabled: true },
+     { value: "quote", label: "Quote", shortcut: `${modifier}Shift+.`, disabled: true },
+     { value: "monospace", label: "Monospace", shortcut: `${modifier}Shift+M`, disabled: true },
+     { value: "spoiler", label: "Spoiler", shortcut: `${modifier}Shift+P`, disabled: true },
+     { value: "create-link", label: "Create link", shortcut: shortcut("K"), disabled: !selectedRangeIsUsable(), action: () => openCreateLinkDialog() },
+     { value: "date", label: "Date", shortcut: `${modifier}Shift+D`, disabled: true },
+     { value: "clear-formatting", label: "Clear formatting", shortcut: `${modifier}Shift+N`, disabled: true },
    ];
-   const enabledIndex = (items: ComposerMenuItem[], index: number, direction: number) => {
-     let next = index;
-     for (let i = 0; i < items.length; i += 1) {
-       next = (next + direction + items.length) % items.length;
-       if (!items[next]?.disabled) return next;
-     }
-     return index;
-   };
-   const handleMainMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-     if (event.key === "Escape") { event.preventDefault(); closeComposerMenus(); return; }
-     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-       event.preventDefault();
-       setActiveMainMenuIndex((index) => enabledIndex(mainItems, index, event.key === "ArrowDown" ? 1 : -1));
-       return;
-     }
-     if (event.key === "ArrowRight" || (event.key === "Enter" && activeMainMenuIndex === 6)) {
-       event.preventDefault();
-       setFormattingOpen(true);
-       setActiveFormattingIndex(7);
-       return;
-     }
-     if (event.key === "Enter") {
-       event.preventDefault();
-       mainItems[activeMainMenuIndex]?.action?.();
-     }
-   };
-   const handleSubmenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-     if (event.key === "Escape") { event.preventDefault(); closeComposerMenus(); return; }
-     if (event.key === "ArrowLeft") { event.preventDefault(); setFormattingOpen(false); return; }
-     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-       event.preventDefault();
-       setActiveFormattingIndex((index) => enabledIndex(formattingItems, index, event.key === "ArrowDown" ? 1 : -1));
-       return;
-     }
-     if (event.key === "Enter") {
-       event.preventDefault();
-       formattingItems[activeFormattingIndex]?.action?.();
-     }
-   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = textareaRef.current;
@@ -1366,13 +1328,20 @@ interface Props {
            top={composerContextMenu.top}
            submenuOnLeft={composerContextMenu.submenuOnLeft}
            submenuOpen={formattingOpen}
-           activeMainIndex={activeMainMenuIndex}
-           activeSubmenuIndex={activeFormattingIndex}
-           onOpenSubmenu={() => setFormattingOpen(true)}
-           onMainActive={setActiveMainMenuIndex}
-           onSubmenuActive={setActiveFormattingIndex}
-           onMainKeyDown={handleMainMenuKeyDown}
-           onSubmenuKeyDown={handleSubmenuKeyDown}
+           activeMainValue={activeMainMenuValue}
+           activeSubmenuValue={activeFormattingValue}
+           onOpenSubmenu={() => {
+             setActiveMainMenuValue("formatting");
+             setActiveFormattingValue(formattingItems.find((item) => !item.disabled)?.value ?? "create-link");
+             setFormattingOpen(true);
+           }}
+           onMainActive={setActiveMainMenuValue}
+           onSubmenuActive={setActiveFormattingValue}
+           onClose={closeComposerMenus}
+           onCloseSubmenu={() => {
+             setFormattingOpen(false);
+             requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-menu-value="formatting"]')?.focus());
+           }}
            mainItems={mainItems}
            submenuItems={formattingItems}
          />

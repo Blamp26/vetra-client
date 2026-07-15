@@ -340,7 +340,7 @@ body[data-vt-shell-resizing="true"] {
   text-align: left;
   cursor: pointer;
 }
-.vt-composer-menu__row.is-active:not(:disabled), .vt-composer-menu__row:hover:not(:disabled) { background: #232e3c; }
+.vt-composer-menu__row.is-active:not(:disabled), .vt-composer-menu__row[data-highlighted="true"]:not(:disabled), .vt-composer-menu__row:hover:not(:disabled) { background: #232e3c; }
 .vt-composer-menu__row:disabled { color: #415469; cursor: default; }
 .vt-composer-menu__label { overflow: hidden; white-space: nowrap; font-size: 13px; line-height: 17px; font-weight: 400; }
 .vt-composer-menu__shortcut { margin-left: auto; white-space: nowrap; color: #6f8499; text-align: right; font-size: 12px; line-height: 16px; font-weight: 400; }

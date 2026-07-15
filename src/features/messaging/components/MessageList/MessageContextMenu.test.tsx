@@ -5,17 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MessageContextMenu, calculateContextMenuPosition, type Rect } from "./MessageContextMenu";
 
-function menuRect(position: { left: number; top: number }, width = 216, height = 248): Rect {
-  return {
-    left: position.left,
-    top: position.top,
-    right: position.left + width,
-    bottom: position.top + height,
-    width,
-    height,
-  };
-}
-
 function popupRect(position: { left: number; top: number }, width = 216, height = 248): Rect {
   return {
     left: position.left - 82,

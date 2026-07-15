@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Emoji } from "@/shared/components/Emoji/Emoji";
+import { Menu, MenuItem } from "@/shared/components/Menu";
 import { cn } from "@/shared/utils/cn";
 
 interface ContextMenuData {
@@ -333,8 +334,13 @@ export function MessageContextMenu({
   onClose,
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(
+    typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  );
+  const reactionSearchRef = useRef<HTMLInputElement>(null);
   const [position, setPosition] = useState({ left: data.x, top: data.y });
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeActionValue, setActiveActionValue] = useState("");
 
   useLayoutEffect(() => {
     const menu = menuRef.current;
@@ -376,12 +382,21 @@ export function MessageContextMenu({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("scroll", handleScroll, true);
+      const previous = previousFocusRef.current;
+      if (previous?.isConnected && !menuRef.current?.contains(previous)) previous.focus({ preventScroll: true });
     };
   }, [onClose]);
 
   useEffect(() => {
     setSearchQuery("");
+    setActiveActionValue("");
   }, [data.msgId, isPickerExpanded]);
+
+  useEffect(() => {
+    if (!isPickerExpanded) return;
+    const frame = requestAnimationFrame(() => reactionSearchRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [isPickerExpanded]);
 
   const actions = useMemo<ActionRow[]>(() => {
     const rows: ActionRow[] = [
@@ -480,7 +495,7 @@ export function MessageContextMenu({
                 className="px-2 pb-2 pt-2"
                 data-testid="message-context-expanded-picker-search-wrap"
               >
-                <label className="flex h-9 w-full items-center gap-2 rounded-[18px] border-0 bg-black/20 px-3 text-[#aaaaaa] shadow-none outline-none ring-0 transition-colors duration-150 focus-within:bg-black/28 focus-within:shadow-none focus-within:outline-none focus-within:ring-0">
+                <label className="flex h-9 w-full items-center gap-2 rounded-[18px] border-0 bg-black/20 px-3 text-[#aaaaaa] shadow-none outline-none ring-0 transition-colors duration-150 focus-within:bg-black/28 focus-within:shadow-none focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary">
                   <Search className="h-4 w-4 shrink-0" />
                   <input
                     type="text"
@@ -488,12 +503,17 @@ export function MessageContextMenu({
                     onChange={(event) => setSearchQuery(event.target.value)}
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => {
-                      if (event.key !== "Escape") {
-                        event.stopPropagation();
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        onClose();
+                        return;
                       }
+                      event.stopPropagation();
                     }}
                     placeholder="Search"
-                    className="h-full w-full appearance-none border-0 bg-transparent px-0 text-sm text-white shadow-none outline-none ring-0 placeholder:text-[#aaaaaa] focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+                    ref={reactionSearchRef}
+                    className="h-full w-full appearance-none border-0 bg-transparent px-0 text-sm text-white shadow-none outline-none ring-0 placeholder:text-[#aaaaaa] focus:border-0 focus:outline-none focus:ring-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    aria-label="Search reactions"
                     data-testid="message-context-expanded-picker-search"
                   />
                 </label>
@@ -570,11 +590,16 @@ export function MessageContextMenu({
 
       <div
         className="mr-[44px] flex min-h-[248px] w-[172px] overflow-y-auto rounded-[16px] bg-[rgba(33,33,33,0.867)] py-1 shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[10px]"
-        role="menu"
-        aria-label={`Message actions for ${data.author}`}
         data-testid="message-context-surface"
       >
-        <div className="flex w-full flex-col" data-testid="message-context-actions">
+        <Menu
+          className="flex w-full flex-col"
+          aria-label={`Message actions for ${data.author}`}
+          data-testid="message-context-actions"
+          activeValue={activeActionValue}
+          onActiveValueChange={setActiveActionValue}
+          autoFocus={!isPickerExpanded}
+        >
           {actions.map((action) => {
             const Icon = action.icon;
             const isDestructive = Boolean(action.destructive);
@@ -582,15 +607,13 @@ export function MessageContextMenu({
 
             return (
               <div key={action.key}>
-                <button
-                  type="button"
-                  role="menuitem"
+                <MenuItem
+                  value={action.key}
                   disabled={isDisabled}
                   title={action.title}
                   aria-label={action.ariaLabel ?? action.label}
-                  onClick={() => {
-                    if (isDisabled || !action.onSelect) return;
-                    action.onSelect();
+                  onSelect={() => {
+                    action.onSelect?.();
                     onClose();
                   }}
                   className={cn(
@@ -614,11 +637,11 @@ export function MessageContextMenu({
                     )}
                   />
                   <span className="truncate">{action.label}</span>
-                </button>
+                </MenuItem>
               </div>
             );
           })}
-        </div>
+        </Menu>
       </div>
     </div>
   );
