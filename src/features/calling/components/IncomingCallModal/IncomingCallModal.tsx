@@ -1,6 +1,8 @@
 // src/features/calling/components/IncomingCallModal/IncomingCallModal.tsx
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Phone, PhoneOff } from "lucide-react";
+import { Button } from "@/shared/components/Button";
+import { Dialog } from "@/shared/components/Dialog";
 import { CALL_UX_TEXT } from "../../utils/callUxText";
 
 interface Props {
@@ -12,6 +14,9 @@ interface Props {
 
 export function IncomingCallModal({ callerName, isPending = false, onAccept, onReject }: Props) {
   const [hasResponded, setHasResponded] = useState(false);
+  const titleId = useId();
+  const descriptionId = useId();
+  const declineRef = useRef<HTMLButtonElement>(null);
   const isResponding = isPending || hasResponded;
 
   const handleAccept = () => {
@@ -27,8 +32,18 @@ export function IncomingCallModal({ callerName, isPending = false, onAccept, onR
   };
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-14 z-[1000] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="vt-modal-panel pointer-events-auto min-w-[340px] max-w-[460px] px-5 py-4">
+    <Dialog
+      open
+      onClose={() => undefined}
+      labelledBy={titleId}
+      describedBy={descriptionId}
+      initialFocusRef={declineRef}
+      closeOnBackdrop={false}
+      closeOnEscape={false}
+      showBackdrop={false}
+      overlayClassName="pointer-events-none items-start pt-14"
+      className="pointer-events-auto min-w-[340px] max-w-[460px] px-5 py-4"
+    >
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="flex h-14 w-14 items-center justify-center rounded-[16px] border border-border bg-primary text-base font-semibold text-primary-foreground">
@@ -39,16 +54,18 @@ export function IncomingCallModal({ callerName, isPending = false, onAccept, onR
               <span className="vt-kicker text-primary">
                 {isResponding ? CALL_UX_TEXT.connecting : CALL_UX_TEXT.incoming}
               </span>
-              <span className="truncate text-base font-semibold text-foreground">{callerName}</span>
-              <span className="text-xs leading-5 text-muted-foreground">
+              <span id={titleId} className="truncate text-base font-semibold text-foreground">{callerName}</span>
+              <span id={descriptionId} className="text-xs leading-5 text-muted-foreground">
                 {isResponding ? "Joining the call..." : "Choose whether to answer or decline."}
               </span>
             </div>
           </div>
 
           <div className="ml-auto flex gap-2">
-            <button
-              className="vt-button vt-button--danger min-h-11 px-3.5 disabled:pointer-events-none disabled:opacity-60"
+            <Button
+              ref={declineRef}
+              variant="danger"
+              className="min-h-11 px-3.5 disabled:pointer-events-none disabled:opacity-60"
               onClick={handleReject}
               title="Decline"
               aria-label="Decline call"
@@ -56,10 +73,11 @@ export function IncomingCallModal({ callerName, isPending = false, onAccept, onR
             >
               <PhoneOff className="h-4 w-4" />
               <span>Decline</span>
-            </button>
+            </Button>
 
-            <button
-              className="vt-button vt-button--primary min-h-11 px-3.5 disabled:pointer-events-none disabled:opacity-60"
+            <Button
+              variant="primary"
+              className="min-h-11 px-3.5 disabled:pointer-events-none disabled:opacity-60"
               onClick={handleAccept}
               title="Accept"
               aria-label="Accept call"
@@ -67,10 +85,9 @@ export function IncomingCallModal({ callerName, isPending = false, onAccept, onR
             >
               <Phone className="h-4 w-4" />
               <span>{isResponding ? CALL_UX_TEXT.connecting : "Accept"}</span>
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
-    );
+    </Dialog>
+  );
 }

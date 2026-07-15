@@ -44,6 +44,28 @@ describe('IncomingCallModal', () => {
     expect(screen.getByRole('dialog').getAttribute('aria-modal')).toBe('true');
   });
 
+  it('exposes the caller as the dialog name and connects its description', () => {
+    renderModal('Alice', false, onAccept, onReject);
+    const dialog = screen.getByRole('dialog', { name: 'Alice' });
+
+    expect(dialog).toHaveAccessibleDescription('Choose whether to answer or decline.');
+  });
+
+  it('starts focus on Decline instead of Accept', () => {
+    renderModal('Alice', false, onAccept, onReject);
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Decline call' }));
+  });
+
+  it('does not accept or decline from Escape or a backdrop click', () => {
+    renderModal('Alice', false, onAccept, onReject);
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+    expect(onAccept).not.toHaveBeenCalled();
+    expect(onReject).not.toHaveBeenCalled();
+    expect(document.querySelector('.vt-dialog-backdrop')).not.toBeInTheDocument();
+  });
+
   // ── Имя звонящего ────────────────────────────────────────────────────────────
 
   it('отображает имя звонящего', () => {
