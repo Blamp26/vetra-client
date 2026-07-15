@@ -157,12 +157,6 @@
   --unread-badge: #2f6b5b;
   --unread-badge-text: #f8faf8;
 
-  /* Presence */
-  --presence-online: #10b981;
-  --presence-away: #f59e0b;
-  --presence-busy: #ef4444;
-  --presence-offline: #737373;
-
   /* Status Colors */
   --success: #22c55e;
   --success-bg: #f0fdf4;
@@ -179,15 +173,8 @@
 
   --surface-0: #e8ece6;
   --surface-1: #f3f6f1;
-  --surface-2: #fbfcfa;
   --text-primary: #181d1a;
   --text-secondary: #5b655d;
-  --fill-control: #dde5de;
-  --fill-danger: #a6463b;
-  --on-danger: #fff7f6;
-  --bg-danger: #fde8e5;
-  --text-danger: #8d362c;
-  --text-accent: #2f6b5b;
   --focus-ring: 0 0 0 3px rgba(47, 107, 91, 0.18);
   --focus-ring-color: var(--ring);
   --focus-ring-width: 2px;
@@ -205,9 +192,7 @@
   --dialog-backdrop: rgba(22, 29, 26, 0.42);
   --dialog-shadow: 0 10px 30px rgba(18, 24, 20, 0.12);
   --control-height-compact: 2rem;
-  --control-height-default: 2.5rem;
   --motion-feedback-duration: 180ms;
-  --motion-overlay-duration: 180ms;
   --ease-out-quart: cubic-bezier(0.2, 1, 0.3, 1);
   --panel-shadow: 0 18px 42px rgba(18, 24, 20, 0.08);
   --overlay-shadow: 0 16px 38px rgba(18, 24, 20, 0.14);
@@ -267,15 +252,8 @@
 
   --surface-0: #1b231f;
   --surface-1: #202823;
-  --surface-2: #252d28;
   --text-primary: #eef2ee;
   --text-secondary: #aab4ad;
-  --fill-control: #2b352f;
-  --fill-danger: #b65245;
-  --on-danger: #fff5f2;
-  --bg-danger: rgba(182, 82, 69, 0.14);
-  --text-danger: #f0b1a8;
-  --text-accent: #7db19f;
   --focus-ring: 0 0 0 3px rgba(125, 177, 159, 0.2);
   --focus-ring-color: var(--ring);
   --dialog-backdrop: rgba(0, 0, 0, 0.5);
@@ -972,10 +950,6 @@ body[data-vt-shell-resizing="true"] {
 
   .vt-attachment-review__menu-icon {
     color: var(--muted-foreground);
-  }
-
-  .vt-empty-state {
-    background: transparent;
   }
 
   .vt-call-shell {
