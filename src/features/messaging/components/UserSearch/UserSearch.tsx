@@ -12,6 +12,7 @@ import {
   ComboboxList,
   ComboboxOption,
 } from "@/shared/components/Combobox";
+import { IconButton } from "@/shared/components/IconButton";
 import {
   directChatForUser,
   serverChatForServer,
@@ -74,27 +75,28 @@ export function UserSearch() {
         }}
       />
       {query && (
-        <button
-          type="button"
-          aria-label="Clear search"
-          className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        <IconButton
+          label="Clear search"
+          title="Clear search"
+          size="compact"
+          className="absolute right-2 top-1/2 -translate-y-1/2"
           onClick={handleClear}
         >
-          <X className="h-4 w-4" />
-        </button>
+          <X className="h-4 w-4" aria-hidden="true" />
+        </IconButton>
       )}
 
       <ComboboxList
         aria-label="Search results"
         className={hasResults
-          ? "absolute left-0 right-0 top-full z-[110] mt-2 max-h-[320px] overflow-y-auto rounded-[var(--radius-md)] border border-border bg-popover p-1.5 shadow-[var(--overlay-shadow)]"
-          : "absolute left-0 right-0 top-full z-[110] mt-2 rounded-[var(--radius-md)] border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-[var(--overlay-shadow)]"}
+          ? "absolute left-0 right-0 top-full z-[110] mt-2 max-h-[320px] overflow-y-auto bg-popover p-1.5"
+          : "absolute left-0 right-0 top-full z-[110] mt-2 bg-popover px-3 py-2 text-xs text-muted-foreground"}
       >
           {open && isSearching && <div role="status" aria-live="polite">Searching...</div>}
           {open && !isSearching && query && !hasResults && <div role="status" aria-live="polite">No results for "{query}"</div>}
           {searchResults.users.length > 0 && (
             <ComboboxGroup className="mb-2" aria-label="Users">
-              <ComboboxGroupLabel className="vt-kicker px-2 py-1">
+              <ComboboxGroupLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
                 Users
               </ComboboxGroupLabel>
               <div className="space-y-0.5">
@@ -121,7 +123,7 @@ export function UserSearch() {
                         {user.display_name || user.username}
                       </span>
                       {user.display_name && (
-                        <span className="text-[10px] text-muted-foreground truncate">
+                        <span className="text-xs text-muted-foreground truncate">
                           @{user.username}
                         </span>
                       )}
@@ -134,7 +136,7 @@ export function UserSearch() {
 
           {searchResults.servers.length > 0 && (
             <ComboboxGroup aria-label="Servers">
-              <ComboboxGroupLabel className="vt-kicker px-2 py-1">
+              <ComboboxGroupLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
                 Servers
               </ComboboxGroupLabel>
               <div className="space-y-0.5">
@@ -145,9 +147,7 @@ export function UserSearch() {
                     className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left hover:bg-accent"
                     onSelect={() => handleSelectServer(server)}
                   >
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-[10px]">
-                      #
-                    </div>
+                    <Avatar name={server.name} size="small" />
                     <span className="text-xs font-normal truncate">
                       {server.name}
                     </span>
