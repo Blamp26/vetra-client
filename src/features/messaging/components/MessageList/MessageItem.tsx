@@ -789,7 +789,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
         inReactions && "message-reactions__metadata",
         (variant === "overlay" || variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing")
           ? variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing"
-            ? cn("message-custom-emoji-metadata", variant === "custom-emoji-trailing" && "message-custom-emoji-metadata--trailing")
+            ? cn("message-custom-emoji-metadata message-large-emoji-metadata", variant === "custom-emoji-trailing" && "message-custom-emoji-metadata--trailing")
             : overlayMetadataClassName
               : cn("gap-0 text-[12px] leading-[14px]", metadataClassName),
       )}
@@ -1601,12 +1601,12 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           </div>
         )}
           {isCustomEmojiOnlyMessage ? (
-            <div className="relative inline-flex h-[112px] w-[112px] items-center justify-center overflow-hidden bg-transparent leading-[0]" data-testid="custom-emoji-standalone">
+            <div className="message-custom-emoji-standalone relative inline-flex h-[112px] w-[112px] items-center justify-center overflow-hidden bg-transparent leading-[0]" data-testid="custom-emoji-standalone" tabIndex={0}>
               <StickerArtwork sticker={customEmoji!} className="h-[112px] w-[112px] object-contain" />
               {renderMetadata("custom-emoji-overlay")}
             </div>
           ) : isMultiCustomEmojiOnlyMessage ? (
-            <div className="custom-emoji-only-group" data-testid="custom-emoji-multiple">
+            <div className="custom-emoji-only-group" data-testid="custom-emoji-multiple" tabIndex={0}>
               <div className="custom-emoji-only-group__artwork" data-testid="custom-emoji-multiple-artwork" style={{ gap: customEmojiOnlyLayout?.gap ?? 0 }}>
                 {pureCustomEmojiSequence.entities.map((entity) => (
                   <span
@@ -1634,6 +1634,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                   ? "message-emoji-only--single"
                   : "message-emoji-only--multiple",
               )}
+              tabIndex={0}
               style={{
                 gap: `${emojiOnlyLayout?.gap ?? 0}px`,
               }}

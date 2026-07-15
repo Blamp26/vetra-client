@@ -5,8 +5,9 @@ import { LoginForm } from "./components/LoginForm/LoginForm";
 export function AuthPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   return (
-    <div className="vt-workspace flex min-h-screen items-center justify-center overflow-y-auto px-5 py-8 sm:px-8 sm:py-10">
-      <main data-testid="auth-composition" className="w-full max-w-[360px] -translate-y-3 sm:-translate-y-6">
+    <div data-testid="auth-workspace" className="vt-auth-workspace vt-workspace" style={{ position: "fixed", inset: 0, width: "100vw", height: "100dvh", minHeight: "100dvh", overflowY: "auto", overflowX: "hidden" }}>
+      <div className="vt-auth-centering">
+      <main data-testid="auth-composition" className="vt-auth-composition" style={{ width: "min(360px, calc(100vw - 40px))", maxWidth: "360px", marginInline: "auto", transform: "translateY(-24px)" }}>
         <div data-testid="auth-brand" className="mb-6 text-center text-xl font-semibold tracking-tight text-foreground">
           Vetra
         </div>
@@ -16,6 +17,7 @@ export function AuthPage() {
           <RegisterForm onSwitchToLogin={() => setMode("login")} />
         )}
       </main>
+      </div>
     </div>
   );
 }

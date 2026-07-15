@@ -38,7 +38,22 @@ describe("AuthPage", () => {
     expect(screen.getByLabelText("Username")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
     expect(screen.getAllByText("Vetra")).toHaveLength(1);
-    expect(screen.getByTestId("auth-composition")).toHaveClass("w-full", "max-w-[360px]", "-translate-y-3", "sm:-translate-y-6");
+    expect(screen.getByTestId("auth-workspace")).toHaveStyle({
+      position: "fixed",
+      inset: "0px",
+      width: "100vw",
+      height: "100dvh",
+      minHeight: "100dvh",
+      overflowY: "auto",
+    });
+    expect(screen.getByTestId("auth-composition")).toHaveStyle({
+      width: "min(360px, calc(100vw - 40px))",
+      maxWidth: "360px",
+      marginInline: "auto",
+      transform: "translateY(-24px)",
+    });
+    expect(screen.getByTestId("auth-workspace")).toHaveClass("vt-auth-workspace");
+    expect(screen.getByTestId("auth-composition")).toHaveClass("vt-auth-composition");
     expect(screen.getByTestId("auth-brand")).toBeInTheDocument();
     expect(screen.getByRole("main")).not.toHaveClass("lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]");
     expect(screen.getByRole("main").querySelector(".vt-pane")).not.toBeInTheDocument();

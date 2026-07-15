@@ -79,6 +79,31 @@
   flex: 0 0 auto;
   margin-left: 2px;
   pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.message-emoji-only:hover .message-emoji-only__metadata,
+.message-emoji-only:focus-within .message-emoji-only__metadata,
+.message-custom-emoji-standalone:hover .message-large-emoji-metadata,
+.message-custom-emoji-standalone:focus-within .message-large-emoji-metadata,
+.custom-emoji-only-group:hover .message-large-emoji-metadata,
+.custom-emoji-only-group:focus-within .message-large-emoji-metadata {
+  visibility: visible;
+  opacity: 1;
+}
+
+.message-large-emoji-metadata {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-emoji-only__metadata,
+  .message-large-emoji-metadata { transition: none; }
 }
 
 .message-emoji-only__metadata > [data-testid="message-metadata"] {

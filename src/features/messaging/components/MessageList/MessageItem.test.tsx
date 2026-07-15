@@ -206,10 +206,11 @@ describe("MessageItem bubble layout", () => {
     });
 
     expect(screen.getByTestId("custom-emoji-standalone")).toBeInTheDocument();
+    expect(screen.getByTestId("custom-emoji-standalone")).toHaveAttribute("tabindex", "0");
     expect(screen.getByTestId("authenticated-image")).toHaveAttribute("alt", "⚡️");
     expect(screen.queryByTestId("message-emoji-only")).not.toBeInTheDocument();
     expect(screen.getByTestId("message-bubble")).toHaveClass("message-emoji-only-bubble");
-    expect(screen.getByTestId("message-custom-emoji-metadata")).toHaveClass("message-custom-emoji-metadata");
+    expect(screen.getByTestId("message-custom-emoji-metadata")).toHaveClass("message-custom-emoji-metadata", "message-large-emoji-metadata");
     expect(screen.queryByTestId("message-text-tail")).not.toBeInTheDocument();
   });
 
@@ -265,6 +266,8 @@ describe("MessageItem bubble layout", () => {
     });
     expect(screen.queryByTestId("message-emoji-only")).not.toBeInTheDocument();
     expect(screen.getByTestId("custom-emoji-multiple")).toBeInTheDocument();
+    expect(screen.getByTestId("custom-emoji-multiple")).toHaveAttribute("tabindex", "0");
+    expect(screen.getByTestId("message-custom-emoji-metadata")).toHaveClass("message-large-emoji-metadata");
     expect(screen.getAllByTestId("custom-emoji-only-item")).toHaveLength(2);
     expect(screen.getByTestId("custom-emoji-multiple-artwork")).toHaveStyle({ gap: "0px" });
     expect(screen.getAllByTestId("authenticated-image")).toHaveLength(2);
@@ -440,6 +443,18 @@ describe("MessageItem bubble layout", () => {
     expect(
       screen.getByTestId("message-emoji-only-metadata"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("message-emoji-only")).toHaveAttribute("tabindex", "0");
+    expect(screen.getByTestId("message-emoji-only-metadata")).toHaveClass("message-emoji-only__metadata");
+  });
+
+  it("uses the large-emoji hover and focus-within visibility contract", () => {
+    renderMessageItem({ content: "😀😎👍" }, { isOwn: true });
+
+    const emojiOnly = screen.getByTestId("message-emoji-only");
+    const metadata = screen.getByTestId("message-emoji-only-metadata");
+    expect(metadata).toHaveClass("message-emoji-only__metadata");
+    expect(emojiOnly).toHaveAttribute("tabindex", "0");
+    expect(screen.getAllByTestId("message-metadata")).toHaveLength(1);
   });
 
   it("returns four emoji and mixed emoji text to the normal message path", () => {
