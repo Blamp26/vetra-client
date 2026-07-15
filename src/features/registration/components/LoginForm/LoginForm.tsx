@@ -39,14 +39,9 @@ export function LoginForm({ onSwitchToRegister }: Props) {
 
   return (
     <div className="vt-pane w-full px-6 py-7">
-      <div className="mb-6 space-y-2">
-        <span className="vt-kicker">Welcome back</span>
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Log in</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Continue to your desktop inbox.
-          </p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Log in</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Sign in to Vetra.</p>
       </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {error && (

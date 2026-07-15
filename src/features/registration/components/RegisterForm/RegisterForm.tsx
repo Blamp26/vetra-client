@@ -40,14 +40,9 @@ export function RegisterForm({ onSwitchToLogin }: Props) {
 
   return (
     <div className="vt-pane w-full px-6 py-7">
-      <div className="mb-6 space-y-2">
-        <span className="vt-kicker">Create account</span>
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Register</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Set up your Vetra profile and join the workspace.
-          </p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Register</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Create your Vetra account.</p>
       </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {error && (

@@ -30,6 +30,8 @@ describe("LoginForm", () => {
   it("uses username wording and username autocomplete instead of email", () => {
     render(<LoginForm onSwitchToRegister={vi.fn()} />);
 
+    expect(screen.getByRole("heading", { name: "Log in", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByText("Welcome back")).not.toBeInTheDocument();
     const usernameInput = screen.getByLabelText("Username");
     expect(usernameInput).toHaveAttribute("type", "text");
     expect(usernameInput).toHaveAttribute("placeholder", "Username");
