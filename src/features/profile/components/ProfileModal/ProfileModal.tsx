@@ -3,12 +3,12 @@ import { authApi, type UpdateProfilePayload } from "@/api/auth";
 import { postFormData, API_BASE_URL } from "@/api/base";
 import { useAppStore, type RootState } from "@/store";
 import type { User } from "@/shared/types";
-import { cn } from "@/shared/utils/cn";
 import { X } from "lucide-react";
 import { Dialog } from "@/shared/components/Dialog";
 import { Button } from "@/shared/components/Button";
 import { IconButton } from "@/shared/components/IconButton";
 import { TextInput } from "@/shared/components/Field";
+import { Avatar } from "@/shared/components/Avatar";
 
 interface Props {
   user:    User;
@@ -93,41 +93,35 @@ export function ProfileModal({ user, onClose }: Props) {
       className="vt-modal-panel relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden"
     >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div>
-            <span className="vt-kicker">Profile</span>
-            <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight">Edit account details</h3>
-          </div>
-          <IconButton label="Close profile" size="default" tone="neutral" onClick={onClose} className="vt-button vt-button--ghost vt-button--icon h-9 w-9 px-0">
+          <h3 id={titleId} className="text-xl font-semibold tracking-tight">Edit account details</h3>
+          <IconButton label="Close profile" size="default" tone="neutral" onClick={onClose}>
             <X className="h-5 w-5" aria-hidden="true" />
           </IconButton>
         </div>
 
         <div className="flex flex-col gap-5 overflow-y-auto px-5 py-5">
-          <div className="vt-panel flex flex-col items-center gap-4 bg-sidebar/35 p-5">
-            <div className="group relative h-24 w-24">
-              <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-[18px] border border-border bg-primary text-3xl font-semibold text-primary-foreground">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" />
-                ) : (
-                  (displayName || username)[0].toUpperCase()
-                )}
-              </div>
-              
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute inset-0 flex items-center justify-center rounded-[18px] bg-black/50 text-[10px] font-semibold uppercase tracking-[0.08em] text-white opacity-0 transition-opacity group-hover:opacity-100"
-              >
-                Change
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }}
-              />
-            </div>
+          <div data-testid="profile-avatar-section" className="flex flex-col items-center gap-4">
+            <Avatar
+              name={displayName || username}
+              src={avatarUrl || null}
+              size="large"
+              className="h-24 w-24 rounded-[18px] text-3xl font-semibold"
+            />
+            <Button
+              size="compact"
+              variant="secondary"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Change avatar
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); }}
+            />
 
             <div className="w-full space-y-1">
               <label className="vt-label" htmlFor="profile-avatar-url">Avatar URL</label>
@@ -171,8 +165,9 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           <div className="space-y-1">
-            <label className="vt-label">Bio</label>
+            <label className="vt-label" htmlFor="profile-bio">Bio</label>
             <textarea
+              id="profile-bio"
               className="vt-textarea resize-none"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
@@ -181,23 +176,26 @@ export function ProfileModal({ user, onClose }: Props) {
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="vt-label">Status</label>
-            <div className="grid grid-cols-2 gap-2">
+          <fieldset className="space-y-2">
+            <legend className="vt-label">Status</legend>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Status">
               {(['online', 'away', 'dnd', 'offline'] as const).map((s) => (
-                <button
+                <label
                   key={s}
-                  onClick={() => setStatus(s)}
-                  className={cn(
-                    "vt-button min-h-10 justify-start px-3 text-xs uppercase tracking-[0.06em]",
-                    status === s ? "vt-button--primary" : ""
-                  )}
+                  className="flex min-h-10 cursor-pointer items-center gap-2 rounded-[12px] border border-border px-3 text-sm"
                 >
-                  {s === "dnd" ? "Do Not Disturb" : s}
-                </button>
+                  <input
+                    type="radio"
+                    name="profile-status"
+                    value={s}
+                    checked={status === s}
+                    onChange={() => setStatus(s)}
+                  />
+                  <span>{s === "dnd" ? "Do Not Disturb" : s[0].toUpperCase() + s.slice(1)}</span>
+                </label>
               ))}
             </div>
-          </div>
+          </fieldset>
 
           {error && <p role="alert" className="text-destructive text-xs">{error}</p>}
         </div>
@@ -210,7 +208,7 @@ export function ProfileModal({ user, onClose }: Props) {
             disabled={saving}
             loading={saving}
           >
-            {saving ? "Saving..." : "Save"}
+            Save
           </Button>
         </div>
     </Dialog>
