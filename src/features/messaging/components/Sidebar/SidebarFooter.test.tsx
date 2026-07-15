@@ -13,7 +13,22 @@ vi.mock("@/store", () => ({
 }));
 
 vi.mock("@/features/profile/components/ProfileModal/ProfileModal", () => ({
-  ProfileModal: () => null,
+  ProfileModal: ({ onClose }: { onClose: () => void }) => {
+    const opener = document.activeElement;
+    return (
+      <div role="dialog" aria-label="Profile">
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            if (opener instanceof HTMLElement) opener.focus();
+          }}
+        >
+          Close profile
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock("@/shared/components/ConfirmModal/ConfirmModal", () => ({
@@ -37,6 +52,9 @@ function renderFooter({
   onHangUp = vi.fn(),
   onMuteToggle = vi.fn(),
   onReturnToCall = vi.fn(),
+  onOpenSettings = vi.fn(),
+  isCollapsed = false,
+  isMuted = false,
 }: {
   callStatus?: CallStatus;
   remoteUsername?: string | null;
@@ -49,13 +67,16 @@ function renderFooter({
   onHangUp?: () => void;
   onMuteToggle?: () => void;
   onReturnToCall?: () => void;
+  onOpenSettings?: () => void;
+  isCollapsed?: boolean;
+  isMuted?: boolean;
 } = {}) {
   return render(
     <SidebarFooter
       callStatus={callStatus}
       remoteUsername={remoteUsername}
       callSeconds={12}
-      isMuted={false}
+      isMuted={isMuted}
       isScreenSharing={isScreenSharing}
       isScreenShareUpdating={isScreenShareUpdating}
       callIssue={callIssue}
@@ -64,8 +85,9 @@ function renderFooter({
       onHangUp={onHangUp}
       onAcceptCall={onAcceptCall}
       onRejectCall={onRejectCall}
-      onOpenSettings={vi.fn()}
+      onOpenSettings={onOpenSettings}
       onReturnToCall={onReturnToCall}
+      isCollapsed={isCollapsed}
     />,
   );
 }
@@ -193,7 +215,7 @@ describe("SidebarFooter call UX", () => {
     const onReturnToCall = vi.fn();
     renderFooter({ callStatus: "active", onMuteToggle, onReturnToCall });
 
-    fireEvent.click(screen.getByTitle("Mic"));
+    fireEvent.click(screen.getByRole("button", { name: "Mute microphone" }));
 
     expect(toggleMicMock).toHaveBeenCalledTimes(1);
     expect(onMuteToggle).toHaveBeenCalledTimes(1);
@@ -203,8 +225,66 @@ describe("SidebarFooter call UX", () => {
   it("keeps footer quick controls aligned as compact buttons", () => {
     renderFooter();
 
-    expect(screen.getByTitle("Mic")).toHaveClass("h-8");
-    expect(screen.getByTitle("Mute sound")).toHaveClass("h-8");
-    expect(screen.getByTitle("Settings")).toHaveClass("h-8");
+    expect(screen.getByRole("button", { name: "Mute microphone" })).toHaveClass("vt-icon-button--compact");
+    expect(screen.getByRole("button", { name: "Mute sound" })).toHaveClass("vt-icon-button--compact");
+    expect(screen.getByRole("button", { name: "Open settings" })).toHaveClass("vt-icon-button--compact");
+  });
+
+  it("keeps the profile identity as one accessible trigger and restores focus after closing", () => {
+    renderFooter();
+
+    const profileTrigger = screen.getByRole("button", { name: "Open profile for Tester" });
+    profileTrigger.focus();
+    fireEvent.click(profileTrigger);
+
+    expect(screen.getByRole("dialog", { name: "Profile" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close profile" }));
+
+    expect(profileTrigger).toHaveFocus();
+  });
+
+  it("uses state-specific microphone and sound labels", () => {
+    useAppStoreMock.mockImplementation((selector: (state: any) => unknown) =>
+      selector({
+        currentUser: { id: 1, username: "tester", display_name: "Tester", status: "online" },
+        onlineUserIds: new Set([1]),
+        userStatuses: {},
+        micEnabled: false,
+        soundEnabled: false,
+        toggleMic: toggleMicMock,
+        toggleSound: toggleSoundMock,
+      }),
+    );
+
+    renderFooter({ callStatus: "active", isMuted: true });
+
+    expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Restore call audio output" })).toBeInTheDocument();
+  });
+
+  it("keeps settings wired to the existing handler", () => {
+    const onOpenSettings = vi.fn();
+    renderFooter({ onOpenSettings });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains all routine controls while collapsed without identity text", () => {
+    renderFooter({ isCollapsed: true });
+
+    expect(screen.getByRole("button", { name: "Open profile for Tester" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mute microphone" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mute sound" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-footer-status")).not.toBeInTheDocument();
+  });
+
+  it("removes the nested identity card treatment", () => {
+    const identityRow = renderFooter().getByTestId("sidebar-footer-identity-row");
+
+    expect(identityRow).not.toHaveClass("border");
+    expect(identityRow).not.toHaveClass("bg-card/90");
   });
 });

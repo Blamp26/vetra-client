@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { Avatar } from "@/shared/components/Avatar";
+import { IconButton } from "@/shared/components/IconButton";
 import { cn } from "@/shared/utils/cn";
 import {
   Settings,
@@ -273,9 +274,9 @@ export function SidebarFooter({
         )}
 
         <div className={cn(
-          "flex items-center rounded-[12px] border border-border bg-card/90",
+          "flex items-center",
           isCollapsed ? "justify-center px-2 py-2" : "justify-between px-3 py-2.5",
-        )}>
+        )} data-testid="sidebar-footer-identity-row">
           <button
             type="button"
             className="flex min-w-0 items-center gap-2 rounded-[10px] border-0 bg-transparent p-0 text-left text-foreground"
@@ -314,43 +315,61 @@ export function SidebarFooter({
           </button>
 
           <div className={cn("flex items-center gap-1", isCollapsed && "ml-2")}>
-            <button
+            <IconButton
+              size="compact"
+              tone={isMicMuted ? "danger" : "neutral"}
+              label={isMicMuted ? "Unmute microphone" : "Mute microphone"}
+              title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
               onClick={() => {
                 toggleMic();
                 if (callStatus === "active" && onMuteToggle) {
                   onMuteToggle();
                 }
               }}
-              title="Mic"
-              aria-label="Toggle microphone"
-              className="flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-accent"
             >
               {isMicMuted ? (
                 <MicOff className="h-3.5 w-3.5 text-destructive" />
               ) : (
                 <Mic className="h-3.5 w-3.5" />
               )}
-            </button>
-            <button
+            </IconButton>
+            <IconButton
+              size="compact"
+              tone={soundEnabled ? "neutral" : "danger"}
+              label={
+                callStatus === "active"
+                  ? soundEnabled
+                    ? "Mute call audio output"
+                    : "Restore call audio output"
+                  : soundEnabled
+                    ? "Mute sound"
+                    : "Restore sound"
+              }
+              title={
+                callStatus === "active"
+                  ? soundEnabled
+                    ? "Mute call audio output"
+                    : "Restore call audio output"
+                  : soundEnabled
+                    ? "Mute sound"
+                    : "Restore sound"
+              }
               onClick={() => toggleSound()}
-              title={callStatus === "active" ? (soundEnabled ? "Mute call audio output" : "Restore call audio output") : (soundEnabled ? "Mute sound" : "Restore sound")}
-              aria-label={callStatus === "active" ? (soundEnabled ? "Mute call audio output" : "Restore call audio output") : "Toggle sound"}
-              className="flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-accent"
             >
               {soundEnabled ? (
                 <Headphones className="h-3.5 w-3.5" />
               ) : (
                 <HeadphoneOff className="h-3.5 w-3.5 text-destructive" />
               )}
-            </button>
-            <button
+            </IconButton>
+            <IconButton
+              size="compact"
+              label="Open settings"
+              title="Open settings"
               onClick={onOpenSettings}
-              title="Settings"
-              aria-label="Open settings"
-              className="flex h-8 w-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-accent"
             >
               <Settings className="h-3.5 w-3.5" />
-            </button>
+            </IconButton>
           </div>
         </div>
       </div>
