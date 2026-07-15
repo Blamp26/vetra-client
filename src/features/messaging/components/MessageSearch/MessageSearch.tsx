@@ -4,7 +4,7 @@ import { messagesApi } from "@/api/messages";
 import { useAppStore } from "@/store";
 import type { Message } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
-import { Search, X, Loader2, MessageSquare } from "lucide-react";
+import { Search, X, Loader2 } from "lucide-react";
 import { withFallbackRef } from "@/shared/utils/refs";
 import { getPreviewText } from "../../utils/attachments";
 import { Dialog } from "@/shared/components/Dialog";
@@ -96,11 +96,8 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
       className="bg-card border border-border w-full max-w-[500px] max-h-[80vh] flex flex-col overflow-hidden"
     >
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <h3 id={titleId} className="text-sm font-normal flex items-center gap-2">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            Search
-          </h3>
-          <IconButton label="Close message search" size="compact" className="p-1 hover:bg-accent text-muted-foreground hover:text-foreground" onClick={onClose}>
+          <h3 id={titleId} className="text-sm font-normal">Search messages</h3>
+          <IconButton label="Close message search" size="compact" onClick={onClose}>
             <X className="w-4 h-4" aria-hidden="true" />
           </IconButton>
         </div>
@@ -111,7 +108,7 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
             <TextInput
               ref={inputRef}
               aria-label="Search messages"
-              className="w-full bg-background border border-border px-10 py-2 text-sm outline-none focus:border-primary"
+              className="w-full pl-10"
               placeholder="Search..."
               value={query}
               onChange={handleChange}
@@ -140,15 +137,15 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
 
             {!loading && results.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] uppercase text-muted-foreground px-2 mb-1">
-                  Results ({results.length})
+                <div className="mb-1 px-2 text-xs text-muted-foreground">
+                  {results.length} result{results.length === 1 ? "" : "s"}
                 </div>
                 {results.map((m) => (
                   <button
                     type="button"
                     key={m.id}
                     onClick={() => onJumpTo(m.id)}
-                    className="w-full text-left p-2 border border-border bg-card hover:bg-accent flex flex-col gap-1"
+                    className="flex w-full flex-col gap-1 rounded-[8px] p-2 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   >
                     <div className="flex items-center gap-2">
                       <Avatar name={m.sender_display_name || m.sender_username} size="small" src={m.sender?.avatar_url} />
@@ -171,7 +168,6 @@ export function MessageSearch({ targetId, type, onClose, onJumpTo }: Props) {
 
             {!loading && !query.trim() && (
               <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground text-center">
-                <MessageSquare className="w-8 h-8 opacity-20" />
                 <span className="text-xs">Enter text to find messages</span>
               </div>
             )}
