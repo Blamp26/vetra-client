@@ -129,4 +129,44 @@ describe("Dialog", () => {
     expect(document.activeElement).toBe(invoker);
     expect(document.body.style.overflow).toBe("");
   });
+
+  it("gives nested dialogs exclusive Escape and focus ownership", () => {
+    function NestedHarness() {
+      const [childOpen, setChildOpen] = React.useState(false);
+      const [parentOpen, setParentOpen] = React.useState(true);
+      return (
+        <>
+          <button>Outside</button>
+          {parentOpen && (
+            <Dialog open onClose={() => setParentOpen(false)} labelledBy="parent-title">
+              <h2 id="parent-title">Parent</h2>
+              <button onClick={() => setChildOpen(true)}>Open child</button>
+              {childOpen && (
+                <Dialog open onClose={() => setChildOpen(false)} labelledBy="child-title">
+                  <h2 id="child-title">Child</h2>
+                  <button>Child action</button>
+                </Dialog>
+              )}
+            </Dialog>
+          )}
+        </>
+      );
+    }
+
+    render(<NestedHarness />);
+    const openChild = screen.getByRole("button", { name: "Open child" });
+    openChild.focus();
+    fireEvent.click(openChild);
+    const child = screen.getByRole("dialog", { name: "Child" });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Child action" }));
+    fireEvent.keyDown(child, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Child" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Parent" })).toBeInTheDocument();
+    expect(document.activeElement).toBe(openChild);
+    expect(document.body.style.overflow).toBe("hidden");
+
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Parent" }), { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Parent" })).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe("");
+  });
 });

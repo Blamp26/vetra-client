@@ -1,10 +1,11 @@
 // client/src/features/settings/components/SettingsPage/SettingsPage.tsx
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useId, useRef } from 'react';
 import { useAppStore, type RootState } from '@/store';
 import { ProfileModal } from '@/features/profile/components/ProfileModal/ProfileModal';
 import { ConfirmModal } from '@/shared/components/ConfirmModal/ConfirmModal';
 import { cn } from '@/shared/utils/cn';
 import { Tabs, Tab, TabList, TabPanel } from '@/shared/components/Tabs';
+import { Dialog } from '@/shared/components/Dialog';
 import { themeLabels, type Theme } from "@/themes";
 import {
   getNotificationPermissionStatus,
@@ -304,12 +305,9 @@ export function SettingsPage({ onClose }: Props) {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus | 'loading'>('loading');
-
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  const titleId = useId();
+  const accountTabRef = useRef<HTMLButtonElement>(null);
+  const profileTriggerRef = useRef<HTMLButtonElement>(null);
 
   const refreshNotificationPermission = useCallback(async () => {
     const status = await getNotificationPermissionStatus();
@@ -333,9 +331,16 @@ export function SettingsPage({ onClose }: Props) {
   ];
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
-      <div className="vt-modal-backdrop" onClick={onClose} />
-      <div className="vt-modal-panel relative z-10 flex h-[82vh] w-full max-w-5xl overflow-hidden">
+    <Dialog
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      initialFocusRef={accountTabRef as React.RefObject<HTMLElement>}
+      trapFocus={!showEditProfile}
+      closeOnEscape={!showEditProfile}
+      backdropClassName="vt-dialog-backdrop--settings"
+      className="vt-modal-panel relative z-10 flex h-[82vh] w-full max-w-5xl overflow-hidden"
+    >
         <Tabs
           value={tab}
           onValueChange={(value) => setTab(value as SettingsTab)}
@@ -345,7 +350,7 @@ export function SettingsPage({ onClose }: Props) {
         <div className="flex w-72 flex-col border-r border-border bg-sidebar/60 px-4 py-5">
           <div className="mb-5">
             <span className="vt-kicker">Preferences</span>
-            <h2 className="mt-1 text-xl font-semibold tracking-tight">Settings</h2>
+            <h2 id={titleId} className="mt-1 text-xl font-semibold tracking-tight">Settings</h2>
           </div>
           <TabList aria-label="Settings sections" className="flex flex-col gap-1">
             {tabs.map((t) => (
@@ -377,7 +382,7 @@ export function SettingsPage({ onClose }: Props) {
                   <div className="font-medium">{currentUser.display_name || currentUser.username}</div>
                   <div className="text-xs text-muted-foreground">@{currentUser.username}</div>
                 </div>
-                <button onClick={() => setShowEditProfile(true)} className="vt-button">Edit</button>
+                <button ref={profileTriggerRef} onClick={() => setShowEditProfile(true)} className="vt-button">Edit</button>
               </div>
               <div className="vt-panel overflow-hidden">
                 <div className="flex justify-between border-b border-border px-4 py-3 text-sm">
@@ -436,8 +441,7 @@ export function SettingsPage({ onClose }: Props) {
           </TabPanel>
         </div>
         </Tabs>
-      </div>
-      {showEditProfile && currentUser && <ProfileModal user={currentUser} onClose={() => setShowEditProfile(false)} />}
+      {showEditProfile && currentUser && <ProfileModal user={currentUser} onClose={() => { setShowEditProfile(false); requestAnimationFrame(() => profileTriggerRef.current?.focus()); }} />}
       {showLogoutConfirm && (
         <ConfirmModal
           title="Log out?"
@@ -447,6 +451,6 @@ export function SettingsPage({ onClose }: Props) {
           onConfirm={() => { setShowLogoutConfirm(false); logout(); onClose(); }}
         />
       )}
-    </div>
+    </Dialog>
   );
 }

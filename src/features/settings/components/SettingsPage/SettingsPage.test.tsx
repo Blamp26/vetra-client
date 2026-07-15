@@ -123,6 +123,16 @@ describe("SettingsPage audio settings", () => {
     tabs.forEach((tab) => expect(document.getElementById(tab.getAttribute("aria-controls")!)).toBeInTheDocument());
   });
 
+  it("uses the shared named dialog and focuses the Account tab initially", () => {
+    const onClose = vi.fn();
+    render(<SettingsPage onClose={onClose} />);
+    const dialog = screen.getByRole("dialog", { name: "Settings" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Account" }));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("uses vertical keyboard navigation and mounts audio settings only when selected", async () => {
     render(<SettingsPage onClose={vi.fn()} />);
 

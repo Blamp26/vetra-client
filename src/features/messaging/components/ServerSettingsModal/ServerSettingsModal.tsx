@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useServerMembers } from "@/features/messaging/hooks/useServerMembers";
 import { useUserSearch } from "@/features/messaging/hooks/useUserSearch";
 import { useAppStore, type RootState, getState } from "@/store";
 import { serversApi } from "@/api/servers";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
+import { Dialog } from "@/shared/components/Dialog";
 import { Tab as TabsTab, TabList, TabPanel, Tabs } from "@/shared/components/Tabs";
 import type { Server } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
@@ -141,6 +142,8 @@ export function ServerSettingsModal({ server, onClose }: Props) {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [showConfirmLeave, setShowConfirmLeave] = useState(false);
   const isOwner = currentUser?.id === server.created_by;
+  const titleId = useId();
+  const membersTabRef = useRef<HTMLButtonElement>(null);
 
   async function handleLeaveServer() {
     if (!currentUser) return;
@@ -181,19 +184,26 @@ export function ServerSettingsModal({ server, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border w-full max-w-lg max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <Dialog
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      initialFocusRef={membersTabRef as React.RefObject<HTMLElement>}
+      backdropClassName="vt-dialog-backdrop--server-settings"
+      className="bg-card border border-border w-full max-w-lg max-h-[85vh] flex flex-col rounded-none shadow-none overflow-hidden"
+    >
         <div className="p-4 border-b border-border flex items-center justify-between">
           <div className="flex flex-col">
             <span className="text-[10px] uppercase text-muted-foreground">Settings</span>
-            <h3 className="text-lg font-normal">{server.name}</h3>
+            <h3 id={titleId} className="text-lg font-normal">{server.name}{" "}<span className="sr-only">settings</span></h3>
           </div>
-          <button onClick={onClose}><X className="h-5 w-5" /></button>
+          <button type="button" aria-label="Close server settings" onClick={onClose} className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><X className="h-5 w-5" aria-hidden="true" /></button>
         </div>
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="flex min-h-0 flex-1 flex-col">
           <TabList aria-label="Server settings sections" className="flex px-4 border-b border-border gap-4">
             <TabsTab
+              ref={membersTabRef}
               value="members"
               className={cn(
                 "py-3 text-sm border-b-2",
@@ -239,14 +249,12 @@ export function ServerSettingsModal({ server, onClose }: Props) {
             </TabPanel>
           </div>
         </Tabs>
-      </div>
-
       {showConfirmDelete && (
         <ConfirmModal title="Delete Server" message="Are you sure?" confirmLabel="Delete" onConfirm={handleDeleteServer} onCancel={() => setShowConfirmDelete(false)} isLoading={deleting} isDanger />
       )}
       {showConfirmLeave && (
         <ConfirmModal title="Leave Server" message="Are you sure?" confirmLabel="Leave" onConfirm={handleLeaveServer} onCancel={() => setShowConfirmLeave(false)} isLoading={leaving} isDanger />
       )}
-    </div>
+    </Dialog>
   );
 }

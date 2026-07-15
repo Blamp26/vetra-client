@@ -18,6 +18,8 @@ const FOCUSABLE_SELECTOR = [
 
 let scrollLockCount = 0;
 let previousBodyOverflow = "";
+let nextDialogId = 1;
+const openDialogStack: number[] = [];
 
 function getFocusableElements(container: HTMLElement) {
   return Array.from(
@@ -38,7 +40,9 @@ export interface DialogProps {
   initialFocusRef?: React.RefObject<HTMLElement>;
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
+  trapFocus?: boolean;
   showBackdrop?: boolean;
+  backdropClassName?: string;
   className?: string;
   overlayClassName?: string;
   children: React.ReactNode;
@@ -52,33 +56,59 @@ export function Dialog({
   initialFocusRef,
   closeOnBackdrop = true,
   closeOnEscape = true,
+  trapFocus = true,
   showBackdrop = true,
+  backdropClassName,
   className,
   overlayClassName,
   children,
 }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const dialogIdRef = useRef<number | null>(null);
+
+  if (dialogIdRef.current === null) dialogIdRef.current = nextDialogId++;
+  const dialogId = dialogIdRef.current;
+
+  const isTopmost = () => openDialogStack[openDialogStack.length - 1] === dialogId;
 
   useEffect(() => {
     if (!open) return;
 
+    openDialogStack.push(dialogId);
+
     restoreFocusRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    return () => {
+      const stackIndex = openDialogStack.indexOf(dialogId);
+      if (stackIndex !== -1) openDialogStack.splice(stackIndex, 1);
+      const restoreTarget = restoreFocusRef.current;
+      if (stackIndex === openDialogStack.length && restoreTarget?.isConnected && !restoreTarget.hasAttribute("disabled")) {
+        restoreTarget.focus();
+      }
+    };
+  }, [dialogId, open]);
+
+  useEffect(() => {
+    if (!open || !trapFocus || !isTopmost()) return;
 
     const dialog = dialogRef.current;
     if (!dialog) return;
 
-    const initialFocus = initialFocusRef?.current;
-    const focusable = getFocusableElements(dialog);
-    const target =
-      initialFocus && !initialFocus.hasAttribute("disabled")
-        ? initialFocus
-        : focusable[0] ?? dialog;
+    if (trapFocus && isTopmost()) {
+      const initialFocus = initialFocusRef?.current;
+      const focusable = getFocusableElements(dialog);
+      const target =
+        initialFocus && !initialFocus.hasAttribute("disabled")
+          ? initialFocus
+          : focusable[0] ?? dialog;
 
-    target.focus();
+      target.focus();
+    }
 
     const handleFocusIn = (event: FocusEvent) => {
+      if (!isTopmost() || !trapFocus) return;
       if (dialog.contains(event.target as Node)) return;
       const nextTarget =
         initialFocusRef?.current && !initialFocusRef.current.hasAttribute("disabled")
@@ -90,12 +120,8 @@ export function Dialog({
     document.addEventListener("focusin", handleFocusIn);
     return () => {
       document.removeEventListener("focusin", handleFocusIn);
-      const restoreTarget = restoreFocusRef.current;
-      if (restoreTarget?.isConnected && !restoreTarget.hasAttribute("disabled")) {
-        restoreTarget.focus();
-      }
     };
-  }, [initialFocusRef, open]);
+  }, [dialogId, initialFocusRef, open, trapFocus]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,6 +142,7 @@ export function Dialog({
   }, [open]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!isTopmost()) return;
     if (event.key === "Escape") {
       if (!closeOnEscape || event.defaultPrevented) return;
       event.preventDefault();
@@ -124,7 +151,7 @@ export function Dialog({
       return;
     }
 
-    if (event.key !== "Tab") return;
+    if (!trapFocus || event.key !== "Tab") return;
 
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -161,9 +188,9 @@ export function Dialog({
     >
       {showBackdrop && (
         <div
-          className="vt-dialog-backdrop"
+          className={backdropClassName ?? "vt-dialog-backdrop"}
           aria-hidden="true"
-          onMouseDown={closeOnBackdrop ? onClose : undefined}
+          onMouseDown={closeOnBackdrop ? () => { if (isTopmost()) onClose(); } : undefined}
           data-testid="dialog-backdrop"
         />
       )}

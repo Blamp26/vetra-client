@@ -84,6 +84,14 @@ describe("ServerSettingsModal tabs", () => {
     expect(screen.queryByText("Permanent deletion of all data.")).not.toBeInTheDocument();
   });
 
+  it("uses a named dialog, focuses Members, and labels the close control", () => {
+    render(<ServerSettingsModal server={server} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog", { name: "Vetra Team settings" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Members" }));
+    expect(screen.getByRole("button", { name: "Close server settings" })).toBeInTheDocument();
+  });
+
   it("switches panels with arrows, Home, End, and click without invoking mutations", () => {
     const onClose = vi.fn();
     render(<ServerSettingsModal server={server} onClose={onClose} />);
