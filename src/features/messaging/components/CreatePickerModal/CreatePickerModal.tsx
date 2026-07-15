@@ -1,3 +1,8 @@
+import { useId, useRef } from "react";
+import { Dialog } from "@/shared/components/Dialog";
+import { IconButton } from "@/shared/components/IconButton";
+import { X } from "lucide-react";
+
 interface Props {
   onPickServer: () => void;
   onPickGroup: () => void;
@@ -5,16 +10,28 @@ interface Props {
 }
 
 export function CreatePickerModal({ onPickServer, onPickGroup, onClose }: Props) {
+  const titleId = useId();
+  const serverButtonRef = useRef<HTMLButtonElement>(null);
+
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border w-full max-w-sm flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <Dialog
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      initialFocusRef={serverButtonRef}
+      className="bg-card border border-border w-full max-w-sm flex flex-col"
+    >
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="text-lg font-normal">Create</h3>
-          <button onClick={onClose} className="text-2xl">×</button>
+          <h3 id={titleId} className="text-lg font-normal">Create</h3>
+          <IconButton label="Close create menu" size="compact" className="text-2xl" onClick={onClose}>
+            <X className="h-4 w-4" aria-hidden="true" />
+          </IconButton>
         </div>
 
         <div className="p-4 grid gap-2">
           <button
+            ref={serverButtonRef}
+            type="button"
             className="p-4 text-left border border-border bg-background hover:bg-accent"
             onClick={onPickServer}
           >
@@ -23,6 +40,7 @@ export function CreatePickerModal({ onPickServer, onPickGroup, onClose }: Props)
           </button>
 
           <button
+            type="button"
             className="p-4 text-left border border-border bg-background hover:bg-accent"
             onClick={onPickGroup}
           >
@@ -30,7 +48,6 @@ export function CreatePickerModal({ onPickServer, onPickGroup, onClose }: Props)
             <div className="text-xs text-muted-foreground">Direct conversation cluster.</div>
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

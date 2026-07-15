@@ -12,6 +12,11 @@ import {
   ComboboxList,
   ComboboxOption,
 } from "@/shared/components/Combobox";
+import { Button } from "@/shared/components/Button";
+import { Dialog } from "@/shared/components/Dialog";
+import { IconButton } from "@/shared/components/IconButton";
+import { TextInput } from "@/shared/components/Field";
+import { X } from "lucide-react";
 
 interface Props {
   onClose: () => void;
@@ -33,6 +38,9 @@ export function CreateRoomModal({ onClose }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchValue, setActiveSearchValue] = useState<string | undefined>();
   const memberInputId = useId();
+  const titleId = useId();
+  const nameErrorId = useId();
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -124,27 +132,38 @@ export function CreateRoomModal({ onClose }: Props) {
     }
   };
 
+  const nameInvalid = error === "Enter group name";
+
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border w-full max-w-md flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <Dialog
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      initialFocusRef={nameInputRef}
+      className="bg-card border border-border w-full max-w-md flex flex-col max-h-[90vh] overflow-hidden"
+    >
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="text-lg font-normal">Create Group</h3>
-          <button onClick={onClose} className="text-2xl">×</button>
+          <h3 id={titleId} className="text-lg font-normal">Create Group</h3>
+          <IconButton label="Close create group" size="compact" className="text-2xl" onClick={onClose}>
+            <X className="h-4 w-4" aria-hidden="true" />
+          </IconButton>
         </div>
 
         <div className="p-4 overflow-y-auto">
-          {error && <div className="bg-destructive/10 border border-destructive p-2 text-destructive text-xs mb-4">{error}</div>}
+          {error && <div id={nameInvalid ? nameErrorId : undefined} role="alert" className="bg-destructive/10 border border-destructive p-2 text-destructive text-xs mb-4">{error}</div>}
 
           <div className="flex flex-col gap-1 mb-4">
             <label className="text-[10px] uppercase text-muted-foreground" htmlFor="create-room-name">Group name</label>
-            <input
+            <TextInput
+              ref={nameInputRef}
+              aria-describedby={nameInvalid ? nameErrorId : undefined}
+              invalid={nameInvalid}
               className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
               id="create-room-name"
               type="text"
               placeholder="Name..."
               value={name}
               onChange={(e) => setName(e.target.value)}
-              autoFocus
             />
           </div>
 
@@ -162,7 +181,7 @@ export function CreateRoomModal({ onClose }: Props) {
                 {selectedUsers.map((u) => (
                   <span key={u.id} className="inline-flex items-center gap-1 px-2 py-1 bg-muted text-xs border border-border">
                     {u.display_name || u.username}
-                    <button onClick={() => removeUser(u.id)} className="text-muted-foreground hover:text-destructive">×</button>
+                    <button type="button" aria-label={`Remove ${u.display_name || u.username}`} onClick={() => removeUser(u.id)} className="text-muted-foreground hover:text-destructive">×</button>
                   </span>
                 ))}
               </div>
@@ -198,16 +217,18 @@ export function CreateRoomModal({ onClose }: Props) {
         </div>
 
         <div className="p-4 border-t border-border flex gap-2 justify-end">
-          <button className="px-4 py-2 text-sm border border-border" onClick={onClose} disabled={isCreating}>Cancel</button>
-          <button
+          <Button variant="secondary" className="px-4 py-2 text-sm border border-border" onClick={onClose} disabled={isCreating}>Cancel</Button>
+          <Button
+            type="button"
+            variant="primary"
+            loading={isCreating}
             className="px-4 py-2 bg-primary text-primary-foreground text-sm border border-primary disabled:opacity-50"
             onClick={handleCreate}
             disabled={isCreating || !name.trim()}
           >
             {isCreating ? "..." : "Create"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
