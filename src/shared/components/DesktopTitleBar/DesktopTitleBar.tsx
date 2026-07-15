@@ -90,17 +90,13 @@ export function DesktopTitleBar() {
         void handleToggleMaximize();
       }}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2" data-tauri-drag-region>
-        <div
-          className="flex h-5 items-center gap-1.5 text-[12px] font-medium text-foreground/90"
+      <div className="flex min-w-0 flex-1 items-center" data-tauri-drag-region>
+        <span
+          className="flex h-5 items-center text-[12px] font-medium text-foreground/90"
           data-tauri-drag-region
         >
-          <span className="h-2 w-2 rounded-full bg-primary" data-tauri-drag-region />
-          <span data-tauri-drag-region>Vetra</span>
-        </div>
-        <div className="text-[11px] leading-none text-muted-foreground" data-tauri-drag-region>
-          Desktop
-        </div>
+          Vetra
+        </span>
       </div>
 
       <div className="flex h-full items-stretch">

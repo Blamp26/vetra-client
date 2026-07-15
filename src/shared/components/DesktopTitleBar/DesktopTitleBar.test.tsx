@@ -43,6 +43,8 @@ describe("DesktopTitleBar", () => {
 
     expect(screen.getByTestId("desktop-title-bar")).toBeInTheDocument();
     expect(screen.getByTestId("desktop-title-bar")).toHaveStyle({ height: `${APP_TITLE_BAR_HEIGHT}px` });
+    expect(screen.getByText("Vetra")).toBeInTheDocument();
+    expect(screen.queryByText("Desktop")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(getCurrentWindowMock).toHaveBeenCalledTimes(1);
     });
