@@ -1,9 +1,15 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useServerMembers } from "@/features/messaging/hooks/useServerMembers";
 import { useUserSearch } from "@/features/messaging/hooks/useUserSearch";
 import { useAppStore, type RootState, getState } from "@/store";
 import { serversApi } from "@/api/servers";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxList,
+  ComboboxOption,
+} from "@/shared/components/Combobox";
 import { Dialog } from "@/shared/components/Dialog";
 import { Tab as TabsTab, TabList, TabPanel, Tabs } from "@/shared/components/Tabs";
 import type { Server } from "@/shared/types";
@@ -30,25 +36,16 @@ function MembersPanel({ server, currentUser }: MembersPanelProps) {
   const [isKicking, setIsKicking] = useState(false);
   const { query, setQuery, searchResults, isSearching, clearSearch } = useUserSearch();
   const { members, isLoading, error, addMember, removeMember } = useServerMembers(server);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [activeMemberValue, setActiveMemberValue] = useState<string | undefined>();
+  const memberInputId = useId();
+  const searchErrorId = `${memberInputId}-error`;
   const isOwner = currentUser?.id === server.created_by;
-
-  useEffect(() => {
-    setIsDropdownOpen(!!query.trim());
-  }, [query]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setIsDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   async function handleAddMember(userId: number | string) {
     setSearchError(null);
     setIsDropdownOpen(false);
+    setActiveMemberValue(undefined);
     try {
       if ((members || []).some((m) => m.user_id === userId || m.user_public_id === userId)) {
         setSearchError("User already in server");
@@ -79,28 +76,40 @@ function MembersPanel({ server, currentUser }: MembersPanelProps) {
     <>
       <div className="space-y-4">
         {isOwner && (
-          <div className="relative flex flex-col gap-1" ref={dropdownRef}>
-            <label className="text-[10px] uppercase text-muted-foreground">Invite Member</label>
-            <input
+          <Combobox
+            open={isDropdownOpen}
+            onOpenChange={setIsDropdownOpen}
+            activeValue={activeMemberValue}
+            onActiveValueChange={setActiveMemberValue}
+            className="relative flex flex-col gap-1"
+          >
+            <label className="text-[10px] uppercase text-muted-foreground" htmlFor={memberInputId}>Invite Member</label>
+            <ComboboxInput
+              id={memberInputId}
+              aria-describedby={searchError ? searchErrorId : undefined}
               className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
               placeholder="Username..."
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setSearchError(null); }}
+              onFocus={() => { if (query.trim()) setIsDropdownOpen(true); }}
+              onChange={(e) => { setQuery(e.target.value); setSearchError(null); setActiveMemberValue(undefined); setIsDropdownOpen(Boolean(e.target.value.trim())); }}
             />
-            {isSearching && <div className="text-xs text-muted-foreground">Searching...</div>}
-            {isDropdownOpen && searchResults?.users?.length > 0 && (
-              <div className="absolute top-full left-0 right-0 z-[100] bg-popover border border-border mt-1 max-h-[200px] overflow-y-auto">
+            {isSearching && <div className="text-xs text-muted-foreground" role="status" aria-live="polite">Searching...</div>}
+            <ComboboxList aria-label="Member search results" className="absolute top-full left-0 right-0 z-[100] bg-popover border border-border mt-1 max-h-[200px] overflow-y-auto">
                 {searchResults.users.map((u) => (
-                  <div key={u.id} onClick={() => handleAddMember(u.public_id ?? u.id)} className="p-2 cursor-pointer flex items-center gap-2 hover:bg-accent">
+                  <ComboboxOption
+                    key={u.id}
+                    value={`user:${u.public_id ?? u.id}`}
+                    onSelect={() => handleAddMember(u.public_id ?? u.id)}
+                    className="p-2 cursor-pointer flex items-center gap-2 hover:bg-accent"
+                  >
                     <Avatar name={u.display_name || u.username} size="small" />
                     <div className="flex-1 text-sm">{u.display_name || u.username}</div>
-                    <Plus className="h-4 w-4" />
-                  </div>
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                  </ComboboxOption>
                 ))}
-              </div>
-            )}
-            {searchError && <p className="text-destructive text-[10px]">{searchError}</p>}
-          </div>
+            </ComboboxList>
+            {searchError && <p id={searchErrorId} className="text-destructive text-[10px]">{searchError}</p>}
+          </Combobox>
         )}
 
         <div className="space-y-2">

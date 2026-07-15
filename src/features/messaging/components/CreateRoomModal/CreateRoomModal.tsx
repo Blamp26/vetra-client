@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { authApi } from "@/api/auth";
 import { roomsApi } from "@/api/rooms";
@@ -6,6 +6,12 @@ import type { User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { roomChatForPreview } from "@/shared/utils/chatRoutes";
 import { userRef } from "@/shared/utils/refs";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxList,
+  ComboboxOption,
+} from "@/shared/components/Combobox";
 
 interface Props {
   onClose: () => void;
@@ -24,6 +30,9 @@ export function CreateRoomModal({ onClose }: Props) {
   const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [activeSearchValue, setActiveSearchValue] = useState<string | undefined>();
+  const memberInputId = useId();
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -32,6 +41,8 @@ export function CreateRoomModal({ onClose }: Props) {
     if (!query.trim() || !currentUser) {
       setSearchResults([]);
       setIsSearching(false);
+      setSearchOpen(false);
+      setActiveSearchValue(undefined);
       return;
     }
     setIsSearching(true);
@@ -53,6 +64,8 @@ export function CreateRoomModal({ onClose }: Props) {
     setSelectedUsers((prev) => [...prev, user]);
     setQuery("");
     setSearchResults([]);
+    setSearchOpen(false);
+    setActiveSearchValue(undefined);
   };
 
   const removeUser = (userId: number) => {
@@ -135,8 +148,14 @@ export function CreateRoomModal({ onClose }: Props) {
             />
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase text-muted-foreground">Add members</label>
+          <Combobox
+            open={searchOpen}
+            onOpenChange={setSearchOpen}
+            activeValue={activeSearchValue}
+            onActiveValueChange={setActiveSearchValue}
+            className="flex flex-col gap-1"
+          >
+            <label className="text-[10px] uppercase text-muted-foreground" htmlFor={memberInputId}>Add members</label>
 
             {selectedUsers.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-2">
@@ -150,31 +169,32 @@ export function CreateRoomModal({ onClose }: Props) {
             )}
 
             <div className="relative">
-              <input
+              <ComboboxInput
+                id={memberInputId}
+                aria-label="Add members"
                 className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
                 type="text"
                 placeholder="Search users..."
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onFocus={() => { if (query.trim()) setSearchOpen(true); }}
+                onChange={(e) => { setQuery(e.target.value); setActiveSearchValue(undefined); setSearchOpen(Boolean(e.target.value.trim())); }}
               />
-              {isSearching && <div className="p-1 text-xs text-muted-foreground">Searching...</div>}
-              {searchResults.length > 0 && (
-                <ul className="absolute left-0 right-0 top-full bg-popover border border-border z-[100] max-h-[200px] overflow-y-auto">
+              {isSearching && <div className="p-1 text-xs text-muted-foreground" role="status" aria-live="polite">Searching...</div>}
+              <ComboboxList aria-label="Member search results" className="absolute left-0 right-0 top-full bg-popover border border-border z-[100] max-h-[200px] overflow-y-auto">
                   {searchResults.map((user) => (
-                    <li key={user.id}>
-                      <button
+                    <ComboboxOption
+                      key={user.id}
+                      value={`user:${user.id}`}
                         className="flex items-center gap-2 w-full p-2 bg-transparent border-none text-left hover:bg-accent"
-                        onClick={() => addUser(user)}
-                      >
+                        onSelect={() => addUser(user)}
+                    >
                         <Avatar name={user.display_name || user.username} size="small" />
                         <span className="text-sm">{user.display_name || user.username}</span>
-                      </button>
-                    </li>
+                    </ComboboxOption>
                   ))}
-                </ul>
-              )}
+              </ComboboxList>
             </div>
-          </div>
+          </Combobox>
         </div>
 
         <div className="p-4 border-t border-border flex gap-2 justify-end">

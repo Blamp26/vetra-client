@@ -3,6 +3,15 @@ import { useAppStore, type RootState } from "@/store";
 import type { User, Server } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
 import { Search, X } from "lucide-react";
+import { useState } from "react";
+import {
+  Combobox,
+  ComboboxGroup,
+  ComboboxGroupLabel,
+  ComboboxInput,
+  ComboboxList,
+  ComboboxOption,
+} from "@/shared/components/Combobox";
 import {
   directChatForUser,
   serverChatForServer,
@@ -16,63 +25,85 @@ export function UserSearch() {
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
   const userStatuses = useAppStore((s: RootState) => s.userStatuses);
   const lastSeenAt = useAppStore((s: RootState) => s.lastSeenAt);
+  const [open, setOpen] = useState(false);
+  const [activeValue, setActiveValue] = useState<string | undefined>();
 
   const handleSelectUser = (user: User) => {
     setActiveChat(directChatForUser(user));
     clearSearch();
+    setOpen(false);
+    setActiveValue(undefined);
   };
 
   const handleSelectServer = (server: Server) => {
     setActiveChat(serverChatForServer(server));
     clearSearch();
+    setOpen(false);
+    setActiveValue(undefined);
   };
 
   const hasResults =
     searchResults.users.length > 0 || searchResults.servers.length > 0;
 
+  const handleClear = () => {
+    clearSearch();
+    setOpen(false);
+    setActiveValue(undefined);
+  };
+
   return (
-    <div className="relative">
+    <Combobox
+      open={open}
+      onOpenChange={setOpen}
+      activeValue={activeValue}
+      onActiveValueChange={setActiveValue}
+      className="relative"
+    >
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-      <input
+      <ComboboxInput
+        aria-label="Search people or servers"
         className="vt-input h-11 pl-9 pr-10"
         placeholder="Search people or servers"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onFocus={() => { if (query.trim()) setOpen(true); }}
+        onChange={(e) => {
+          const nextQuery = e.target.value;
+          setQuery(nextQuery);
+          setActiveValue(undefined);
+          setOpen(Boolean(nextQuery.trim()));
+        }}
       />
       {query && (
         <button
+          type="button"
+          aria-label="Clear search"
           className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-          onClick={clearSearch}
+          onClick={handleClear}
         >
           <X className="h-4 w-4" />
         </button>
       )}
 
-      {isSearching && (
-        <div className="absolute left-0 right-0 top-full z-[110] mt-2 rounded-[var(--radius-md)] border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-[var(--overlay-shadow)]">
-          Searching...
-        </div>
-      )}
-
-      {!isSearching && query && !hasResults && (
-        <div className="absolute left-0 right-0 top-full z-[110] mt-2 rounded-[var(--radius-md)] border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-[var(--overlay-shadow)]">
-          No results for "{query}"
-        </div>
-      )}
-
-      {hasResults && (
-        <div className="absolute left-0 right-0 top-full z-[110] mt-2 max-h-[320px] overflow-y-auto rounded-[var(--radius-md)] border border-border bg-popover p-1.5 shadow-[var(--overlay-shadow)]">
+      <ComboboxList
+        aria-label="Search results"
+        className={hasResults
+          ? "absolute left-0 right-0 top-full z-[110] mt-2 max-h-[320px] overflow-y-auto rounded-[var(--radius-md)] border border-border bg-popover p-1.5 shadow-[var(--overlay-shadow)]"
+          : "absolute left-0 right-0 top-full z-[110] mt-2 rounded-[var(--radius-md)] border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-[var(--overlay-shadow)]"}
+      >
+          {open && isSearching && <div role="status" aria-live="polite">Searching...</div>}
+          {open && !isSearching && query && !hasResults && <div role="status" aria-live="polite">No results for "{query}"</div>}
           {searchResults.users.length > 0 && (
-            <div className="mb-2">
-              <div className="vt-kicker px-2 py-1">
+            <ComboboxGroup className="mb-2" aria-label="Users">
+              <ComboboxGroupLabel className="vt-kicker px-2 py-1">
                 Users
-              </div>
+              </ComboboxGroupLabel>
               <div className="space-y-0.5">
                 {searchResults.users.map((user) => (
-                  <button
+                  <ComboboxOption
                     key={`user-${user.id}`}
+                    value={`user:${user.id}`}
                     className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left hover:bg-accent"
-                    onClick={() => handleSelectUser(user)}
+                    onSelect={() => handleSelectUser(user)}
                   >
                     <Avatar
                       name={user.display_name || user.username}
@@ -95,23 +126,24 @@ export function UserSearch() {
                         </span>
                       )}
                     </div>
-                  </button>
+                  </ComboboxOption>
                 ))}
               </div>
-            </div>
+            </ComboboxGroup>
           )}
 
           {searchResults.servers.length > 0 && (
-            <div>
-              <div className="vt-kicker px-2 py-1">
+            <ComboboxGroup aria-label="Servers">
+              <ComboboxGroupLabel className="vt-kicker px-2 py-1">
                 Servers
-              </div>
+              </ComboboxGroupLabel>
               <div className="space-y-0.5">
                 {searchResults.servers.map((server) => (
-                  <button
+                  <ComboboxOption
                     key={`server-${server.id}`}
+                    value={`server:${server.id}`}
                     className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left hover:bg-accent"
-                    onClick={() => handleSelectServer(server)}
+                    onSelect={() => handleSelectServer(server)}
                   >
                     <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-[10px]">
                       #
@@ -119,13 +151,12 @@ export function UserSearch() {
                     <span className="text-xs font-normal truncate">
                       {server.name}
                     </span>
-                  </button>
+                  </ComboboxOption>
                 ))}
               </div>
-            </div>
+            </ComboboxGroup>
           )}
-        </div>
-      )}
-    </div>
+        </ComboboxList>
+    </Combobox>
   );
 }

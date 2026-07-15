@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Server } from "@/shared/types";
@@ -111,6 +111,40 @@ describe("ServerSettingsModal tabs", () => {
     expect(danger).toHaveFocus();
     fireEvent.keyDown(danger, { key: "ArrowLeft" });
     expect(members).toHaveFocus();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("uses the invite-member combobox without closing the dialog on its first Escape", async () => {
+    const addMember = vi.fn().mockResolvedValue(undefined);
+    const invitedUser = { id: 12, public_id: "user-12", username: "alex", display_name: "Alex" };
+    useUserSearchMock.mockReturnValue({
+      query: "",
+      setQuery: vi.fn(),
+      searchResults: { users: [invitedUser] },
+      isSearching: false,
+      clearSearch: vi.fn(),
+    });
+    useServerMembersMock.mockReturnValue({
+      members: [],
+      isLoading: false,
+      error: null,
+      addMember,
+      removeMember: vi.fn(),
+    });
+
+    const onClose = vi.fn();
+    render(<ServerSettingsModal server={server} onClose={onClose} />);
+    const input = screen.getByRole("combobox", { name: "Invite Member" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(screen.getByRole("option", { name: /Alex/ })).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Vetra Team settings" })).toBeInTheDocument();
+    expect(addMember).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(addMember).toHaveBeenCalledWith("user-12"));
+    expect(addMember).toHaveBeenCalledOnce();
     expect(onClose).not.toHaveBeenCalled();
   });
 });
