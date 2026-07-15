@@ -4,6 +4,7 @@ import { useAppStore, type RootState } from '@/store';
 import { ProfileModal } from '@/features/profile/components/ProfileModal/ProfileModal';
 import { ConfirmModal } from '@/shared/components/ConfirmModal/ConfirmModal';
 import { cn } from '@/shared/utils/cn';
+import { Tabs, Tab, TabList, TabPanel } from '@/shared/components/Tabs';
 import { themeLabels, type Theme } from "@/themes";
 import {
   getNotificationPermissionStatus,
@@ -290,7 +291,7 @@ function AudioVideoSettings() {
   );
 }
 
-type SettingsTab = 'account' | 'profile' | 'appearance' | 'notifications' | 'audioVideo' | 'privacy';
+type SettingsTab = 'account' | 'appearance' | 'notifications' | 'audioVideo';
 
 interface Props { onClose: () => void; }
 
@@ -326,7 +327,6 @@ export function SettingsPage({ onClose }: Props) {
 
   const tabs: { id: SettingsTab; label: string }[] = [
     { id: 'account', label: 'Account' },
-    { id: 'profile', label: 'Profile' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'notifications', label: 'Notifications' },
     { id: 'audioVideo', label: 'Audio & Video' },
@@ -336,30 +336,37 @@ export function SettingsPage({ onClose }: Props) {
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       <div className="vt-modal-backdrop" onClick={onClose} />
       <div className="vt-modal-panel relative z-10 flex h-[82vh] w-full max-w-5xl overflow-hidden">
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(value as SettingsTab)}
+          orientation="vertical"
+          className="flex h-full w-full"
+        >
         <div className="flex w-72 flex-col border-r border-border bg-sidebar/60 px-4 py-5">
           <div className="mb-5">
             <span className="vt-kicker">Preferences</span>
             <h2 className="mt-1 text-xl font-semibold tracking-tight">Settings</h2>
           </div>
-          <nav className="flex flex-col gap-1">
+          <TabList aria-label="Settings sections" className="flex flex-col gap-1">
             {tabs.map((t) => (
-              <button
+              <Tab
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                value={t.id}
                 className={cn(
                   "vt-button min-h-10 justify-start px-3 text-left text-sm",
                   tab === t.id ? "vt-button--primary" : "vt-button--ghost border-transparent",
                 )}
-              >{t.label}</button>
+              >{t.label}</Tab>
             ))}
-          </nav>
+          </TabList>
           <div className="mt-auto flex flex-col gap-2">
             <button onClick={() => setShowLogoutConfirm(true)} className="vt-button vt-button--danger justify-start">Log Out</button>
             <button onClick={onClose} className="vt-button justify-start">Back</button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-8 py-7">
-          {tab === 'account' && currentUser && (
+          <TabPanel value="account" className="max-w-xl space-y-4">
+          {currentUser && (
             <div className="max-w-xl space-y-4">
               <h3 className="text-xl font-semibold tracking-tight">Account</h3>
               <div className="vt-panel flex items-center gap-4 p-4">
@@ -384,7 +391,8 @@ export function SettingsPage({ onClose }: Props) {
               </div>
             </div>
           )}
-          {tab === 'appearance' && (
+          </TabPanel>
+          <TabPanel value="appearance" className="max-w-xl space-y-4">
             <div className="max-w-xl space-y-4">
               <h3 className="text-xl font-semibold tracking-tight">Appearance</h3>
               <div className="flex gap-2">
@@ -397,8 +405,8 @@ export function SettingsPage({ onClose }: Props) {
                 ))}
               </div>
             </div>
-          )}
-          {tab === 'notifications' && (
+          </TabPanel>
+          <TabPanel value="notifications" className="max-w-xl space-y-4">
             <div className="max-w-xl space-y-4">
               <h3 className="text-xl font-semibold tracking-tight">Notifications</h3>
               <div className="vt-panel space-y-3 p-4">
@@ -422,9 +430,12 @@ export function SettingsPage({ onClose }: Props) {
                 )}
               </div>
             </div>
-          )}
-          {tab === 'audioVideo' && <AudioVideoSettings />}
+          </TabPanel>
+          <TabPanel value="audioVideo">
+            <AudioVideoSettings />
+          </TabPanel>
         </div>
+        </Tabs>
       </div>
       {showEditProfile && currentUser && <ProfileModal user={currentUser} onClose={() => setShowEditProfile(false)} />}
       {showLogoutConfirm && (
