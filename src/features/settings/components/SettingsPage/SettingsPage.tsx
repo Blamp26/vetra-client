@@ -209,18 +209,34 @@ function AudioVideoSettings() {
             Input device changes apply to the next call. Live microphone switching is not enabled in the current direct-call demo.
           </p>
           <div className="mt-2">
-            <div className="text-[10px] text-muted-foreground mb-1">Input Level: {Math.round((micLevel / 128) * 100)}%</div>
+            <div className="mb-1 text-xs text-muted-foreground">Input Level: {Math.round((micLevel / 128) * 100)}%</div>
             <div className="h-1 w-full bg-muted">
-              <div className="h-full bg-primary" style={{ width: `${(micLevel / 128) * 100}%` }} />
+              <div
+                role="progressbar"
+                aria-label="Input level"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round((micLevel / 128) * 100)}
+                className="h-full bg-primary"
+                style={{ width: `${(micLevel / 128) * 100}%` }}
+              />
             </div>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            <button onClick={() => { void handleAllowMicrophone(); }} className="vt-button" type="button">
+            <Button
+              size="compact"
+              variant="secondary"
+              onClick={() => { void handleAllowMicrophone(); }}
+            >
               Allow microphone
-            </button>
-            <button onClick={() => { void handleMicTestToggle(); }} className="vt-button" type="button">
+            </Button>
+            <Button
+              size="compact"
+              variant="secondary"
+              onClick={() => { void handleMicTestToggle(); }}
+            >
               {isMicTestActive ? "Stop microphone test" : "Test microphone"}
-            </button>
+            </Button>
           </div>
           {audioFeedback && (
             <div
@@ -230,6 +246,8 @@ function AudioVideoSettings() {
                   ? "border-destructive/35 bg-destructive/10 text-foreground"
                   : "border-border bg-card text-muted-foreground",
               )}
+              role={audioFeedback.tone === "error" ? "alert" : "status"}
+              aria-live={audioFeedback.tone === "error" ? undefined : "polite"}
               data-testid="settings-audio-feedback"
             >
               {audioFeedback.message}
@@ -252,13 +270,11 @@ function AudioVideoSettings() {
             Speaker routing depends on browser support and may fall back to the system default output device.
           </p>
         </div>
-        <div className="vt-panel space-y-2 p-4">
-          <div>
-            <div className="text-sm font-medium">Microphone processing</div>
-            <p className="text-xs text-muted-foreground">
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Microphone processing</legend>
+          <p className="text-xs text-muted-foreground">
               These are browser-requested audio improvements. Actual support and behavior can vary by browser and device.
-            </p>
-          </div>
+          </p>
           <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-noise-suppression">
             <span>Noise suppression</span>
             <input
@@ -289,8 +305,14 @@ function AudioVideoSettings() {
               className="h-4 w-4 accent-[var(--primary)]"
             />
           </label>
-        </div>
-        <button onClick={() => { void refreshDevices().then(applyDeviceRefreshFeedback); }} className="vt-button">Refresh devices</button>
+        </fieldset>
+        <Button
+          size="compact"
+          variant="secondary"
+          onClick={() => { void refreshDevices().then(applyDeviceRefreshFeedback); }}
+        >
+          Refresh devices
+        </Button>
       </div>
     </div>
   );

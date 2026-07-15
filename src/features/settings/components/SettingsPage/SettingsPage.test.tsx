@@ -230,6 +230,39 @@ describe("SettingsPage audio settings", () => {
     expect(
       screen.getByText(/input device changes apply to the next call/i),
     ).toBeInTheDocument();
+    const processingGroup = screen.getByRole("group", { name: "Microphone processing" });
+    expect(processingGroup).toBeInTheDocument();
+    expect(processingGroup).not.toHaveClass("vt-panel");
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+  });
+
+  it("keeps audio actions accessible and wired to their existing handlers", async () => {
+    render(<SettingsPage onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
+
+    expect(screen.getByRole("button", { name: "Allow microphone" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Test microphone" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh devices" })).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Input level" })).toHaveAttribute("aria-valuenow", "0");
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow microphone" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh devices" }));
+
+    await waitFor(() => {
+      expect(storeState.refreshDevices).toHaveBeenCalledWith({ requestPermission: true });
+      expect(storeState.refreshDevices).toHaveBeenCalledWith();
+    });
+  });
+
+  it("switches the microphone test action label while the test is active", async () => {
+    render(<SettingsPage onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test microphone" }));
+
+    expect(await screen.findByRole("button", { name: "Stop microphone test" })).toBeInTheDocument();
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Stop microphone test" }));
+    expect(screen.getByRole("button", { name: "Test microphone" })).toBeInTheDocument();
   });
 
   it("does not request microphone access just by opening audio settings", async () => {
@@ -254,9 +287,11 @@ describe("SettingsPage audio settings", () => {
     render(<SettingsPage onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
 
-    expect(await screen.findByTestId("settings-audio-feedback")).toHaveTextContent(
+    const feedback = await screen.findByTestId("settings-audio-feedback");
+    expect(feedback).toHaveTextContent(
       /device names may stay hidden until you explicitly allow microphone access/i,
     );
+    expect(feedback).toHaveRole("status");
   });
 
   it("surfaces microphone permission errors from explicit actions", async () => {
@@ -271,9 +306,11 @@ describe("SettingsPage audio settings", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
     fireEvent.click(screen.getByRole("button", { name: "Allow microphone" }));
 
-    expect(await screen.findByTestId("settings-audio-feedback")).toHaveTextContent(
+    const feedback = await screen.findByTestId("settings-audio-feedback");
+    expect(feedback).toHaveTextContent(
       /microphone permission denied/i,
     );
+    expect(feedback).toHaveRole("alert");
   });
 
   it("calls store setters when microphone processing toggles change", () => {
