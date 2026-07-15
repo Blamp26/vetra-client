@@ -197,7 +197,7 @@ describe("attachments utils", () => {
     ).toBe("File: report.pdf");
   });
 
-  it("builds safe legacy attachment fallbacks from media_file_id/media_mime_type", () => {
+  it("builds safe legacy attachment fallbacks and allows forwarding them", () => {
     const attachment = getMessageAttachment({
       media_file_id: "legacy-photo-1",
       media_mime_type: "image/jpeg",
@@ -225,10 +225,10 @@ describe("attachments utils", () => {
         media_file_id: "legacy-photo-1",
         media_mime_type: "image/jpeg",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
-  it("normalizes grouped photo attachments and uses a plural preview label", () => {
+  it("normalizes grouped photo attachments, uses a plural preview label, and allows forwarding them", () => {
     const attachments = getMessageAttachments({
       attachments: [
         {
@@ -255,7 +255,11 @@ describe("attachments utils", () => {
       content: "",
       attachments,
     })).toBe("Photos");
-    expect(isMessageForwardable({ attachments })).toBe(false);
+    expect(isMessageForwardable({ attachments })).toBe(true);
+  });
+
+  it("does not allow forwarding an empty message without attachments", () => {
+    expect(isMessageForwardable({ content: "   " })).toBe(false);
   });
 
   it("preserves rich attachment URLs and dimensions when present", () => {

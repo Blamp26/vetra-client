@@ -42,7 +42,6 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
         renderedWidth: number;
         renderedHeight: number;
         devicePixelRatio: number;
-        duration: number | null;
       }) => void;
   }) => (
     <img
@@ -80,6 +79,7 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
       renderedWidth: number;
       renderedHeight: number;
       devicePixelRatio: number;
+      duration: number | null;
     }) => void;
   }) => (
     <video
@@ -1038,7 +1038,7 @@ describe("MessageItem bubble layout", () => {
     );
     await waitFor(() =>
       expect(
-        attachmentDownloads.fetchAttachmentBlob.mock.calls.slice(-3),
+        vi.mocked(attachmentDownloads.fetchAttachmentBlob).mock.calls.slice(-3),
       ).toHaveLength(3),
     );
   });
@@ -1625,7 +1625,7 @@ describe("MessageItem bubble layout", () => {
     const image = screen.getByTestId("authenticated-image");
 
     expect(mediaShell).toHaveAttribute("data-photo-layout-state", "pending");
-    expect(layoutSpy.mock.calls.at(-1)?.[0]).toEqual([
+    expect(layoutSpy.mock.calls[layoutSpy.mock.calls.length - 1]?.[0]).toEqual([
       expect.objectContaining({
         id: "photo-pending-1",
         width: undefined,
@@ -1640,7 +1640,7 @@ describe("MessageItem bubble layout", () => {
     fireEvent.load(image);
 
     expect(mediaShell).toHaveAttribute("data-photo-layout-state", "resolved");
-    expect(layoutSpy.mock.calls.at(-1)?.[0]).toEqual([
+    expect(layoutSpy.mock.calls[layoutSpy.mock.calls.length - 1]?.[0]).toEqual([
       expect.objectContaining({
         id: "photo-pending-1",
         width: 1600,
@@ -2081,7 +2081,7 @@ describe("MessageItem bubble layout", () => {
     });
     fireEvent(video, new Event("loadedmetadata"));
 
-    expect(layoutSpy.mock.calls.at(-1)?.[0]).toEqual([
+    expect(layoutSpy.mock.calls[layoutSpy.mock.calls.length - 1]?.[0]).toEqual([
       expect.objectContaining({
         id: "video-fallback-1",
         width: 1920,

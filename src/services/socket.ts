@@ -669,7 +669,7 @@ export async function connectSocket(
           .receive("ok", (p: Message) => {
             logAttachmentDebug("socket.send.room.ok", {
               roomId,
-              ...summarizeMessageMedia(p as Record<string, unknown>),
+              ...summarizeMessageMedia(p as unknown as Record<string, unknown>),
             }, {
               batchId: debugMeta?.batchId,
               sendUnitId: debugMeta?.sendUnitId,
@@ -790,7 +790,7 @@ export function sendMessageViaChannel(
       .receive("ok", (payload: Message) => {
         logAttachmentDebug("socket.send.direct.ok", {
           recipientRef,
-          ...summarizeMessageMedia(payload as Record<string, unknown>),
+          ...summarizeMessageMedia(payload as unknown as Record<string, unknown>),
         }, {
           batchId: debugMeta?.batchId,
           sendUnitId: debugMeta?.sendUnitId,

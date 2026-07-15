@@ -93,7 +93,6 @@ vi.mock("@/shared/components/AuthenticatedImage", () => ({
       renderedWidth: number;
       renderedHeight: number;
       devicePixelRatio: number;
-      duration: number | null;
     }) => void;
   }) => (
     <img
@@ -131,6 +130,7 @@ vi.mock("@/shared/components/AuthenticatedVideo", () => ({
       renderedWidth: number;
       renderedHeight: number;
       devicePixelRatio: number;
+      duration: number | null;
     }) => void;
   }) => (
     <video
@@ -831,7 +831,7 @@ describe("MessageList bubble layout", () => {
     const originalGetBoundingClientRect =
       HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      function getBoundingClientRect() {
+      function getBoundingClientRect(this: HTMLElement) {
       if (this === bubble) {
         return {
           x: 660,

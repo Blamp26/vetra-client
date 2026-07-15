@@ -107,7 +107,10 @@ function getWideRatio(options: MediaAlbumLayoutOptions) {
   return options.wideRatio ?? DEFAULT_WIDE_RATIO;
 }
 
-function warnMissingDimensions(item: MediaAlbumInput) {
+function warnMissingDimensions(
+  item: Partial<Pick<MediaAlbumInput, "id" | "kind">>,
+) {
+  if (!item.id) return;
   if (!import.meta.env.DEV) return;
   if (warnedMissingDimensions.has(item.id)) return;
   warnedMissingDimensions.add(item.id);
@@ -123,7 +126,10 @@ function classifyRatio(ratio: number, options: MediaAlbumLayoutOptions): MediaSh
   return "balanced";
 }
 
-function resolveRatio(item: MediaAlbumInput, options: MediaAlbumLayoutOptions) {
+function resolveRatio(
+  item: Pick<MediaAlbumInput, "width" | "height"> & Partial<Pick<MediaAlbumInput, "id" | "kind">>,
+  options: MediaAlbumLayoutOptions,
+) {
   const fallbackRatio = getFallbackRatio(options);
   const width = isPositiveFinite(item.width) ? item.width : null;
   const height = isPositiveFinite(item.height) ? item.height : null;
@@ -489,7 +495,7 @@ function scoreCandidate(
   const widthPenalty = candidate.layout.width < maxWidth * 0.42
     ? 1.5
     : 0;
-  const lastRowPenalty = candidate.rowSizes.at(-1) === 4 ? 0.2 : 0;
+  const lastRowPenalty = candidate.rowSizes[candidate.rowSizes.length - 1] === 4 ? 0.2 : 0;
   const heightPenalty = Math.abs(candidate.layout.height - targetHeight) / targetHeight;
   const coveragePenalty = candidate.layout.width < maxWidth * 0.58 && items.length > 1 ? 0.6 : 0;
   const rowCountPenalty = Math.abs(candidate.rowSizes.length - desiredRowCount) * 1.6;

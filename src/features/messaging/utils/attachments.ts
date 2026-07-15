@@ -528,7 +528,7 @@ export function buildPreviewMessage(
   };
 
   logAttachmentDebug("preview.build", {
-    ...summarizeMessageMedia(message as Record<string, unknown>),
+    ...summarizeMessageMedia(message as unknown as Record<string, unknown>),
     normalizedAttachmentsLength: attachments.length,
     previewId: preview.id,
   }, {

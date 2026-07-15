@@ -346,7 +346,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
         logAttachmentDebug("sendMessage.response", {
           contextType,
           targetId: roomId,
-          ...summarizeMessageMedia(message as Record<string, unknown>),
+          ...summarizeMessageMedia(message as unknown as Record<string, unknown>),
           normalizedAttachmentsLength: normalizedAttachments.length,
         }, {
           batchId: debugMeta?.batchId,
@@ -357,7 +357,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
             contextType,
             targetId: roomId,
             localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
-            response: summarizeMessageMedia(message as Record<string, unknown>),
+            response: summarizeMessageMedia(message as unknown as Record<string, unknown>),
           }, {
             batchId: debugMeta?.batchId,
             sendUnitId: debugMeta?.sendUnitId,
@@ -369,7 +369,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
             contextType,
             targetId: roomId,
             localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
-            response: summarizeMessageMedia(message as Record<string, unknown>),
+            response: summarizeMessageMedia(message as unknown as Record<string, unknown>),
             normalizedAttachmentsLength: normalizedAttachments.length,
           }, {
             batchId: debugMeta?.batchId,
@@ -406,7 +406,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
         logAttachmentDebug("sendMessage.response", {
           contextType,
           targetId: directPartnerId,
-          ...summarizeMessageMedia(message as Record<string, unknown>),
+          ...summarizeMessageMedia(message as unknown as Record<string, unknown>),
           normalizedAttachmentsLength: normalizedAttachments.length,
         }, {
           batchId: debugMeta?.batchId,
@@ -417,7 +417,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
             contextType,
             targetId: directPartnerId,
             localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
-            response: summarizeMessageMedia(message as Record<string, unknown>),
+            response: summarizeMessageMedia(message as unknown as Record<string, unknown>),
           }, {
             batchId: debugMeta?.batchId,
             sendUnitId: debugMeta?.sendUnitId,
@@ -429,7 +429,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
             contextType,
             targetId: directPartnerId,
             localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
-            response: summarizeMessageMedia(message as Record<string, unknown>),
+            response: summarizeMessageMedia(message as unknown as Record<string, unknown>),
             normalizedAttachmentsLength: normalizedAttachments.length,
           }, {
             batchId: debugMeta?.batchId,

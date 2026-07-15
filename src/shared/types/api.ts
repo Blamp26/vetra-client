@@ -94,6 +94,8 @@ export interface Message {
   mediaFileIds?:            string[] | null;
   media_mime_type?:        string | null;
   media_mime_types?:       string[] | null;
+  mediaMimeType?:          string | null;
+  mediaMimeTypes?:         string[] | null;
   attachment?:             Attachment | null;
   attachments?:            Attachment[] | null;
   sender?:                 User;
