@@ -1,6 +1,9 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { Eye, EyeOff } from "lucide-react";
+import { Button } from "@/shared/components/Button";
+import { IconButton } from "@/shared/components/IconButton";
+import { TextInput } from "@/shared/components/Field";
 
 interface Props { onSwitchToRegister: () => void; }
 
@@ -10,6 +13,8 @@ export function LoginForm({ onSwitchToRegister }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const usernameErrorId = useId();
+  const passwordErrorId = useId();
 
   const { login, isLoading, error, clearError } = useAuth();
 
@@ -45,7 +50,7 @@ export function LoginForm({ onSwitchToRegister }: Props) {
       </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {error && (
-          <div className="rounded-[var(--radius-md)] border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <div role="alert" className="rounded-[var(--radius-md)] border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             <span>{error.message}</span>
             {error.details &&
               Object.entries(error.details).map(([field, msgs]: [string, string[]]) => (
@@ -60,15 +65,16 @@ export function LoginForm({ onSwitchToRegister }: Props) {
           <label className="vt-label" htmlFor="login-username">
             Username
           </label>
-          <input
-            className="vt-input"
+          <TextInput
             id="login-username" name="username" type="text" placeholder="Username" autoComplete="username"
             value={username} 
             onChange={(e) => { clearError(); setUsername(e.target.value); }}
             onBlur={(e) => validateUsername(e.target.value)}
             required autoFocus
+            invalid={!!usernameError}
+            aria-describedby={usernameError ? usernameErrorId : undefined}
           />
-          {usernameError && <p className="text-[11px] text-destructive">{usernameError}</p>}
+          {usernameError && <p id={usernameErrorId} className="text-[11px] text-destructive">{usernameError}</p>}
         </div>
 
         <div className="flex flex-col gap-1">
@@ -76,33 +82,38 @@ export function LoginForm({ onSwitchToRegister }: Props) {
             Password
           </label>
           <div className="relative">
-            <input
-              className="vt-input pr-10"
+            <TextInput
+              className="pr-10"
               id="login-password" name="password" type={showPassword ? "text" : "password"} placeholder="Password" autoComplete="current-password"
               value={password} 
               onChange={(e) => { clearError(); setPassword(e.target.value); }}
               onBlur={(e) => validatePassword(e.target.value)}
               required
+              invalid={!!passwordError}
+              aria-describedby={passwordError ? passwordErrorId : undefined}
             />
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            <IconButton
+              label={showPassword ? "Hide password" : "Show password"}
+              size="compact"
+              pressed={showPassword}
+              className="absolute right-1 top-1/2 -translate-y-1/2"
               onClick={() => setShowPassword((v) => !v)}
-              tabIndex={-1}
             >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+              {showPassword ? <EyeOff aria-hidden="true" className="h-4 w-4" /> : <Eye aria-hidden="true" className="h-4 w-4" />}
+            </IconButton>
           </div>
-          {passwordError && <p className="text-[11px] text-destructive">{passwordError}</p>}
+          {passwordError && <p id={passwordErrorId} className="text-[11px] text-destructive">{passwordError}</p>}
         </div>
 
-        <button 
+        <Button
           type="submit" 
-          disabled={isLoading || isInvalid} 
-          className="vt-button vt-button--primary mt-2 w-full"
+          disabled={isInvalid}
+          loading={isLoading}
+          variant="primary"
+          className="mt-2 w-full"
         >
           {isLoading ? "Logging in..." : "Log In"}
-        </button>
+        </Button>
       </form>
       <p className="mt-5 text-center text-xs text-muted-foreground">
         No account?{" "}

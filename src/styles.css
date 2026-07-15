@@ -725,6 +725,24 @@ body[data-vt-shell-resizing="true"] {
     border-color: color-mix(in srgb, var(--input) 72%, var(--primary) 28%);
   }
 
+  .vt-input--compact {
+    min-height: var(--control-height-compact);
+    padding-block: 0.5rem;
+    font-size: 0.8125rem;
+  }
+
+  .vt-input--invalid {
+    border-color: var(--danger);
+  }
+
+  .vt-input:disabled {
+    cursor: not-allowed;
+    border-color: var(--border-default);
+    background: var(--surface-0);
+    color: var(--text-disabled);
+    opacity: 1;
+  }
+
   .vt-textarea {
     overflow-y: hidden;
     scrollbar-width: none;

@@ -55,6 +55,48 @@ describe("LoginForm", () => {
     });
   });
 
+  it("connects validation messages to invalid fields", () => {
+    render(<LoginForm onSwitchToRegister={vi.fn()} />);
+
+    const username = screen.getByLabelText("Username");
+    const password = screen.getByLabelText("Password");
+    fireEvent.blur(username);
+    fireEvent.blur(password);
+
+    expect(username).toHaveAttribute("aria-invalid", "true");
+    expect(password).toHaveAttribute("aria-invalid", "true");
+    expect(document.getElementById(username.getAttribute("aria-describedby")!)).toHaveTextContent("Required field");
+    expect(document.getElementById(password.getAttribute("aria-describedby")!)).toHaveTextContent("Required field");
+  });
+
+  it("provides a keyboard-reachable password visibility toggle", () => {
+    render(<LoginForm onSwitchToRegister={vi.fn()} />);
+
+    const password = screen.getByLabelText("Password");
+    const toggle = screen.getByRole("button", { name: "Show password" });
+    expect(toggle).not.toHaveAttribute("tabindex", "-1");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(toggle);
+
+    expect(password).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide password" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("uses the shared submit Button and prevents submission while incomplete or loading", () => {
+    const { rerender } = render(<LoginForm onSwitchToRegister={vi.fn()} />);
+    let submit = screen.getByRole("button", { name: "Log In" });
+    expect(submit).toHaveClass("vt-button", "vt-button--primary");
+    expect(submit).toHaveAttribute("type", "submit");
+    expect(submit).toBeDisabled();
+
+    useAuthMock.mockReturnValue({ login: loginMock, isLoading: true, error: null, clearError: clearErrorMock });
+    rerender(<LoginForm onSwitchToRegister={vi.fn()} />);
+    submit = screen.getByRole("button", { name: "Logging in..." });
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAttribute("aria-busy", "true");
+  });
+
   it("renders backend login error text from the auth hook", () => {
     useAuthMock.mockReturnValue({
       login: loginMock,
@@ -68,7 +110,7 @@ describe("LoginForm", () => {
 
     render(<LoginForm onSwitchToRegister={vi.fn()} />);
 
-    expect(screen.getByText("Unknown username")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Unknown username");
     expect(screen.getByText("username:")).toBeInTheDocument();
     expect(screen.getByText("not found")).toBeInTheDocument();
   });

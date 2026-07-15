@@ -55,6 +55,50 @@ describe("RegisterForm", () => {
     });
   });
 
+  it("connects validation messages and preserves register constraints", () => {
+    render(<RegisterForm onSwitchToLogin={vi.fn()} />);
+
+    const username = screen.getByLabelText("Username");
+    const password = screen.getByLabelText("Password");
+    fireEvent.blur(username);
+    fireEvent.blur(password);
+
+    expect(username).toHaveAttribute("minlength", "2");
+    expect(username).toHaveAttribute("maxlength", "32");
+    expect(username).toHaveAttribute("aria-invalid", "true");
+    expect(password).toHaveAttribute("minlength", "6");
+    expect(password).toHaveAttribute("autocomplete", "new-password");
+    expect(password).toHaveAttribute("aria-invalid", "true");
+    expect(document.getElementById(username.getAttribute("aria-describedby")!)).toHaveTextContent("Required field");
+    expect(document.getElementById(password.getAttribute("aria-describedby")!)).toHaveTextContent("Required field");
+  });
+
+  it("provides a keyboard-reachable password visibility toggle", () => {
+    render(<RegisterForm onSwitchToLogin={vi.fn()} />);
+
+    const password = screen.getByLabelText("Password");
+    const toggle = screen.getByRole("button", { name: "Show password" });
+    expect(toggle).not.toHaveAttribute("tabindex", "-1");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(toggle);
+
+    expect(password).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide password" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("uses the shared submit Button and exposes loading semantics", () => {
+    const { rerender } = render(<RegisterForm onSwitchToLogin={vi.fn()} />);
+    const submit = screen.getByRole("button", { name: "Register" });
+    expect(submit).toHaveClass("vt-button", "vt-button--primary");
+    expect(submit).toHaveAttribute("type", "submit");
+    expect(submit).toBeDisabled();
+
+    useAuthMock.mockReturnValue({ register: registerMock, isLoading: true, error: null, clearError: clearErrorMock });
+    rerender(<RegisterForm onSwitchToLogin={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Creating..." })).toHaveAttribute("aria-busy", "true");
+  });
+
   it("renders backend register error text and field details", () => {
     useAuthMock.mockReturnValue({
       register: registerMock,
@@ -68,7 +112,7 @@ describe("RegisterForm", () => {
 
     render(<RegisterForm onSwitchToLogin={vi.fn()} />);
 
-    expect(screen.getByText("Username is already taken")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Username is already taken");
     expect(screen.getByText("username:")).toBeInTheDocument();
     expect(screen.getByText("has already been taken")).toBeInTheDocument();
   });
