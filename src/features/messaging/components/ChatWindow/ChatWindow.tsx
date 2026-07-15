@@ -12,6 +12,7 @@ import { StickerPicker } from "../StickerPicker/StickerPicker";
 import { StickerPackPreviewDialog, type StickerPackSelectionRequest } from "../StickerPicker/StickerPackPreviewDialog";
 import type { ActiveChat, StickerMessage, User } from "@/shared/types";
 import { Avatar } from "@/shared/components/Avatar";
+import { IconButton } from "@/shared/components/IconButton";
 import { CallButton } from "@/features/calling/components/CallButton";
 import { ActiveCallDock } from "@/features/calling/components/ActiveCallDock";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
@@ -279,6 +280,8 @@ export function ChatWindow({ activeChat, call }: Props) {
           <div
             className="flex h-[54px] items-center border-b border-border px-4 text-sm text-muted-foreground"
             data-testid="chat-header"
+            role="status"
+            aria-live="polite"
           >
             Loading...
           </div>
@@ -311,14 +314,14 @@ export function ChatWindow({ activeChat, call }: Props) {
               size="medium"
               status={currentStatus as any}
             />
-            <div className="flex min-w-0 flex-col justify-center self-stretch pt-2">
+            <div className="flex min-w-0 flex-col justify-center self-stretch gap-0.5">
               <h3 className="truncate text-[15px] font-semibold leading-5">
                 {partner.display_name || partner.username}
               </h3>
               <p
                 data-testid="chat-header-status"
                 className={cn(
-                  "mt-[4px] truncate text-[12px] leading-[14px]",
+                  "truncate text-[12px] leading-[14px]",
                   currentStatus === "online"
                     ? "text-online"
                     : currentStatus === "away"
@@ -346,14 +349,12 @@ export function ChatWindow({ activeChat, call }: Props) {
               onUnavailable={handleCallUnavailable}
               className="h-10 w-10 rounded-full border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-0"
             />
-            <button
-              type="button"
+            <IconButton
+              label="Search messages"
               onClick={() => setIsSearchOpen(true)}
-              aria-label="Search"
-              className="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-0"
             >
-              <Search className="h-[18px] w-[18px]" />
-            </button>
+              <Search className="h-[18px] w-[18px]" aria-hidden="true" />
+            </IconButton>
           </div>
         </div>
       );
@@ -367,22 +368,20 @@ export function ChatWindow({ activeChat, call }: Props) {
         >
           <div className="flex min-w-0 flex-1 items-center gap-3 pr-2">
             <Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />
-            <div className="flex min-w-0 flex-col justify-center self-stretch pt-2">
+            <div className="flex min-w-0 flex-col justify-center self-stretch gap-0.5">
               <h3 className="truncate text-[15px] font-semibold leading-5">
                 {roomPreview?.name || `Room #${roomId}`}
               </h3>
-              <p className="mt-[4px] truncate text-[12px] leading-[14px] text-muted-foreground">Group chat</p>
+              <p className="truncate text-[12px] leading-[14px] text-muted-foreground">Group chat</p>
             </div>
           </div>
           <div className="flex h-full shrink-0 items-center" data-testid="chat-header-actions">
-            <button
-              type="button"
+            <IconButton
+              label="Search messages"
               onClick={() => setIsSearchOpen(true)}
-              aria-label="Search"
-              className="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-0"
             >
-              <Search className="h-[18px] w-[18px]" />
-            </button>
+              <Search className="h-[18px] w-[18px]" aria-hidden="true" />
+            </IconButton>
           </div>
         </div>
       );

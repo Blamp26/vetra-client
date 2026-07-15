@@ -234,10 +234,55 @@ describe("ChatWindow presence rendering", () => {
     expect(screen.getByTestId("chat-header-status")).toHaveTextContent("Online");
     expect(actions).toContainElement(screen.getByRole("button", { name: "Call Alice" }));
 
-    const searchButton = screen.getByRole("button", { name: "Search" });
-    expect(searchButton).toHaveClass("h-10", "w-10");
+    const searchButton = screen.getByRole("button", { name: "Search messages" });
+    expect(searchButton).toHaveClass("vt-icon-button");
+    expect(searchButton).not.toHaveClass("flex");
     fireEvent.click(searchButton);
     expect(screen.getByTestId("message-search")).toBeInTheDocument();
+  });
+
+  it("renders the group header with a subtitle and no call control", () => {
+    const state = makeState();
+    state.roomPreviews = {
+      3: {
+        id: 3,
+        name: "Project room",
+        public_id: "room-3",
+        created_by: 1,
+        server_id: null,
+        inserted_at: "2026-07-01T00:00:00Z",
+        unread_count: 0,
+        last_message_at: null,
+        last_message: null,
+      },
+    } as any;
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+    render(<ChatWindow activeChat={{ type: "room", roomId: 3 }} call={makeCall()} />);
+
+    const header = screen.getByTestId("chat-header");
+    expect(screen.getByText("Project room")).toBeInTheDocument();
+    expect(screen.getByText("Group chat")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Search messages" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Call/ })).not.toBeInTheDocument();
+    const headerClasses = Array.from(header.querySelectorAll<HTMLElement>("[class]")).map(
+      (element) => String(element.className),
+    );
+    expect(headerClasses.some((classes) => classes.includes("pt-2"))).toBe(false);
+    expect(headerClasses.some((classes) => classes.includes("mt-[4px]"))).toBe(false);
+  });
+
+  it("exposes the direct loading header as a polite status", () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+    getUser.mockReturnValue(new Promise(() => undefined));
+    render(<ChatWindow activeChat={{ type: "direct", partnerId: 2 }} call={makeCall()} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading...");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
   });
 
   it("clears the active reply when switching conversations", async () => {
