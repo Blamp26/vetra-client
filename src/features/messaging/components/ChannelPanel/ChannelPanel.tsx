@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { serversApi } from "@/api/servers";
 import { roomsApi } from "@/api/rooms";
@@ -9,6 +9,9 @@ import { cn } from "@/shared/utils/cn";
 import { Settings, Trash2, Plus } from "lucide-react";
 import { channelChatForChannel } from "@/shared/utils/chatRoutes";
 import { roomRef, serverRef } from "@/shared/utils/refs";
+import { EmptyPane } from "@/shared/components/EmptyPane";
+import { TextInput } from "@/shared/components/Field";
+import { Button } from "@/shared/components/Button";
 
 interface Props {
   serverId: number;
@@ -36,25 +39,41 @@ export function ChannelPanel({ serverId }: Props) {
   const [createError,     setCreateError]     = useState<string | null>(null);
   const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
   const [isDeleting,      setIsDeleting]      = useState(false);
+  const [channelsLoadError, setChannelsLoadError] = useState<string | null>(null);
+  const channelRequestGeneration = useRef(0);
+  const channelNameErrorId = useId();
 
   const server    = servers[serverId];
   const isOwner   = currentUser?.id === server?.created_by;
   const channels  = serverChannels[serverId];
   const isLoading = channelsLoading[serverId] ?? false;
 
-  useEffect(() => {
-    if (channels !== undefined) return;
-
+  const loadChannels = useCallback(() => {
+    const generation = ++channelRequestGeneration.current;
+    setChannelsLoadError(null);
     setChannelsLoading(serverId, true);
-    serversApi
+    void serversApi
       .getChannels(serverRef(server) ?? serverId)
-      .then((fetched) => setServerChannels(serverId, fetched))
-      .catch((err) => {
-        console.error("Failed to load channels:", err);
-        setServerChannels(serverId, []);
+      .then((fetched) => {
+        if (generation === channelRequestGeneration.current) {
+          setServerChannels(serverId, fetched);
+        }
       })
-      .finally(() => setChannelsLoading(serverId, false));
-  }, [serverId, channels, server, setChannelsLoading, setServerChannels]);
+      .catch((err) => {
+        if (generation !== channelRequestGeneration.current) return;
+        console.error("Failed to load channels:", err);
+        setChannelsLoadError("Could not load channels.");
+      })
+      .finally(() => {
+        setChannelsLoading(serverId, false);
+      });
+  }, [server, serverId, setChannelsLoading, setServerChannels]);
+
+  useEffect(() => {
+    setChannelsLoadError(null);
+    if (channels === undefined) loadChannels();
+    return () => { channelRequestGeneration.current += 1; };
+  }, [channels, loadChannels, serverId]);
 
   const handleChannelClick = async (channel: Channel) => {
     resetChannelUnread(channel.id);
@@ -156,6 +175,7 @@ export function ChannelPanel({ serverId }: Props) {
     activeChat?.type === "channel" && activeChat.serverId === serverId
       ? activeChat.channelId
       : null;
+  const createValidationError = createError === "Channel name is required." || createError === "Max 100 characters.";
 
   return (
     <>
@@ -197,17 +217,21 @@ export function ChannelPanel({ serverId }: Props) {
         {showCreate && (
           <div className="p-4 border-b border-border flex-shrink-0">
             {createError && (
-              <div className="bg-destructive/10 border border-destructive/20 p-2 text-destructive text-[10px] mb-2">
+              <div id={createValidationError ? channelNameErrorId : undefined} role="alert" className="bg-destructive/10 border border-destructive/20 p-2 text-destructive text-[10px] mb-2">
                 {createError}
               </div>
             )}
-            <input
-              className="w-full px-2 py-1 bg-background border border-border text-sm outline-none focus:border-primary"
+            <TextInput
+              size="compact"
+              className="w-full px-2 py-1 bg-background border border-border text-sm focus:border-primary"
               type="text"
               placeholder="channel-name"
+              aria-label="Channel name"
               value={newChannelName}
-              autoFocus
               maxLength={100}
+              invalid={createValidationError}
+              aria-describedby={createValidationError ? channelNameErrorId : undefined}
+              autoFocus
               onChange={(e) => { setNewChannelName(e.target.value); setCreateError(null); }}
               onKeyDown={(e) => {
                 if (e.key === "Enter")  handleCreateChannel();
@@ -215,32 +239,40 @@ export function ChannelPanel({ serverId }: Props) {
               }}
             />
             <div className="flex gap-2 mt-2">
-              <button
-                className="flex-1 py-1 bg-primary text-primary-foreground text-xs border border-primary disabled:opacity-50"
+              <Button
+                size="compact"
+                variant="primary"
+                className="flex-1 py-1 text-xs"
                 onClick={handleCreateChannel}
                 disabled={isCreating || !newChannelName.trim()}
+                loading={isCreating}
               >
                 {isCreating ? "..." : "Create"}
-              </button>
-              <button
-                className="flex-1 py-1 bg-background border border-border text-muted-foreground text-xs"
+              </Button>
+              <Button
+                size="compact"
+                variant="secondary"
+                className="flex-1 py-1 text-xs text-muted-foreground"
                 onClick={() => { setShowCreate(false); setNewChannelName(""); }}
                 disabled={isCreating}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
         {/* Channel list */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="flex-1 overflow-y-auto p-2 space-y-1" aria-busy={isLoading}>
           {isLoading ? (
-            <div className="py-8 text-center text-xs text-muted-foreground">Loading...</div>
-          ) : !channels || channels.length === 0 ? (
-            <div className="py-8 text-center px-4">
-              <p className="text-xs text-muted-foreground">No channels.</p>
+            <div className="py-8 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading...</div>
+          ) : channelsLoadError ? (
+            <div className="py-8 text-center px-4" role="alert">
+              <p className="text-xs text-destructive">{channelsLoadError}</p>
+              <Button size="compact" variant="secondary" className="mt-3" onClick={loadChannels} disabled={isLoading}>Retry</Button>
             </div>
+          ) : !channels || channels.length === 0 ? (
+            <EmptyPane title="No channels." density="compact" titleLevel={3} className="px-4 py-8" />
           ) : (
             <div className="space-y-1">
               {channels.map((ch) => {

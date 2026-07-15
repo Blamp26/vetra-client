@@ -186,6 +186,32 @@ describe("App hash sync", () => {
     window.localStorage.clear();
   });
 
+  it("renders the conversation EmptyPane and opens the picker once", () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "Pick a conversation" })).toBeInTheDocument();
+    expect(screen.getByText("Select a chat or start a new one.")).toBeInTheDocument();
+    expect(screen.queryByText("Inbox")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start a new conversation" }));
+    expect(state.openModal).toHaveBeenCalledOnce();
+    expect(state.openModal).toHaveBeenCalledWith("CREATE_PICKER");
+  });
+
+  it("renders a channel-selection EmptyPane without the workspace kicker", () => {
+    const state = makeState();
+    state.activeChat = { type: "server", serverId: 1, serverRef: 1 };
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "Choose a channel" })).toBeInTheDocument();
+    expect(screen.getByText("Open any channel to start messaging.")).toBeInTheDocument();
+    expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
+  });
+
   it("resolves a channel hash to a channel active chat directly", async () => {
     const state = makeState();
     window.location.hash = "#/s/1/1";

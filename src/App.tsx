@@ -16,6 +16,8 @@ import {
 } from "@/shared/utils/chatRoutes";
 import { IncomingCallModal } from "./features/calling/components/IncomingCallModal";
 import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
+import { EmptyPane } from "@/shared/components/EmptyPane";
+import { Button } from "@/shared/components/Button";
 import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
 import { CallProvider, useCallContext } from "@/features/calling/context";
 import { debugCall } from "@/features/calling/utils/callDebug";
@@ -65,40 +67,6 @@ function getInitialLeftPaneWidth(): number {
   return resolveTextPaneWidth(
     hasStoredWidth ? Math.max(parsedWidth, LEFT_TEXT_MIN_WIDTH) : LEFT_PANE_DEFAULT_WIDTH,
     window.innerWidth,
-  );
-}
-
-function EmptyState({
-  eyebrow,
-  title,
-  description,
-  actionLabel,
-  onAction,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  mode: "channel" | "conversation";
-}) {
-  return (
-    <div className="flex flex-1 items-center justify-center px-8 py-10">
-      <div className="vt-empty-state w-full max-w-2xl">
-        <div className="space-y-4">
-          <span className="vt-kicker">{eyebrow}</span>
-          <div className="max-w-xl space-y-2">
-            <h2 className="text-[1.625rem] font-semibold tracking-tight text-foreground">{title}</h2>
-            <p className="text-sm leading-6 text-muted-foreground">{description}</p>
-          </div>
-          {actionLabel && onAction ? (
-            <button onClick={onAction} className="vt-button vt-button--primary">
-              {actionLabel}
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -648,20 +616,19 @@ function AppShell() {
               call={call}
             />
           ) : !isSettingsRoute && activeChat?.type === "server" ? (
-            <EmptyState
-              eyebrow="Workspace"
+            <EmptyPane
               title="Choose a channel"
               description="Open any channel to start messaging."
-              mode="channel"
+              density="workspace"
+              className="flex flex-1 flex-col items-center justify-center px-8 py-10 [&_.vt-empty-pane__title]:text-[1.625rem] [&_.vt-empty-pane__title]:font-semibold [&_.vt-empty-pane__title]:tracking-tight"
             />
           ) : !isSettingsRoute ? (
-            <EmptyState
-              eyebrow="Inbox"
+            <EmptyPane
               title="Pick a conversation"
               description="Select a chat or start a new one."
-              actionLabel="Start a new conversation"
-              onAction={() => openModal("CREATE_PICKER")}
-              mode="conversation"
+              action={<Button variant="primary" type="button" onClick={() => openModal("CREATE_PICKER")}>Start a new conversation</Button>}
+              density="workspace"
+              className="flex flex-1 flex-col items-center justify-center px-8 py-10 [&_.vt-empty-pane__title]:text-[1.625rem] [&_.vt-empty-pane__title]:font-semibold [&_.vt-empty-pane__title]:tracking-tight"
             />
           ) : null}
         </div>

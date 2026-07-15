@@ -17,6 +17,7 @@ import {
 import { getPresenceText, resolvePresenceStatus } from "@/shared/utils/presence";
 import { sortConversationItems } from "../../utils/conversationOrdering";
 import { getPreviewText } from "../../utils/attachments";
+import { EmptyPane } from "@/shared/components/EmptyPane";
 
 interface SidebarProps {
   isServerMode?: boolean;
@@ -184,21 +185,17 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
 
       <div className={cn("flex-1 overflow-y-auto", !isServerMode && !isCollapsed ? "py-1" : "px-3 py-3")}>
         {!hasListContent && !isServerMode ? (
-          <div
+          <EmptyPane
+            title="No conversations"
+            description={isCollapsed ? undefined : "Start a direct chat or create a room to begin messaging."}
+            density="compact"
+            align={isCollapsed ? "center" : "start"}
+            titleLevel={3}
             className={cn(
-              "mx-3 rounded-[12px] border border-border bg-card/70 px-4 py-5",
-              isCollapsed && "text-center",
+              "mx-3 px-4 py-5",
+              isCollapsed && "px-1 py-3 text-center [&_.vt-empty-pane__title]:truncate",
             )}
-          >
-            <div className="space-y-1.5">
-              <span className="vt-kicker">No conversations</span>
-              {!isCollapsed && (
-                <p className="text-sm text-muted-foreground">
-                  Start a direct chat or create a room to begin messaging.
-                </p>
-              )}
-            </div>
-          </div>
+          />
         ) : (
           <div className={isServerMode || isCollapsed ? "space-y-1.5" : undefined}>
             {!isServerMode &&

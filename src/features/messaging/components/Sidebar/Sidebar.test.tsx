@@ -119,6 +119,22 @@ describe("Sidebar attachment previews", () => {
     getListMock.mockResolvedValue([]);
   });
 
+  it("renders the no-conversations state as a semantic empty pane", () => {
+    const state = makeState();
+    state.conversationPreviews = {} as typeof state.conversationPreviews;
+    state.roomPreviews = {} as typeof state.roomPreviews;
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    render(<Sidebar />);
+
+    expect(screen.getByRole("heading", { name: "No conversations" })).toBeInTheDocument();
+    expect(screen.getByText("Start a direct chat or create a room to begin messaging.")).toBeInTheDocument();
+    expect(screen.queryByText("No conversations", { selector: ".vt-kicker" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start a new/i })).not.toBeInTheDocument();
+  });
+
   it("uses server-provided preview text for direct and room items", async () => {
     const state = makeState();
 
