@@ -140,25 +140,25 @@ export function CreateRoomModal({ onClose }: Props) {
       onClose={onClose}
       labelledBy={titleId}
       initialFocusRef={nameInputRef}
-      className="bg-card border border-border w-full max-w-md flex flex-col max-h-[90vh] overflow-hidden"
+      className="w-full max-w-md flex flex-col max-h-[90vh] overflow-hidden"
     >
         <div className="p-4 border-b border-border flex items-center justify-between">
           <h3 id={titleId} className="text-lg font-normal">Create Group</h3>
-          <IconButton label="Close create group" size="compact" className="text-2xl" onClick={onClose}>
+          <IconButton label="Close create group" size="compact" onClick={onClose}>
             <X className="h-4 w-4" aria-hidden="true" />
           </IconButton>
         </div>
 
         <div className="p-4 overflow-y-auto">
-          {error && <div id={nameInvalid ? nameErrorId : undefined} role="alert" className="bg-destructive/10 border border-destructive p-2 text-destructive text-xs mb-4">{error}</div>}
+          {error && <div id={nameInvalid ? nameErrorId : undefined} role="alert" className="mb-4 text-sm text-destructive">{error}</div>}
 
           <div className="flex flex-col gap-1 mb-4">
-            <label className="text-[10px] uppercase text-muted-foreground" htmlFor="create-room-name">Group name</label>
+            <label className="text-sm font-medium" htmlFor="create-room-name">Group name</label>
             <TextInput
               ref={nameInputRef}
               aria-describedby={nameInvalid ? nameErrorId : undefined}
               invalid={nameInvalid}
-              className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
+              className="w-full"
               id="create-room-name"
               type="text"
               placeholder="Name..."
@@ -174,14 +174,21 @@ export function CreateRoomModal({ onClose }: Props) {
             onActiveValueChange={setActiveSearchValue}
             className="flex flex-col gap-1"
           >
-            <label className="text-[10px] uppercase text-muted-foreground" htmlFor={memberInputId}>Add members</label>
+            <label className="text-sm font-medium" htmlFor={memberInputId}>Add members</label>
 
             {selectedUsers.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-2">
                 {selectedUsers.map((u) => (
-                  <span key={u.id} className="inline-flex items-center gap-1 px-2 py-1 bg-muted text-xs border border-border">
+                  <span key={u.id} className="inline-flex items-center gap-1 px-2 py-1 bg-muted text-xs">
                     {u.display_name || u.username}
-                    <button type="button" aria-label={`Remove ${u.display_name || u.username}`} onClick={() => removeUser(u.id)} className="text-muted-foreground hover:text-destructive">×</button>
+                    <IconButton
+                      label={`Remove ${u.display_name || u.username}`}
+                      size="compact"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => removeUser(u.id)}
+                    >
+                      <X className="h-3 w-3" aria-hidden="true" />
+                    </IconButton>
                   </span>
                 ))}
               </div>
@@ -191,7 +198,7 @@ export function CreateRoomModal({ onClose }: Props) {
               <ComboboxInput
                 id={memberInputId}
                 aria-label="Add members"
-                className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
+                className="w-full"
                 type="text"
                 placeholder="Search users..."
                 value={query}
@@ -199,12 +206,12 @@ export function CreateRoomModal({ onClose }: Props) {
                 onChange={(e) => { setQuery(e.target.value); setActiveSearchValue(undefined); setSearchOpen(Boolean(e.target.value.trim())); }}
               />
               {isSearching && <div className="p-1 text-xs text-muted-foreground" role="status" aria-live="polite">Searching...</div>}
-              <ComboboxList aria-label="Member search results" className="absolute left-0 right-0 top-full bg-popover border border-border z-[100] max-h-[200px] overflow-y-auto">
+              <ComboboxList aria-label="Member search results" className="absolute left-0 right-0 top-full z-[100] max-h-[200px] overflow-y-auto bg-popover">
                   {searchResults.map((user) => (
                     <ComboboxOption
                       key={user.id}
                       value={`user:${user.id}`}
-                        className="flex items-center gap-2 w-full p-2 bg-transparent border-none text-left hover:bg-accent"
+                        className="flex items-center gap-2 w-full p-2 text-left hover:bg-accent"
                         onSelect={() => addUser(user)}
                     >
                         <Avatar name={user.display_name || user.username} size="small" />
@@ -217,16 +224,15 @@ export function CreateRoomModal({ onClose }: Props) {
         </div>
 
         <div className="p-4 border-t border-border flex gap-2 justify-end">
-          <Button variant="secondary" className="px-4 py-2 text-sm border border-border" onClick={onClose} disabled={isCreating}>Cancel</Button>
+          <Button variant="secondary" onClick={onClose} disabled={isCreating}>Cancel</Button>
           <Button
             type="button"
             variant="primary"
             loading={isCreating}
-            className="px-4 py-2 bg-primary text-primary-foreground text-sm border border-primary disabled:opacity-50"
             onClick={handleCreate}
             disabled={isCreating || !name.trim()}
           >
-            {isCreating ? "..." : "Create"}
+            Create
           </Button>
         </div>
     </Dialog>
