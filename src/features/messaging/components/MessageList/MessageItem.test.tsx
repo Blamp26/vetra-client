@@ -3596,4 +3596,25 @@ describe("MessageItem bubble layout", () => {
     renderMessageItem({ sticker: { id: "sticker-1", pack_id: "pack-1", media_file_id: "media-1", width: 512, height: 256, format: "webp", emoji_tags: ["😀"] } });
     expect(screen.getByTestId("sticker-message")).toHaveStyle({ width: "220px", height: "110px" });
   });
+
+  it("keeps sticker metadata attached to the sticker content", () => {
+    renderMessageItem({
+      sticker: {
+        id: "sticker-meta-1",
+        pack_id: "pack-1",
+        media_file_id: "media-meta-1",
+        width: 512,
+        height: 512,
+        format: "webp",
+        emoji_tags: ["😀"],
+      },
+      status: "read",
+    }, { isOwn: true });
+
+    const sticker = screen.getByTestId("sticker-message");
+    const overlay = screen.getByTestId("message-media-only-overlay");
+    expect(sticker).toContainElement(overlay);
+    expect(overlay).toHaveClass("absolute", "bottom-[4px]", "right-[4px]");
+    expect(screen.queryByTestId("message-media-only-status")).toBeInTheDocument();
+  });
 });

@@ -12,6 +12,7 @@ vi.mock("@/store", () => ({
 }));
 
 import { AuthenticatedImage } from "./AuthenticatedImage";
+import { Avatar } from "./Avatar/Avatar";
 import { MediaVisibilityContext } from "./MediaVisibilityContext";
 
 class IdleIntersectionObserver {
@@ -154,5 +155,38 @@ describe("AuthenticatedImage", () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:no-observer");
     render(<AuthenticatedImage src="/api/v1/media/no-observer" alt="No observer image" />);
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows avatar initials when the authenticated request fails", async () => {
+    vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network error"));
+
+    render(<Avatar name="Alice" src="/api/v1/users/alice/avatar" status="online" />);
+
+    await waitFor(() => expect(screen.getByText("A")).toBeInTheDocument());
+    expect(screen.getByText("A")).toHaveAttribute("data-slot", "avatar");
+    expect(screen.getByTestId("avatar-status-indicator")).toHaveAttribute("data-status", "online");
+  });
+
+  it("uses the fallback when the browser rejects a decoded object URL", async () => {
+    vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(["not-an-image"], { type: "image/jpeg" }),
+    } as Response);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:broken-image");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+
+    render(
+      <AuthenticatedImage
+        src="/api/v1/media/broken-image"
+        alt="Broken preview"
+        fallback={<span data-testid="image-fallback">Fallback</span>}
+      />,
+    );
+
+    const image = await waitFor(() => screen.getByAltText("Broken preview"));
+    fireEvent.error(image);
+    await waitFor(() => expect(screen.getByTestId("image-fallback")).toBeInTheDocument());
   });
 });

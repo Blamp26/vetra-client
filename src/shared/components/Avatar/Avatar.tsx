@@ -63,6 +63,16 @@ export const Avatar: React.FC<AvatarProps> = ({
       src={src} 
       alt={name || 'avatar'} 
       className={combinedClassName} 
+      fallback={(
+        <span
+          data-slot="avatar"
+          className={combinedClassName}
+          onClick={onClick}
+          title={title}
+        >
+          {initials}
+        </span>
+      )}
       onClick={onClick}
       title={title}
     />

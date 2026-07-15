@@ -1380,7 +1380,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
     }
     if (msg.sticker) {
       const sticker = msg.sticker;
-      return <div className="relative flex flex-col items-end" data-testid="sticker-message" style={{ width: `${stickerDisplaySize?.width ?? 220}px`, height: `${stickerDisplaySize?.height ?? 220}px` }}><button type="button" className="flex h-full w-full items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" aria-label={`Open sticker pack ${sticker.pack_title ?? ""}`.trim()} onClick={(event) => { if (selectionMode) return; event.stopPropagation(); onOpenStickerPack?.(sticker.pack_id, sticker.id); }}><StickerArtwork sticker={sticker} className="h-full w-full object-contain" /></button>{renderMetadata("overlay")}</div>;
+      return <div className="relative flex flex-col items-end" data-testid="sticker-message" style={{ width: `${stickerDisplaySize?.width ?? 220}px`, height: `${stickerDisplaySize?.height ?? 220}px` }}><button type="button" className="flex h-full w-full items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" aria-label={`Open sticker pack ${sticker.pack_title ?? ""}`.trim()} onClick={(event) => { if (selectionMode) return; event.stopPropagation(); onOpenStickerPack?.(sticker.pack_id, sticker.id); }}><StickerArtwork sticker={sticker} className="h-full w-full object-contain" /></button><div className="pointer-events-none absolute bottom-[4px] right-[4px]" data-testid="message-media-only-overlay">{renderMetadata("overlay")}</div></div>;
     }
     return (
       <>

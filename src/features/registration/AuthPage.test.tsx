@@ -37,7 +37,8 @@ describe("AuthPage", () => {
     expect(screen.getByRole("heading", { name: "Log in" })).toBeInTheDocument();
     expect(screen.getByLabelText("Username")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
-    expect(screen.getByText("Vetra")).toBeInTheDocument();
+    expect(screen.getAllByText("Vetra")).toHaveLength(2);
+    expect(screen.getByRole("main")).toHaveClass("lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]");
     for (const text of [
       "Tauri-first messenger",
       "Calm desktop messaging for daily work.",

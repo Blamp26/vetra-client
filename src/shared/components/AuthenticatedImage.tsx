@@ -12,6 +12,7 @@ export interface AuthenticatedImageDiagnostics {
 
 interface AuthenticatedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
+  fallback?: React.ReactNode;
   onMediaDiagnostics?: (diagnostics: AuthenticatedImageDiagnostics) => void;
 }
 
@@ -34,6 +35,7 @@ function isWithinVisibilityMargin(target: HTMLElement, root: HTMLElement | null)
  */
 export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
   src,
+  fallback,
   onMediaDiagnostics,
   ...props
 }) => {
@@ -182,7 +184,15 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
     props.onLoad?.(event);
   };
 
+  const handleError: React.ReactEventHandler<HTMLImageElement> = (event) => {
+    revokeObjectUrl();
+    setError(true);
+    props.onError?.(event);
+  };
+
   if (error) {
+    if (fallback) return fallback;
+
     return (
       <div
         aria-label={typeof props.alt === "string" ? props.alt : "Failed to load image"}
@@ -208,6 +218,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
       ref={imageRef}
       src={objectUrl}
       onLoad={handleLoad}
+      onError={handleError}
       style={{ display: "block", width: "100%", height: "100%", ...props.style }}
     />
   );
