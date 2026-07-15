@@ -1,10 +1,14 @@
-import { useState, useRef } from "react";
+import { useId, useState, useRef } from "react";
 import { authApi, type UpdateProfilePayload } from "@/api/auth";
 import { postFormData, API_BASE_URL } from "@/api/base";
 import { useAppStore, type RootState } from "@/store";
 import type { User } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { X } from "lucide-react";
+import { Dialog } from "@/shared/components/Dialog";
+import { Button } from "@/shared/components/Button";
+import { IconButton } from "@/shared/components/IconButton";
+import { TextInput } from "@/shared/components/Field";
 
 interface Props {
   user:    User;
@@ -15,6 +19,9 @@ export function ProfileModal({ user, onClose }: Props) {
   const updateCurrentUser = useAppStore((s: RootState) => s.updateCurrentUser);
   const socketManager     = useAppStore((s: RootState) => s.socketManager);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const usernameInputRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
+  const usernameErrorId = useId();
 
   const [username,    setUsername]    = useState(user.username);
   const [displayName, setDisplayName] = useState(user.display_name ?? "");
@@ -74,16 +81,25 @@ export function ProfileModal({ user, onClose }: Props) {
     }
   }
 
+  const usernameInvalid = Boolean(usernameErr);
+
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="vt-modal-backdrop" />
-      <div className="vt-modal-panel relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <Dialog
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      initialFocusRef={usernameInputRef}
+      backdropClassName="vt-modal-backdrop"
+      className="vt-modal-panel relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden"
+    >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
             <span className="vt-kicker">Profile</span>
-            <h3 className="mt-1 text-xl font-semibold tracking-tight">Edit account details</h3>
+            <h3 id={titleId} className="mt-1 text-xl font-semibold tracking-tight">Edit account details</h3>
           </div>
-          <button className="vt-button vt-button--ghost vt-button--icon h-9 w-9 px-0" onClick={onClose}><X className="h-5 w-5" /></button>
+          <IconButton label="Close profile" size="default" tone="neutral" onClick={onClose} className="vt-button vt-button--ghost vt-button--icon h-9 w-9 px-0">
+            <X className="h-5 w-5" aria-hidden="true" />
+          </IconButton>
         </div>
 
         <div className="flex flex-col gap-5 overflow-y-auto px-5 py-5">
@@ -114,9 +130,11 @@ export function ProfileModal({ user, onClose }: Props) {
             </div>
 
             <div className="w-full space-y-1">
-              <label className="vt-label">Avatar URL</label>
-              <input
+              <label className="vt-label" htmlFor="profile-avatar-url">Avatar URL</label>
+              <TextInput
                 className="vt-input"
+                id="profile-avatar-url"
+                aria-label="Avatar URL"
                 value={avatarUrl}
                 onChange={(e) => setAvatarUrl(e.target.value)}
                 placeholder="https://..."
@@ -125,9 +143,11 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           <div className="space-y-1">
-            <label className="vt-label">Display Name</label>
-            <input
+            <label className="vt-label" htmlFor="profile-display-name">Display Name</label>
+            <TextInput
               className="vt-input"
+              id="profile-display-name"
+              aria-label="Display Name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               maxLength={64}
@@ -135,15 +155,19 @@ export function ProfileModal({ user, onClose }: Props) {
           </div>
 
           <div className="space-y-1">
-            <label className="vt-label">Username</label>
-            <input
+            <label className="vt-label" htmlFor="profile-username">Username</label>
+            <TextInput
+              ref={usernameInputRef}
               className="vt-input"
+              id="profile-username"
               value={username}
               onChange={(e) => { setUsernameErr(null); setUsername(e.target.value); }}
               minLength={2}
               maxLength={32}
+              invalid={usernameInvalid}
+              aria-describedby={usernameInvalid ? usernameErrorId : undefined}
             />
-            {usernameErr && <p className="text-[11px] text-destructive">{usernameErr}</p>}
+            {usernameErr && <p id={usernameErrorId} role="alert" className="text-[11px] text-destructive">{usernameErr}</p>}
           </div>
 
           <div className="space-y-1">
@@ -175,20 +199,20 @@ export function ProfileModal({ user, onClose }: Props) {
             </div>
           </div>
 
-          {error && <p className="text-destructive text-xs">{error}</p>}
+          {error && <p role="alert" className="text-destructive text-xs">{error}</p>}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
-          <button className="vt-button" onClick={onClose}>Cancel</button>
-          <button 
-            className="vt-button vt-button--primary disabled:opacity-50"
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
             onClick={handleSave} 
             disabled={saving}
+            loading={saving}
           >
             {saving ? "Saving..." : "Save"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

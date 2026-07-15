@@ -69,6 +69,13 @@ describe("ForwardModal", () => {
     ]);
   });
 
+  it("uses a named dialog and focuses its search field", () => {
+    render(<ForwardModal onForward={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByRole("dialog", { name: "Forward" })).toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Search forwarding destinations" }));
+    expect(screen.getByRole("button", { name: "Close forward dialog" })).toBeInTheDocument();
+  });
+
   it("allows only one pending destination submission and keeps the modal on failure", async () => {
     let rejectForward!: (reason: Error) => void;
     const onForward = vi.fn(() => new Promise<void>((_, reject) => { rejectForward = reject; }));

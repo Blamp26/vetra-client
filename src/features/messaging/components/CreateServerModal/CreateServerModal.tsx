@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { serversApi } from "@/api/servers";
 import { serverChatForServer } from "@/shared/utils/chatRoutes";
+import { Dialog } from "@/shared/components/Dialog";
+import { Button } from "@/shared/components/Button";
+import { IconButton } from "@/shared/components/IconButton";
+import { TextInput } from "@/shared/components/Field";
+import { X } from "lucide-react";
 
 interface Props {
   onClose: () => void;
@@ -15,6 +20,9 @@ export function CreateServerModal({ onClose }: Props) {
   const [name,       setName]       = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error,      setError]      = useState<string | null>(null);
+  const titleId = useId();
+  const nameErrorId = useId();
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const handleCreate = async () => {
     if (!currentUser) return;
@@ -40,27 +48,39 @@ export function CreateServerModal({ onClose }: Props) {
     }
   };
 
+  const nameInvalid = error === "Enter server name";
+
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <Dialog
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      initialFocusRef={nameInputRef}
+      backdropClassName="absolute inset-0 bg-background/50"
+      className="bg-card border border-border w-full max-w-md flex flex-col"
+    >
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="text-lg font-normal">Create Server</h3>
-          <button onClick={onClose} className="text-2xl">×</button>
+          <h3 id={titleId} className="text-lg font-normal">Create Server</h3>
+          <IconButton label="Close create server" size="default" tone="neutral" onClick={onClose}>
+            <X className="h-5 w-5" aria-hidden="true" />
+          </IconButton>
         </div>
 
         <div className="p-4 flex flex-col gap-4">
-          {error && <div className="bg-destructive/10 border border-destructive p-2 text-destructive text-xs">{error}</div>}
+          {error && <div id={nameInvalid ? nameErrorId : undefined} role="alert" className="bg-destructive/10 border border-destructive p-2 text-destructive text-xs">{error}</div>}
 
           <div className="flex flex-col gap-1">
             <label className="text-[10px] uppercase text-muted-foreground" htmlFor="create-server-name">Server name</label>
-            <input
-              className="w-full px-2 py-2 bg-background border border-border text-sm outline-none"
+            <TextInput
+              ref={nameInputRef}
+              className="w-full px-2 py-2 bg-background border border-border text-sm"
               id="create-server-name"
               type="text"
               placeholder="Name..."
               value={name}
               maxLength={100}
-              autoFocus
+              invalid={nameInvalid}
+              aria-describedby={nameInvalid ? nameErrorId : undefined}
               onChange={(e) => { setName(e.target.value); setError(null); }}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             />
@@ -68,16 +88,16 @@ export function CreateServerModal({ onClose }: Props) {
         </div>
 
         <div className="p-4 border-t border-border flex gap-2 justify-end">
-          <button className="px-4 py-2 text-sm border border-border" onClick={onClose} disabled={isCreating}>Cancel</button>
-          <button
-            className="px-4 py-2 bg-primary text-primary-foreground text-sm border border-primary disabled:opacity-50"
+          <Button variant="secondary" onClick={onClose} disabled={isCreating}>Cancel</Button>
+          <Button
+            variant="primary"
             onClick={handleCreate}
             disabled={isCreating || !name.trim()}
+            loading={isCreating}
           >
             {isCreating ? "..." : "Create"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

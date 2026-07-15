@@ -336,8 +336,6 @@ export function SettingsPage({ onClose }: Props) {
       onClose={onClose}
       labelledBy={titleId}
       initialFocusRef={accountTabRef as React.RefObject<HTMLElement>}
-      trapFocus={!showEditProfile}
-      closeOnEscape={!showEditProfile}
       backdropClassName="vt-dialog-backdrop--settings"
       className="vt-modal-panel relative z-10 flex h-[82vh] w-full max-w-5xl overflow-hidden"
     >
@@ -441,7 +439,7 @@ export function SettingsPage({ onClose }: Props) {
           </TabPanel>
         </div>
         </Tabs>
-      {showEditProfile && currentUser && <ProfileModal user={currentUser} onClose={() => { setShowEditProfile(false); requestAnimationFrame(() => profileTriggerRef.current?.focus()); }} />}
+      {showEditProfile && currentUser && <ProfileModal user={currentUser} onClose={() => setShowEditProfile(false)} />}
       {showLogoutConfirm && (
         <ConfirmModal
           title="Log out?"

@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { X, Search, Send, User } from "lucide-react";
 import { Avatar } from "@/shared/components/Avatar/Avatar";
 import { sortConversationItems } from "../../utils/conversationOrdering";
 import { cn } from "@/shared/utils/cn";
+import { Dialog } from "@/shared/components/Dialog";
+import { IconButton } from "@/shared/components/IconButton";
+import { TextInput } from "@/shared/components/Field";
 
 type Target = {
   type: "direct" | "room";
@@ -27,6 +30,8 @@ export function ForwardModal({ onForward, onCancel }: Props) {
   const [search, setSearch] = useState("");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const titleId = useId();
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const targets = useMemo<Target[]>(() => {
     const directTargets = Object.values(conversationPreviews).map((preview) => ({
@@ -77,36 +82,28 @@ export function ForwardModal({ onForward, onCancel }: Props) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center bg-background/50 p-4"
-      onClick={pendingKey ? undefined : onCancel}
+    <Dialog
+      open
+      onClose={onCancel}
+      labelledBy={titleId}
+      initialFocusRef={searchInputRef}
+      closeOnBackdrop={!pendingKey}
+      backdropClassName="absolute inset-0 bg-background/50"
+      className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden border border-border bg-card"
     >
-      <div
-        className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden border border-border bg-card"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="forward-dialog-title"
-      >
         <div className="flex h-[56px] shrink-0 items-center justify-between border-b border-border px-4">
-          <h3 id="forward-dialog-title" className="text-lg font-normal">Forward</h3>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={Boolean(pendingKey)}
-            aria-label="Close forwarding dialog"
-            className="p-1 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <h3 id={titleId} className="text-lg font-normal">Forward</h3>
+          <IconButton label="Close forward dialog" size="compact" tone="neutral" onClick={onCancel} disabled={Boolean(pendingKey)} className="p-1 text-muted-foreground hover:text-foreground">
             <X className="h-5 w-5" />
-          </button>
+          </IconButton>
         </div>
 
         <div className="shrink-0 border-b border-border p-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              autoFocus
-              className="h-9 w-full border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-primary"
+            <TextInput
+              ref={searchInputRef}
+              className="h-9 w-full border border-border bg-background pl-10 pr-4 text-sm focus:border-primary"
               placeholder="Search..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -156,7 +153,6 @@ export function ForwardModal({ onForward, onCancel }: Props) {
             <div className="py-8 text-center text-xs text-muted-foreground">No results</div>
           )}
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
