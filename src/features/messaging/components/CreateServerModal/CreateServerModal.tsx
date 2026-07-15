@@ -56,48 +56,47 @@ export function CreateServerModal({ onClose }: Props) {
       onClose={onClose}
       labelledBy={titleId}
       initialFocusRef={nameInputRef}
-      backdropClassName="absolute inset-0 bg-background/50"
-      className="bg-card border border-border w-full max-w-md flex flex-col"
+      className="w-full max-w-md flex flex-col"
     >
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 id={titleId} className="text-lg font-normal">Create Server</h3>
-          <IconButton label="Close create server" size="default" tone="neutral" onClick={onClose}>
-            <X className="h-5 w-5" aria-hidden="true" />
-          </IconButton>
-        </div>
+      <div className="p-4 border-b border-border flex items-center justify-between">
+        <h3 id={titleId} className="text-lg font-normal">Create Server</h3>
+        <IconButton label="Close create server" size="default" onClick={onClose}>
+          <X className="h-5 w-5" aria-hidden="true" />
+        </IconButton>
+      </div>
 
-        <div className="p-4 flex flex-col gap-4">
-          {error && <div id={nameInvalid ? nameErrorId : undefined} role="alert" className="bg-destructive/10 border border-destructive p-2 text-destructive text-xs">{error}</div>}
+      <div className="p-4 flex flex-col gap-4">
+        {error && <div id={nameInvalid ? nameErrorId : undefined} role="alert" className="text-sm text-destructive">{error}</div>}
 
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase text-muted-foreground" htmlFor="create-server-name">Server name</label>
-            <TextInput
-              ref={nameInputRef}
-              className="w-full px-2 py-2 bg-background border border-border text-sm"
-              id="create-server-name"
-              type="text"
-              placeholder="Name..."
-              value={name}
-              maxLength={100}
-              invalid={nameInvalid}
-              aria-describedby={nameInvalid ? nameErrorId : undefined}
-              onChange={(e) => { setName(e.target.value); setError(null); }}
-              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            />
-          </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium" htmlFor="create-server-name">Server name</label>
+          <TextInput
+            ref={nameInputRef}
+            className="w-full"
+            id="create-server-name"
+            type="text"
+            placeholder="Name..."
+            value={name}
+            maxLength={100}
+            invalid={nameInvalid}
+            aria-describedby={nameInvalid ? nameErrorId : undefined}
+            onChange={(e) => { setName(e.target.value); setError(null); }}
+            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          />
         </div>
+      </div>
 
-        <div className="p-4 border-t border-border flex gap-2 justify-end">
-          <Button variant="secondary" onClick={onClose} disabled={isCreating}>Cancel</Button>
-          <Button
-            variant="primary"
-            onClick={handleCreate}
-            disabled={isCreating || !name.trim()}
-            loading={isCreating}
-          >
-            {isCreating ? "..." : "Create"}
-          </Button>
-        </div>
+      <div className="p-4 border-t border-border flex gap-2 justify-end">
+        <Button variant="secondary" onClick={onClose} disabled={isCreating}>Cancel</Button>
+        <Button
+          variant="primary"
+          onClick={handleCreate}
+          disabled={isCreating || !name.trim()}
+          loading={isCreating}
+        >
+          Create
+        </Button>
+      </div>
     </Dialog>
   );
 }
