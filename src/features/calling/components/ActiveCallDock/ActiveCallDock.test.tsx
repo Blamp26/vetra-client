@@ -1,8 +1,36 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+
+const { mockCurrentWindow, mockGetCurrentWindow, fullscreenState } = vi.hoisted(() => {
+  const state = { value: false };
+  const currentWindow = {
+    setFullscreen: vi.fn(async (fullscreen: boolean) => { state.value = fullscreen; }),
+    isFullscreen: vi.fn(async () => state.value),
+  };
+  return {
+    mockCurrentWindow: currentWindow,
+    mockGetCurrentWindow: vi.fn(() => currentWindow),
+    fullscreenState: state,
+  };
+});
+
+vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: mockGetCurrentWindow }));
 import { ActiveCallDock } from "./ActiveCallDock";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  fullscreenState.value = false;
+  mockCurrentWindow.setFullscreen.mockImplementation(async (fullscreen: boolean) => { fullscreenState.value = fullscreen; });
+  mockCurrentWindow.isFullscreen.mockImplementation(async () => fullscreenState.value);
+  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
+});
+
+afterEach(() => {
+  delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+});
 
 function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = {}) {
   const props: ComponentProps<typeof ActiveCallDock> = {
@@ -146,40 +174,35 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("local-screen-share-pip")).toHaveClass("h-[90px]", "w-[160px]");
   });
 
-  it("uses the Fullscreen API and synchronizes browser exit", async () => {
-    let fullscreenElement: Element | null = null;
-    const requestFullscreen = vi.fn(function(this: Element) { fullscreenElement = this; document.dispatchEvent(new Event("fullscreenchange")); return Promise.resolve(); });
-    const exitFullscreen = vi.fn(() => { fullscreenElement = null; document.dispatchEvent(new Event("fullscreenchange")); return Promise.resolve(); });
+  it("uses native Tauri fullscreen and never calls the browser Fullscreen API", async () => {
+    const requestFullscreen = vi.fn();
     Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: requestFullscreen });
-    Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
-    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
     renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     expandShare();
     fireEvent.mouseEnter(screen.getByTestId("screen-share-stage"));
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
-    await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenCalledWith(true));
+    expect(requestFullscreen).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass("mt-5");
     expect(screen.getByTestId("fullscreen-participant-strip")).toBeInTheDocument();
     expect(screen.getAllByTestId("screen-share-framed-participant-tile")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /Return to framed call|Expand share/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
-    await waitFor(() => expect(exitFullscreen).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(false));
   });
 
-  it("offers a balanced participant fullscreen layout for voice-only calls", async () => {
-    let fullscreenElement: Element | null = null;
-    const requestFullscreen = vi.fn(function(this: Element) { fullscreenElement = this; document.dispatchEvent(new Event("fullscreenchange")); return Promise.resolve(); });
-    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: requestFullscreen });
-    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+  it("exits native fullscreen from Escape and keeps the voice grid presentation", async () => {
     renderDock();
 
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
 
-    await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenCalledWith(true));
     expect(screen.getByTestId("active-call-voice-surface")).toHaveClass("fullscreen-voice-participants");
     expect(screen.getByTestId("voice-call-tile-row")).toBeInTheDocument();
     expect(screen.queryByTestId("fullscreen-participant-strip")).not.toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(false));
   });
 
   it("keeps the call dock height stable while entering and leaving expanded share mode", async () => {
@@ -195,13 +218,58 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[clamp(300px,42vh,480px)]", "shrink-0");
   });
 
-  it("handles fullscreenerror without leaving a stale fullscreen state", async () => {
-    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: vi.fn(() => { document.dispatchEvent(new Event("fullscreenerror")); return Promise.reject(new Error("unsupported")); }) });
+  it("does not apply fullscreen state when native enter rejects", async () => {
+    mockCurrentWindow.setFullscreen.mockRejectedValueOnce(new Error("unsupported"));
     renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     expandShare();
     fireEvent.mouseEnter(screen.getByTestId("screen-share-stage"));
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument());
+    expect(screen.getByTestId("screen-share-stage")).not.toHaveClass("fullscreen-share-layout");
+  });
+
+  it("synchronizes native state when exit rejects", async () => {
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    expandShare();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
+    mockCurrentWindow.setFullscreen.mockRejectedValueOnce(new Error("exit failed"));
+    mockCurrentWindow.isFullscreen.mockResolvedValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
+    await waitFor(() => expect(mockCurrentWindow.isFullscreen).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+  });
+
+  it("exits native fullscreen when the call ends", async () => {
+    const { rerender, props } = renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    expandShare();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
+    rerender(<ActiveCallDock {...props} callStatus="ended" />);
+    await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(false));
+  });
+
+  it("exits native fullscreen during cleanup when the call owns it", async () => {
+    const { unmount } = renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    expandShare();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
+    unmount();
+    await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(false));
+  });
+
+  it("keeps the viewport-filling fullscreen contract on the call stage", async () => {
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    expandShare();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(screen.getByTestId("screen-share-stage")).toHaveClass("fullscreen-share-layout", "screen-share-stage--fullscreen"));
+    expect(screen.getByTestId("screen-share-stage")).toHaveClass("flex", "flex-col");
+  });
+
+  it("keeps the native fullscreen capability and title-bar drag permission", () => {
+    const capability = readFileSync("src-tauri/capabilities/default.json", "utf8");
+    expect(capability).toContain("core:window:allow-set-fullscreen");
+    expect(capability).toContain("core:window:allow-start-dragging");
   });
 
   it("clears fullscreen state when the screen share stream ends", async () => {

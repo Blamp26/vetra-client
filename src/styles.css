@@ -1189,15 +1189,17 @@ body[data-vt-shell-resizing="true"] {
     transform: translateY(0);
   }
 
-  .screen-share-stage:fullscreen {
-    width: 100vw;
-    height: 100vh;
-  }
-
-  .fullscreen-call-layout:fullscreen {
+  .fullscreen-call-layout,
+  .fullscreen-share-layout {
+    position: fixed;
+    inset: 0;
     width: 100vw;
     height: 100vh;
     min-height: 100vh;
+    margin: 0;
+    border-radius: 0;
+    overflow: hidden;
+    z-index: 9999;
     background: #070a09;
   }
 
@@ -1220,10 +1222,6 @@ body[data-vt-shell-resizing="true"] {
     min-height: 0;
     background: #15171a;
     border-color: rgba(255, 255, 255, 0.12);
-  }
-
-  .fullscreen-share-layout {
-    background: #070a09;
   }
 
   .fullscreen-share-layout .fullscreen-share-video-area {

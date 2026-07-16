@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Maximize, Mic, MicOff, Minimize, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
 import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import { detachVideo, safelyPlayVideo } from "./mediaVideo";
+
+function isTauriDesktopRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
 
 interface ActiveCallDockProps {
   remoteUsername: string;
@@ -84,8 +89,12 @@ export function ActiveCallDock({
   onWatchRemoteScreen,
   onHangUp,
 }: ActiveCallDockProps) {
-  const stageRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLElement | null>(null);
+  const isMountedRef = useRef(true);
+  const nativeFullscreenOwnedRef = useRef(false);
+  const fullscreenPresentationRef = useRef<"share" | "voice" | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreenPending, setIsFullscreenPending] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
   const [isShareExpanded, setIsShareExpanded] = useState(false);
   const [isRemoteWatchPending, setIsRemoteWatchPending] = useState(false);
@@ -101,8 +110,40 @@ export function ActiveCallDock({
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
 
   useEffect(() => {
+    isMountedRef.current = true;
+    if (!isTauriDesktopRuntime()) return () => { isMountedRef.current = false; };
+
+    void getCurrentWindow().isFullscreen()
+      .then((fullscreen) => {
+        if (isMountedRef.current) setIsFullscreen(fullscreen);
+      })
+      .catch((error: unknown) => {
+        console.warn("[ActiveCallDock] Failed to read native fullscreen state", error);
+      });
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriDesktopRuntime()) return;
+    return () => {
+      if (!nativeFullscreenOwnedRef.current) return;
+      nativeFullscreenOwnedRef.current = false;
+      void getCurrentWindow().setFullscreen(false).catch((error: unknown) => {
+        console.warn("[ActiveCallDock] Failed to exit native fullscreen during cleanup", error);
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isTauriDesktopRuntime() || !stageRef.current) return;
     const syncFullscreen = () => setIsFullscreen(Boolean(stageRef.current) && document.fullscreenElement === stageRef.current);
-    const handleFullscreenError = () => setIsFullscreen(false);
+    const handleFullscreenError = () => {
+      fullscreenPresentationRef.current = null;
+      setIsFullscreen(false);
+    };
     document.addEventListener("fullscreenchange", syncFullscreen);
     document.addEventListener("fullscreenerror", handleFullscreenError);
     syncFullscreen();
@@ -112,24 +153,68 @@ export function ActiveCallDock({
     };
   }, []);
 
+  const exitFullscreen = async () => {
+    if (isFullscreenPending) return;
+    setIsFullscreenPending(true);
+    try {
+      if (isTauriDesktopRuntime()) {
+        const currentWindow = getCurrentWindow();
+        await currentWindow.setFullscreen(false);
+        nativeFullscreenOwnedRef.current = false;
+        fullscreenPresentationRef.current = null;
+        const fullscreen = await currentWindow.isFullscreen();
+        if (isMountedRef.current) setIsFullscreen(fullscreen);
+      } else if (document.fullscreenElement === stageRef.current) {
+        await document.exitFullscreen?.();
+        fullscreenPresentationRef.current = null;
+      }
+    } catch (error) {
+      if (isTauriDesktopRuntime()) {
+        try {
+          const fullscreen = await getCurrentWindow().isFullscreen();
+          if (isMountedRef.current) setIsFullscreen(fullscreen);
+        } catch (syncError) {
+          console.warn("[ActiveCallDock] Failed to synchronize native fullscreen state", syncError);
+        }
+      }
+      console.warn("[ActiveCallDock] Failed to exit fullscreen", error);
+    } finally {
+      if (isMountedRef.current) setIsFullscreenPending(false);
+    }
+  };
+
   useEffect(() => {
     if (callStatus !== "active") {
       setIsFullscreen(false);
       setControlsVisible(false);
       setIsShareExpanded(false);
-      if (document.fullscreenElement === stageRef.current) void document.exitFullscreen?.();
+      if (isTauriDesktopRuntime()) {
+        if (nativeFullscreenOwnedRef.current) void exitFullscreen();
+      } else if (document.fullscreenElement === stageRef.current) {
+        void exitFullscreen();
+      }
       return;
     }
 
     if (!hasScreenShare) {
       setIsShareExpanded(false);
       setControlsVisible(false);
-      if (isFullscreen && document.fullscreenElement !== stageRef.current) {
-        setIsFullscreen(false);
-        if (document.fullscreenElement) void document.exitFullscreen?.();
+      if (isFullscreen && fullscreenPresentationRef.current === "share") {
+        void exitFullscreen();
       }
     }
   }, [callStatus, hasScreenShare, isFullscreen]);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      void exitFullscreen();
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isFullscreen]);
 
   useEffect(() => {
     if (isShareExpanded && !isRemoteWatchPending && isRemoteScreenAvailable && !isWatchingRemoteScreen && !isRemoteScreenLoading && !remoteScreenStream) {
@@ -149,16 +234,43 @@ export function ActiveCallDock({
 
   const toggleFullscreen = async () => {
     if (!stageRef.current) return;
-    if (document.fullscreenElement === stageRef.current) {
-      await document.exitFullscreen?.();
+    if (isFullscreenPending) return;
+
+    if (isTauriDesktopRuntime()) {
+      setIsFullscreenPending(true);
+      const targetFullscreen = !isFullscreen;
+      try {
+        const currentWindow = getCurrentWindow();
+        await currentWindow.setFullscreen(targetFullscreen);
+        nativeFullscreenOwnedRef.current = targetFullscreen;
+        fullscreenPresentationRef.current = targetFullscreen ? (hasScreenShare ? "share" : "voice") : null;
+        const fullscreen = await currentWindow.isFullscreen();
+        if (isMountedRef.current) setIsFullscreen(fullscreen);
+      } catch (error) {
+        try {
+          const fullscreen = await getCurrentWindow().isFullscreen();
+          if (isMountedRef.current) setIsFullscreen(fullscreen);
+        } catch (syncError) {
+          console.warn("[ActiveCallDock] Failed to synchronize native fullscreen state", syncError);
+        }
+        console.warn("[ActiveCallDock] Failed to toggle native fullscreen", error);
+      } finally {
+        if (isMountedRef.current) setIsFullscreenPending(false);
+      }
       return;
     }
-    if (stageRef.current.requestFullscreen) {
-      try {
-        await stageRef.current.requestFullscreen();
-      } catch {
-        setIsFullscreen(false);
-      }
+
+    if (document.fullscreenElement === stageRef.current) {
+      await exitFullscreen();
+      return;
+    }
+    if (!stageRef.current.requestFullscreen) return;
+    try {
+      await stageRef.current.requestFullscreen();
+      fullscreenPresentationRef.current = hasScreenShare ? "share" : "voice";
+    } catch {
+      fullscreenPresentationRef.current = null;
+      if (isMountedRef.current) setIsFullscreen(false);
     }
   };
 
@@ -168,14 +280,14 @@ export function ActiveCallDock({
   };
 
   const closeExpandedFromStage = () => {
-    if (document.fullscreenElement === stageRef.current) void document.exitFullscreen?.();
+    if (isFullscreen) void exitFullscreen();
     setIsShareExpanded(false);
   };
 
   if (!hasScreenShare) {
     return (
       <section
-        ref={stageRef}
+        ref={(element) => { stageRef.current = element; }}
         className={cn(
           "active-call-dock active-call-dock--voice relative flex h-[clamp(300px,42vh,480px)] min-h-[300px] shrink-0 flex-col border-b border-border text-foreground",
           isFullscreen && "fullscreen-call-layout",
@@ -214,7 +326,7 @@ export function ActiveCallDock({
             isMuted={isMuted}
             isScreenSharing={false}
             isScreenShareUpdating={isScreenShareUpdating}
-            isFullscreen={false}
+            isFullscreen={isFullscreen}
             onMuteToggle={onMuteToggle}
             onStartScreenShare={onStartScreenShare}
             onStopScreenShare={onStopScreenShare}
@@ -282,7 +394,7 @@ export function ActiveCallDock({
     <section className="active-call-dock active-call-dock--screen flex h-[clamp(300px,42vh,480px)] min-h-[300px] min-w-0 shrink-0 flex-col border-b border-border text-foreground" data-testid="active-call-dock" aria-label="Active call dock">
       {displayIssue && <div className="m-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm" data-testid="call-issue-banner">{displayIssue.message}</div>}
       <div
-        ref={stageRef}
+        ref={(element) => { stageRef.current = element; }}
         className={cn("screen-share-stage group relative min-h-0 flex-1 overflow-hidden bg-black", isFullscreen && "screen-share-stage--fullscreen fullscreen-share-layout flex flex-col")}
         data-testid="screen-share-stage"
         data-controls-visible={controlsVisible ? "true" : "false"}
@@ -294,7 +406,6 @@ export function ActiveCallDock({
           if ((event.target as HTMLElement).closest("button")) return;
           closeExpandedFromStage();
         }}
-        onKeyDown={(event) => { if (event.key === "Escape" && document.fullscreenElement === stageRef.current) void document.exitFullscreen?.(); }}
         tabIndex={-1}
       >
         <div className={isFullscreen ? "fullscreen-share-video-area relative flex min-h-0 flex-1" : "absolute inset-0"}>
