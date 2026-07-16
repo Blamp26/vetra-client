@@ -4,16 +4,20 @@ import type { ComponentProps } from "react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 
-const { mockCurrentWindow, mockGetCurrentWindow, fullscreenState } = vi.hoisted(() => {
+const { mockCurrentWindow, mockGetCurrentWindow, fullscreenState, nativeEventHandlers } = vi.hoisted(() => {
   const state = { value: false };
+  const handlers = { resize: [] as Array<() => void>, focus: [] as Array<() => void> };
   const currentWindow = {
     setFullscreen: vi.fn(async (fullscreen: boolean) => { state.value = fullscreen; }),
     isFullscreen: vi.fn(async () => state.value),
+    onResized: vi.fn(async (handler: () => void) => { handlers.resize.push(handler); return () => { handlers.resize = handlers.resize.filter((candidate) => candidate !== handler); }; }),
+    onFocusChanged: vi.fn(async (handler: () => void) => { handlers.focus.push(handler); return () => { handlers.focus = handlers.focus.filter((candidate) => candidate !== handler); }; }),
   };
   return {
     mockCurrentWindow: currentWindow,
     mockGetCurrentWindow: vi.fn(() => currentWindow),
     fullscreenState: state,
+    nativeEventHandlers: handlers,
   };
 });
 
@@ -23,6 +27,8 @@ import { ActiveCallDock } from "./ActiveCallDock";
 beforeEach(() => {
   vi.clearAllMocks();
   fullscreenState.value = false;
+  nativeEventHandlers.resize = [];
+  nativeEventHandlers.focus = [];
   mockCurrentWindow.setFullscreen.mockImplementation(async (fullscreen: boolean) => { fullscreenState.value = fullscreen; });
   mockCurrentWindow.isFullscreen.mockImplementation(async () => fullscreenState.value);
   Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
@@ -31,6 +37,9 @@ beforeEach(() => {
 afterEach(() => {
   delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
 });
+
+function emitNativeResize() { for (const handler of [...nativeEventHandlers.resize]) handler(); }
+function emitNativeFocus() { for (const handler of [...nativeEventHandlers.focus]) handler(); }
 
 function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = {}) {
   const props: ComponentProps<typeof ActiveCallDock> = {
@@ -231,6 +240,70 @@ describe("ActiveCallDock", () => {
     fireEvent.click(within(root).getByRole("button", { name: "Exit fullscreen" }));
     await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).not.toBeInTheDocument());
     expect(document.body.style.overflow).toBe(previousOverflow);
+  });
+
+  it("closes the portal when a native resize reports fullscreen has ended", async () => {
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    expandShare();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument());
+
+    fullscreenState.value = false;
+    emitNativeResize();
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).not.toBeInTheDocument());
+    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+    expect(mockCurrentWindow.setFullscreen).not.toHaveBeenCalledWith(false);
+  });
+
+  it("closes the portal when a native focus event reports fullscreen has ended", async () => {
+    renderDock();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument());
+
+    fullscreenState.value = false;
+    emitNativeFocus();
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).not.toBeInTheDocument());
+    expect(screen.getByTestId("active-call-voice-surface")).toBeInTheDocument();
+  });
+
+  it("keeps the portal when native resize and focus still report fullscreen", async () => {
+    renderDock();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument());
+    mockCurrentWindow.isFullscreen.mockClear();
+
+    fullscreenState.value = true;
+    emitNativeResize();
+    emitNativeFocus();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(mockCurrentWindow.isFullscreen).toHaveBeenCalledTimes(1);
+    expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument();
+  });
+
+  it("debounces duplicate native fullscreen events", async () => {
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    expandShare();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument());
+    mockCurrentWindow.isFullscreen.mockClear();
+    fullscreenState.value = false;
+
+    emitNativeResize();
+    emitNativeResize();
+    emitNativeFocus();
+    emitNativeFocus();
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).not.toBeInTheDocument());
+    expect(mockCurrentWindow.isFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes native fullscreen listeners on unmount", async () => {
+    const { unmount } = renderDock();
+    await waitFor(() => expect(mockCurrentWindow.onResized).toHaveBeenCalledTimes(1));
+    expect(nativeEventHandlers.resize).toHaveLength(1);
+    expect(nativeEventHandlers.focus).toHaveLength(1);
+    unmount();
+    expect(nativeEventHandlers.resize).toHaveLength(0);
+    expect(nativeEventHandlers.focus).toHaveLength(0);
   });
 
   it("keeps the same remote stream and does not watch again across fullscreen", async () => {

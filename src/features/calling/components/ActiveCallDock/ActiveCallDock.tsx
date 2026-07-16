@@ -148,6 +148,61 @@ export function ActiveCallDock({
 
   useEffect(() => {
     if (!isTauriDesktopRuntime()) return;
+
+    let disposed = false;
+    let syncTimer: ReturnType<typeof setTimeout> | null = null;
+    let unlistenResize: (() => void) | null = null;
+    let unlistenFocus: (() => void) | null = null;
+    const currentWindow = getCurrentWindow();
+
+    const synchronizeNativeFullscreen = () => {
+      if (disposed) return;
+      if (syncTimer !== null) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        syncTimer = null;
+        void currentWindow.isFullscreen()
+          .then((fullscreen) => {
+            if (disposed || !isMountedRef.current || fullscreen) return;
+            nativeFullscreenOwnedRef.current = false;
+            fullscreenPresentationRef.current = null;
+            setIsFullscreenPending(false);
+            setIsFullscreen(false);
+          })
+          .catch((error: unknown) => {
+            if (!disposed) console.warn("[ActiveCallDock] Failed to synchronize native fullscreen state", error);
+          });
+      }, 50);
+    };
+
+    const registerNativeListeners = async () => {
+      try {
+        const [resizeUnlisten, focusUnlisten] = await Promise.all([
+          currentWindow.onResized(synchronizeNativeFullscreen),
+          currentWindow.onFocusChanged(synchronizeNativeFullscreen),
+        ]);
+        if (disposed || !isMountedRef.current) {
+          resizeUnlisten();
+          focusUnlisten();
+          return;
+        }
+        unlistenResize = resizeUnlisten;
+        unlistenFocus = focusUnlisten;
+      } catch (error) {
+        if (!disposed) console.warn("[ActiveCallDock] Failed to subscribe to native fullscreen events", error);
+      }
+    };
+
+    void registerNativeListeners();
+    return () => {
+      disposed = true;
+      if (syncTimer !== null) clearTimeout(syncTimer);
+      unlistenResize?.();
+      unlistenFocus?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriDesktopRuntime()) return;
     return () => {
       if (!nativeFullscreenOwnedRef.current) return;
       nativeFullscreenOwnedRef.current = false;
