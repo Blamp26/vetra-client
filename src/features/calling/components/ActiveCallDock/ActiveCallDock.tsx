@@ -89,6 +89,8 @@ export function ActiveCallDock({
     isScreenSharing,
     isScreenShareUpdating,
   });
+  const shouldShowDiagnostics =
+    import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
 
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === stageRef.current);
@@ -132,27 +134,48 @@ export function ActiveCallDock({
 
   if (!hasScreenShare) {
     return (
-      <section className="active-call-dock active-call-dock--voice flex h-[88px] shrink-0 items-center border-b border-border px-4 text-foreground" data-testid="active-call-dock" aria-label="Active call dock">
-        {displayIssue && <div className="mr-3 rounded-md border border-destructive/35 bg-destructive/10 px-2 py-1 text-xs" data-testid="call-issue-banner">{displayIssue.message}</div>}
-        <div className="flex min-w-0 flex-1 items-center gap-3" data-testid="active-call-voice-surface">
-          <div className="vt-call-avatar h-10 w-10 shrink-0 text-sm font-semibold" aria-hidden="true">{remoteUsername.slice(0, 1).toUpperCase()}</div>
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-foreground" data-testid="active-call-remote-name">{remoteUsername}</h2>
-            <p className="truncate text-xs text-muted-foreground" data-testid="active-call-dock-status">{statusLabel} · {formatCallTime(seconds)}</p>
-          </div>
+      <section
+        className="active-call-dock active-call-dock--voice relative flex h-[clamp(260px,38vh,420px)] min-h-[260px] shrink-0 flex-col border-b border-border text-foreground"
+        data-testid="active-call-dock"
+        aria-label="Active call dock"
+      >
+        <div className="voice-call-status absolute left-4 top-3 z-10 min-w-0" data-testid="active-call-voice-status">
+          <p className="truncate text-xs font-medium text-muted-foreground" data-testid="active-call-dock-status">
+            {statusLabel} · {formatCallTime(seconds)}
+          </p>
         </div>
-        <CallControls
-          {...controlProps}
-          isMuted={isMuted}
-          isScreenSharing={false}
-          isScreenShareUpdating={isScreenShareUpdating}
-          isFullscreen={false}
-          onMuteToggle={onMuteToggle}
-          onStartScreenShare={onStartScreenShare}
-          onStopScreenShare={onStopScreenShare}
-          onHangUp={onHangUp}
-          onToggleFullscreen={undefined}
-        />
+
+        {displayIssue && (
+          <div className="voice-call-issue absolute left-4 right-4 top-9 z-10 rounded-md bg-destructive/10 px-3 py-1.5 text-xs text-foreground" data-testid="call-issue-banner">
+            {displayIssue.message}
+          </div>
+        )}
+
+        {shouldShowDiagnostics && (
+          <div className="voice-call-diagnostics pointer-events-none absolute right-4 top-3 z-10 hidden text-[11px] text-muted-foreground lg:block" data-testid="webrtc-diagnostics">
+            connection {diagnostics.connectionState} · ice {diagnostics.iceConnectionState} · candidate {diagnostics.selectedLocalCandidateType}
+          </div>
+        )}
+
+        <div className="voice-call-participants flex min-h-0 flex-1 items-center gap-3 px-4 pb-4 pt-10" data-testid="active-call-voice-surface">
+          <VoiceParticipantTile name="You" isMuted={isMuted} />
+          <VoiceParticipantTile name={remoteUsername} />
+        </div>
+
+        <div className="voice-call-controls-wrap absolute inset-x-0 bottom-4 z-10 flex justify-center" data-testid="active-call-dock-controls">
+          <CallControls
+            className="voice-call-controls"
+            isMuted={isMuted}
+            isScreenSharing={false}
+            isScreenShareUpdating={isScreenShareUpdating}
+            isFullscreen={false}
+            onMuteToggle={onMuteToggle}
+            onStartScreenShare={onStartScreenShare}
+            onStopScreenShare={onStopScreenShare}
+            onHangUp={onHangUp}
+            onToggleFullscreen={undefined}
+          />
+        </div>
       </section>
     );
   }
@@ -206,14 +229,30 @@ export function ActiveCallDock({
 }
 
 function CallControls({
+  className,
   isMuted, isScreenSharing, isScreenShareUpdating, isFullscreen, onMuteToggle, onStartScreenShare, onStopScreenShare, onHangUp, onToggleFullscreen, onMouseEnter, onMouseLeave,
 }: {
+  className?: string;
   isMuted: boolean; isScreenSharing: boolean; isScreenShareUpdating: boolean; isFullscreen: boolean; onMuteToggle: () => void; onStartScreenShare: () => Promise<void>; onStopScreenShare: () => void; onHangUp: () => void; onToggleFullscreen?: () => Promise<void>; onMouseEnter?: () => void; onMouseLeave?: () => void;
 }) {
-  return <div className="call-controls flex items-center justify-center gap-2 rounded-lg bg-black/60 p-2 text-white" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+  return <div className={cn("call-controls flex items-center justify-center gap-2 rounded-lg bg-black/60 p-2 text-white", className)} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
     <button className={cn("vt-call-control h-10 w-10 p-0", isMuted && "bg-destructive/20 text-destructive")} onClick={onMuteToggle} aria-label={isMuted ? "Unmute" : "Mute"}>{isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
     <button className="vt-call-control h-10 w-10 p-0" onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }} aria-label={isScreenShareUpdating ? "Updating screen share" : isScreenSharing ? "Stop sharing" : "Share screen"} disabled={isScreenShareUpdating}>{isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}</button>
     {onToggleFullscreen && <button className="vt-call-control h-10 w-10 p-0" onClick={() => { void onToggleFullscreen(); }} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>{isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button>}
     <button className="vt-call-control vt-call-control--danger h-10 w-10 p-0" onClick={onHangUp} aria-label="Hang Up"><PhoneOff className="h-4 w-4" /></button>
   </div>;
+}
+
+function VoiceParticipantTile({ name, isMuted = false }: { name: string; isMuted?: boolean }) {
+  return (
+    <div className="voice-participant-tile relative flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-lg" data-testid="active-call-voice-participant-tile">
+      <div className="voice-participant-avatar flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-semibold" aria-hidden="true" data-testid="voice-participant-avatar">
+        {name.slice(0, 1).toUpperCase()}
+      </div>
+      <div className="absolute bottom-3 left-3 flex min-w-0 max-w-[calc(100%-24px)] items-center gap-1.5 text-sm font-medium" data-testid="voice-participant-label">
+        <span className="truncate">{name}</span>
+        {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label={`${name} muted`} />}
+      </div>
+    </div>
+  );
 }

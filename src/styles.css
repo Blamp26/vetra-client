@@ -1090,6 +1090,33 @@ body[data-vt-shell-resizing="true"] {
     background: var(--card);
   }
 
+  .voice-participant-tile {
+    background: color-mix(in srgb, var(--card) 82%, var(--sidebar) 18%);
+  }
+
+  .voice-participant-avatar {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+
+  .voice-call-controls {
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  @media (max-width: 640px) {
+    .voice-call-participants {
+      gap: 0.5rem;
+      padding-inline: 0.75rem;
+    }
+
+    .voice-participant-avatar {
+      height: 4rem;
+      width: 4rem;
+    }
+  }
+
   .active-call-dock--screen {
     background: #000;
   }

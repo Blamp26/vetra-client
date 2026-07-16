@@ -18,13 +18,23 @@ function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = 
 function stream(id: string) { return { id } as MediaStream; }
 
 describe("ActiveCallDock", () => {
-  it("renders a compact one-to-one voice surface without participant cards", () => {
+  it("renders a substantial one-to-one voice stage instead of the rejected 88px header", () => {
     renderDock();
+    const dock = screen.getByTestId("active-call-dock");
+    expect(dock).toHaveClass("active-call-dock--voice", "h-[clamp(260px,38vh,420px)]");
+    expect(dock).not.toHaveClass("h-[88px]");
     expect(screen.getByTestId("active-call-voice-surface")).toBeInTheDocument();
-    expect(screen.getByTestId("active-call-remote-name")).toHaveTextContent("Alice");
+    expect(screen.getAllByTestId("active-call-voice-participant-tile")).toHaveLength(2);
+    expect(screen.getAllByTestId("voice-participant-label")[0]).toHaveTextContent("You");
+    expect(screen.getAllByTestId("voice-participant-label")[1]).toHaveTextContent("Alice");
+    expect(screen.getAllByTestId("voice-participant-avatar")).toHaveLength(2);
     expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("01:05");
+    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("Connected");
     expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("active-call-participant-tile")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("active-call-dock-surface")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("webrtc-diagnostics")).not.toBeInTheDocument();
+    expect(screen.getByTestId("active-call-dock-controls")).toHaveClass("voice-call-controls-wrap");
+    expect(screen.queryByRole("button", { name: "Enter fullscreen" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share screen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hang Up" })).toBeInTheDocument();
