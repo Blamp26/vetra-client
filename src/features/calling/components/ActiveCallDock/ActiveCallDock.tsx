@@ -277,8 +277,10 @@ export function ActiveCallDock({
       <section
         ref={(element) => { stageRef.current = element; }}
         className={cn(
-          "active-call-dock active-call-dock--voice relative flex h-[clamp(300px,42vh,480px)] min-h-[300px] shrink-0 flex-col border-b border-border text-foreground",
-          isFullscreen && "fullscreen-call-surface h-full min-h-0 w-full",
+          "active-call-dock active-call-dock--voice relative flex min-w-0 flex-col text-foreground",
+          isFullscreen
+            ? "fullscreen-call-surface h-full min-h-0 w-full flex-1 shrink border-0 overflow-hidden bg-black"
+            : "h-[clamp(300px,42vh,480px)] min-h-[300px] shrink-0 border-b border-border",
         )}
         data-testid="active-call-dock"
         aria-label="Active call dock"
@@ -324,7 +326,7 @@ export function ActiveCallDock({
         </div>
       </section>
     );
-    return isFullscreen ? (fullscreenRoot ? createPortal(<div className="fullscreen-call-layout">{voiceStage}</div>, fullscreenRoot) : null) : voiceStage;
+    return isFullscreen ? (fullscreenRoot ? createPortal(voiceStage, fullscreenRoot) : null) : voiceStage;
   }
 
   if (!isShareExpanded) {
@@ -380,7 +382,16 @@ export function ActiveCallDock({
   }
 
   const shareStage = (
-    <section className="active-call-dock active-call-dock--screen flex h-[clamp(300px,42vh,480px)] min-h-[300px] min-w-0 shrink-0 flex-col border-b border-border text-foreground" data-testid="active-call-dock" aria-label="Active call dock">
+    <section
+      className={cn(
+        "active-call-dock active-call-dock--screen flex min-w-0 flex-col text-foreground",
+        isFullscreen
+          ? "fullscreen-call-surface h-full min-h-0 w-full flex-1 shrink border-0 overflow-hidden bg-black"
+          : "h-[clamp(300px,42vh,480px)] min-h-[300px] shrink-0 border-b border-border",
+      )}
+      data-testid="active-call-dock"
+      aria-label="Active call dock"
+    >
       {displayIssue && <div className="m-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm" data-testid="call-issue-banner">{displayIssue.message}</div>}
       <div
         ref={(element) => { stageRef.current = element; }}
@@ -397,7 +408,7 @@ export function ActiveCallDock({
         }}
         tabIndex={-1}
       >
-        <div className={isFullscreen ? "fullscreen-share-video-area relative flex min-h-0 flex-1" : "absolute inset-0"}>
+        <div className={isFullscreen ? "fullscreen-share-video-area relative flex min-h-0 flex-1" : "absolute inset-0"} data-testid={isFullscreen ? "fullscreen-share-video-area" : undefined}>
           {remoteScreenStream && isWatchingRemoteScreen ? (
             <StreamVideo stream={remoteScreenStream} label={`${remoteUsername} screen share`} className="absolute inset-0 h-full w-full object-contain" muted testId="remote-screen-share-video" />
           ) : localScreenStream ? (

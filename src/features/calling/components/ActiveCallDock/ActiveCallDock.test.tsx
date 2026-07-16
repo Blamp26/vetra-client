@@ -202,8 +202,12 @@ describe("ActiveCallDock", () => {
     expect(root?.parentElement).toBe(document.body);
     expect(container.contains(root)).toBe(false);
     expect(document.querySelectorAll("#vetra-call-fullscreen-root")).toHaveLength(1);
+    const surface = root?.firstElementChild as HTMLElement;
+    expect(surface).toHaveClass("fullscreen-call-surface", "h-full", "min-h-0", "w-full", "flex-1", "border-0");
+    expect(surface).not.toHaveClass("h-[clamp(300px,42vh,480px)]", "min-h-[300px]", "shrink-0", "border-b", "border-border");
     expect(within(root as HTMLElement).getByTestId("remote-screen-share-video")).toBeInTheDocument();
     expect(within(root as HTMLElement).getByTestId("fullscreen-participant-strip")).toBeInTheDocument();
+    expect(within(root as HTMLElement).getByTestId("fullscreen-share-video-area")).toHaveClass("flex-1", "min-h-0");
     expect(within(root as HTMLElement).getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
     expect(container.querySelector("[data-testid=screen-share-stage]")).not.toBeInTheDocument();
     expect(document.querySelectorAll("[data-testid=remote-screen-share-video]")).toHaveLength(1);
@@ -217,6 +221,8 @@ describe("ActiveCallDock", () => {
     await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument());
     const root = document.getElementById("vetra-call-fullscreen-root") as HTMLElement;
     expect(root).toHaveClass("vetra-call-fullscreen-root");
+    expect(root.firstElementChild).toHaveClass("fullscreen-call-surface", "h-full", "min-h-0", "w-full", "flex-1", "border-0");
+    expect(root.firstElementChild).not.toHaveClass("h-[clamp(300px,42vh,480px)]", "min-h-[300px]", "shrink-0", "border-b", "border-border");
     expect(within(root).getByTestId("active-call-voice-surface")).toBeInTheDocument();
     expect(within(root).getByTestId("voice-call-tile-row")).toBeInTheDocument();
     expect(within(root).getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
@@ -248,6 +254,9 @@ describe("ActiveCallDock", () => {
     expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*z-index:\s*2147483647/);
     expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*width:\s*100dvw/);
     expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*height:\s*100dvh/);
+    expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*display:\s*flex/);
+    expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*flex-direction:\s*column/);
+    expect(styles).toMatch(/\.vetra-call-fullscreen-root\s*>\s*\.fullscreen-call-surface[\s\S]*flex:\s*1\s+1\s+0%/);
   });
 
   it("exits native fullscreen from Escape and keeps the voice grid presentation", async () => {
