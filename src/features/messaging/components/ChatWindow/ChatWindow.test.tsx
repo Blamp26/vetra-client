@@ -526,9 +526,9 @@ describe("ChatWindow presence rendering", () => {
     const dock = screen.getByTestId("active-call-dock");
     const messageRegion = screen.getByTestId("message-list-region");
 
-    expect(dock).toHaveClass("active-call-dock", "active-call-dock--screen", "flex-1");
-    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
-    expect(screen.getByTestId("remote-screen-share-video")).toHaveClass("object-contain");
+    expect(dock).toHaveClass("active-call-dock", "active-call-dock--screen", "active-call-dock--framed");
+    expect(screen.getByTestId("screen-share-framed-layout")).toBeInTheDocument();
+    expect(screen.getByTestId("screen-share-framed-video")).toHaveClass("object-contain");
     expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();
     expect(screen.getByText("message visible during active call")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Message composer" })).toBeInTheDocument();

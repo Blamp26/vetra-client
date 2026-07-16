@@ -1121,6 +1121,37 @@ body[data-vt-shell-resizing="true"] {
     background: #000;
   }
 
+  .active-call-dock--framed {
+    background: var(--card);
+  }
+
+  .screen-share-framed-tile {
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent 18%);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--card) 84%, var(--sidebar) 16%);
+  }
+
+  .screen-share-framed-tile:first-child {
+    background: #0b0d0c;
+  }
+
+  .screen-share-framed-label {
+    border-radius: 6px;
+    background: rgba(10, 13, 12, 0.62);
+  }
+
+  .screen-share-framed-controls__group {
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent 24%);
+    background: color-mix(in srgb, var(--card) 88%, var(--sidebar) 12%);
+  }
+
+  @media (max-width: 640px) {
+    .screen-share-framed-layout {
+      gap: 0.5rem;
+      padding-inline: 0.75rem;
+    }
+  }
+
   .screen-share-stage {
     isolation: isolate;
   }

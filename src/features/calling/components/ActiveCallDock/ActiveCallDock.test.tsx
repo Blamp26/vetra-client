@@ -16,6 +16,7 @@ function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = 
   return { props, ...render(<ActiveCallDock {...props} />) };
 }
 function stream(id: string) { return { id } as MediaStream; }
+function expandShare() { fireEvent.click(screen.getByRole("button", { name: "Expand share" })); }
 
 describe("ActiveCallDock", () => {
   it("renders a substantial one-to-one voice stage instead of the rejected 88px header", () => {
@@ -40,17 +41,26 @@ describe("ActiveCallDock", () => {
     expect(screen.getByRole("button", { name: "Hang Up" })).toBeInTheDocument();
   });
 
-  it("renders screen sharing as one dominant stage with contained video", () => {
+  it("renders default screen sharing as a framed tile layout", () => {
     renderDock({ remoteScreenStream: stream("remote") });
-    expect(screen.getByTestId("screen-share-stage")).toHaveClass("relative", "flex-1", "bg-black");
-    expect(screen.getByTestId("remote-screen-share-video")).toHaveClass("absolute", "inset-0", "object-contain");
-    expect(screen.getByTestId("screen-share-info")).toBeInTheDocument();
+    const dock = screen.getByTestId("active-call-dock");
+    expect(dock).toHaveClass("active-call-dock--framed", "h-[clamp(300px,42vh,480px)]");
+    expect(screen.getByTestId("screen-share-framed-layout")).toBeInTheDocument();
+    expect(screen.getByTestId("screen-share-framed-tile")).toHaveClass("screen-share-framed-tile");
+    expect(screen.getByTestId("screen-share-framed-video")).toHaveClass("object-contain");
+    expect(screen.getAllByTestId("screen-share-framed-participant-tile")).toHaveLength(2);
+    expect(screen.getByTestId("active-call-dock-controls")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand share" })).toBeInTheDocument();
+    expect(screen.queryByTestId("screen-share-stage")).not.toBeInTheDocument();
     expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("active-call-participant-tile")).not.toBeInTheDocument();
   });
 
   it("keeps controls hidden by default and exposes the visible-state contract on hover", () => {
     renderDock({ remoteScreenStream: stream("remote") });
+    expandShare();
+    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+    expect(screen.queryByTestId("screen-share-framed-layout")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument();
     const stage = screen.getByTestId("screen-share-stage");
     expect(stage).toHaveAttribute("data-controls-visible", "false");
     expect(screen.getByTestId("active-call-dock-controls")).toHaveClass("stage-controls");
@@ -62,6 +72,7 @@ describe("ActiveCallDock", () => {
 
   it("reveals the same controls contract through keyboard focus", () => {
     renderDock({ remoteScreenStream: stream("remote") });
+    expandShare();
     const stage = screen.getByTestId("screen-share-stage");
     fireEvent.focus(stage);
     expect(stage).toHaveAttribute("data-controls-visible", "true");
@@ -71,6 +82,7 @@ describe("ActiveCallDock", () => {
 
   it("keeps a local preview secondary when both streams exist", () => {
     renderDock({ remoteScreenStream: stream("remote"), localScreenStream: stream("local"), isScreenSharing: true });
+    expandShare();
     expect(screen.getByTestId("local-screen-share-pip")).toHaveClass("h-[90px]", "w-[160px]");
   });
 
@@ -82,6 +94,7 @@ describe("ActiveCallDock", () => {
     Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
     Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
     renderDock({ remoteScreenStream: stream("remote") });
+    expandShare();
     fireEvent.mouseEnter(screen.getByTestId("screen-share-stage"));
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
     await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
@@ -93,6 +106,7 @@ describe("ActiveCallDock", () => {
   it("handles fullscreenerror without leaving a stale fullscreen state", async () => {
     Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: vi.fn(() => { document.dispatchEvent(new Event("fullscreenerror")); return Promise.reject(new Error("unsupported")); }) });
     renderDock({ remoteScreenStream: stream("remote") });
+    expandShare();
     fireEvent.mouseEnter(screen.getByTestId("screen-share-stage"));
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument());
