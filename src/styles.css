@@ -1203,6 +1203,31 @@ body[data-vt-shell-resizing="true"] {
     background: #070a09;
   }
 
+  .vetra-call-fullscreen-root {
+    position: fixed;
+    inset: 0;
+    width: 100dvw;
+    height: 100dvh;
+    min-width: 100dvw;
+    min-height: 100dvh;
+    z-index: 2147483647;
+    overflow: hidden;
+    background: #000;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  @supports not (width: 100dvw) {
+    .vetra-call-fullscreen-root {
+      width: 100vw;
+      height: 100vh;
+      min-width: 100vw;
+      min-height: 100vh;
+    }
+  }
+
   .fullscreen-call-layout .voice-call-status,
   .fullscreen-call-layout .voice-call-diagnostics {
     color: rgba(255, 255, 255, 0.72);

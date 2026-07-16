@@ -192,6 +192,64 @@ describe("ActiveCallDock", () => {
     await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(false));
   });
 
+  it("portals fullscreen share presentation directly under body and removes the normal stage", async () => {
+    const { container } = renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    expandShare();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument());
+    const root = document.getElementById("vetra-call-fullscreen-root");
+    expect(root?.parentElement).toBe(document.body);
+    expect(container.contains(root)).toBe(false);
+    expect(document.querySelectorAll("#vetra-call-fullscreen-root")).toHaveLength(1);
+    expect(within(root as HTMLElement).getByTestId("remote-screen-share-video")).toBeInTheDocument();
+    expect(within(root as HTMLElement).getByTestId("fullscreen-participant-strip")).toBeInTheDocument();
+    expect(within(root as HTMLElement).getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+    expect(container.querySelector("[data-testid=screen-share-stage]")).not.toBeInTheDocument();
+    expect(document.querySelectorAll("[data-testid=remote-screen-share-video]")).toHaveLength(1);
+  });
+
+  it("portals the voice participant grid and locks body overflow", async () => {
+    const previousOverflow = document.body.style.overflow;
+    renderDock();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument());
+    const root = document.getElementById("vetra-call-fullscreen-root") as HTMLElement;
+    expect(root).toHaveClass("vetra-call-fullscreen-root");
+    expect(within(root).getByTestId("active-call-voice-surface")).toBeInTheDocument();
+    expect(within(root).getByTestId("voice-call-tile-row")).toBeInTheDocument();
+    expect(within(root).getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+    expect(document.body.style.overflow).toBe("hidden");
+
+    fireEvent.click(within(root).getByRole("button", { name: "Exit fullscreen" }));
+    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).not.toBeInTheDocument());
+    expect(document.body.style.overflow).toBe(previousOverflow);
+  });
+
+  it("keeps the same remote stream and does not watch again across fullscreen", async () => {
+    const remote = stream("remote");
+    const onWatchRemoteScreen = vi.fn().mockResolvedValue(undefined);
+    renderDock({ remoteScreenStream: remote, isRemoteScreenAvailable: true, isWatchingRemoteScreen: true, onWatchRemoteScreen });
+    expandShare();
+    const videoBefore = screen.getByTestId("remote-screen-share-video");
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
+    expect(document.querySelectorAll("[data-testid=remote-screen-share-video]")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
+    await waitFor(() => expect(screen.getByTestId("remote-screen-share-video")).toBeInTheDocument());
+    expect(onWatchRemoteScreen).not.toHaveBeenCalled();
+    expect((screen.getByTestId("remote-screen-share-video") as HTMLVideoElement).getAttribute("aria-label")).toBe(videoBefore.getAttribute("aria-label"));
+  });
+
+  it("keeps the portal viewport contract in the stylesheet", () => {
+    const styles = readFileSync("src/styles.css", "utf8");
+    expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*position:\s*fixed/);
+    expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*z-index:\s*2147483647/);
+    expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*width:\s*100dvw/);
+    expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*height:\s*100dvh/);
+  });
+
   it("exits native fullscreen from Escape and keeps the voice grid presentation", async () => {
     renderDock();
 

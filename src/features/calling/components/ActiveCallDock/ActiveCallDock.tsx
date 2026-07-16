@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Maximize, Mic, MicOff, Minimize, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
@@ -98,6 +99,7 @@ export function ActiveCallDock({
   const [controlsVisible, setControlsVisible] = useState(false);
   const [isShareExpanded, setIsShareExpanded] = useState(false);
   const [isRemoteWatchPending, setIsRemoteWatchPending] = useState(false);
+  const [fullscreenRoot, setFullscreenRoot] = useState<HTMLDivElement | null>(null);
   const displayIssue = normalizeCallIssue(callIssue);
   const hasScreenShare = isRemoteScreenAvailable || Boolean(localScreenStream) || isScreenSharing;
   const statusLabel = getCallStatusLabel({
@@ -108,6 +110,24 @@ export function ActiveCallDock({
   });
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
+
+  useEffect(() => {
+    if (!isFullscreen || typeof document === "undefined") return;
+
+    const root = document.createElement("div");
+    root.id = "vetra-call-fullscreen-root";
+    root.className = "vetra-call-fullscreen-root";
+    document.body.appendChild(root);
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    setFullscreenRoot(root);
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      setFullscreenRoot((currentRoot) => (currentRoot === root ? null : currentRoot));
+      root.remove();
+    };
+  }, [isFullscreen]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -137,22 +157,6 @@ export function ActiveCallDock({
     };
   }, []);
 
-  useEffect(() => {
-    if (isTauriDesktopRuntime() || !stageRef.current) return;
-    const syncFullscreen = () => setIsFullscreen(Boolean(stageRef.current) && document.fullscreenElement === stageRef.current);
-    const handleFullscreenError = () => {
-      fullscreenPresentationRef.current = null;
-      setIsFullscreen(false);
-    };
-    document.addEventListener("fullscreenchange", syncFullscreen);
-    document.addEventListener("fullscreenerror", handleFullscreenError);
-    syncFullscreen();
-    return () => {
-      document.removeEventListener("fullscreenchange", syncFullscreen);
-      document.removeEventListener("fullscreenerror", handleFullscreenError);
-    };
-  }, []);
-
   const exitFullscreen = async () => {
     if (isFullscreenPending) return;
     setIsFullscreenPending(true);
@@ -164,9 +168,6 @@ export function ActiveCallDock({
         fullscreenPresentationRef.current = null;
         const fullscreen = await currentWindow.isFullscreen();
         if (isMountedRef.current) setIsFullscreen(fullscreen);
-      } else if (document.fullscreenElement === stageRef.current) {
-        await document.exitFullscreen?.();
-        fullscreenPresentationRef.current = null;
       }
     } catch (error) {
       if (isTauriDesktopRuntime()) {
@@ -190,8 +191,6 @@ export function ActiveCallDock({
       setIsShareExpanded(false);
       if (isTauriDesktopRuntime()) {
         if (nativeFullscreenOwnedRef.current) void exitFullscreen();
-      } else if (document.fullscreenElement === stageRef.current) {
-        void exitFullscreen();
       }
       return;
     }
@@ -260,18 +259,7 @@ export function ActiveCallDock({
       return;
     }
 
-    if (document.fullscreenElement === stageRef.current) {
-      await exitFullscreen();
-      return;
-    }
-    if (!stageRef.current.requestFullscreen) return;
-    try {
-      await stageRef.current.requestFullscreen();
-      fullscreenPresentationRef.current = hasScreenShare ? "share" : "voice";
-    } catch {
-      fullscreenPresentationRef.current = null;
-      if (isMountedRef.current) setIsFullscreen(false);
-    }
+    return;
   };
 
   const controlProps = {
@@ -285,12 +273,12 @@ export function ActiveCallDock({
   };
 
   if (!hasScreenShare) {
-    return (
+    const voiceStage = (
       <section
         ref={(element) => { stageRef.current = element; }}
         className={cn(
           "active-call-dock active-call-dock--voice relative flex h-[clamp(300px,42vh,480px)] min-h-[300px] shrink-0 flex-col border-b border-border text-foreground",
-          isFullscreen && "fullscreen-call-layout",
+          isFullscreen && "fullscreen-call-surface h-full min-h-0 w-full",
         )}
         data-testid="active-call-dock"
         aria-label="Active call dock"
@@ -336,6 +324,7 @@ export function ActiveCallDock({
         </div>
       </section>
     );
+    return isFullscreen ? (fullscreenRoot ? createPortal(<div className="fullscreen-call-layout">{voiceStage}</div>, fullscreenRoot) : null) : voiceStage;
   }
 
   if (!isShareExpanded) {
@@ -390,7 +379,7 @@ export function ActiveCallDock({
     );
   }
 
-  return (
+  const shareStage = (
     <section className="active-call-dock active-call-dock--screen flex h-[clamp(300px,42vh,480px)] min-h-[300px] min-w-0 shrink-0 flex-col border-b border-border text-foreground" data-testid="active-call-dock" aria-label="Active call dock">
       {displayIssue && <div className="m-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm" data-testid="call-issue-banner">{displayIssue.message}</div>}
       <div
@@ -448,6 +437,7 @@ export function ActiveCallDock({
       </div>
     </section>
   );
+  return isFullscreen ? (fullscreenRoot ? createPortal(shareStage, fullscreenRoot) : null) : shareStage;
 }
 
 function CallControls({
