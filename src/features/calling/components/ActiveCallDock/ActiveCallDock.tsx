@@ -177,7 +177,7 @@ export function ActiveCallDock({
       <section
         ref={stageRef}
         className={cn(
-          "active-call-dock active-call-dock--voice relative flex h-[clamp(260px,38vh,420px)] min-h-[260px] shrink-0 flex-col border-b border-border text-foreground",
+          "active-call-dock active-call-dock--voice relative flex h-[clamp(300px,42vh,480px)] min-h-[300px] shrink-0 flex-col border-b border-border text-foreground",
           isFullscreen && "fullscreen-call-layout",
         )}
         data-testid="active-call-dock"
@@ -279,7 +279,7 @@ export function ActiveCallDock({
   }
 
   return (
-    <section className="active-call-dock active-call-dock--screen flex min-h-[300px] min-w-0 flex-1 flex-col border-b border-border text-foreground" data-testid="active-call-dock" aria-label="Active call dock">
+    <section className="active-call-dock active-call-dock--screen flex h-[clamp(300px,42vh,480px)] min-h-[300px] min-w-0 shrink-0 flex-col border-b border-border text-foreground" data-testid="active-call-dock" aria-label="Active call dock">
       {displayIssue && <div className="m-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm" data-testid="call-issue-banner">{displayIssue.message}</div>}
       <div
         ref={stageRef}
@@ -313,7 +313,7 @@ export function ActiveCallDock({
         </div>
 
         {isFullscreen ? (
-          <div className="fullscreen-share-participants relative z-10 mx-auto mb-[80px] grid h-[clamp(96px,15vh,150px)] w-[min(760px,calc(100%-32px))] shrink-0 grid-cols-2 gap-3" data-testid="fullscreen-participant-strip">
+          <div className="fullscreen-share-participants relative z-10 mx-auto mb-[80px] mt-5 grid h-[clamp(96px,15vh,150px)] w-[min(760px,calc(100%-32px))] shrink-0 grid-cols-2 gap-3" data-testid="fullscreen-participant-strip">
             <FramedParticipantTile name="You" isMuted={isMuted} className="h-full aspect-auto" />
             <FramedParticipantTile name={remoteUsername} className="h-full aspect-auto" />
           </div>

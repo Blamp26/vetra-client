@@ -24,7 +24,7 @@ describe("ActiveCallDock", () => {
   it("renders a substantial one-to-one voice stage instead of the rejected 88px header", () => {
     renderDock();
     const dock = screen.getByTestId("active-call-dock");
-    expect(dock).toHaveClass("active-call-dock--voice", "h-[clamp(260px,38vh,420px)]");
+    expect(dock).toHaveClass("active-call-dock--voice", "h-[clamp(300px,42vh,480px)]");
     expect(dock).not.toHaveClass("h-[88px]");
     expect(screen.getByTestId("active-call-voice-surface")).toBeInTheDocument();
     const tileRow = screen.getByTestId("voice-call-tile-row");
@@ -159,6 +159,7 @@ describe("ActiveCallDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
     await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
+    expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass("mt-5");
     expect(screen.getByTestId("fullscreen-participant-strip")).toBeInTheDocument();
     expect(screen.getAllByTestId("screen-share-framed-participant-tile")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /Return to framed call|Expand share/ })).not.toBeInTheDocument();
@@ -179,6 +180,19 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("active-call-voice-surface")).toHaveClass("fullscreen-voice-participants");
     expect(screen.getByTestId("voice-call-tile-row")).toBeInTheDocument();
     expect(screen.queryByTestId("fullscreen-participant-strip")).not.toBeInTheDocument();
+  });
+
+  it("keeps the call dock height stable while entering and leaving expanded share mode", async () => {
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    const initialDock = screen.getByTestId("active-call-dock");
+    expect(initialDock).toHaveClass("h-[clamp(300px,42vh,480px)]", "shrink-0");
+
+    fireEvent.click(screen.getByTestId("screen-share-framed-tile"));
+    expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[clamp(300px,42vh,480px)]", "shrink-0");
+
+    fireEvent.click(screen.getByTestId("screen-share-stage"));
+    await waitFor(() => expect(screen.getByTestId("screen-share-framed-layout")).toBeInTheDocument());
+    expect(screen.getByTestId("active-call-dock")).toHaveClass("h-[clamp(300px,42vh,480px)]", "shrink-0");
   });
 
   it("handles fullscreenerror without leaving a stale fullscreen state", async () => {
