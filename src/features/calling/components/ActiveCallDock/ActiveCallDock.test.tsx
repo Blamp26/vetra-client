@@ -13,7 +13,7 @@ function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = 
     diagnostics: { connectionState: "connected", iceConnectionState: "connected", iceGatheringState: "complete", signalingState: "stable", selectedLocalCandidateType: "host" },
     onMuteToggle: vi.fn(), onStartScreenShare: vi.fn().mockResolvedValue(undefined),
     onStopScreenShare: vi.fn(), onWatchRemoteScreen: vi.fn().mockResolvedValue(undefined),
-    onStopWatchingRemoteScreen: vi.fn().mockResolvedValue(undefined), onHangUp: vi.fn(), ...overrides,
+    onHangUp: vi.fn(), ...overrides,
   };
   return { props, ...render(<ActiveCallDock {...props} />) };
 }
@@ -47,7 +47,7 @@ describe("ActiveCallDock", () => {
     expect(screen.queryByTestId("active-call-dock-surface")).not.toBeInTheDocument();
     expect(screen.queryByTestId("webrtc-diagnostics")).not.toBeInTheDocument();
     expect(screen.getByTestId("active-call-dock-controls")).toHaveClass("voice-call-controls-wrap");
-    expect(screen.queryByRole("button", { name: "Enter fullscreen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share screen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hang Up" })).toBeInTheDocument();
@@ -103,17 +103,15 @@ describe("ActiveCallDock", () => {
     expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
   });
 
-  it("stops remote watching when returning from expanded in-call viewing", async () => {
-    const onStopWatchingRemoteScreen = vi.fn().mockResolvedValue(undefined);
+  it("keeps the watched remote stream when returning from expanded in-call viewing", async () => {
     renderDock({
       isRemoteScreenAvailable: true,
       isWatchingRemoteScreen: true,
       remoteScreenStream: stream("remote"),
-      onStopWatchingRemoteScreen,
     });
     fireEvent.click(screen.getByTestId("screen-share-framed-tile"));
     fireEvent.click(screen.getByRole("button", { name: "Return to framed call" }));
-    await waitFor(() => expect(onStopWatchingRemoteScreen).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId("screen-share-framed-video")).toBeInTheDocument());
   });
 
   it("keeps controls hidden by default and exposes the visible-state contract on hover", () => {
@@ -160,8 +158,25 @@ describe("ActiveCallDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
     await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
+    expect(screen.getByTestId("fullscreen-participant-strip")).toBeInTheDocument();
+    expect(screen.getAllByTestId("screen-share-framed-participant-tile")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
     await waitFor(() => expect(exitFullscreen).toHaveBeenCalledTimes(1));
+  });
+
+  it("offers a balanced participant fullscreen layout for voice-only calls", async () => {
+    let fullscreenElement: Element | null = null;
+    const requestFullscreen = vi.fn(function(this: Element) { fullscreenElement = this; document.dispatchEvent(new Event("fullscreenchange")); return Promise.resolve(); });
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: requestFullscreen });
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+    renderDock();
+
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+
+    await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("active-call-voice-surface")).toHaveClass("fullscreen-voice-participants");
+    expect(screen.getByTestId("voice-call-tile-row")).toBeInTheDocument();
+    expect(screen.queryByTestId("fullscreen-participant-strip")).not.toBeInTheDocument();
   });
 
   it("handles fullscreenerror without leaving a stale fullscreen state", async () => {

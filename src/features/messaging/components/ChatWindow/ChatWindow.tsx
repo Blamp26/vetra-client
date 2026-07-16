@@ -422,7 +422,6 @@ export function ChatWindow({ activeChat, call }: Props) {
           onStartScreenShare={call.startScreenShare}
           onStopScreenShare={call.stopScreenShare}
           onWatchRemoteScreen={call.watchRemoteScreen}
-          onStopWatchingRemoteScreen={call.stopWatchingRemoteScreen}
           onHangUp={call.hangUp}
         />
       )}

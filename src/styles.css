@@ -1194,6 +1194,53 @@ body[data-vt-shell-resizing="true"] {
     height: 100vh;
   }
 
+  .fullscreen-call-layout:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    min-height: 100vh;
+    background: #070a09;
+  }
+
+  .fullscreen-call-layout .voice-call-status,
+  .fullscreen-call-layout .voice-call-diagnostics {
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .fullscreen-call-layout .voice-call-participants {
+    padding: clamp(32px, 7vh, 84px) clamp(24px, 8vw, 144px) 88px;
+  }
+
+  .fullscreen-call-layout .voice-call-tile-row {
+    width: min(100%, 1180px);
+    max-width: 1180px;
+    gap: clamp(12px, 1.5vw, 24px);
+  }
+
+  .fullscreen-call-layout .voice-participant-tile {
+    min-height: 0;
+    background: #15171a;
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .fullscreen-share-layout {
+    background: #070a09;
+  }
+
+  .fullscreen-share-layout .fullscreen-share-video-area {
+    min-height: 0;
+    background: #000;
+  }
+
+  .fullscreen-share-layout .fullscreen-share-participants .screen-share-framed-tile {
+    background: #15171a;
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .fullscreen-share-layout .screen-share-stage__controls {
+    bottom: 16px;
+    z-index: 20;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .screen-share-stage__controls {
       transition: none;

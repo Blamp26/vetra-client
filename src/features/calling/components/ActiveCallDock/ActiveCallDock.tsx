@@ -24,7 +24,6 @@ interface ActiveCallDockProps {
   onStartScreenShare: () => Promise<void>;
   onStopScreenShare: () => void;
   onWatchRemoteScreen: () => Promise<void>;
-  onStopWatchingRemoteScreen: () => Promise<void>;
   onHangUp: () => void;
 }
 
@@ -83,7 +82,6 @@ export function ActiveCallDock({
   onStartScreenShare,
   onStopScreenShare,
   onWatchRemoteScreen,
-  onStopWatchingRemoteScreen,
   onHangUp,
 }: ActiveCallDockProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -115,13 +113,23 @@ export function ActiveCallDock({
   }, []);
 
   useEffect(() => {
-    if (callStatus !== "active" || !hasScreenShare) {
+    if (callStatus !== "active") {
       setIsFullscreen(false);
       setControlsVisible(false);
       setIsShareExpanded(false);
       if (document.fullscreenElement === stageRef.current) void document.exitFullscreen?.();
+      return;
     }
-  }, [callStatus, hasScreenShare]);
+
+    if (!hasScreenShare) {
+      setIsShareExpanded(false);
+      setControlsVisible(false);
+      if (isFullscreen && document.fullscreenElement !== stageRef.current) {
+        setIsFullscreen(false);
+        if (document.fullscreenElement) void document.exitFullscreen?.();
+      }
+    }
+  }, [callStatus, hasScreenShare, isFullscreen]);
 
   useEffect(() => {
     if (isShareExpanded && !isRemoteWatchPending && isRemoteScreenAvailable && !isWatchingRemoteScreen && !isRemoteScreenLoading && !remoteScreenStream) {
@@ -160,14 +168,17 @@ export function ActiveCallDock({
   };
 
   const collapseShare = async () => {
-    if (isWatchingRemoteScreen) await onStopWatchingRemoteScreen();
     setIsShareExpanded(false);
   };
 
   if (!hasScreenShare) {
     return (
       <section
-        className="active-call-dock active-call-dock--voice relative flex h-[clamp(260px,38vh,420px)] min-h-[260px] shrink-0 flex-col border-b border-border text-foreground"
+        ref={stageRef}
+        className={cn(
+          "active-call-dock active-call-dock--voice relative flex h-[clamp(260px,38vh,420px)] min-h-[260px] shrink-0 flex-col border-b border-border text-foreground",
+          isFullscreen && "fullscreen-call-layout",
+        )}
         data-testid="active-call-dock"
         aria-label="Active call dock"
       >
@@ -189,7 +200,7 @@ export function ActiveCallDock({
           </div>
         )}
 
-        <div className="voice-call-participants flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10" data-testid="active-call-voice-surface">
+        <div className={cn("voice-call-participants flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10", isFullscreen && "fullscreen-voice-participants")} data-testid="active-call-voice-surface">
           <div className="voice-call-tile-row grid w-full max-w-[760px] grid-cols-2 gap-3" data-testid="voice-call-tile-row">
             <VoiceParticipantTile name="You" isMuted={isMuted} />
             <VoiceParticipantTile name={remoteUsername} />
@@ -208,7 +219,7 @@ export function ActiveCallDock({
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
             isExpanded={false}
-            onToggleFullscreen={undefined}
+            onToggleFullscreen={toggleFullscreen}
           />
         </div>
       </section>
@@ -273,7 +284,7 @@ export function ActiveCallDock({
       {displayIssue && <div className="m-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm" data-testid="call-issue-banner">{displayIssue.message}</div>}
       <div
         ref={stageRef}
-        className={cn("screen-share-stage group relative min-h-0 flex-1 overflow-hidden bg-black", isFullscreen && "screen-share-stage--fullscreen")}
+        className={cn("screen-share-stage group relative min-h-0 flex-1 overflow-hidden bg-black", isFullscreen && "screen-share-stage--fullscreen fullscreen-share-layout flex flex-col")}
         data-testid="screen-share-stage"
         data-controls-visible={controlsVisible ? "true" : "false"}
         onMouseEnter={() => setControlsVisible(true)}
@@ -283,20 +294,29 @@ export function ActiveCallDock({
         onKeyDown={(event) => { if (event.key === "Escape" && document.fullscreenElement === stageRef.current) void document.exitFullscreen?.(); }}
         tabIndex={-1}
       >
-        {remoteScreenStream && isWatchingRemoteScreen ? (
-          <StreamVideo stream={remoteScreenStream} label={`${remoteUsername} screen share`} className="absolute inset-0 h-full w-full object-contain" muted testId="remote-screen-share-video" />
-        ) : localScreenStream ? (
-          <StreamVideo stream={localScreenStream} label="Your screen share" className="absolute inset-0 h-full w-full object-contain" muted testId="local-screen-share-video" />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-white/75" data-testid="screen-share-loading">{isRemoteScreenLoading ? "Connecting to screen share…" : "Screen share is starting…"}</div>
-        )}
+        <div className={isFullscreen ? "fullscreen-share-video-area relative flex min-h-0 flex-1" : "absolute inset-0"}>
+          {remoteScreenStream && isWatchingRemoteScreen ? (
+            <StreamVideo stream={remoteScreenStream} label={`${remoteUsername} screen share`} className="absolute inset-0 h-full w-full object-contain" muted testId="remote-screen-share-video" />
+          ) : localScreenStream ? (
+            <StreamVideo stream={localScreenStream} label="Your screen share" className="absolute inset-0 h-full w-full object-contain" muted testId="local-screen-share-video" />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-white/75" data-testid="screen-share-loading">{isRemoteScreenLoading ? "Connecting to screen share…" : "Screen share is starting…"}</div>
+          )}
+        </div>
 
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 text-white" data-testid="screen-share-info">
           <div className="min-w-0"><p className="truncate text-sm font-semibold">{remoteUsername}</p><p className="text-xs text-white/70">Screen sharing · {formatCallTime(seconds)}</p></div>
           <span className="rounded-full bg-black/45 px-2.5 py-1 text-xs text-white/80">{statusLabel}</span>
         </div>
 
-        {localScreenStream && remoteScreenStream && <div className="absolute bottom-4 right-4 h-[90px] w-[160px] overflow-hidden rounded-md bg-zinc-900 shadow-lg" data-testid="local-screen-share-pip"><StreamVideo stream={localScreenStream} label="Your screen share preview" className="h-full w-full object-cover" testId="local-screen-share-pip-video" /></div>}
+        {isFullscreen ? (
+          <div className="fullscreen-share-participants relative z-10 mx-auto mb-[80px] grid h-[clamp(96px,15vh,150px)] w-[min(760px,calc(100%-32px))] shrink-0 grid-cols-2 gap-3" data-testid="fullscreen-participant-strip">
+            <FramedParticipantTile name="You" isMuted={isMuted} className="h-full aspect-auto" />
+            <FramedParticipantTile name={remoteUsername} className="h-full aspect-auto" />
+          </div>
+        ) : localScreenStream && remoteScreenStream ? (
+          <div className="absolute bottom-4 right-4 h-[90px] w-[160px] overflow-hidden rounded-md bg-zinc-900 shadow-lg" data-testid="local-screen-share-pip"><StreamVideo stream={localScreenStream} label="Your screen share preview" className="h-full w-full object-cover" testId="local-screen-share-pip-video" /></div>
+        ) : null}
 
         <div className="screen-share-stage__controls stage-controls absolute inset-x-0 bottom-4 flex justify-center transition-[opacity,transform,visibility] duration-150 ease-out" data-testid="active-call-dock-controls" {...controlProps}>
           <CallControls
@@ -309,7 +329,7 @@ export function ActiveCallDock({
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
             isExpanded
-            onToggleExpanded={isFullscreen ? undefined : () => { void collapseShare(); }}
+            onToggleExpanded={() => { void collapseShare(); }}
             onToggleFullscreen={toggleFullscreen}
           />
         </div>
@@ -383,9 +403,9 @@ function ScreenShareFrame({
   );
 }
 
-function FramedParticipantTile({ name, isMuted = false }: { name: string; isMuted?: boolean }) {
+function FramedParticipantTile({ name, isMuted = false, className }: { name: string; isMuted?: boolean; className?: string }) {
   return (
-    <div className="screen-share-framed-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden" data-testid="screen-share-framed-participant-tile">
+    <div className={cn("screen-share-framed-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden", className)} data-testid="screen-share-framed-participant-tile">
       <div className="voice-participant-avatar flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-semibold" aria-hidden="true">
         {name.slice(0, 1).toUpperCase()}
       </div>
