@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { APP_TITLE_BAR_HEIGHT, DesktopTitleBar } from "./DesktopTitleBar";
 
 const {
@@ -134,5 +136,34 @@ describe("DesktopTitleBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Minimize window" }));
 
     expect(parentClick).not.toHaveBeenCalled();
+  });
+
+  it("keeps the flexible title area as the Tauri drag region", () => {
+    const { container } = render(<DesktopTitleBar />);
+
+    const dragRegions = Array.from(container.querySelectorAll("[data-tauri-drag-region]"));
+    const flexibleRegion = dragRegions.find((element) => element.classList.contains("flex-1"));
+
+    expect(flexibleRegion).toBeInTheDocument();
+    expect(flexibleRegion).toHaveAttribute("data-tauri-drag-region");
+    expect(screen.getByText("Vetra")).toHaveAttribute("data-tauri-drag-region");
+  });
+
+  it("keeps window controls outside all Tauri drag regions", () => {
+    render(<DesktopTitleBar />);
+
+    for (const label of ["Minimize window", "Maximize window", "Close window"]) {
+      const button = screen.getByRole("button", { name: label });
+      expect(button).not.toHaveAttribute("data-tauri-drag-region");
+      expect(button.closest("[data-tauri-drag-region]")).toBeNull();
+    }
+  });
+
+  it("declares the Tauri permission required for native title-bar dragging", () => {
+    const capability = JSON.parse(
+      readFileSync(resolve(process.cwd(), "src-tauri/capabilities/default.json"), "utf8"),
+    ) as { permissions: string[] };
+
+    expect(capability.permissions).toContain("core:window:allow-start-dragging");
   });
 });
