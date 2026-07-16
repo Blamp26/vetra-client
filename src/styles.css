@@ -1229,6 +1229,18 @@ body[data-vt-shell-resizing="true"] {
   .fullscreen-share-layout .fullscreen-share-video-area {
     min-height: 0;
     background: #000;
+    border: 0;
+    box-shadow: none;
+    outline: 0;
+    overflow: hidden;
+    contain: paint;
+  }
+
+  .fullscreen-share-layout .fullscreen-share-video-area video {
+    display: block;
+    border: 0;
+    outline: 0;
+    object-fit: contain;
   }
 
   .fullscreen-share-layout .fullscreen-share-participants .screen-share-framed-tile {

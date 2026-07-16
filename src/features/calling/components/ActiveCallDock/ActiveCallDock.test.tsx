@@ -110,7 +110,7 @@ describe("ActiveCallDock", () => {
       remoteScreenStream: stream("remote"),
     });
     fireEvent.click(screen.getByTestId("screen-share-framed-tile"));
-    fireEvent.click(screen.getByRole("button", { name: "Return to framed call" }));
+    fireEvent.click(screen.getByTestId("screen-share-stage"));
     await waitFor(() => expect(screen.getByTestId("screen-share-framed-video")).toBeInTheDocument());
   });
 
@@ -118,6 +118,7 @@ describe("ActiveCallDock", () => {
     renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     expandShare();
     expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Return to framed call|Expand share/ })).not.toBeInTheDocument();
     expect(screen.queryByTestId("screen-share-framed-layout")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument();
     const stage = screen.getByTestId("screen-share-stage");
@@ -160,6 +161,7 @@ describe("ActiveCallDock", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
     expect(screen.getByTestId("fullscreen-participant-strip")).toBeInTheDocument();
     expect(screen.getAllByTestId("screen-share-framed-participant-tile")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /Return to framed call|Expand share/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
     await waitFor(() => expect(exitFullscreen).toHaveBeenCalledTimes(1));
   });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Maximize, Maximize2, Mic, MicOff, Minimize, Minimize2, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
+import { Maximize, Mic, MicOff, Minimize, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
@@ -167,7 +167,8 @@ export function ActiveCallDock({
     onMouseLeave: () => setControlsVisible(false),
   };
 
-  const collapseShare = async () => {
+  const closeExpandedFromStage = () => {
+    if (document.fullscreenElement === stageRef.current) void document.exitFullscreen?.();
     setIsShareExpanded(false);
   };
 
@@ -218,7 +219,6 @@ export function ActiveCallDock({
             onStartScreenShare={onStartScreenShare}
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
-            isExpanded={false}
             onToggleFullscreen={toggleFullscreen}
           />
         </div>
@@ -271,7 +271,6 @@ export function ActiveCallDock({
               onStartScreenShare={onStartScreenShare}
               onStopScreenShare={onStopScreenShare}
               onHangUp={onHangUp}
-              isExpanded={false}
             />
           </div>
         </div>
@@ -291,6 +290,10 @@ export function ActiveCallDock({
         onMouseLeave={() => setControlsVisible(false)}
         onFocus={() => setControlsVisible(true)}
         onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setControlsVisible(false); }}
+        onClick={(event) => {
+          if ((event.target as HTMLElement).closest("button")) return;
+          closeExpandedFromStage();
+        }}
         onKeyDown={(event) => { if (event.key === "Escape" && document.fullscreenElement === stageRef.current) void document.exitFullscreen?.(); }}
         tabIndex={-1}
       >
@@ -328,8 +331,6 @@ export function ActiveCallDock({
             onStartScreenShare={onStartScreenShare}
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
-            isExpanded
-            onToggleExpanded={() => { void collapseShare(); }}
             onToggleFullscreen={toggleFullscreen}
           />
         </div>
@@ -340,15 +341,14 @@ export function ActiveCallDock({
 
 function CallControls({
   className,
-  isMuted, isScreenSharing, isScreenShareUpdating, isFullscreen, isExpanded, onMuteToggle, onStartScreenShare, onStopScreenShare, onHangUp, onToggleExpanded, onToggleFullscreen, onMouseEnter, onMouseLeave,
+  isMuted, isScreenSharing, isScreenShareUpdating, isFullscreen, onMuteToggle, onStartScreenShare, onStopScreenShare, onHangUp, onToggleFullscreen, onMouseEnter, onMouseLeave,
 }: {
   className?: string;
-  isMuted: boolean; isScreenSharing: boolean; isScreenShareUpdating: boolean; isFullscreen: boolean; isExpanded: boolean; onMuteToggle: () => void; onStartScreenShare: () => Promise<void>; onStopScreenShare: () => void; onHangUp: () => void; onToggleExpanded?: () => void; onToggleFullscreen?: () => Promise<void>; onMouseEnter?: () => void; onMouseLeave?: () => void;
+  isMuted: boolean; isScreenSharing: boolean; isScreenShareUpdating: boolean; isFullscreen: boolean; onMuteToggle: () => void; onStartScreenShare: () => Promise<void>; onStopScreenShare: () => void; onHangUp: () => void; onToggleFullscreen?: () => Promise<void>; onMouseEnter?: () => void; onMouseLeave?: () => void;
 }) {
   return <div className={cn("call-controls flex items-center justify-center gap-2 rounded-lg bg-black/60 p-2 text-white", className)} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
     <button className={cn("vt-call-control h-10 w-10 p-0", isMuted && "bg-destructive/20 text-destructive")} onClick={onMuteToggle} aria-label={isMuted ? "Unmute" : "Mute"}>{isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
     <button className="vt-call-control h-10 w-10 p-0" onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }} aria-label={isScreenShareUpdating ? "Updating screen share" : isScreenSharing ? "Stop sharing" : "Share screen"} disabled={isScreenShareUpdating}>{isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}</button>
-    {onToggleExpanded && <button className="vt-call-control h-10 w-10 p-0" onClick={onToggleExpanded} aria-label={isFullscreen ? "Return to framed call" : isExpanded ? "Return to framed call" : "Expand share"}>{isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>}
     {onToggleFullscreen && <button className="vt-call-control h-10 w-10 p-0" onClick={() => { void onToggleFullscreen(); }} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>{isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button>}
     <button className="vt-call-control vt-call-control--danger h-10 w-10 p-0" onClick={onHangUp} aria-label="Hang Up"><PhoneOff className="h-4 w-4" /></button>
   </div>;
