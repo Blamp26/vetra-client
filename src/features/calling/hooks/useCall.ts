@@ -191,6 +191,8 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [isScreenShareUpdating, setIsScreenShareUpdating] = useState(false);
     const [isRemoteScreenLoading, setIsRemoteScreenLoading] = useState(false);
+    const [isRemoteScreenAvailable, setIsRemoteScreenAvailable] = useState(false);
+    const [isWatchingRemoteScreen, setIsWatchingRemoteScreen] = useState(false);
     const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
     const [remoteScreenStream, setRemoteScreenStream] = useState<MediaStream | null>(null);
     const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null);
@@ -307,6 +309,8 @@ export function useCall(currentUserId: number): UseCallReturn {
             setCallId(null);
             setRemoteStream(null);
             setRemoteScreenStream(null);
+            setIsRemoteScreenAvailable(false);
+            setIsWatchingRemoteScreen(false);
             setIsScreenShareUpdating(false);
             setIsRemoteScreenLoading(false);
             setIsMuted(false);
@@ -343,6 +347,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         setCallId(null);
         setRemoteStream(null);
         setRemoteScreenStream(null);
+        setIsRemoteScreenAvailable(false);
+        setIsWatchingRemoteScreen(false);
         setIsScreenShareUpdating(false);
         setIsRemoteScreenLoading(false);
         setIsMuted(false);
@@ -687,6 +693,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         const service = new WebRTCService(channel, currentUserId, targetUserId);
         service.onRemoteStream = (stream) => setRemoteStream(stream);
         service.onRemoteScreenStream = (stream) => setRemoteScreenStream(stream);
+        service.onRemoteScreenAvailabilityChange = (available) => setIsRemoteScreenAvailable(available);
+        service.onRemoteScreenWatchStateChange = (watching) => setIsWatchingRemoteScreen(watching);
         service.onRemoteScreenLoading = (loading) => setIsRemoteScreenLoading(loading);
         service.onScreenShareUpdatingChange = (updating) => setIsScreenShareUpdating(updating);
         service.onCallIdReceived = (nextCallId) => {
@@ -747,6 +755,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         service.onRemoteScreenStream = (stream) => {
             setRemoteScreenStream(stream);
         };
+        service.onRemoteScreenAvailabilityChange = (available) => setIsRemoteScreenAvailable(available);
+        service.onRemoteScreenWatchStateChange = (watching) => setIsWatchingRemoteScreen(watching);
         service.onRemoteScreenLoading = (loading) => setIsRemoteScreenLoading(loading);
         service.onScreenShareUpdatingChange = (updating) => setIsScreenShareUpdating(updating);
         service.onDiagnosticsChange = (nextDiagnostics) => setDiagnostics(mapDiagnostics(nextDiagnostics));
@@ -857,6 +867,24 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
     }, [cleanupScreenShare]);
 
+    const watchRemoteScreen = useCallback(async () => {
+        try {
+            await webrtcRef.current?.watchRemoteScreen();
+        } catch (err) {
+            console.warn('[useCall] Failed to watch remote screen share', err);
+            setCallIssue(buildCallIssue('Unable to watch the screen share. Try again.'));
+        }
+    }, []);
+
+    const stopWatchingRemoteScreen = useCallback(async () => {
+        try {
+            await webrtcRef.current?.stopWatchingRemoteScreen();
+        } catch (err) {
+            console.warn('[useCall] Failed to stop watching remote screen share', err);
+            setCallIssue(buildCallIssue('Unable to stop watching the screen share.'));
+        }
+    }, []);
+
     return {
         status,
         callServiceStatus,
@@ -867,6 +895,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         isScreenSharing,
         isScreenShareUpdating,
         isRemoteScreenLoading,
+        isRemoteScreenAvailable,
+        isWatchingRemoteScreen,
         remoteStream,
         remoteScreenStream,
         localScreenStream,
@@ -877,6 +907,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         startCall,
         startScreenShare,
         stopScreenShare,
+        watchRemoteScreen,
+        stopWatchingRemoteScreen,
         acceptCall,
         rejectCall,
         hangUp,

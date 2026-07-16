@@ -34,6 +34,8 @@ type StatsValue = {
     localCandidateId?: string;
     remoteCandidateId?: string;
     candidateType?: string;
+    kind?: string;
+    bytesReceived?: number;
 };
 
 const RENEGOTIATION_ANSWER_TIMEOUT_MS = 8_000;
@@ -155,6 +157,11 @@ export class WebRTCService {
     private remoteStream: MediaStream | null = null;
     private remoteScreenStream: MediaStream | null = null;
     private remoteScreenShareActive = false;
+    private remoteScreenAvailable = false;
+    private isWatchingRemoteScreen = false;
+    private desiredRemoteScreenWatch = false;
+    private remoteScreenWatchChangePending = false;
+    private remoteScreenTransceiver: RTCRtpTransceiver | null = null;
     private screenStream: MediaStream | null = null;
     private screenSender: RTCRtpSender | null = null;
     private screenTransceiver: RTCRtpTransceiver | null = null;
@@ -185,6 +192,8 @@ export class WebRTCService {
 
     public onRemoteStream: (stream: MediaStream) => void = () => { };
     public onRemoteScreenStream: (stream: MediaStream | null) => void = () => { };
+    public onRemoteScreenAvailabilityChange: (available: boolean) => void = () => { };
+    public onRemoteScreenWatchStateChange: (watching: boolean) => void = () => { };
     public onRemoteScreenLoading: (loading: boolean) => void = () => { };
     public onScreenShareUpdatingChange: (updating: boolean) => void = () => { };
     public onCallIdReceived: ((callId: string) => void) | null = null;
@@ -270,6 +279,9 @@ export class WebRTCService {
         });
         await this.refreshDiagnostics();
         await this.flushIceCandidateQueue();
+        if (this.remoteScreenShareActive && this.isWatchingRemoteScreen) {
+            this.syncRemoteScreenFromReceivers('renegotiation_answer');
+        }
         this.consumePendingScreenShareChangeIfStable();
         this.runQueuedRenegotiationIfStable();
     }
@@ -292,17 +304,31 @@ export class WebRTCService {
         });
         if (options?.screenShareActive !== undefined) {
             this.remoteScreenShareActive = options.screenShareActive;
+            this.setRemoteScreenAvailability(options.screenShareActive);
         }
         await this.peerConnection.setRemoteDescription(
             new RTCSessionDescription({ type: 'offer', sdp })
         );
         this.remoteDescriptionSet = true;
+        this.remoteScreenTransceiver = this.findRemoteScreenTransceiver();
         if (options?.screenShareActive === false || !remoteSdpHasSendingVideo(sdp)) {
             this.remoteScreenShareActive = false;
+            this.setRemoteScreenAvailability(false);
+            this.isWatchingRemoteScreen = false;
+            this.desiredRemoteScreenWatch = false;
+            this.remoteScreenWatchChangePending = false;
+            this.setRemoteScreenTransceiverDirection('inactive');
+            this.onRemoteScreenWatchStateChange(false);
             this.setRemoteScreenLoading(false, 'screenShareActive_false');
             this.clearRemoteScreenStream('screenShareActive_false');
         } else if (this.remoteScreenShareActive) {
-            this.syncRemoteScreenFromReceivers('post_renegotiation');
+            this.setRemoteScreenTransceiverDirection(this.isWatchingRemoteScreen ? 'recvonly' : 'inactive');
+            if (this.isWatchingRemoteScreen) {
+                this.syncRemoteScreenFromReceivers('post_renegotiation');
+            } else {
+                this.setRemoteScreenLoading(false, 'remote_screen_available_unwatched');
+                this.clearRemoteScreenStream('remote_screen_available_unwatched');
+            }
         }
         await this.refreshDiagnostics();
         await this.flushIceCandidateQueue();
@@ -320,6 +346,14 @@ export class WebRTCService {
         if (!this.peerConnection) return;
 
         await this.addRealIceCandidate(candidate);
+    }
+
+    async watchRemoteScreen(): Promise<void> {
+        await this.setRemoteScreenWatchDesired(true);
+    }
+
+    async stopWatchingRemoteScreen(): Promise<void> {
+        await this.setRemoteScreenWatchDesired(false);
     }
 
     getDiagnosticsSnapshot(): WebRTCDiagnostics {
@@ -578,6 +612,11 @@ export class WebRTCService {
             this.remoteStream = null;
         }
         this.remoteScreenShareActive = false;
+        this.remoteScreenAvailable = false;
+        this.isWatchingRemoteScreen = false;
+        this.desiredRemoteScreenWatch = false;
+        this.remoteScreenWatchChangePending = false;
+        this.remoteScreenTransceiver = null;
         this.setRemoteScreenLoading(false, 'dispose');
         this.clearRemoteScreenStream('dispose');
         this.desiredScreenShareActive = false;
@@ -600,6 +639,8 @@ export class WebRTCService {
         this.emitDiagnostics();
         this.onRemoteStream = () => { };
         this.onRemoteScreenStream = () => { };
+        this.onRemoteScreenAvailabilityChange = () => { };
+        this.onRemoteScreenWatchStateChange = () => { };
         this.onRemoteScreenLoading = () => { };
         this.onScreenShareUpdatingChange = () => { };
         this.onCallIdReceived = null;
@@ -869,6 +910,9 @@ export class WebRTCService {
 
         const reason = this.pendingRenegotiationReason;
         this.pendingRenegotiationReason = null;
+        if (reason === 'remote_screen_watch') {
+            this.remoteScreenWatchChangePending = false;
+        }
         debugCall('[WebRTCService] pending renegotiation cleared', {
             call_id: this.getCallId(),
             reason,
@@ -891,7 +935,7 @@ export class WebRTCService {
     }
 
     private isScreenShareUpdating(): boolean {
-        return this.isCreatingRenegotiationOffer || this.isRenegotiationInFlight || this.pendingScreenShareChange;
+        return this.isCreatingRenegotiationOffer || this.isRenegotiationInFlight || this.pendingScreenShareChange || this.remoteScreenWatchChangePending;
     }
 
     private startRenegotiationAnswerTimeout(reason: string): void {
@@ -949,6 +993,16 @@ export class WebRTCService {
             });
         }
 
+        if (reason === 'remote_screen_watch') {
+            this.remoteScreenWatchChangePending = false;
+            this.desiredRemoteScreenWatch = false;
+            this.isWatchingRemoteScreen = false;
+            this.setRemoteScreenTransceiverDirection('inactive');
+            this.setRemoteScreenLoading(false, 'remote_screen_watch_failed');
+            this.clearRemoteScreenStream('remote_screen_watch_failed');
+            this.onRemoteScreenWatchStateChange(false);
+        }
+
         this.pendingRenegotiationReason = null;
         this.setRenegotiationInFlight(false);
         await this.refreshDiagnostics();
@@ -958,7 +1012,7 @@ export class WebRTCService {
 
     private syncRemoteScreenFromReceivers(reason: string): void {
         const peerConnection = this.peerConnection;
-        if (!peerConnection || !this.remoteScreenShareActive) return;
+        if (!peerConnection || !this.remoteScreenShareActive || !this.isWatchingRemoteScreen) return;
 
         const videoReceivers = peerConnection
             .getReceivers()
@@ -989,35 +1043,109 @@ export class WebRTCService {
         this.setRemoteScreenTrack(videoTrack, reason);
     }
 
+    private findRemoteScreenTransceiver(): RTCRtpTransceiver | null {
+        const peerConnection = this.peerConnection;
+        if (!peerConnection || typeof peerConnection.getTransceivers !== 'function') return null;
+        const transceivers = peerConnection.getTransceivers();
+        return transceivers.find((transceiver) => {
+            return !transceiver.sender.track && transceiver.receiver.track?.kind === 'video';
+        }) ?? transceivers.find((transceiver) => transceiver.receiver.track?.kind === 'video') ?? null;
+    }
+
+    private setRemoteScreenAvailability(available: boolean): void {
+        if (this.remoteScreenAvailable === available) return;
+        this.remoteScreenAvailable = available;
+        this.onRemoteScreenAvailabilityChange(available);
+        debugCall('[WebRTCService] remote screen availability changed', {
+            call_id: this.getCallId(),
+            available,
+            watching: this.isWatchingRemoteScreen,
+        });
+    }
+
+    private setRemoteScreenTransceiverDirection(direction: RTCRtpTransceiverDirection): void {
+        const transceiver = this.remoteScreenTransceiver ?? this.findRemoteScreenTransceiver();
+        if (!transceiver) return;
+        this.remoteScreenTransceiver = transceiver;
+        if (transceiver.direction === direction) return;
+        transceiver.direction = direction;
+        debugCall('[WebRTCService] remote screen receiver direction changed', {
+            call_id: this.getCallId(),
+            direction,
+            transceiver: transceiver.mid,
+        });
+    }
+
+    private async setRemoteScreenWatchDesired(watching: boolean): Promise<void> {
+        if (watching && !this.remoteScreenAvailable) return;
+        if (this.desiredRemoteScreenWatch === watching && this.isWatchingRemoteScreen === watching && !this.remoteScreenWatchChangePending) {
+            return;
+        }
+
+        this.desiredRemoteScreenWatch = watching;
+        this.isWatchingRemoteScreen = watching;
+        this.onRemoteScreenWatchStateChange(watching);
+        this.setRemoteScreenTransceiverDirection(watching ? 'recvonly' : 'inactive');
+
+        if (watching) {
+            this.setRemoteScreenLoading(true, 'watch_requested');
+        } else {
+            this.setRemoteScreenLoading(false, 'watch_stopped');
+            this.clearRemoteScreenStream('watch_stopped');
+        }
+
+        const peerConnection = this.peerConnection;
+        if (!peerConnection) return;
+        if (!this.canApplyScreenShareChangeNow()) {
+            this.remoteScreenWatchChangePending = true;
+            this.pendingRenegotiationReason = 'remote_screen_watch';
+            this.emitScreenShareUpdatingState();
+            debugCall('[WebRTCService] remote screen watch change queued', {
+                call_id: this.getCallId(),
+                watching,
+                signalingState: peerConnection.signalingState,
+            });
+            return;
+        }
+
+        this.remoteScreenWatchChangePending = false;
+        await this.renegotiate('remote_screen_watch');
+    }
+
     private attachRemoteScreenTrackLifecycle(track: MediaStreamTrack): void {
         track.onended = () => {
             debugCall('[WebRTCService] remote screen track ended', {
                 call_id: this.getCallId(),
                 track_id: track.id,
             });
-            this.setRemoteScreenLoading(false, 'onended');
-            this.clearRemoteScreenStream('onended');
+            if (this.isWatchingRemoteScreen) {
+                this.setRemoteScreenLoading(false, 'onended');
+                this.clearRemoteScreenStream('onended');
+            }
         };
         track.onmute = () => {
             debugCall('[WebRTCService] remote screen track muted', {
                 call_id: this.getCallId(),
                 track_id: track.id,
             });
-            this.setRemoteScreenLoading(true, 'onmute');
-            this.clearRemoteScreenStream('onmute');
+            if (this.isWatchingRemoteScreen) {
+                this.setRemoteScreenLoading(true, 'onmute');
+                this.clearRemoteScreenStream('onmute');
+            }
         };
         track.onunmute = () => {
             debugCall('[WebRTCService] remote screen track unmuted', {
                 call_id: this.getCallId(),
                 track_id: track.id,
             });
-            if (this.remoteScreenShareActive) {
+            if (this.remoteScreenShareActive && this.isWatchingRemoteScreen) {
                 this.setRemoteScreenTrack(track, 'onunmute');
             }
         };
     }
 
     private setRemoteScreenTrack(track: MediaStreamTrack, reason: string): void {
+        if (!this.isWatchingRemoteScreen || !this.remoteScreenShareActive) return;
         this.attachRemoteScreenTrackLifecycle(track);
         const screenStream = new MediaStream([track]);
         this.remoteScreenStream = screenStream;
@@ -1088,7 +1216,13 @@ export class WebRTCService {
 
             if (event.track?.kind === 'video') {
                 this.remoteScreenShareActive = true;
-                if (event.track.muted) {
+                this.remoteScreenTransceiver = event.transceiver ?? this.findRemoteScreenTransceiver();
+                this.setRemoteScreenAvailability(true);
+                if (!this.isWatchingRemoteScreen) {
+                    this.setRemoteScreenLoading(false, 'ontrack_not_watching');
+                    this.clearRemoteScreenStream('ontrack_not_watching');
+                    this.setRemoteScreenTransceiverDirection('inactive');
+                } else if (event.track.muted) {
                     this.setRemoteScreenLoading(true, 'ontrack_muted');
                     this.attachRemoteScreenTrackLifecycle(event.track);
                 } else {
@@ -1145,6 +1279,16 @@ export class WebRTCService {
             if (typeof peerConnection.getStats === 'function') {
                 const stats = await peerConnection.getStats();
                 nextDiagnostics.selectedCandidatePair = inspectSelectedCandidatePairFromStats(stats);
+                if (isCallDebugEnabled()) {
+                    const inboundVideo = getStatsValues(stats).filter((stat) => stat.type === 'inbound-rtp' && stat.kind === 'video');
+                    debugCall('[WebRTCService] remote screen subscription stats', {
+                        call_id: this.getCallId(),
+                        available: this.remoteScreenAvailable,
+                        watching: this.isWatchingRemoteScreen,
+                        transceiverDirection: this.remoteScreenTransceiver?.direction ?? null,
+                        inboundVideo: inboundVideo.map((stat) => ({ id: stat.id, bytesReceived: stat.bytesReceived ?? null })),
+                    });
+                }
             }
         } catch {
             nextDiagnostics.selectedCandidatePair = null;

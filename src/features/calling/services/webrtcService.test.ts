@@ -123,10 +123,13 @@ class MockRTCPeerConnection {
             track,
             replaceTrack: vi.fn().mockResolvedValue(undefined),
         },
+        receiver: { track: null },
     }));
     removeTrack = vi.fn();
     receivers: Array<{ track: MediaStreamTrack }> = [];
     getReceivers = vi.fn(() => this.receivers);
+    transceivers: Array<any> = [];
+    getTransceivers = vi.fn(() => this.transceivers);
     close = vi.fn();
 
     constructor(config: RTCConfiguration) {
@@ -899,11 +902,13 @@ describe('WebRTCService', () => {
             expect(onRemoteStream).toHaveBeenCalledWith(fakeStream);
         });
 
-        it('invokes onRemoteScreenStream for remote video tracks and clears it on mute', async () => {
+        it('announces remote video availability without exposing a stream before watching', async () => {
             const onRemoteScreenStream = vi.fn();
             const onRemoteScreenLoading = vi.fn();
+            const onRemoteScreenAvailabilityChange = vi.fn();
             service.onRemoteScreenStream = onRemoteScreenStream;
             service.onRemoteScreenLoading = onRemoteScreenLoading;
+            service.onRemoteScreenAvailabilityChange = onRemoteScreenAvailabilityChange;
 
             await service.startCall();
             const pc = (service as any).peerConnection as MockRTCPeerConnection;
@@ -920,12 +925,13 @@ describe('WebRTCService', () => {
 
             pc.ontrack?.({ streams: [fakeStream], track: fakeTrack } as any);
 
-            expect(onRemoteScreenStream).toHaveBeenCalledWith(expect.any(MediaStream));
+            expect(onRemoteScreenAvailabilityChange).toHaveBeenCalledWith(true);
+            expect(onRemoteScreenStream).not.toHaveBeenCalledWith(expect.any(MediaStream));
 
             fakeTrack.onmute?.();
 
-            expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
-            expect(onRemoteScreenLoading).toHaveBeenLastCalledWith(true);
+            expect(onRemoteScreenStream).not.toHaveBeenCalledWith(expect.any(MediaStream));
+            expect(onRemoteScreenLoading).toHaveBeenLastCalledWith(false);
         });
 
         it('restores remote screen on unmute while remote screen share is active', async () => {
@@ -947,6 +953,8 @@ describe('WebRTCService', () => {
                 onunmute: null as (() => void) | null,
             };
 
+            pc.ontrack?.({ streams: [fakeStream], track: fakeTrack } as any);
+            await service.watchRemoteScreen();
             pc.ontrack?.({ streams: [fakeStream], track: fakeTrack } as any);
             fakeTrack.onmute?.();
             onRemoteScreenStream.mockClear();
@@ -977,11 +985,12 @@ describe('WebRTCService', () => {
 
             pc.ontrack?.({ streams: [new MediaStream()], track: fakeTrack } as any);
 
-            expect(onRemoteScreenLoading).toHaveBeenCalledWith(true);
+            expect(onRemoteScreenLoading).toHaveBeenLastCalledWith(false);
             expect(onRemoteScreenStream).not.toHaveBeenCalledWith(expect.any(MediaStream));
 
+            await service.watchRemoteScreen();
             fakeTrack.muted = false;
-            fakeTrack.onunmute?.();
+            pc.ontrack?.({ streams: [new MediaStream()], track: fakeTrack } as any);
 
             expect(onRemoteScreenStream).toHaveBeenCalledWith(expect.any(MediaStream));
             expect(onRemoteScreenLoading).toHaveBeenLastCalledWith(false);
@@ -1004,6 +1013,8 @@ describe('WebRTCService', () => {
             };
 
             pc.ontrack?.({ streams: [new MediaStream()], track: fakeTrack } as any);
+            await service.watchRemoteScreen();
+            pc.ontrack?.({ streams: [new MediaStream()], track: fakeTrack } as any);
             fakeTrack.onended?.();
 
             expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
@@ -1025,6 +1036,7 @@ describe('WebRTCService', () => {
                 onunmute: null as (() => void) | null,
             };
             pc.receivers = [{ track: existingVideoTrack as any }];
+            pc.transceivers = [{ sender: { track: null }, receiver: { track: existingVideoTrack } }];
             onRemoteScreenStream.mockClear();
 
             await service.handleOffer([
@@ -1035,8 +1047,17 @@ describe('WebRTCService', () => {
                 'a=sendonly',
             ].join('\r\n'), { screenShareActive: true });
 
-            expect(onRemoteScreenStream).toHaveBeenCalledTimes(1);
+            expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
+            expect((pc.transceivers[0] as any).direction).toBe('inactive');
+
+            await service.watchRemoteScreen();
+            expect((pc.transceivers[0] as any).direction).toBe('recvonly');
+            await service.handleAnswer('renegotiation-answer-sdp');
             expect(onRemoteScreenStream).toHaveBeenCalledWith(expect.any(MediaStream));
+
+            await service.stopWatchingRemoteScreen();
+            expect((pc.transceivers[0] as any).direction).toBe('inactive');
+            expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
         });
 
         it('screenShareActive false clears remote screen immediately even with an existing receiver', async () => {
@@ -1067,6 +1088,34 @@ describe('WebRTCService', () => {
             ].join('\r\n'), { screenShareActive: false });
 
             expect(onRemoteScreenStream).toHaveBeenLastCalledWith(null);
+        });
+
+        it('queues rapid watch and unwatch requests and converges on inactive without touching audio', async () => {
+            await service.acceptCall('initial-offer-sdp');
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            const videoTrack = { kind: 'video', id: 'remote-video', muted: false, readyState: 'live', onended: null, onmute: null, onunmute: null };
+            const audioTrack = { kind: 'audio', id: 'remote-audio' };
+            pc.receivers = [{ track: videoTrack as any }, { track: audioTrack as any }];
+            pc.transceivers = [{ sender: { track: null }, receiver: { track: videoTrack }, direction: 'sendrecv' }];
+
+            await service.handleOffer([
+                'v=0',
+                'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+                'a=sendrecv',
+                'm=video 9 UDP/TLS/RTP/SAVPF 96',
+                'a=sendonly',
+            ].join('\r\n'), { screenShareActive: true });
+
+            await service.watchRemoteScreen();
+            await service.watchRemoteScreen();
+            expect(renegotiationPushes('offer')).toHaveLength(1);
+            await service.stopWatchingRemoteScreen();
+            expect((pc.transceivers[0] as any).direction).toBe('inactive');
+
+            await service.handleAnswer('watch-answer-sdp');
+            await vi.waitFor(() => expect(renegotiationPushes('offer')).toHaveLength(2));
+            expect((pc.transceivers[0] as any).direction).toBe('inactive');
+            expect(pc.receivers[1]?.track).toBe(audioTrack);
         });
 
         it('clears remote screen stream when a renegotiation offer no longer sends video', async () => {

@@ -38,6 +38,8 @@ vi.mock('../services/webrtcService', () => {
             this._screenStream?.getTracks?.().forEach((track: MediaStreamTrack) => track.stop());
             this._screenStream = null;
         });
+        this.watchRemoteScreen = vi.fn().mockResolvedValue(undefined);
+        this.stopWatchingRemoteScreen = vi.fn().mockResolvedValue(undefined);
         this.collectDiagnostics = vi.fn().mockResolvedValue({
             connectionState: 'unknown',
             iceConnectionState: 'unknown',
@@ -67,6 +69,8 @@ vi.mock('../services/webrtcService', () => {
         this.onRemoteStream = null;
         this.onRemoteScreenStream = null;
         this.onRemoteScreenLoading = null;
+        this.onRemoteScreenAvailabilityChange = null;
+        this.onRemoteScreenWatchStateChange = null;
         this.onScreenShareUpdatingChange = null;
         this.onCallIdReceived = null;
         this.onDiagnosticsChange = null;
@@ -229,6 +233,8 @@ describe('useCall', () => {
         expect(result.current.isMuted).toBe(false);
         expect(result.current.remoteStream).toBeNull();
         expect(result.current.remoteScreenStream).toBeNull();
+        expect(result.current.isRemoteScreenAvailable).toBe(false);
+        expect(result.current.isWatchingRemoteScreen).toBe(false);
     });
 
     // УБРАЛИ async и waitFor
@@ -1582,6 +1588,40 @@ describe('useCall', () => {
             });
 
             expect(result.current.remoteScreenStream).toEqual({ id: 'remote-screen-second' });
+        });
+
+        it('exposes remote screen availability separately from the watched stream and actions', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            const answerHandler = callChannel.on.mock.calls.find((c: any[]) => c[0] === 'answer')?.[1];
+
+            act(() => {
+                answerHandler({ sdp: 'answer-sdp', from_username: 'caller' });
+                service.onRemoteScreenAvailabilityChange?.(true);
+            });
+            expect(result.current.isRemoteScreenAvailable).toBe(true);
+            expect(result.current.remoteScreenStream).toBeNull();
+
+            await act(async () => {
+                await result.current.watchRemoteScreen();
+            });
+            expect(service.watchRemoteScreen).toHaveBeenCalledTimes(1);
+
+            act(() => service.onRemoteScreenWatchStateChange?.(true));
+            expect(result.current.isWatchingRemoteScreen).toBe(true);
+
+            await act(async () => {
+                await result.current.stopWatchingRemoteScreen();
+            });
+            expect(service.stopWatchingRemoteScreen).toHaveBeenCalledTimes(1);
+
+            act(() => service.onRemoteScreenWatchStateChange?.(false));
+            expect(result.current.isWatchingRemoteScreen).toBe(false);
+            expect(result.current.isRemoteScreenAvailable).toBe(true);
         });
 
         it('active-call offer is handled as renegotiation without leaving active status', () => {

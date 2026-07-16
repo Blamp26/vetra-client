@@ -1127,9 +1127,17 @@ body[data-vt-shell-resizing="true"] {
   }
 
   .screen-share-framed-tile {
+    appearance: none;
     border: 1px solid color-mix(in srgb, var(--border) 82%, transparent 18%);
     border-radius: 8px;
     background: color-mix(in srgb, var(--card) 68%, var(--sidebar) 32%);
+    color: var(--foreground);
+    text-align: left;
+  }
+
+  .screen-share-framed-tile:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 
   .screen-share-framed-tile:first-child {

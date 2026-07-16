@@ -14,6 +14,8 @@ interface ActiveCallDockProps {
   isScreenSharing: boolean;
   isScreenShareUpdating: boolean;
   isRemoteScreenLoading: boolean;
+  isRemoteScreenAvailable: boolean;
+  isWatchingRemoteScreen: boolean;
   callIssue: CallIssue | null;
   remoteScreenStream: MediaStream | null;
   localScreenStream: MediaStream | null;
@@ -21,6 +23,8 @@ interface ActiveCallDockProps {
   onMuteToggle: () => void;
   onStartScreenShare: () => Promise<void>;
   onStopScreenShare: () => void;
+  onWatchRemoteScreen: () => Promise<void>;
+  onStopWatchingRemoteScreen: () => Promise<void>;
   onHangUp: () => void;
 }
 
@@ -69,6 +73,8 @@ export function ActiveCallDock({
   isScreenSharing,
   isScreenShareUpdating,
   isRemoteScreenLoading,
+  isRemoteScreenAvailable,
+  isWatchingRemoteScreen,
   callIssue,
   remoteScreenStream,
   localScreenStream,
@@ -76,6 +82,8 @@ export function ActiveCallDock({
   onMuteToggle,
   onStartScreenShare,
   onStopScreenShare,
+  onWatchRemoteScreen,
+  onStopWatchingRemoteScreen,
   onHangUp,
 }: ActiveCallDockProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -83,7 +91,7 @@ export function ActiveCallDock({
   const [controlsVisible, setControlsVisible] = useState(false);
   const [isShareExpanded, setIsShareExpanded] = useState(false);
   const displayIssue = normalizeCallIssue(callIssue);
-  const hasScreenShare = isRemoteScreenLoading || Boolean(remoteScreenStream) || Boolean(localScreenStream) || isScreenSharing;
+  const hasScreenShare = isRemoteScreenAvailable || Boolean(localScreenStream) || isScreenSharing;
   const statusLabel = getCallStatusLabel({
     status: callStatus,
     diagnostics,
@@ -134,6 +142,11 @@ export function ActiveCallDock({
     onMouseLeave: () => setControlsVisible(false),
   };
 
+  const collapseShare = async () => {
+    if (isWatchingRemoteScreen) await onStopWatchingRemoteScreen();
+    setIsShareExpanded(false);
+  };
+
   if (!hasScreenShare) {
     return (
       <section
@@ -177,6 +190,7 @@ export function ActiveCallDock({
             onStartScreenShare={onStartScreenShare}
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
+            isExpanded={false}
             onToggleFullscreen={undefined}
           />
         </div>
@@ -205,9 +219,13 @@ export function ActiveCallDock({
           <div className="screen-share-framed-layout flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10" data-testid="screen-share-framed-layout">
             <div className="screen-share-framed-row grid w-full max-w-[1120px] grid-cols-3 gap-3" data-testid="screen-share-framed-row">
               <ScreenShareFrame
-                stream={remoteScreenStream ?? localScreenStream}
-                sharerName={remoteScreenStream ? remoteUsername : "You"}
-                isLoading={isRemoteScreenLoading || isScreenSharing}
+                stream={isRemoteScreenAvailable ? (isWatchingRemoteScreen ? remoteScreenStream : null) : localScreenStream}
+                sharerName={isRemoteScreenAvailable ? remoteUsername : "You"}
+                isRemote={isRemoteScreenAvailable}
+                isWatching={isWatchingRemoteScreen}
+                isLoading={isRemoteScreenLoading}
+                onWatch={async () => { setIsShareExpanded(true); await onWatchRemoteScreen(); }}
+                onExpand={() => setIsShareExpanded(true)}
               />
               <FramedParticipantTile name="You" isMuted={isMuted} />
               <FramedParticipantTile name={remoteUsername} />
@@ -225,7 +243,7 @@ export function ActiveCallDock({
               onStartScreenShare={onStartScreenShare}
               onStopScreenShare={onStopScreenShare}
               onHangUp={onHangUp}
-              onToggleExpanded={() => setIsShareExpanded(true)}
+              isExpanded={false}
             />
           </div>
         </div>
@@ -248,7 +266,7 @@ export function ActiveCallDock({
         onKeyDown={(event) => { if (event.key === "Escape" && document.fullscreenElement === stageRef.current) void document.exitFullscreen?.(); }}
         tabIndex={-1}
       >
-        {remoteScreenStream ? (
+        {remoteScreenStream && isWatchingRemoteScreen ? (
           <StreamVideo stream={remoteScreenStream} label={`${remoteUsername} screen share`} className="absolute inset-0 h-full w-full object-contain" muted testId="remote-screen-share-video" />
         ) : localScreenStream ? (
           <StreamVideo stream={localScreenStream} label="Your screen share" className="absolute inset-0 h-full w-full object-contain" muted testId="local-screen-share-video" />
@@ -273,7 +291,8 @@ export function ActiveCallDock({
             onStartScreenShare={onStartScreenShare}
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
-            onToggleExpanded={isFullscreen ? undefined : () => setIsShareExpanded(false)}
+            isExpanded
+            onToggleExpanded={isFullscreen ? undefined : () => { void collapseShare(); }}
             onToggleFullscreen={toggleFullscreen}
           />
         </div>
@@ -284,32 +303,64 @@ export function ActiveCallDock({
 
 function CallControls({
   className,
-  isMuted, isScreenSharing, isScreenShareUpdating, isFullscreen, onMuteToggle, onStartScreenShare, onStopScreenShare, onHangUp, onToggleExpanded, onToggleFullscreen, onMouseEnter, onMouseLeave,
+  isMuted, isScreenSharing, isScreenShareUpdating, isFullscreen, isExpanded, onMuteToggle, onStartScreenShare, onStopScreenShare, onHangUp, onToggleExpanded, onToggleFullscreen, onMouseEnter, onMouseLeave,
 }: {
   className?: string;
-  isMuted: boolean; isScreenSharing: boolean; isScreenShareUpdating: boolean; isFullscreen: boolean; onMuteToggle: () => void; onStartScreenShare: () => Promise<void>; onStopScreenShare: () => void; onHangUp: () => void; onToggleExpanded?: () => void; onToggleFullscreen?: () => Promise<void>; onMouseEnter?: () => void; onMouseLeave?: () => void;
+  isMuted: boolean; isScreenSharing: boolean; isScreenShareUpdating: boolean; isFullscreen: boolean; isExpanded: boolean; onMuteToggle: () => void; onStartScreenShare: () => Promise<void>; onStopScreenShare: () => void; onHangUp: () => void; onToggleExpanded?: () => void; onToggleFullscreen?: () => Promise<void>; onMouseEnter?: () => void; onMouseLeave?: () => void;
 }) {
   return <div className={cn("call-controls flex items-center justify-center gap-2 rounded-lg bg-black/60 p-2 text-white", className)} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
     <button className={cn("vt-call-control h-10 w-10 p-0", isMuted && "bg-destructive/20 text-destructive")} onClick={onMuteToggle} aria-label={isMuted ? "Unmute" : "Mute"}>{isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
     <button className="vt-call-control h-10 w-10 p-0" onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }} aria-label={isScreenShareUpdating ? "Updating screen share" : isScreenSharing ? "Stop sharing" : "Share screen"} disabled={isScreenShareUpdating}>{isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}</button>
-    {onToggleExpanded && <button className="vt-call-control h-10 w-10 p-0" onClick={onToggleExpanded} aria-label={isFullscreen ? "Return to framed call" : "Expand share"}>{isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>}
+    {onToggleExpanded && <button className="vt-call-control h-10 w-10 p-0" onClick={onToggleExpanded} aria-label={isFullscreen ? "Return to framed call" : isExpanded ? "Return to framed call" : "Expand share"}>{isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>}
     {onToggleFullscreen && <button className="vt-call-control h-10 w-10 p-0" onClick={() => { void onToggleFullscreen(); }} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>{isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button>}
     <button className="vt-call-control vt-call-control--danger h-10 w-10 p-0" onClick={onHangUp} aria-label="Hang Up"><PhoneOff className="h-4 w-4" /></button>
   </div>;
 }
 
-function ScreenShareFrame({ stream, sharerName, isLoading }: { stream: MediaStream | null; sharerName: string; isLoading: boolean }) {
-  return (
-    <div className="screen-share-framed-tile relative aspect-video min-w-0 overflow-hidden" data-testid="screen-share-framed-tile">
-      {stream ? (
-        <StreamVideo stream={stream} label={`${sharerName} screen share`} className="absolute inset-0 h-full w-full object-contain" muted testId="screen-share-framed-video" />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground" data-testid="screen-share-framed-loading">
-          {isLoading ? "Connecting to screen share…" : "Screen share is starting…"}
-        </div>
-      )}
-      <span className="screen-share-framed-label absolute bottom-2 left-2 max-w-[calc(100%-16px)] truncate px-2 py-1 text-xs text-white">{sharerName} · Screen share</span>
+function ScreenShareFrame({
+  stream,
+  sharerName,
+  isRemote,
+  isWatching,
+  isLoading,
+  onWatch,
+  onExpand,
+}: {
+  stream: MediaStream | null;
+  sharerName: string;
+  isRemote: boolean;
+  isWatching: boolean;
+  isLoading: boolean;
+  onWatch: () => Promise<void>;
+  onExpand: () => void;
+}) {
+  const isWatchPlaceholder = isRemote && !isWatching;
+  const content = stream ? (
+    <StreamVideo stream={stream} label={`${sharerName} screen share`} className="absolute inset-0 h-full w-full object-contain" muted testId="screen-share-framed-video" />
+  ) : isWatchPlaceholder ? (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
+      <MonitorUp className="h-6 w-6" aria-hidden="true" />
+      <span>{sharerName}</span>
+      <span className="text-xs">Screen sharing</span>
+      <span className="text-xs font-medium text-foreground">Watch stream</span>
     </div>
+  ) : (
+    <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground" data-testid="screen-share-framed-loading">
+      {isLoading ? "Connecting to screen share…" : "Screen share is starting…"}
+    </div>
+  );
+
+  return (
+    <button
+      type="button"
+      className="screen-share-framed-tile relative aspect-video min-w-0 overflow-hidden text-left"
+      data-testid="screen-share-framed-tile"
+      aria-label={isWatchPlaceholder ? `Watch ${sharerName}'s screen share` : `${sharerName} screen share`}
+      onClick={() => { if (isWatchPlaceholder) void onWatch(); else onExpand(); }}
+    >
+      {content}
+      <span className="screen-share-framed-label absolute bottom-2 left-2 max-w-[calc(100%-16px)] truncate px-2 py-1 text-xs text-white">{sharerName} · Screen share</span>
+    </button>
   );
 }
 

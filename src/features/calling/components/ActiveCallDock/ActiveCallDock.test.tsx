@@ -8,15 +8,17 @@ function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = 
   const props: ComponentProps<typeof ActiveCallDock> = {
     remoteUsername: "Alice", seconds: 65, isMuted: false, isScreenSharing: false,
     isScreenShareUpdating: false, isRemoteScreenLoading: false, callIssue: null,
+    isRemoteScreenAvailable: false, isWatchingRemoteScreen: false,
     remoteScreenStream: null, localScreenStream: null,
     diagnostics: { connectionState: "connected", iceConnectionState: "connected", iceGatheringState: "complete", signalingState: "stable", selectedLocalCandidateType: "host" },
     onMuteToggle: vi.fn(), onStartScreenShare: vi.fn().mockResolvedValue(undefined),
-    onStopScreenShare: vi.fn(), onHangUp: vi.fn(), ...overrides,
+    onStopScreenShare: vi.fn(), onWatchRemoteScreen: vi.fn().mockResolvedValue(undefined),
+    onStopWatchingRemoteScreen: vi.fn().mockResolvedValue(undefined), onHangUp: vi.fn(), ...overrides,
   };
   return { props, ...render(<ActiveCallDock {...props} />) };
 }
 function stream(id: string) { return { id } as MediaStream; }
-function expandShare() { fireEvent.click(screen.getByRole("button", { name: "Expand share" })); }
+function expandShare() { fireEvent.click(screen.getByTestId("screen-share-framed-tile")); }
 
 describe("ActiveCallDock", () => {
   it("renders a substantial one-to-one voice stage instead of the rejected 88px header", () => {
@@ -52,7 +54,7 @@ describe("ActiveCallDock", () => {
   });
 
   it("renders default screen sharing as a framed tile layout", () => {
-    renderDock({ remoteScreenStream: stream("remote") });
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     const dock = screen.getByTestId("active-call-dock");
     expect(dock).toHaveClass("active-call-dock--framed", "h-[clamp(300px,42vh,480px)]");
     expect(screen.getByTestId("screen-share-framed-layout")).toBeInTheDocument();
@@ -68,13 +70,41 @@ describe("ActiveCallDock", () => {
     }
     expect(screen.getByTestId("active-call-dock-controls")).toBeInTheDocument();
     expect(row.compareDocumentPosition(screen.getByTestId("active-call-dock-controls")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Expand share" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Expand share" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("screen-share-stage")).not.toBeInTheDocument();
     expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();
   });
 
+  it("renders an available remote share as a keyboard-accessible placeholder and opens expanded viewing", async () => {
+    const onWatchRemoteScreen = vi.fn().mockResolvedValue(undefined);
+    renderDock({ isRemoteScreenAvailable: true, onWatchRemoteScreen });
+    const tile = screen.getByTestId("screen-share-framed-tile");
+    expect(tile).toHaveAttribute("aria-label", "Watch Alice's screen share");
+    expect(within(tile).getByText("Screen sharing")).toBeInTheDocument();
+    expect(within(tile).getByText("Watch stream")).toBeInTheDocument();
+    expect(screen.queryByTestId("screen-share-framed-video")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(tile, { key: "Enter" });
+    fireEvent.click(tile);
+    await waitFor(() => expect(onWatchRemoteScreen).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+  });
+
+  it("stops remote watching when returning from expanded in-call viewing", async () => {
+    const onStopWatchingRemoteScreen = vi.fn().mockResolvedValue(undefined);
+    renderDock({
+      isRemoteScreenAvailable: true,
+      isWatchingRemoteScreen: true,
+      remoteScreenStream: stream("remote"),
+      onStopWatchingRemoteScreen,
+    });
+    fireEvent.click(screen.getByTestId("screen-share-framed-tile"));
+    fireEvent.click(screen.getByRole("button", { name: "Return to framed call" }));
+    await waitFor(() => expect(onStopWatchingRemoteScreen).toHaveBeenCalledTimes(1));
+  });
+
   it("keeps controls hidden by default and exposes the visible-state contract on hover", () => {
-    renderDock({ remoteScreenStream: stream("remote") });
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     expandShare();
     expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
     expect(screen.queryByTestId("screen-share-framed-layout")).not.toBeInTheDocument();
@@ -89,7 +119,7 @@ describe("ActiveCallDock", () => {
   });
 
   it("reveals the same controls contract through keyboard focus", () => {
-    renderDock({ remoteScreenStream: stream("remote") });
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     expandShare();
     const stage = screen.getByTestId("screen-share-stage");
     fireEvent.focus(stage);
@@ -99,7 +129,7 @@ describe("ActiveCallDock", () => {
   });
 
   it("keeps a local preview secondary when both streams exist", () => {
-    renderDock({ remoteScreenStream: stream("remote"), localScreenStream: stream("local"), isScreenSharing: true });
+    renderDock({ remoteScreenStream: stream("remote"), localScreenStream: stream("local"), isScreenSharing: true, isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     expandShare();
     expect(screen.getByTestId("local-screen-share-pip")).toHaveClass("h-[90px]", "w-[160px]");
   });
@@ -111,7 +141,7 @@ describe("ActiveCallDock", () => {
     Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: requestFullscreen });
     Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
     Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
-    renderDock({ remoteScreenStream: stream("remote") });
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     expandShare();
     fireEvent.mouseEnter(screen.getByTestId("screen-share-stage"));
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
@@ -123,7 +153,7 @@ describe("ActiveCallDock", () => {
 
   it("handles fullscreenerror without leaving a stale fullscreen state", async () => {
     Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: vi.fn(() => { document.dispatchEvent(new Event("fullscreenerror")); return Promise.reject(new Error("unsupported")); }) });
-    renderDock({ remoteScreenStream: stream("remote") });
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     expandShare();
     fireEvent.mouseEnter(screen.getByTestId("screen-share-stage"));
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
@@ -131,13 +161,13 @@ describe("ActiveCallDock", () => {
   });
 
   it("clears fullscreen state when the screen share stream ends", async () => {
-    const { rerender, props } = renderDock({ remoteScreenStream: stream("remote") });
-    rerender(<ActiveCallDock {...props} remoteScreenStream={null} isRemoteScreenLoading={false} />);
+    const { rerender, props } = renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    rerender(<ActiveCallDock {...props} remoteScreenStream={null} isRemoteScreenLoading={false} isRemoteScreenAvailable={false} isWatchingRemoteScreen={false} />);
     await waitFor(() => expect(screen.getByTestId("active-call-voice-surface")).toBeInTheDocument());
   });
 
   it("keeps the screen-share button disabled while updating", () => {
-    renderDock({ remoteScreenStream: stream("remote"), isScreenShareUpdating: true });
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true, isScreenShareUpdating: true });
     expect(screen.getByRole("button", { name: "Updating screen share" })).toBeDisabled();
   });
 

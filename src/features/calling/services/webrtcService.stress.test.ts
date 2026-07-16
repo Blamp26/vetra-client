@@ -547,6 +547,10 @@ class ServicePeer {
         await this.service.startScreenShare();
     }
 
+    watchRemoteScreen(): Promise<void> {
+        return this.service.watchRemoteScreen();
+    }
+
     stopScreenShare(): Promise<void> {
         return this.service.stopScreenShare();
     }
@@ -690,6 +694,8 @@ describe('WebRTCService stress integration', () => {
 
             for (let cycle = 0; cycle < 5; cycle += 1) {
                 await caller.startScreenShare();
+                await waitUntil(() => expect(callee.internal.remoteScreenAvailable).toBe(true));
+                await callee.watchRemoteScreen();
                 await waitUntil(() => {
                     expect(callee.remoteScreenStream).not.toBeNull();
                     expect(callee.remoteScreenLoading).toBe(false);

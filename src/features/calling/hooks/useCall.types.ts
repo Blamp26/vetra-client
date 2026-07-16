@@ -62,6 +62,8 @@ export interface UseCallReturn {
     isScreenSharing: boolean;
     isScreenShareUpdating: boolean;
     isRemoteScreenLoading: boolean;
+    isRemoteScreenAvailable: boolean;
+    isWatchingRemoteScreen: boolean;
     remoteStream: MediaStream | null;
     remoteScreenStream: MediaStream | null;
     localScreenStream: MediaStream | null;
@@ -72,6 +74,8 @@ export interface UseCallReturn {
     startCall: (targetUserId: ResourceRef, targetUsername?: string) => void;
     startScreenShare: () => Promise<void>;
     stopScreenShare: () => void;
+    watchRemoteScreen: () => Promise<void>;
+    stopWatchingRemoteScreen: () => Promise<void>;
     acceptCall: () => void;
     rejectCall: () => void;
     hangUp: () => void;

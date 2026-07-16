@@ -412,6 +412,8 @@ export function ChatWindow({ activeChat, call }: Props) {
           isScreenSharing={call.isScreenSharing}
           isScreenShareUpdating={call.isScreenShareUpdating}
           isRemoteScreenLoading={call.isRemoteScreenLoading}
+          isRemoteScreenAvailable={call.isRemoteScreenAvailable}
+          isWatchingRemoteScreen={call.isWatchingRemoteScreen}
           callIssue={call.callIssue}
           remoteScreenStream={call.remoteScreenStream}
           localScreenStream={call.localScreenStream}
@@ -419,6 +421,8 @@ export function ChatWindow({ activeChat, call }: Props) {
           onMuteToggle={call.toggleMute}
           onStartScreenShare={call.startScreenShare}
           onStopScreenShare={call.stopScreenShare}
+          onWatchRemoteScreen={call.watchRemoteScreen}
+          onStopWatchingRemoteScreen={call.stopWatchingRemoteScreen}
           onHangUp={call.hangUp}
         />
       )}
