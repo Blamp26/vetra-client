@@ -12,6 +12,10 @@ function isTauriDesktopRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+function isWindowsDesktopRuntime(): boolean {
+  return isTauriDesktopRuntime() && typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent);
+}
+
 interface ActiveCallDockProps {
   remoteUsername: string;
   callStatus?: CallStatus;
@@ -94,6 +98,9 @@ export function ActiveCallDock({
   const isMountedRef = useRef(true);
   const nativeFullscreenOwnedRef = useRef(false);
   const fullscreenPresentationRef = useRef<"share" | "voice" | null>(null);
+  const capturedResizableRef = useRef<boolean | null>(null);
+  const capturedMaximizedRef = useRef<boolean | null>(null);
+  const nativeStateRestorePromiseRef = useRef<Promise<void> | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFullscreenPending, setIsFullscreenPending] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
@@ -110,6 +117,26 @@ export function ActiveCallDock({
   });
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
+
+  const restoreCapturedNativeWindowState = async (currentWindow: ReturnType<typeof getCurrentWindow>, nativeFullscreen: boolean) => {
+    if (!isWindowsDesktopRuntime() || capturedResizableRef.current === null || capturedMaximizedRef.current === null) return;
+    if (nativeStateRestorePromiseRef.current) return nativeStateRestorePromiseRef.current;
+
+    const wasResizable = capturedResizableRef.current;
+    const wasMaximized = capturedMaximizedRef.current;
+    const restoration = (async () => {
+      if (nativeFullscreen) return;
+      await currentWindow.setResizable(wasResizable);
+      if (wasMaximized) await currentWindow.maximize();
+      capturedResizableRef.current = null;
+      capturedMaximizedRef.current = null;
+    })();
+    const trackedRestoration = restoration.finally(() => {
+      if (nativeStateRestorePromiseRef.current === trackedRestoration) nativeStateRestorePromiseRef.current = null;
+    });
+    nativeStateRestorePromiseRef.current = trackedRestoration;
+    return trackedRestoration;
+  };
 
   useEffect(() => {
     if (!isFullscreen || typeof document === "undefined") return;
@@ -163,10 +190,17 @@ export function ActiveCallDock({
         void currentWindow.isFullscreen()
           .then((fullscreen) => {
             if (disposed || !isMountedRef.current || fullscreen) return;
-            nativeFullscreenOwnedRef.current = false;
-            fullscreenPresentationRef.current = null;
-            setIsFullscreenPending(false);
-            setIsFullscreen(false);
+            void restoreCapturedNativeWindowState(currentWindow, false)
+              .catch((error: unknown) => {
+                if (!disposed) console.warn("[ActiveCallDock] Failed to restore native window state", error);
+              })
+              .finally(() => {
+                if (disposed || !isMountedRef.current) return;
+                nativeFullscreenOwnedRef.current = false;
+                fullscreenPresentationRef.current = null;
+                setIsFullscreenPending(false);
+                setIsFullscreen(false);
+              });
           })
           .catch((error: unknown) => {
             if (!disposed) console.warn("[ActiveCallDock] Failed to synchronize native fullscreen state", error);
@@ -204,11 +238,20 @@ export function ActiveCallDock({
   useEffect(() => {
     if (!isTauriDesktopRuntime()) return;
     return () => {
-      if (!nativeFullscreenOwnedRef.current) return;
+      const currentWindow = getCurrentWindow();
+      if (!nativeFullscreenOwnedRef.current && capturedResizableRef.current === null) return;
       nativeFullscreenOwnedRef.current = false;
-      void getCurrentWindow().setFullscreen(false).catch((error: unknown) => {
-        console.warn("[ActiveCallDock] Failed to exit native fullscreen during cleanup", error);
-      });
+      void (async () => {
+        try { await currentWindow.setFullscreen(false); } catch (error) {
+          console.warn("[ActiveCallDock] Failed to exit native fullscreen during cleanup", error);
+        }
+        try {
+          const fullscreen = await currentWindow.isFullscreen();
+          if (!fullscreen) await restoreCapturedNativeWindowState(currentWindow, false);
+        } catch (error) {
+          console.warn("[ActiveCallDock] Failed to restore native fullscreen during cleanup", error);
+        }
+      })();
     };
   }, []);
 
@@ -219,15 +262,26 @@ export function ActiveCallDock({
       if (isTauriDesktopRuntime()) {
         const currentWindow = getCurrentWindow();
         await currentWindow.setFullscreen(false);
+        const fullscreen = await currentWindow.isFullscreen();
+        if (fullscreen) {
+          if (isMountedRef.current) setIsFullscreen(true);
+          return;
+        }
+        await restoreCapturedNativeWindowState(currentWindow, false);
         nativeFullscreenOwnedRef.current = false;
         fullscreenPresentationRef.current = null;
-        const fullscreen = await currentWindow.isFullscreen();
-        if (isMountedRef.current) setIsFullscreen(fullscreen);
+        if (isMountedRef.current) setIsFullscreen(false);
       }
     } catch (error) {
       if (isTauriDesktopRuntime()) {
         try {
-          const fullscreen = await getCurrentWindow().isFullscreen();
+          const currentWindow = getCurrentWindow();
+          const fullscreen = await currentWindow.isFullscreen();
+          if (!fullscreen) {
+            await restoreCapturedNativeWindowState(currentWindow, false);
+            nativeFullscreenOwnedRef.current = false;
+            fullscreenPresentationRef.current = null;
+          }
           if (isMountedRef.current) setIsFullscreen(fullscreen);
         } catch (syncError) {
           console.warn("[ActiveCallDock] Failed to synchronize native fullscreen state", syncError);
@@ -295,14 +349,40 @@ export function ActiveCallDock({
       const targetFullscreen = !isFullscreen;
       try {
         const currentWindow = getCurrentWindow();
+        if (targetFullscreen && isWindowsDesktopRuntime()) {
+          if (capturedResizableRef.current === null && capturedMaximizedRef.current === null) {
+            capturedResizableRef.current = await currentWindow.isResizable();
+            capturedMaximizedRef.current = await currentWindow.isMaximized();
+          }
+          if (capturedMaximizedRef.current) await currentWindow.unmaximize();
+          await currentWindow.setResizable(false);
+        }
+        if (!targetFullscreen && isWindowsDesktopRuntime()) {
+          await currentWindow.setFullscreen(false);
+          const fullscreen = await currentWindow.isFullscreen();
+          if (fullscreen) {
+            if (isMountedRef.current) setIsFullscreen(true);
+            return;
+          }
+          await restoreCapturedNativeWindowState(currentWindow, false);
+          nativeFullscreenOwnedRef.current = false;
+          fullscreenPresentationRef.current = null;
+          if (isMountedRef.current) setIsFullscreen(false);
+          return;
+        }
         await currentWindow.setFullscreen(targetFullscreen);
-        nativeFullscreenOwnedRef.current = targetFullscreen;
-        fullscreenPresentationRef.current = targetFullscreen ? (hasScreenShare ? "share" : "voice") : null;
         const fullscreen = await currentWindow.isFullscreen();
+        nativeFullscreenOwnedRef.current = fullscreen;
+        fullscreenPresentationRef.current = fullscreen ? (hasScreenShare ? "share" : "voice") : null;
         if (isMountedRef.current) setIsFullscreen(fullscreen);
       } catch (error) {
         try {
-          const fullscreen = await getCurrentWindow().isFullscreen();
+          const currentWindow = getCurrentWindow();
+          try { await currentWindow.setFullscreen(false); } catch { /* best effort after partial entry */ }
+          const fullscreen = await currentWindow.isFullscreen();
+          if (!fullscreen) await restoreCapturedNativeWindowState(currentWindow, false);
+          nativeFullscreenOwnedRef.current = fullscreen;
+          fullscreenPresentationRef.current = fullscreen ? (hasScreenShare ? "share" : "voice") : null;
           if (isMountedRef.current) setIsFullscreen(fullscreen);
         } catch (syncError) {
           console.warn("[ActiveCallDock] Failed to synchronize native fullscreen state", syncError);
