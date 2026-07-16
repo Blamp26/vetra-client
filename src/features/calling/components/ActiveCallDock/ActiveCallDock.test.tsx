@@ -76,17 +76,30 @@ describe("ActiveCallDock", () => {
   });
 
   it("renders an available remote share as a keyboard-accessible placeholder and opens expanded viewing", async () => {
-    const onWatchRemoteScreen = vi.fn().mockResolvedValue(undefined);
+    const onWatchRemoteScreen = vi.fn(() => new Promise<void>(() => undefined));
     renderDock({ isRemoteScreenAvailable: true, onWatchRemoteScreen });
     const tile = screen.getByTestId("screen-share-framed-tile");
     expect(tile).toHaveAttribute("aria-label", "Watch Alice's screen share");
     expect(within(tile).getByText("Screen sharing")).toBeInTheDocument();
     expect(within(tile).getByText("Watch stream")).toBeInTheDocument();
     expect(screen.queryByTestId("screen-share-framed-video")).not.toBeInTheDocument();
+    expect(within(tile).getByText("Alice")).toHaveClass("remote-screen-placeholder__username");
+    expect(within(tile).getByText("Screen sharing")).toHaveClass("text-white/65");
+    expect(within(tile).getByText("Watch stream")).toHaveClass("text-white");
 
     fireEvent.keyDown(tile, { key: "Enter" });
     fireEvent.click(tile);
     await waitFor(() => expect(onWatchRemoteScreen).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+  });
+
+  it("prevents duplicate remote watch clicks while the request is pending", () => {
+    const onWatchRemoteScreen = vi.fn(() => new Promise<void>(() => undefined));
+    renderDock({ isRemoteScreenAvailable: true, onWatchRemoteScreen });
+    const tile = screen.getByTestId("screen-share-framed-tile");
+    fireEvent.click(tile);
+    fireEvent.click(tile);
+    expect(onWatchRemoteScreen).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
   });
 

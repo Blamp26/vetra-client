@@ -1140,6 +1140,10 @@ body[data-vt-shell-resizing="true"] {
     outline-offset: 2px;
   }
 
+  .screen-share-framed-tile:has(.remote-screen-placeholder):hover {
+    background: color-mix(in srgb, #ffffff 10%, #0b0d0c 90%);
+  }
+
   .screen-share-framed-tile:first-child {
     background: #0b0d0c;
   }

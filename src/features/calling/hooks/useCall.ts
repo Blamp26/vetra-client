@@ -872,7 +872,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             await webrtcRef.current?.watchRemoteScreen();
         } catch (err) {
             console.warn('[useCall] Failed to watch remote screen share', err);
-            setCallIssue(buildCallIssue('Unable to watch the screen share. Try again.'));
+            setCallIssue(buildCallIssue(err instanceof Error && err.message ? err.message : 'Could not load screen share. Try again.'));
         }
     }, []);
 

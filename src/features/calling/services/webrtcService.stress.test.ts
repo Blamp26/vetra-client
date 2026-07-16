@@ -96,6 +96,7 @@ type FakeSender = {
 type FakeTransceiver = {
     direction: RTCRtpTransceiverDirection;
     sender: FakeSender;
+    receiver: FakeReceiver;
 };
 
 let pendingPeerConnection: FakeRTCPeerConnection | null = null;
@@ -117,6 +118,7 @@ class FakeRTCPeerConnection {
     public receivers: FakeReceiver[] = [];
     public screenSender: FakeSender | null = null;
     public screenTransceiver: FakeTransceiver | null = null;
+    public remoteScreenTransceiver: FakeTransceiver | null = null;
     public addTrack = vi.fn((track: FakeMediaStreamTrack) => {
         const sender: FakeSender = {
             track,
@@ -136,6 +138,7 @@ class FakeRTCPeerConnection {
         const transceiver: FakeTransceiver = {
             direction: init?.direction ?? 'sendrecv',
             sender,
+            receiver: { track: new FakeMediaStreamTrack('video', { muted: true }) },
         };
         this.screenSender = sender;
         this.screenTransceiver = transceiver;
@@ -171,7 +174,7 @@ class FakeRTCPeerConnection {
     public setRemoteDescription = vi.fn(async (desc: RTCSessionDescriptionInit) => {
         this.remoteDescription = desc;
         this.signalingState = desc.type === 'offer' ? 'have-remote-offer' : 'stable';
-        if (desc.type === 'offer') {
+        if (desc.type === 'offer' || desc.type === 'answer') {
             this.syncScreenReceiverFromPartner();
         }
         this.maybeMarkConnected();
@@ -224,14 +227,34 @@ class FakeRTCPeerConnection {
             return;
         }
 
-        const remoteTrack = new FakeMediaStreamTrack('video', { muted: true });
-        this.receivers = [{ track: remoteTrack }];
+        const remoteTrack = this.remoteScreenTransceiver?.receiver.track
+            ?? new FakeMediaStreamTrack('video', { muted: true });
+        this.remoteScreenTransceiver ??= {
+            direction: 'inactive',
+            sender: {
+                track: null,
+                replaceTrack: vi.fn(async () => undefined),
+            },
+            receiver: { track: remoteTrack },
+        };
+        this.receivers = [this.remoteScreenTransceiver.receiver];
         const stream = new FakeMediaStream([remoteTrack]);
-        this.ontrack?.({ track: remoteTrack, streams: [stream] } as unknown as RTCTrackEvent);
+        this.ontrack?.({
+            track: remoteTrack,
+            streams: [stream],
+            transceiver: this.remoteScreenTransceiver,
+        } as unknown as RTCTrackEvent);
         setTimeout(() => {
             remoteTrack.setMuted(false);
         }, 0);
     }
+
+    public getTransceivers = vi.fn(() => {
+        return [
+            ...(this.screenTransceiver ? [this.screenTransceiver] : []),
+            ...(this.remoteScreenTransceiver ? [this.remoteScreenTransceiver] : []),
+        ];
+    });
 
     private maybeMarkConnected(): void {
         if (!this.localDescription || !this.remoteDescription) return;
@@ -695,7 +718,7 @@ describe('WebRTCService stress integration', () => {
             for (let cycle = 0; cycle < 5; cycle += 1) {
                 await caller.startScreenShare();
                 await waitUntil(() => expect(callee.internal.remoteScreenAvailable).toBe(true));
-                await callee.watchRemoteScreen();
+                void callee.watchRemoteScreen();
                 await waitUntil(() => {
                     expect(callee.remoteScreenStream).not.toBeNull();
                     expect(callee.remoteScreenLoading).toBe(false);
