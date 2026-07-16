@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Maximize, Mic, MicOff, Minimize, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
@@ -35,6 +36,12 @@ interface ActiveCallDockProps {
   onStopScreenShare: () => void;
   onWatchRemoteScreen: () => Promise<void>;
   onHangUp: () => void;
+}
+
+interface WindowsFullscreenExitState {
+  fullscreen: boolean;
+  maximized: boolean;
+  resizable: boolean;
 }
 
 function StreamVideo({
@@ -100,7 +107,7 @@ export function ActiveCallDock({
   const fullscreenPresentationRef = useRef<"share" | "voice" | null>(null);
   const capturedResizableRef = useRef<boolean | null>(null);
   const capturedMaximizedRef = useRef<boolean | null>(null);
-  const nativeStateRestorePromiseRef = useRef<Promise<void> | null>(null);
+  const nativeStateRestorePromiseRef = useRef<Promise<boolean> | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFullscreenPending, setIsFullscreenPending] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
@@ -120,7 +127,6 @@ export function ActiveCallDock({
 
   const restoreCapturedNativeWindowState = async (currentWindow: ReturnType<typeof getCurrentWindow>, nativeFullscreen: boolean) => {
     if (!isWindowsDesktopRuntime() || capturedResizableRef.current === null || capturedMaximizedRef.current === null) return;
-    if (nativeStateRestorePromiseRef.current) return nativeStateRestorePromiseRef.current;
 
     const wasResizable = capturedResizableRef.current;
     const wasMaximized = capturedMaximizedRef.current;
@@ -130,6 +136,36 @@ export function ActiveCallDock({
       if (wasMaximized) await currentWindow.maximize();
       capturedResizableRef.current = null;
       capturedMaximizedRef.current = null;
+    })();
+    return restoration;
+  };
+
+  const restoreNativeFullscreen = async (currentWindow: ReturnType<typeof getCurrentWindow>) => {
+    if (nativeStateRestorePromiseRef.current) return nativeStateRestorePromiseRef.current;
+
+    const restoration = (async (): Promise<boolean> => {
+      if (isWindowsDesktopRuntime() && capturedResizableRef.current !== null && capturedMaximizedRef.current !== null) {
+        try {
+          const state = await invoke<WindowsFullscreenExitState>("exit_call_fullscreen_windows", {
+            wasResizable: capturedResizableRef.current,
+            wasMaximized: capturedMaximizedRef.current,
+          });
+          if (!state.fullscreen) {
+            capturedResizableRef.current = null;
+            capturedMaximizedRef.current = null;
+          }
+          return state.fullscreen;
+        } catch (error) {
+          console.warn("[ActiveCallDock] Atomic Windows fullscreen exit failed; using fallback", error);
+        }
+      }
+
+      try { await currentWindow.setFullscreen(false); } catch (error) {
+        console.warn("[ActiveCallDock] Failed to exit native fullscreen", error);
+      }
+      const fullscreen = await currentWindow.isFullscreen();
+      if (!fullscreen) await restoreCapturedNativeWindowState(currentWindow, false);
+      return fullscreen;
     })();
     const trackedRestoration = restoration.finally(() => {
       if (nativeStateRestorePromiseRef.current === trackedRestoration) nativeStateRestorePromiseRef.current = null;
@@ -190,7 +226,10 @@ export function ActiveCallDock({
         void currentWindow.isFullscreen()
           .then((fullscreen) => {
             if (disposed || !isMountedRef.current || fullscreen) return;
-            void restoreCapturedNativeWindowState(currentWindow, false)
+            const restoration = isWindowsDesktopRuntime()
+              ? restoreNativeFullscreen(currentWindow)
+              : Promise.resolve(false);
+            void restoration
               .catch((error: unknown) => {
                 if (!disposed) console.warn("[ActiveCallDock] Failed to restore native window state", error);
               })
@@ -242,12 +281,8 @@ export function ActiveCallDock({
       if (!nativeFullscreenOwnedRef.current && capturedResizableRef.current === null) return;
       nativeFullscreenOwnedRef.current = false;
       void (async () => {
-        try { await currentWindow.setFullscreen(false); } catch (error) {
-          console.warn("[ActiveCallDock] Failed to exit native fullscreen during cleanup", error);
-        }
         try {
-          const fullscreen = await currentWindow.isFullscreen();
-          if (!fullscreen) await restoreCapturedNativeWindowState(currentWindow, false);
+          await restoreNativeFullscreen(currentWindow);
         } catch (error) {
           console.warn("[ActiveCallDock] Failed to restore native fullscreen during cleanup", error);
         }
@@ -261,13 +296,11 @@ export function ActiveCallDock({
     try {
       if (isTauriDesktopRuntime()) {
         const currentWindow = getCurrentWindow();
-        await currentWindow.setFullscreen(false);
-        const fullscreen = await currentWindow.isFullscreen();
+        const fullscreen = await restoreNativeFullscreen(currentWindow);
         if (fullscreen) {
           if (isMountedRef.current) setIsFullscreen(true);
           return;
         }
-        await restoreCapturedNativeWindowState(currentWindow, false);
         nativeFullscreenOwnedRef.current = false;
         fullscreenPresentationRef.current = null;
         if (isMountedRef.current) setIsFullscreen(false);
@@ -276,9 +309,8 @@ export function ActiveCallDock({
       if (isTauriDesktopRuntime()) {
         try {
           const currentWindow = getCurrentWindow();
-          const fullscreen = await currentWindow.isFullscreen();
+          const fullscreen = await restoreNativeFullscreen(currentWindow);
           if (!fullscreen) {
-            await restoreCapturedNativeWindowState(currentWindow, false);
             nativeFullscreenOwnedRef.current = false;
             fullscreenPresentationRef.current = null;
           }
@@ -358,13 +390,11 @@ export function ActiveCallDock({
           await currentWindow.setResizable(false);
         }
         if (!targetFullscreen && isWindowsDesktopRuntime()) {
-          await currentWindow.setFullscreen(false);
-          const fullscreen = await currentWindow.isFullscreen();
+          const fullscreen = await restoreNativeFullscreen(currentWindow);
           if (fullscreen) {
             if (isMountedRef.current) setIsFullscreen(true);
             return;
           }
-          await restoreCapturedNativeWindowState(currentWindow, false);
           nativeFullscreenOwnedRef.current = false;
           fullscreenPresentationRef.current = null;
           if (isMountedRef.current) setIsFullscreen(false);
