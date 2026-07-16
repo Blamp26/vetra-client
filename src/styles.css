@@ -1086,6 +1086,45 @@ body[data-vt-shell-resizing="true"] {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
+  .active-call-dock--voice {
+    background: var(--card);
+  }
+
+  .active-call-dock--screen {
+    background: #000;
+  }
+
+  .screen-share-stage {
+    isolation: isolate;
+  }
+
+  .screen-share-stage__controls {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(6px);
+  }
+
+  .screen-share-stage:hover .screen-share-stage__controls,
+  .screen-share-stage:focus-within .screen-share-stage__controls,
+  .screen-share-stage[data-controls-visible="true"] .screen-share-stage__controls {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .screen-share-stage:fullscreen {
+    width: 100vw;
+    height: 100vh;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .screen-share-stage__controls {
+      transition: none;
+    }
+  }
+
   .vt-divider {
     border-color: var(--border);
   }

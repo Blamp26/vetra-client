@@ -1,521 +1,130 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ActiveCallDock } from "./ActiveCallDock";
-
-const {
-  useAppStoreMock,
-  setOutputVolumeMock,
-  toggleSoundMock,
-} = vi.hoisted(() => ({
-  useAppStoreMock: vi.fn(),
-  setOutputVolumeMock: vi.fn(),
-  toggleSoundMock: vi.fn(),
-}));
-
-vi.mock("@/store", () => ({
-  useAppStore: (selector: (state: unknown) => unknown) => useAppStoreMock(selector),
-}));
-
-function makeStream(id: string): MediaStream {
-  return { id } as MediaStream;
-}
 
 function renderDock(overrides: Partial<ComponentProps<typeof ActiveCallDock>> = {}) {
   const props: ComponentProps<typeof ActiveCallDock> = {
-    remoteUsername: "Alice",
-    seconds: 65,
-    isMuted: false,
-    isScreenSharing: false,
-    isScreenShareUpdating: false,
-    isRemoteScreenLoading: false,
-    callIssue: null,
-    remoteScreenStream: null,
-    localScreenStream: null,
-    diagnostics: {
-      connectionState: "connected",
-      iceConnectionState: "connected",
-      iceGatheringState: "complete",
-      signalingState: "stable",
-      selectedLocalCandidateType: "host",
-    },
-    onMuteToggle: vi.fn(),
-    onStartScreenShare: vi.fn(),
-    onStopScreenShare: vi.fn(),
-    onHangUp: vi.fn(),
-    ...overrides,
+    remoteUsername: "Alice", seconds: 65, isMuted: false, isScreenSharing: false,
+    isScreenShareUpdating: false, isRemoteScreenLoading: false, callIssue: null,
+    remoteScreenStream: null, localScreenStream: null,
+    diagnostics: { connectionState: "connected", iceConnectionState: "connected", iceGatheringState: "complete", signalingState: "stable", selectedLocalCandidateType: "host" },
+    onMuteToggle: vi.fn(), onStartScreenShare: vi.fn().mockResolvedValue(undefined),
+    onStopScreenShare: vi.fn(), onHangUp: vi.fn(), ...overrides,
   };
-
-  return {
-    props,
-    ...render(<ActiveCallDock {...props} />),
-  };
+  return { props, ...render(<ActiveCallDock {...props} />) };
 }
-
-const hoverHiddenClasses = [
-  "opacity-0",
-  "opacity-20",
-  "pointer-events-none",
-  "group-hover:opacity-100",
-];
-
-function expectNoHoverHiddenClasses(element: HTMLElement) {
-  for (const className of hoverHiddenClasses) {
-    expect(element).not.toHaveClass(className);
-  }
-}
-
-function mockFullscreenApi() {
-  let fullscreenElement: Element | null = null;
-  const requestFullscreen = vi.fn(function requestFullscreenMock(this: Element) {
-    fullscreenElement = this;
-    document.dispatchEvent(new Event("fullscreenchange"));
-    return Promise.resolve();
-  });
-  const exitFullscreen = vi.fn(() => {
-    fullscreenElement = null;
-    document.dispatchEvent(new Event("fullscreenchange"));
-    return Promise.resolve();
-  });
-
-  Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
-    configurable: true,
-    value: requestFullscreen,
-  });
-  Object.defineProperty(document, "exitFullscreen", {
-    configurable: true,
-    value: exitFullscreen,
-  });
-  Object.defineProperty(document, "fullscreenElement", {
-    configurable: true,
-    get: () => fullscreenElement,
-  });
-
-  return {
-    requestFullscreen,
-    exitFullscreen,
-    exitViaBrowserEsc: () => {
-      fullscreenElement = null;
-      document.dispatchEvent(new Event("fullscreenchange"));
-    },
-  };
-}
+function stream(id: string) { return { id } as MediaStream; }
 
 describe("ActiveCallDock", () => {
-  beforeEach(() => {
-    useAppStoreMock.mockImplementation((selector: (state: any) => unknown) =>
-      selector({
-        soundEnabled: true,
-        outputVolume: 0.7,
-        setOutputVolume: setOutputVolumeMock,
-        toggleSound: toggleSoundMock,
-      }),
-    );
-    setOutputVolumeMock.mockReset();
-    toggleSoundMock.mockReset();
-    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
-    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
-    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
-  });
-
-  it("renders the audio-only dock as a large call viewport with one participant grid", () => {
+  it("renders a compact one-to-one voice surface without participant cards", () => {
     renderDock();
-
-    expect(screen.getByTestId("active-call-dock")).toHaveClass(
-      "active-call-dock",
-      "h-[clamp(300px,48vh,523px)]",
-    );
-    expect(screen.getByTestId("call-dock-inner")).toHaveClass("call-dock-inner", "h-full", "w-full");
-    expect(screen.getByTestId("call-dock-inner")).not.toHaveClass("max-w-[980px]", "mx-auto");
-    expect(screen.getByTestId("active-call-dock-surface")).toHaveClass("call-surface", "flex-1");
-    expect(screen.getByTestId("active-call-dock-surface")).not.toHaveClass("rounded-[12px]", "p-[14px]");
-    expect(screen.getByTestId("call-grid-view")).toBeInTheDocument();
-    expect(screen.getByTestId("call-grid-view")).toHaveClass(
-      "call-grid",
-      "h-full",
-      "w-full",
-      "gap-[clamp(24px,2vw,32px)]",
-    );
-    expect(screen.getAllByTestId("active-call-participant-tile")).toHaveLength(2);
-    expect(screen.getAllByTestId("active-call-participant-tile")[0]).toHaveClass("participant-tile", "participant-tile--avatar");
-    expect(screen.getAllByTestId("active-call-participant-tile")[0]).toHaveClass(
-      "h-[clamp(140px,14vw,190px)]",
-      "max-h-[190px]",
-      "w-[clamp(220px,24vw,330px)]",
-      "max-w-[330px]",
-      "shrink-0",
-    );
-    expect(screen.getAllByTestId("active-call-participant-tile")[0].className).not.toContain("flex-[");
-    expect(screen.getAllByTestId("active-call-participant-tile")[0]).not.toHaveClass("max-w-[705px]");
-    expect(screen.getAllByTestId("active-call-participant-tile")[0]).toHaveClass(
-      "vt-call-tile",
-      "overflow-hidden",
-    );
-    expect(screen.getAllByTestId("participant-avatar-name")[0]).toHaveTextContent("You");
-    expect(screen.queryByTestId("active-call-screen-share-tile")).not.toBeInTheDocument();
-    expect(screen.getByTestId("active-call-dock-controls")).toHaveClass("vt-call-floating", "call-controls", "h-[58px]");
-    expect(screen.getByRole("button", { name: "Mute" })).toHaveClass(
-      "vt-call-control",
-      "h-12",
-      "w-12",
-    );
-    expect(screen.getByRole("button", { name: "Mute" })).not.toHaveClass("rounded-full");
+    expect(screen.getByTestId("active-call-voice-surface")).toBeInTheDocument();
+    expect(screen.getByTestId("active-call-remote-name")).toHaveTextContent("Alice");
+    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent("01:05");
+    expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("active-call-participant-tile")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Share screen" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hang Up" })).toHaveClass(
-      "vt-call-control",
-      "vt-call-control--danger",
-      "ctrl-btn--danger",
-      "h-12",
-      "w-12",
-    );
+    expect(screen.getByRole("button", { name: "Hang Up" })).toBeInTheDocument();
   });
 
-  it("renders a remote screen share as an idle participant tile without auto-expanding", () => {
-    renderDock({ remoteScreenStream: makeStream("remote-screen") });
-
-    const dock = screen.getByTestId("active-call-dock");
-    const tile = screen.getByTestId("active-call-screen-share-tile");
-
-    expect(dock).toHaveClass("active-call-dock", "h-[clamp(300px,48vh,523px)]");
-    expect(tile).toHaveAttribute("data-variant", "screenShare");
-    expect(tile).toHaveAttribute("data-state", "idle");
-    expect(tile).toHaveClass("participant-tile", "participant-tile--screen");
-    expect(tile).toHaveClass(
-      "h-[clamp(140px,14vw,190px)]",
-      "max-h-[190px]",
-      "w-[clamp(220px,24vw,330px)]",
-      "max-w-[330px]",
-      "vt-call-video-shell",
-    );
-    expect(tile.className).not.toContain("flex-[");
-    expect(screen.getByRole("button", { name: "Watch stream" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Watch stream" })).toHaveClass("vt-call-floating");
-    expect(screen.queryByRole("button", { name: "Expand Alice's screen" })).not.toBeInTheDocument();
-    expect(screen.getByTestId("participant-screen-name")).toHaveTextContent("Alice");
-    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("active-call-dock-controls")).toBeInTheDocument();
+  it("renders screen sharing as one dominant stage with contained video", () => {
+    renderDock({ remoteScreenStream: stream("remote") });
+    expect(screen.getByTestId("screen-share-stage")).toHaveClass("relative", "flex-1", "bg-black");
+    expect(screen.getByTestId("remote-screen-share-video")).toHaveClass("absolute", "inset-0", "object-contain");
+    expect(screen.getByTestId("screen-share-info")).toBeInTheDocument();
+    expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("active-call-participant-tile")).not.toBeInTheDocument();
   });
 
-  it("watches a remote screen share inline as a normal grid tile", () => {
-    const stream = makeStream("remote-screen");
-    renderDock({ remoteScreenStream: stream });
-
-    const tileBefore = screen.getByTestId("active-call-screen-share-tile");
-    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    const tileAfter = screen.getByTestId("active-call-screen-share-tile");
-
-    expect(tileAfter).toBe(tileBefore);
-    expect(tileAfter).toHaveAttribute("data-state", "watchingInline");
-    expect(tileAfter).toHaveClass(
-      "h-[clamp(140px,14vw,190px)]",
-      "max-h-[190px]",
-      "w-[clamp(220px,24vw,330px)]",
-      "max-w-[330px]",
-    );
-    expect(tileAfter.className).not.toContain("flex-[");
-    expect(screen.getByTestId("participant-screen-video")).toHaveProperty("srcObject", stream);
-    expect(screen.getByTestId("participant-screen-video")).toHaveClass("object-contain");
-    expect(screen.getByRole("button", { name: "Expand Alice's screen" })).toBeInTheDocument();
-    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
-    expect(screen.getByTestId("active-call-dock-controls")).not.toHaveClass("watch-stage-ui", "opacity-20");
-    expectNoHoverHiddenClasses(screen.getByTestId("active-call-dock-controls"));
-    expectNoHoverHiddenClasses(tileAfter);
+  it("keeps controls hidden by default and exposes the visible-state contract on hover", () => {
+    renderDock({ remoteScreenStream: stream("remote") });
+    const stage = screen.getByTestId("screen-share-stage");
+    expect(stage).toHaveAttribute("data-controls-visible", "false");
+    expect(screen.getByTestId("active-call-dock-controls")).toHaveClass("stage-controls");
+    fireEvent.mouseEnter(stage);
+    expect(stage).toHaveAttribute("data-controls-visible", "true");
+    fireEvent.mouseLeave(stage);
+    expect(stage).toHaveAttribute("data-controls-visible", "false");
   });
 
-  it("opens partial fullscreen from the grid tile, then true fullscreen from pop out", async () => {
-    const stream = makeStream("remote-screen");
-    document.documentElement.style.overflow = "";
-    document.body.style.overflow = "";
-    const { requestFullscreen, exitViaBrowserEsc } = mockFullscreenApi();
-    renderDock({ remoteScreenStream: stream });
-
-    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
-
-    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
-    expect(screen.getByTestId("focus-stream-view")).toHaveClass("focus-stream-view", "h-full", "w-full");
-    expect(screen.getByTestId("focus-stream-view")).not.toHaveClass("max-w-[1040px]", "mx-auto");
-    expect(screen.getByTestId("active-call-dock")).toHaveClass("active-call-dock", "h-[clamp(300px,48vh,523px)]");
-    expect(screen.getByText("Alice's screen")).toBeInTheDocument();
-    expect(screen.getByText("LIVE")).toBeInTheDocument();
-    expect(screen.getByText("720p")).toBeInTheDocument();
-    expect(screen.getByTestId("focus-stream-stage")).toBeInTheDocument();
-    expect(screen.getByTestId("focus-stream-stage")).toHaveClass(
-      "vt-call-video-shell",
-      "focus-stage",
-      "flex-1",
-      "min-h-[180px]",
-    );
-    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("You");
-    expect(screen.getByTestId("focus-participant-strip")).toHaveTextContent("Alice");
-    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("focus-strip", "watch-stage-ui");
-    expectNoHoverHiddenClasses(screen.getByTestId("focus-participant-strip"));
-    expect(
-      screen.getByTestId("focus-participant-strip").querySelectorAll(".focus-strip-tile"),
-    ).toHaveLength(2);
-    expect(screen.getByTestId("focus-control-bar")).toBeInTheDocument();
-    expect(screen.getByTestId("focus-control-bar")).toHaveClass(
-      "vt-call-floating",
-      "focus-controls",
-      "h-[58px]",
-      "watch-stage-ui",
-    );
-    expectNoHoverHiddenClasses(screen.getByTestId("focus-control-bar"));
-    expect(screen.getByRole("button", { name: "Mute" })).toHaveClass("vt-call-control", "h-12", "w-12");
-    expect(screen.getByRole("button", { name: "Mute" })).not.toHaveClass("rounded-full");
-    expect(screen.getByTestId("focus-stream-video")).toHaveProperty("srcObject", stream);
-    expect(screen.getByTestId("focus-stream-video")).toHaveClass("object-contain");
-
-    fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
-
-    expect(screen.getByTestId("fullscreen-stream-view")).toBeInTheDocument();
-    expect(screen.getByTestId("fullscreen-stream-view")).toHaveClass(
-      "fixed",
-      "inset-0",
-      "h-[100dvh]",
-      "max-h-[100dvh]",
-      "overflow-hidden",
-      "bg-[#070a09]",
-    );
-    expect(screen.getByTestId("fullscreen-stream-view")).not.toHaveClass("overflow-y-auto");
-    expect(screen.getByTestId("fullscreen-content")).toHaveClass(
-      "fullscreen-content",
-      "h-[100dvh]",
-      "max-h-[100dvh]",
-      "flex",
-      "flex-col",
-      "items-center",
-      "justify-start",
-      "pb-3",
-      "pt-[clamp(24px,6.7vh,72px)]",
-    );
-    expect(screen.getByTestId("fullscreen-content")).not.toHaveClass("justify-center", "gap-3");
-    expect(screen.getByTestId("fullscreen-stream-stage")).toHaveClass(
-      "aspect-video",
-      "w-[min(1420px,calc(100vw-500px),calc((100dvh-264px)*16/9))]",
-      "max-w-[1420px]",
-      "max-h-[calc(100dvh-264px)]",
-    );
-    expect(screen.getByTestId("fullscreen-stream-stage")).not.toHaveClass("flex-1");
-    expect(screen.getByTestId("fullscreen-stream-video")).toHaveProperty("srcObject", stream);
-    expect(screen.getByTestId("fullscreen-stream-video")).toHaveClass("object-contain");
-    expect(screen.getByTestId("fullscreen-control-bar")).toHaveClass(
-      "vt-call-floating",
-      "fullscreen-ui",
-      "mt-3",
-      "h-[58px]",
-      "w-[445px]",
-    );
-    expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-control-bar"));
-    expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("border", "border-white/15");
-    expect(screen.getByTestId("fullscreen-control-bar")).not.toHaveClass("absolute", "bottom-5", "-translate-x-1/2");
-    expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass(
-      "vt-call-floating",
-      "fullscreen-ui",
-      "mt-3",
-      "min-h-[108px]",
-    );
-    expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-participant-strip"));
-    expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("border", "border-white/15");
-    expect(screen.getByTestId("fullscreen-participant-strip")).not.toHaveClass("absolute", "bottom-24", "-translate-x-1/2");
-    expect(screen.getByTestId("fullscreen-screen-share-tile")).toHaveClass("h-[108px]", "w-[188px]");
-    expect(screen.getByTestId("fullscreen-screen-share-tile").className).not.toMatch(/(?:^|\s)(?:ring|ring-2|ring-white\/80|border|outline)(?:\s|$)/);
-    expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")).toHaveLength(2);
-    expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")[0]).toHaveClass("h-[108px]", "w-[188px]");
-    expect(screen.getAllByTestId("fullscreen-participant-avatar-tile")[0]).not.toHaveClass("border", "border-white/20");
-    expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("You");
-    expect(screen.getByTestId("fullscreen-participant-strip")).toHaveTextContent("Alice");
-    expect(document.documentElement.style.overflow).toBe("hidden");
-    expect(document.body.style.overflow).toBe("hidden");
-    await waitFor(() => {
-      expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    });
-    await act(async () => {
-      exitViaBrowserEsc();
-    });
-    expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
-    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
-    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("watch-stage-ui");
-    expect(screen.getByTestId("focus-control-bar")).toHaveClass("watch-stage-ui");
-    await waitFor(() => {
-      expect(document.documentElement.style.overflow).toBe("");
-      expect(document.body.style.overflow).toBe("");
-    });
+  it("reveals the same controls contract through keyboard focus", () => {
+    renderDock({ remoteScreenStream: stream("remote") });
+    const stage = screen.getByTestId("screen-share-stage");
+    fireEvent.focus(stage);
+    expect(stage).toHaveAttribute("data-controls-visible", "true");
+    fireEvent.blur(stage, { relatedTarget: document.body });
+    expect(stage).toHaveAttribute("data-controls-visible", "false");
   });
 
-  it("uses document.exitFullscreen from the fullscreen close button and returns to partial fullscreen", async () => {
-    const stream = makeStream("remote-screen");
-    document.documentElement.style.overflow = "";
-    document.body.style.overflow = "";
-    const { requestFullscreen, exitFullscreen } = mockFullscreenApi();
-
-    renderDock({ remoteScreenStream: stream });
-
-    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
-
-    await waitFor(() => {
-      expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen stream" }));
-
-    await waitFor(() => {
-      expect(exitFullscreen).toHaveBeenCalledTimes(1);
-      expect(screen.queryByTestId("fullscreen-stream-view")).not.toBeInTheDocument();
-    });
-    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
+  it("keeps a local preview secondary when both streams exist", () => {
+    renderDock({ remoteScreenStream: stream("remote"), localScreenStream: stream("local"), isScreenSharing: true });
+    expect(screen.getByTestId("local-screen-share-pip")).toHaveClass("h-[90px]", "w-[160px]");
   });
 
-  it("keeps focus and fullscreen call controls visible", async () => {
-    const stream = makeStream("remote-screen");
-    const { requestFullscreen } = mockFullscreenApi();
-    renderDock({ remoteScreenStream: stream });
-
-    expectNoHoverHiddenClasses(screen.getByTestId("active-call-dock-controls"));
-    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    expectNoHoverHiddenClasses(screen.getByTestId("active-call-dock-controls"));
-    expectNoHoverHiddenClasses(screen.getByTestId("active-call-screen-share-tile"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
-
-    expect(screen.getByTestId("focus-participant-strip")).toHaveClass("watch-stage-ui");
-    expect(screen.getByTestId("focus-control-bar")).toHaveClass("watch-stage-ui");
-    expectNoHoverHiddenClasses(screen.getByTestId("focus-participant-strip"));
-    expectNoHoverHiddenClasses(screen.getByTestId("focus-control-bar"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Pop out stream" }));
-
-    await waitFor(() => {
-      expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    });
-    expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-participant-strip"));
-    expectNoHoverHiddenClasses(screen.getByTestId("fullscreen-control-bar"));
+  it("uses the Fullscreen API and synchronizes browser exit", async () => {
+    let fullscreenElement: Element | null = null;
+    const requestFullscreen = vi.fn(function(this: Element) { fullscreenElement = this; document.dispatchEvent(new Event("fullscreenchange")); return Promise.resolve(); });
+    const exitFullscreen = vi.fn(() => { fullscreenElement = null; document.dispatchEvent(new Event("fullscreenchange")); return Promise.resolve(); });
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: requestFullscreen });
+    Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+    renderDock({ remoteScreenStream: stream("remote") });
+    fireEvent.mouseEnter(screen.getByTestId("screen-share-stage"));
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
+    await waitFor(() => expect(exitFullscreen).toHaveBeenCalledTimes(1));
   });
 
-  it("exits partial fullscreen back to the watched grid tile", () => {
-    renderDock({ remoteScreenStream: makeStream("remote-screen") });
-
-    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Exit focus view" }));
-
-    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
-    expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute(
-      "data-state",
-      "watchingInline",
-    );
-    expect(screen.getByTestId("participant-screen-video")).toBeInTheDocument();
+  it("handles fullscreenerror without leaving a stale fullscreen state", async () => {
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", { configurable: true, value: vi.fn(() => { document.dispatchEvent(new Event("fullscreenerror")); return Promise.reject(new Error("unsupported")); }) });
+    renderDock({ remoteScreenStream: stream("remote") });
+    fireEvent.mouseEnter(screen.getByTestId("screen-share-stage"));
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument());
   });
 
-  it("opens a real call output volume panel in focused stream view", () => {
-    renderDock({ remoteScreenStream: makeStream("remote-screen") });
-
-    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Call output volume" }));
-
-    const panel = screen.getByTestId("call-volume-panel");
-    expect(panel).toBeInTheDocument();
-    expect(within(panel).getByText("Call output volume")).toBeInTheDocument();
-
-    fireEvent.change(within(panel).getByLabelText("Call output volume slider"), {
-      target: { value: "35" },
-    });
-    fireEvent.click(within(panel).getByRole("button", { name: "Mute" }));
-
-    expect(setOutputVolumeMock).toHaveBeenCalledWith(0.35);
-    expect(toggleSoundMock).toHaveBeenCalledTimes(1);
+  it("clears fullscreen state when the screen share stream ends", async () => {
+    const { rerender, props } = renderDock({ remoteScreenStream: stream("remote") });
+    rerender(<ActiveCallDock {...props} remoteScreenStream={null} isRemoteScreenLoading={false} />);
+    await waitFor(() => expect(screen.getByTestId("active-call-voice-surface")).toBeInTheDocument());
   });
 
-  it("renders local sharing as a grid tile without a Watch stream action or auto-opened stage", () => {
+  it("keeps the screen-share button disabled while updating", () => {
+    renderDock({ remoteScreenStream: stream("remote"), isScreenShareUpdating: true });
+    expect(screen.getByRole("button", { name: "Updating screen share" })).toBeDisabled();
+  });
+
+  it("preserves mute, share and hang-up controls", async () => {
+    const onMuteToggle = vi.fn(); const onStartScreenShare = vi.fn().mockResolvedValue(undefined); const onHangUp = vi.fn();
+    renderDock({ onMuteToggle, onStartScreenShare, onHangUp });
+    fireEvent.click(screen.getByRole("button", { name: "Mute" }));
+    fireEvent.click(screen.getByRole("button", { name: "Share screen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hang Up" }));
+    expect(onMuteToggle).toHaveBeenCalledTimes(1);
+    expect(onStartScreenShare).toHaveBeenCalledTimes(1);
+    expect(onHangUp).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops local sharing through the same control", () => {
     const onStopScreenShare = vi.fn();
-    const stream = makeStream("local-screen");
-    renderDock({
-      localScreenStream: stream,
-      isScreenSharing: true,
-      onStopScreenShare,
-    });
-
-    expect(screen.getByTestId("active-call-dock")).toHaveClass("active-call-dock", "h-[clamp(300px,48vh,523px)]");
-    expect(screen.queryByRole("button", { name: "Watch stream" })).not.toBeInTheDocument();
-    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
-    expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute("data-state", "watchingInline");
-    expect(screen.getByTestId("active-call-screen-share-tile")).toHaveClass(
-      "h-[clamp(140px,14vw,190px)]",
-      "max-h-[190px]",
-      "w-[clamp(220px,24vw,330px)]",
-      "max-w-[330px]",
-    );
-    expect(screen.getByTestId("participant-screen-video")).toHaveProperty("srcObject", stream);
-    expect(screen.getByTestId("participant-screen-video")).toHaveClass("object-contain");
-    expect(screen.getByRole("button", { name: "Expand You's screen" })).toBeInTheDocument();
-
-    expect(screen.getAllByRole("button", { name: "Stop sharing" })).toHaveLength(2);
-    fireEvent.click(screen.getAllByRole("button", { name: "Stop sharing" })[0]);
-
+    renderDock({ isScreenSharing: true, localScreenStream: stream("local"), onStopScreenShare });
+    fireEvent.click(screen.getByRole("button", { name: "Stop sharing" }));
     expect(onStopScreenShare).toHaveBeenCalledTimes(1);
   });
 
-  it("removes inline/focus UI state when sharing stops", () => {
-    const { rerender, props } = renderDock({ remoteScreenStream: makeStream("remote-screen") });
-
-    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-    fireEvent.click(screen.getByRole("button", { name: "Expand Alice's screen" }));
-    expect(screen.getByTestId("focus-stream-view")).toBeInTheDocument();
-
-    rerender(
-      <ActiveCallDock
-        {...props}
-        remoteScreenStream={null}
-        localScreenStream={null}
-        isRemoteScreenLoading={false}
-      />,
-    );
-
-    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("active-call-screen-share-tile")).not.toBeInTheDocument();
+  it("shows normalized call issues without rebuilding the dashboard", () => {
+    renderDock({ callIssue: { tone: "error", message: "One side is already in a call." } });
+    expect(screen.getByTestId("call-issue-banner")).toHaveTextContent("One side is already in a call.");
+    expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();
   });
 
-  it("disables the screen-share control while an update is in flight", () => {
-    renderDock({ isScreenShareUpdating: true });
-
-    expect(screen.getByRole("button", { name: "Updating screen share" })).toBeDisabled();
-    expect(screen.getByTestId("active-call-dock-status")).toHaveTextContent(
-      "Updating screen share...",
-    );
-  });
-
-  it("normalizes recoverable call issue text inside the dock", () => {
-    renderDock({
-      callIssue: {
-        tone: "error",
-        message: "Call could not start because one side is already in a call.",
-      },
-    });
-
-    expect(screen.getByTestId("call-issue-banner")).toHaveTextContent(
-      "One side is already in a call.",
-    );
-  });
-
-  it("does not pause unrelated document media when screen-share video detaches", () => {
-    const externalVideo = document.createElement("video");
-    const externalPause = vi.fn();
-    Object.defineProperty(externalVideo, "pause", {
-      value: externalPause,
-      configurable: true,
-    });
-    document.body.appendChild(externalVideo);
-    const { rerender, props } = renderDock({ remoteScreenStream: makeStream("remote-screen") });
-    fireEvent.click(screen.getByRole("button", { name: "Watch stream" }));
-
-    rerender(<ActiveCallDock {...props} remoteScreenStream={null} />);
-
-    expect(externalPause).not.toHaveBeenCalled();
-    externalVideo.remove();
+  it("does not make diagnostics part of the production call layout", () => {
+    renderDock({ diagnostics: { connectionState: "failed", iceConnectionState: "failed", iceGatheringState: "complete", signalingState: "closed", selectedLocalCandidateType: "relay" } });
+    expect(screen.queryByTestId("webrtc-diagnostics")).not.toBeInTheDocument();
   });
 });

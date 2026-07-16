@@ -526,15 +526,10 @@ describe("ChatWindow presence rendering", () => {
     const dock = screen.getByTestId("active-call-dock");
     const messageRegion = screen.getByTestId("message-list-region");
 
-    expect(dock).toHaveClass("active-call-dock", "h-[clamp(300px,48vh,523px)]");
-    expect(screen.getByTestId("active-call-dock-surface")).toHaveClass("call-surface");
-    expect(screen.getByTestId("call-grid-view")).toBeInTheDocument();
-    expect(screen.getByTestId("active-call-screen-share-tile")).toHaveAttribute(
-      "data-state",
-      "idle",
-    );
-    expect(screen.getByTestId("participant-screen-name")).toHaveTextContent("Alice");
-    expect(screen.queryByTestId("focus-stream-view")).not.toBeInTheDocument();
+    expect(dock).toHaveClass("active-call-dock", "active-call-dock--screen", "flex-1");
+    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("remote-screen-share-video")).toHaveClass("object-contain");
+    expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();
     expect(screen.getByText("message visible during active call")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Message composer" })).toBeInTheDocument();
     expect(
