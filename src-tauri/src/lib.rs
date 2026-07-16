@@ -43,7 +43,8 @@ fn exit_call_fullscreen_windows_on_ui_thread(
     was_maximized: bool,
 ) -> Result<WindowsFullscreenExitState, String> {
     use std::mem::size_of;
-    use windows::Win32::Foundation::{BOOL, HWND};
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED};
 
     struct DwmTransitionGuard {
