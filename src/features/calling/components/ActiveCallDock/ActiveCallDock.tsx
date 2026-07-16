@@ -159,9 +159,11 @@ export function ActiveCallDock({
           </div>
         )}
 
-        <div className="voice-call-participants flex min-h-0 flex-1 items-center gap-3 px-4 pb-4 pt-10" data-testid="active-call-voice-surface">
-          <VoiceParticipantTile name="You" isMuted={isMuted} />
-          <VoiceParticipantTile name={remoteUsername} />
+        <div className="voice-call-participants flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10" data-testid="active-call-voice-surface">
+          <div className="voice-call-tile-row grid w-full max-w-[760px] grid-cols-2 gap-3" data-testid="voice-call-tile-row">
+            <VoiceParticipantTile name="You" isMuted={isMuted} />
+            <VoiceParticipantTile name={remoteUsername} />
+          </div>
         </div>
 
         <div className="voice-call-controls-wrap absolute inset-x-0 bottom-4 z-10 flex justify-center" data-testid="active-call-dock-controls">
@@ -200,14 +202,16 @@ export function ActiveCallDock({
             </div>
           )}
 
-          <div className="screen-share-framed-layout grid min-h-0 flex-1 grid-cols-2 grid-rows-[minmax(0,1.45fr)_minmax(0,1fr)] gap-3 px-4 pb-20 pt-10" data-testid="screen-share-framed-layout">
-            <ScreenShareFrame
-              stream={remoteScreenStream ?? localScreenStream}
-              sharerName={remoteScreenStream ? remoteUsername : "You"}
-              isLoading={isRemoteScreenLoading || isScreenSharing}
-            />
-            <FramedParticipantTile name="You" isMuted={isMuted} />
-            <FramedParticipantTile name={remoteUsername} />
+          <div className="screen-share-framed-layout flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10" data-testid="screen-share-framed-layout">
+            <div className="screen-share-framed-row grid w-full max-w-[1120px] grid-cols-3 gap-3" data-testid="screen-share-framed-row">
+              <ScreenShareFrame
+                stream={remoteScreenStream ?? localScreenStream}
+                sharerName={remoteScreenStream ? remoteUsername : "You"}
+                isLoading={isRemoteScreenLoading || isScreenSharing}
+              />
+              <FramedParticipantTile name="You" isMuted={isMuted} />
+              <FramedParticipantTile name={remoteUsername} />
+            </div>
           </div>
 
           <div className="screen-share-framed-controls absolute inset-x-0 bottom-4 z-10 flex justify-center" data-testid="active-call-dock-controls">
@@ -296,7 +300,7 @@ function CallControls({
 
 function ScreenShareFrame({ stream, sharerName, isLoading }: { stream: MediaStream | null; sharerName: string; isLoading: boolean }) {
   return (
-    <div className="screen-share-framed-tile relative col-span-2 min-h-0 overflow-hidden" data-testid="screen-share-framed-tile">
+    <div className="screen-share-framed-tile relative aspect-video min-w-0 overflow-hidden" data-testid="screen-share-framed-tile">
       {stream ? (
         <StreamVideo stream={stream} label={`${sharerName} screen share`} className="absolute inset-0 h-full w-full object-contain" muted testId="screen-share-framed-video" />
       ) : (
@@ -311,7 +315,7 @@ function ScreenShareFrame({ stream, sharerName, isLoading }: { stream: MediaStre
 
 function FramedParticipantTile({ name, isMuted = false }: { name: string; isMuted?: boolean }) {
   return (
-    <div className="screen-share-framed-tile relative flex min-w-0 items-center justify-center overflow-hidden" data-testid="screen-share-framed-participant-tile">
+    <div className="screen-share-framed-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden" data-testid="screen-share-framed-participant-tile">
       <div className="voice-participant-avatar flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-semibold" aria-hidden="true">
         {name.slice(0, 1).toUpperCase()}
       </div>
@@ -325,7 +329,7 @@ function FramedParticipantTile({ name, isMuted = false }: { name: string; isMute
 
 function VoiceParticipantTile({ name, isMuted = false }: { name: string; isMuted?: boolean }) {
   return (
-    <div className="voice-participant-tile relative flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-lg" data-testid="active-call-voice-participant-tile">
+    <div className="voice-participant-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden rounded-lg" data-testid="active-call-voice-participant-tile">
       <div className="voice-participant-avatar flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-semibold" aria-hidden="true" data-testid="voice-participant-avatar">
         {name.slice(0, 1).toUpperCase()}
       </div>

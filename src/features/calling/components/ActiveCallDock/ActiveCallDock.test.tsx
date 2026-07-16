@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -25,7 +25,17 @@ describe("ActiveCallDock", () => {
     expect(dock).toHaveClass("active-call-dock--voice", "h-[clamp(260px,38vh,420px)]");
     expect(dock).not.toHaveClass("h-[88px]");
     expect(screen.getByTestId("active-call-voice-surface")).toBeInTheDocument();
-    expect(screen.getAllByTestId("active-call-voice-participant-tile")).toHaveLength(2);
+    const tileRow = screen.getByTestId("voice-call-tile-row");
+    const tiles = within(tileRow).getAllByTestId("active-call-voice-participant-tile");
+    expect(tiles).toHaveLength(2);
+    expect(tileRow).toHaveClass("grid", "grid-cols-2", "max-w-[760px]");
+    for (const tile of tiles) {
+      expect(tile).toHaveClass("voice-participant-tile", "aspect-video", "min-w-0");
+      expect(tile).not.toHaveClass("flex-1");
+      expect(within(tile).getByTestId("voice-participant-avatar")).toBeInTheDocument();
+      expect(within(tile).getByTestId("voice-participant-label")).toBeInTheDocument();
+    }
+    expect(tileRow.compareDocumentPosition(screen.getByTestId("active-call-dock-controls")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getAllByTestId("voice-participant-label")[0]).toHaveTextContent("You");
     expect(screen.getAllByTestId("voice-participant-label")[1]).toHaveTextContent("Alice");
     expect(screen.getAllByTestId("voice-participant-avatar")).toHaveLength(2);
@@ -46,10 +56,18 @@ describe("ActiveCallDock", () => {
     const dock = screen.getByTestId("active-call-dock");
     expect(dock).toHaveClass("active-call-dock--framed", "h-[clamp(300px,42vh,480px)]");
     expect(screen.getByTestId("screen-share-framed-layout")).toBeInTheDocument();
-    expect(screen.getByTestId("screen-share-framed-tile")).toHaveClass("screen-share-framed-tile");
-    expect(screen.getByTestId("screen-share-framed-video")).toHaveClass("object-contain");
-    expect(screen.getAllByTestId("screen-share-framed-participant-tile")).toHaveLength(2);
+    const row = screen.getByTestId("screen-share-framed-row");
+    expect(row).toHaveClass("grid", "grid-cols-3", "max-w-[1120px]");
+    expect(within(row).getByTestId("screen-share-framed-tile")).toHaveClass("screen-share-framed-tile", "aspect-video", "min-w-0");
+    expect(within(row).getByTestId("screen-share-framed-video")).toHaveClass("object-contain");
+    const participantTiles = within(row).getAllByTestId("screen-share-framed-participant-tile");
+    expect(participantTiles).toHaveLength(2);
+    for (const tile of [within(row).getByTestId("screen-share-framed-tile"), ...participantTiles]) {
+      expect(tile).toHaveClass("screen-share-framed-tile", "aspect-video", "min-w-0");
+      expect(tile).not.toHaveClass("col-span-2");
+    }
     expect(screen.getByTestId("active-call-dock-controls")).toBeInTheDocument();
+    expect(row.compareDocumentPosition(screen.getByTestId("active-call-dock-controls")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("button", { name: "Expand share" })).toBeInTheDocument();
     expect(screen.queryByTestId("screen-share-stage")).not.toBeInTheDocument();
     expect(screen.queryByTestId("call-grid-view")).not.toBeInTheDocument();

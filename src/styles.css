@@ -1087,11 +1087,12 @@ body[data-vt-shell-resizing="true"] {
   }
 
   .active-call-dock--voice {
-    background: var(--card);
+    background: color-mix(in srgb, var(--surface-1) 88%, var(--sidebar) 12%);
   }
 
   .voice-participant-tile {
-    background: color-mix(in srgb, var(--card) 82%, var(--sidebar) 18%);
+    border: 1px solid color-mix(in srgb, var(--border) 76%, var(--primary) 24%);
+    background: color-mix(in srgb, var(--card) 68%, var(--sidebar) 32%);
   }
 
   .voice-participant-avatar {
@@ -1122,13 +1123,13 @@ body[data-vt-shell-resizing="true"] {
   }
 
   .active-call-dock--framed {
-    background: var(--card);
+    background: color-mix(in srgb, var(--surface-1) 88%, var(--sidebar) 12%);
   }
 
   .screen-share-framed-tile {
     border: 1px solid color-mix(in srgb, var(--border) 82%, transparent 18%);
     border-radius: 8px;
-    background: color-mix(in srgb, var(--card) 84%, var(--sidebar) 16%);
+    background: color-mix(in srgb, var(--card) 68%, var(--sidebar) 32%);
   }
 
   .screen-share-framed-tile:first-child {
@@ -1146,8 +1147,12 @@ body[data-vt-shell-resizing="true"] {
   }
 
   @media (max-width: 640px) {
-    .screen-share-framed-layout {
+    .voice-call-tile-row,
+    .screen-share-framed-row {
       gap: 0.5rem;
+    }
+
+    .screen-share-framed-layout {
       padding-inline: 0.75rem;
     }
   }
