@@ -1158,7 +1158,7 @@ describe("MessageItem bubble layout", () => {
       "ml-[-2px]",
       "h-[16px]",
       "w-[16px]",
-      "overflow-hidden",
+      "overflow-visible",
       "rounded-[10px]",
     );
     const sentIcon = screen.getByLabelText("Sent");

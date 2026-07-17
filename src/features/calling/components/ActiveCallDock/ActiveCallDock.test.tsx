@@ -255,6 +255,27 @@ describe("ActiveCallDock", () => {
     expect(document.querySelectorAll("[data-testid=remote-screen-share-video]")).toHaveLength(1);
   });
 
+  it("switches from fullscreen share focus to fullscreen mosaic without exiting native fullscreen", async () => {
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    expandShare();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(screen.getByTestId("screen-share-stage")).toHaveClass("fullscreen-share-layout"));
+
+    fireEvent.click(screen.getByTestId("screen-share-stage"));
+
+    await waitFor(() => expect(screen.getByTestId("screen-share-framed-layout")).toBeInTheDocument());
+    expect(screen.getByTestId("screen-share-framed-layout")).toHaveClass("fullscreen-mosaic-layout");
+    expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+    expect(mockCurrentWindow.setFullscreen).toHaveBeenCalledTimes(1);
+    expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getByTestId("screen-share-framed-tile"));
+    await waitFor(() => expect(screen.getByTestId("screen-share-stage")).toHaveClass("fullscreen-share-layout"));
+    expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+    expect(mockCurrentWindow.setFullscreen).toHaveBeenCalledTimes(1);
+  });
+
   it("portals the voice participant grid and locks body overflow", async () => {
     const previousOverflow = document.body.style.overflow;
     renderDock();

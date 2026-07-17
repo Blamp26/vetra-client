@@ -785,7 +785,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
     return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center whitespace-nowrap",
+        "inline-flex max-w-full items-center gap-[1px] whitespace-nowrap leading-none",
         inReactions && "message-reactions__metadata",
         (variant === "overlay" || variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing")
           ? variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing"
@@ -828,7 +828,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
               className={cn(
                   variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing"
                     ? "box-border ml-[-3px] flex h-[19px] w-[19px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]"
-                    : "box-border ml-[-2px] flex h-[16px] w-[16px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]",
+                    : "box-border ml-[-2px] flex h-[16px] w-[16px] shrink-0 items-center justify-center overflow-visible rounded-[10px] leading-[14px]",
                 isOwn ? "text-white opacity-100" : "text-current",
               )}
                   data-testid={variant === "custom-emoji-overlay" || variant === "custom-emoji-trailing" ? "custom-emoji-status" : "message-media-only-status"}
@@ -841,7 +841,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           ) : (
             <span
               className={cn(
-                  "box-border ml-[-2px] flex h-[16px] w-[16px] shrink-0 items-center justify-center overflow-hidden rounded-[10px] leading-[14px]",
+                  "box-border ml-[-2px] flex h-[16px] w-[16px] shrink-0 items-center justify-center overflow-visible rounded-[10px] leading-[14px]",
                 isOwn ? "text-white opacity-100" : "text-current",
               )}
               data-testid="message-inline-status"

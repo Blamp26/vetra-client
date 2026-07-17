@@ -400,9 +400,15 @@ export function ActiveCallDock({
   }
 
   if (!isShareExpanded) {
-    return (
+    const framedStage = (
       <section
-        className="active-call-dock active-call-dock--screen active-call-dock--framed flex h-[clamp(300px,42vh,480px)] min-h-[300px] shrink-0 flex-col border-b border-border text-foreground"
+        ref={(element) => { stageRef.current = element; }}
+        className={cn(
+          "active-call-dock active-call-dock--screen active-call-dock--framed flex min-w-0 flex-col text-foreground",
+          isFullscreen
+            ? "fullscreen-call-surface h-full min-h-0 w-full flex-1 shrink border-0 overflow-hidden bg-black"
+            : "h-[clamp(300px,42vh,480px)] min-h-[300px] shrink-0 border-b border-border",
+        )}
         data-testid="active-call-dock"
         aria-label="Active call dock"
       >
@@ -417,8 +423,11 @@ export function ActiveCallDock({
             </div>
           )}
 
-          <div className="screen-share-framed-layout flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10" data-testid="screen-share-framed-layout">
-            <div className="screen-share-framed-row grid w-full max-w-[1120px] grid-cols-3 gap-3" data-testid="screen-share-framed-row">
+          <div className={cn(
+            "screen-share-framed-layout flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10",
+            isFullscreen && "fullscreen-mosaic-layout",
+          )} data-testid="screen-share-framed-layout">
+            <div className="screen-share-framed-row grid w-full max-w-[1120px] grid-cols-3 gap-4" data-testid="screen-share-framed-row">
               <ScreenShareFrame
                 stream={isRemoteScreenAvailable ? (isWatchingRemoteScreen ? remoteScreenStream : null) : localScreenStream}
                 sharerName={isRemoteScreenAvailable ? remoteUsername : "You"}
@@ -439,16 +448,18 @@ export function ActiveCallDock({
               isMuted={isMuted}
               isScreenSharing={isScreenSharing}
               isScreenShareUpdating={isScreenShareUpdating}
-              isFullscreen={false}
+              isFullscreen={isFullscreen}
               onMuteToggle={onMuteToggle}
               onStartScreenShare={onStartScreenShare}
               onStopScreenShare={onStopScreenShare}
               onHangUp={onHangUp}
+              onToggleFullscreen={toggleFullscreen}
             />
           </div>
         </div>
       </section>
     );
+    return isFullscreen ? (fullscreenRoot ? createPortal(framedStage, fullscreenRoot) : null) : framedStage;
   }
 
   const shareStage = (
@@ -474,6 +485,10 @@ export function ActiveCallDock({
         onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setControlsVisible(false); }}
         onClick={(event) => {
           if ((event.target as HTMLElement).closest("button")) return;
+          if (isFullscreen) {
+            setIsShareExpanded(false);
+            return;
+          }
           closeExpandedFromStage();
         }}
         tabIndex={-1}
