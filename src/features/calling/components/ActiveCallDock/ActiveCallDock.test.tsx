@@ -213,6 +213,35 @@ describe("ActiveCallDock", () => {
     await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(false));
   });
 
+  it("uses a centered two-row fullscreen mosaic with equal 16:9 tiles", async () => {
+    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
+    expandShare();
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    await waitFor(() => expect(screen.getByTestId("screen-share-stage")).toHaveClass("fullscreen-share-layout"));
+    fireEvent.click(screen.getByTestId("screen-share-stage"));
+
+    const grid = screen.getByTestId("screen-share-framed-row");
+    expect(grid).toHaveClass("fullscreen-mosaic-grid", "max-w-none");
+    expect(grid).toHaveStyle({
+      width: "min(88vw, calc((100dvh - 128px - 8px) * 1.7777778 + 8px))",
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      gridTemplateRows: "repeat(2, minmax(0, 1fr))",
+      gap: "8px",
+    });
+    const tiles = grid.querySelectorAll<HTMLElement>(
+      "[data-testid='screen-share-framed-tile'], [data-testid='screen-share-framed-participant-tile']",
+    );
+    expect(tiles).toHaveLength(3);
+    for (const tile of tiles) expect(tile).toHaveClass("aspect-video");
+    expect(tiles[0]).not.toHaveClass("col-span-2");
+    expect(tiles[1]).not.toHaveClass("col-span-2");
+    expect(tiles[2]).toHaveClass("col-span-2", "justify-self-center", "aspect-video");
+    expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+    expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument();
+    expect(mockCurrentWindow.setFullscreen).toHaveBeenCalledTimes(1);
+    expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(true);
+  });
+
   it("uses only the standard Tauri fullscreen API for entry and exit", async () => {
     renderDock();
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));

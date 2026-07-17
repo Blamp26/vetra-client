@@ -426,8 +426,23 @@ export function ActiveCallDock({
           <div className={cn(
             "screen-share-framed-layout flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10",
             isFullscreen && "fullscreen-mosaic-layout",
-          )} data-testid="screen-share-framed-layout">
-            <div className="screen-share-framed-row grid w-full max-w-[1120px] grid-cols-3 gap-4" data-testid="screen-share-framed-row">
+          )}
+          style={isFullscreen ? { paddingTop: "64px", paddingBottom: "64px" } : undefined}
+          data-testid="screen-share-framed-layout"
+        >
+            <div
+              className={cn(
+                "screen-share-framed-row grid w-full max-w-[1120px] grid-cols-3 gap-4",
+                isFullscreen && "fullscreen-mosaic-grid max-w-none",
+              )}
+              style={isFullscreen ? {
+                width: "min(88vw, calc((100dvh - 128px - 8px) * 1.7777778 + 8px))",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gridTemplateRows: "repeat(2, minmax(0, 1fr))",
+                gap: "8px",
+              } : undefined}
+              data-testid="screen-share-framed-row"
+            >
               <ScreenShareFrame
                 stream={isRemoteScreenAvailable ? (isWatchingRemoteScreen ? remoteScreenStream : null) : localScreenStream}
                 sharerName={isRemoteScreenAvailable ? remoteUsername : "You"}
@@ -438,7 +453,10 @@ export function ActiveCallDock({
                 onExpand={() => setIsShareExpanded(true)}
               />
               <FramedParticipantTile name="You" isMuted={isMuted} />
-              <FramedParticipantTile name={remoteUsername} />
+              <FramedParticipantTile
+                name={remoteUsername}
+                className={isFullscreen ? "col-span-2 w-[calc(50%_-_4px)] justify-self-center" : undefined}
+              />
             </div>
           </div>
 

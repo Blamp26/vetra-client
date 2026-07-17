@@ -64,7 +64,7 @@ export function StatusIcon({ status, className }: StatusIconProps) {
       aria-label="Read"
     >
       <path d="M1.5 9.5L5 13L12.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6.5 12.5L9.5 15L17 7.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6.5 9.5L10 13L17.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
