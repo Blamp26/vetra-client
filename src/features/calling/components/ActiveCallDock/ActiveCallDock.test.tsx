@@ -223,7 +223,7 @@ describe("ActiveCallDock", () => {
     const grid = screen.getByTestId("screen-share-framed-row");
     expect(grid).toHaveClass("fullscreen-mosaic-grid", "max-w-none");
     expect(grid).toHaveStyle({
-      width: "min(88vw, calc((100dvh - 128px - 8px) * 1.7777778 + 8px))",
+      width: "min(88vw, calc((100dvh - 128px - 72px - 8px) * 1.7777778 + 8px))",
       gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
       gridTemplateRows: "repeat(2, minmax(0, 1fr))",
       gap: "8px",
@@ -236,6 +236,10 @@ describe("ActiveCallDock", () => {
     expect(tiles[0]).not.toHaveClass("col-span-2");
     expect(tiles[1]).not.toHaveClass("col-span-2");
     expect(tiles[2]).toHaveClass("col-span-2", "justify-self-center", "aspect-video");
+    const controls = screen.getByTestId("active-call-dock-controls");
+    expect(controls).toHaveClass("relative", "inset-auto", "shrink-0", "pb-4");
+    expect(controls).not.toHaveClass("absolute", "bottom-4");
+    expect(grid.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
     expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument();
     expect(mockCurrentWindow.setFullscreen).toHaveBeenCalledTimes(1);

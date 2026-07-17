@@ -436,7 +436,7 @@ export function ActiveCallDock({
                 isFullscreen && "fullscreen-mosaic-grid max-w-none",
               )}
               style={isFullscreen ? {
-                width: "min(88vw, calc((100dvh - 128px - 8px) * 1.7777778 + 8px))",
+                width: "min(88vw, calc((100dvh - 128px - 72px - 8px) * 1.7777778 + 8px))",
                 gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                 gridTemplateRows: "repeat(2, minmax(0, 1fr))",
                 gap: "8px",
@@ -460,7 +460,13 @@ export function ActiveCallDock({
             </div>
           </div>
 
-          <div className="screen-share-framed-controls absolute inset-x-0 bottom-4 z-10 flex justify-center" data-testid="active-call-dock-controls">
+          <div
+            className={cn(
+              "screen-share-framed-controls z-10 flex justify-center",
+              isFullscreen ? "relative inset-auto shrink-0 pb-4" : "absolute inset-x-0 bottom-4",
+            )}
+            data-testid="active-call-dock-controls"
+          >
             <CallControls
               className="screen-share-framed-controls__group"
               isMuted={isMuted}
