@@ -527,15 +527,24 @@ export function ActiveCallDock({
         </div>
 
         {isFullscreen ? (
-          <div className="fullscreen-share-participants relative z-10 mx-auto mb-[80px] mt-5 grid h-[clamp(96px,15vh,150px)] w-[min(760px,calc(100%-32px))] shrink-0 grid-cols-2 gap-3" data-testid="fullscreen-participant-strip">
-            <FramedParticipantTile name="You" isMuted={isMuted} className="h-full aspect-auto" />
-            <FramedParticipantTile name={remoteUsername} className="h-full aspect-auto" />
+          <div className="fullscreen-share-participants relative z-10 mx-auto mb-4 mt-5 grid w-[min(560px,calc(100%-32px))] shrink-0 grid-cols-2 gap-3" data-testid="fullscreen-participant-strip">
+            <FramedParticipantTile name="You" isMuted={isMuted} />
+            <FramedParticipantTile name={remoteUsername} />
           </div>
         ) : localScreenStream && remoteScreenStream ? (
           <div className="absolute bottom-4 right-4 h-[90px] w-[160px] overflow-hidden rounded-md bg-zinc-900 shadow-lg" data-testid="local-screen-share-pip"><StreamVideo stream={localScreenStream} label="Your screen share preview" className="h-full w-full object-cover" testId="local-screen-share-pip-video" /></div>
         ) : null}
 
-        <div className={cn("screen-share-stage__controls stage-controls absolute inset-x-0 bottom-4 flex justify-center", !isFullscreen && "transition-[opacity,transform,visibility] duration-150 ease-out")} data-testid="active-call-dock-controls" {...controlProps}>
+        <div
+          className={cn(
+            "screen-share-stage__controls stage-controls flex justify-center",
+            isFullscreen ? "relative inset-auto shrink-0 pb-4" : "absolute inset-x-0 bottom-4",
+            !isFullscreen && "transition-[opacity,transform,visibility] duration-150 ease-out",
+          )}
+          style={isFullscreen ? { bottom: "auto" } : undefined}
+          data-testid="active-call-dock-controls"
+          {...controlProps}
+        >
           <CallControls
             isMuted={isMuted}
             isScreenSharing={isScreenSharing}

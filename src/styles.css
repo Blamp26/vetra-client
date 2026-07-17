@@ -1253,10 +1253,11 @@ body[data-vt-shell-resizing="true"] {
     gap: clamp(12px, 1.5vw, 24px);
   }
 
-  .fullscreen-call-surface .voice-participant-tile {
+  .fullscreen-call-surface .voice-participant-tile,
+  .fullscreen-call-surface .screen-share-framed-tile {
     min-height: 0;
     background: #15171a;
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(0, 0, 0, 0.48);
   }
 
   .fullscreen-share-layout .fullscreen-share-video-area {
@@ -1274,16 +1275,6 @@ body[data-vt-shell-resizing="true"] {
     border: 0;
     outline: 0;
     object-fit: contain;
-  }
-
-  .fullscreen-share-layout .fullscreen-share-participants .screen-share-framed-tile {
-    background: #15171a;
-    border-color: rgba(255, 255, 255, 0.14);
-  }
-
-  .fullscreen-share-layout .screen-share-stage__controls {
-    bottom: 16px;
-    z-index: 20;
   }
 
   .vetra-call-fullscreen-root,

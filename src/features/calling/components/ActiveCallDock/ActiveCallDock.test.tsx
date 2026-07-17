@@ -278,10 +278,26 @@ describe("ActiveCallDock", () => {
     expect(surface).not.toHaveClass("h-[clamp(300px,42vh,480px)]", "min-h-[300px]", "shrink-0", "border-b", "border-border");
     expect(within(root as HTMLElement).getByTestId("remote-screen-share-video")).toBeInTheDocument();
     expect(within(root as HTMLElement).getByTestId("fullscreen-participant-strip")).toBeInTheDocument();
+    const participantStrip = within(root as HTMLElement).getByTestId("fullscreen-participant-strip");
+    expect(participantStrip).toHaveClass("grid-cols-2", "w-[min(560px,calc(100%-32px))]");
+    for (const tile of within(participantStrip).getAllByTestId("screen-share-framed-participant-tile")) {
+      expect(tile).toHaveClass("aspect-video");
+      expect(tile).not.toHaveClass("aspect-auto", "h-full");
+    }
+    const controls = within(root as HTMLElement).getByTestId("active-call-dock-controls");
+    expect(controls).toHaveClass("relative", "shrink-0", "pb-4");
+    expect(controls).not.toHaveClass("absolute", "bottom-4");
+    expect(participantStrip.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(root as HTMLElement).getByTestId("fullscreen-share-video-area")).toHaveClass("flex-1", "min-h-0");
     expect(within(root as HTMLElement).getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
     expect(container.querySelector("[data-testid=screen-share-stage]")).not.toBeInTheDocument();
     expect(document.querySelectorAll("[data-testid=remote-screen-share-video]")).toHaveLength(1);
+  });
+
+  it("uses the same subtle dark border treatment for fullscreen call tiles", async () => {
+    const styles = readFileSync("src/styles.css", "utf8");
+    expect(styles).toMatch(/\.fullscreen-call-surface \.voice-participant-tile,\s*\.fullscreen-call-surface \.screen-share-framed-tile[\s\S]*border-color:\s*rgba\(0, 0, 0, 0\.48\)/);
+    expect(styles).not.toContain("border-color: rgba(255, 255, 255, 0.14)");
   });
 
   it("switches from fullscreen share focus to fullscreen mosaic without exiting native fullscreen", async () => {
