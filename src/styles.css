@@ -1230,6 +1230,8 @@ body[data-vt-shell-resizing="true"] {
     width: 260px;
     max-height: min(440px, calc(100dvh - 16px));
     flex-direction: column;
+    min-width: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -1238,15 +1240,19 @@ body[data-vt-shell-resizing="true"] {
     padding: 4px;
     box-shadow: 0 10px 20px rgba(18, 24, 20, 0.16);
   }
-  .vt-user-context-menu [role="menuitem"] { min-height: 34px; width: 100%; border-radius: 5px; padding: 7px 10px; text-align: left; font-size: 13px; }
+  .vt-user-context-menu [role="menuitem"] { display: flex; min-height: 34px; min-width: 0; width: 100%; align-items: center; gap: 8px; border-radius: 5px; padding: 7px 10px; text-align: left; font-size: 13px; }
   .vt-user-context-menu [role="menuitem"]:hover,
   .vt-user-context-menu [role="menuitem"][data-highlighted="true"]:focus-visible { background: var(--muted); }
   .vt-user-context-menu [role="menuitem"]:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
   .vt-user-context-menu [role="separator"] { height: 1px; margin: 4px 6px; background: var(--border); }
-  .vt-user-context-menu__volume { padding: 8px 10px 5px; font-size: 12px; }
-  .vt-user-context-menu__volume label { display: flex; justify-content: space-between; gap: 8px; }
-  .vt-user-context-menu__volume output { color: var(--muted-foreground); }
-  .vt-user-context-menu__volume input { width: 100%; accent-color: var(--primary); }
+  .vt-user-context-menu__leading-icon { display: inline-flex; width: 16px; min-width: 16px; height: 16px; align-items: center; justify-content: center; color: var(--muted-foreground); }
+  .vt-user-context-menu__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-user-context-menu__volume { min-width: 0; padding: 8px 10px 5px; font-size: 12px; }
+  .vt-user-context-menu__volume label { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; }
+  .vt-user-context-menu__volume-label { display: inline-flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-user-context-menu__volume-label span { overflow: hidden; text-overflow: ellipsis; }
+  .vt-user-context-menu__volume output { flex: 0 0 auto; color: var(--muted-foreground); }
+  .vt-user-context-menu__volume input { display: block; width: 100%; margin-top: 6px; accent-color: var(--primary); }
 
   .vetra-call-fullscreen-root > .fullscreen-call-surface {
     width: 100%;
