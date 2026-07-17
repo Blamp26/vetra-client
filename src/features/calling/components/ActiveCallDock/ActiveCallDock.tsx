@@ -424,7 +424,7 @@ export function ActiveCallDock({
           )}
 
           <div className={cn(
-            "screen-share-framed-layout flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10",
+            "screen-share-framed-layout flex min-h-0 min-w-0 flex-1 items-center justify-center px-4 pb-20 pt-10",
             isFullscreen && "fullscreen-mosaic-layout",
           )}
           style={isFullscreen ? { paddingTop: "64px", paddingBottom: "64px" } : undefined}
@@ -432,7 +432,7 @@ export function ActiveCallDock({
         >
             <div
               className={cn(
-                "screen-share-framed-row grid w-full max-w-[1120px] grid-cols-3 gap-4",
+                "screen-share-framed-row grid min-w-0 w-full max-w-[1120px] grid-cols-3 gap-4",
                 isFullscreen && "fullscreen-mosaic-grid max-w-none",
               )}
               style={isFullscreen ? {
@@ -517,7 +517,7 @@ export function ActiveCallDock({
         }}
         tabIndex={-1}
       >
-        <div className={isFullscreen ? "fullscreen-share-video-area relative flex min-h-0 flex-1" : "absolute inset-0"} data-testid={isFullscreen ? "fullscreen-share-video-area" : undefined}>
+        <div className={isFullscreen ? "fullscreen-share-video-area relative flex min-h-0 min-w-0 flex-1" : "absolute inset-0"} data-testid={isFullscreen ? "fullscreen-share-video-area" : undefined}>
           {remoteScreenStream && isWatchingRemoteScreen ? (
             <StreamVideo stream={remoteScreenStream} label={`${remoteUsername} screen share`} className="absolute inset-0 h-full w-full object-contain" muted testId="remote-screen-share-video" />
           ) : localScreenStream ? (
@@ -533,12 +533,12 @@ export function ActiveCallDock({
         </div>
 
         {isFullscreen ? (
-          <div className="fullscreen-share-participants relative z-10 mx-auto mb-4 mt-5 grid w-[min(560px,calc(100%-32px))] shrink-0 grid-cols-2 gap-3" data-testid="fullscreen-participant-strip">
+          <div className="fullscreen-share-participants relative z-10 mx-auto mb-4 mt-5 grid min-w-0 w-[min(560px,calc(100%-32px))] shrink-0 grid-cols-2 gap-3" data-testid="fullscreen-participant-strip">
             <FramedParticipantTile name="You" isMuted={isMuted} />
             <FramedParticipantTile name={remoteUsername} />
           </div>
         ) : localScreenStream && remoteScreenStream ? (
-          <div className="absolute bottom-4 right-4 h-[90px] w-[160px] overflow-hidden rounded-md bg-zinc-900 shadow-lg" data-testid="local-screen-share-pip"><StreamVideo stream={localScreenStream} label="Your screen share preview" className="h-full w-full object-cover" testId="local-screen-share-pip-video" /></div>
+          <div className="absolute bottom-20 right-4 h-[90px] w-[160px] overflow-hidden rounded-md bg-zinc-900 shadow-lg" data-testid="local-screen-share-pip"><StreamVideo stream={localScreenStream} label="Your screen share preview" className="h-full w-full object-cover" testId="local-screen-share-pip-video" /></div>
         ) : null}
 
         <div

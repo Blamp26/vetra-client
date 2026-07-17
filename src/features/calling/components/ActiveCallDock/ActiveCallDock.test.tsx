@@ -108,7 +108,7 @@ describe("ActiveCallDock", () => {
     expect(dock).toHaveClass("active-call-dock--framed", "h-[clamp(300px,42vh,480px)]");
     expect(screen.getByTestId("screen-share-framed-layout")).toBeInTheDocument();
     const row = screen.getByTestId("screen-share-framed-row");
-    expect(row).toHaveClass("grid", "grid-cols-3", "max-w-[1120px]");
+    expect(row).toHaveClass("grid", "min-w-0", "grid-cols-3", "max-w-[1120px]");
     expect(within(row).getByTestId("screen-share-framed-tile")).toHaveClass("screen-share-framed-tile", "aspect-video", "min-w-0");
     expect(within(row).getByTestId("screen-share-framed-video")).toHaveClass("object-contain");
     const participantTiles = within(row).getAllByTestId("screen-share-framed-participant-tile");
@@ -140,6 +140,21 @@ describe("ActiveCallDock", () => {
     fireEvent.click(tile);
     await waitFor(() => expect(onWatchRemoteScreen).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
+  });
+
+  it("keeps long participant names truncated inside framed tiles", () => {
+    renderDock({
+      remoteUsername: "A participant with a deliberately long display name",
+      remoteScreenStream: stream("remote"),
+      isRemoteScreenAvailable: true,
+      isWatchingRemoteScreen: true,
+    });
+
+    const tile = screen.getAllByTestId("screen-share-framed-participant-tile")[1];
+    const label = within(tile).getByTestId("screen-share-framed-participant-label");
+    expect(tile).toHaveClass("min-w-0", "aspect-video");
+    expect(label).toHaveClass("min-w-0", "max-w-[calc(100%-16px)]");
+    expect(within(label).getByText("A participant with a deliberately long display name")).toHaveClass("truncate");
   });
 
   it("prevents duplicate remote watch clicks while the request is pending", () => {
@@ -192,7 +207,8 @@ describe("ActiveCallDock", () => {
   it("keeps a local preview secondary when both streams exist", () => {
     renderDock({ remoteScreenStream: stream("remote"), localScreenStream: stream("local"), isScreenSharing: true, isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
     expandShare();
-    expect(screen.getByTestId("local-screen-share-pip")).toHaveClass("h-[90px]", "w-[160px]");
+    expect(screen.getByTestId("local-screen-share-pip")).toHaveClass("bottom-20", "h-[90px]", "w-[160px]");
+    expect(screen.getByTestId("local-screen-share-pip")).not.toHaveClass("bottom-4");
   });
 
   it("uses native Tauri fullscreen and never calls the browser Fullscreen API", async () => {
@@ -221,6 +237,7 @@ describe("ActiveCallDock", () => {
     fireEvent.click(screen.getByTestId("screen-share-stage"));
 
     const grid = screen.getByTestId("screen-share-framed-row");
+    expect(screen.getByTestId("screen-share-framed-layout")).toHaveClass("min-w-0");
     expect(grid).toHaveClass("fullscreen-mosaic-grid", "max-w-none");
     expect(grid).toHaveStyle({
       width: "min(88vw, calc((100dvh - 128px - 72px - 8px) * 1.7777778 + 8px))",
