@@ -7,7 +7,7 @@ vi.mock("@/api/auth", () => ({ authApi: { getUser: vi.fn().mockResolvedValue({ i
 
 describe("UserProfileDialog", () => {
   it("loads and displays a read-only profile", async () => {
-    render(<UserProfileDialog target={{ id: "alice-public", username: "alice" }} onClose={vi.fn()} />);
+    render(<UserProfileDialog target={{ profileId: "alice-public", username: "alice" }} onClose={vi.fn()} />);
     expect(screen.getByTestId("user-profile-loading")).toBeInTheDocument();
     expect(await screen.findByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("Hello")).toBeInTheDocument();

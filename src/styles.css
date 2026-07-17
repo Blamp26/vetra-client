@@ -1242,7 +1242,6 @@ body[data-vt-shell-resizing="true"] {
   .vt-user-context-menu [role="menuitem"]:hover,
   .vt-user-context-menu [role="menuitem"][data-highlighted="true"]:focus-visible { background: var(--muted); }
   .vt-user-context-menu [role="menuitem"]:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-  .vt-user-context-menu [role="menuitem"][data-menu-value="stop-call"] { color: var(--destructive); }
   .vt-user-context-menu [role="separator"] { height: 1px; margin: 4px 6px; background: var(--border); }
   .vt-user-context-menu__volume { padding: 8px 10px 5px; font-size: 12px; }
   .vt-user-context-menu__volume label { display: flex; justify-content: space-between; gap: 8px; }

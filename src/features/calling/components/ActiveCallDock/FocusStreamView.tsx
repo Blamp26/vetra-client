@@ -9,6 +9,7 @@ import {
   PhoneOff,
   ScreenShare,
   Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
@@ -444,6 +445,7 @@ export function FullscreenStreamView({
               <div className="vt-call-avatar flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white">
                 {participant.name.charAt(0).toUpperCase()}
               </div>
+              {participant.isLocallyMuted && <VolumeX className="absolute right-2 top-2 h-4 w-4 text-white/75" aria-label="Muted locally" />}
               <div className="vt-call-overlay-label absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate px-1.5 py-1 text-[10px] leading-none text-white">
                 {participant.name}
               </div>

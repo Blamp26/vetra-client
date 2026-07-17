@@ -370,4 +370,19 @@ describe('CallAudioRenderer', () => {
     expect(audio.muted).toBe(true);
     expect(audio.volume).toBe(0);
   });
+
+  it('applies per-user volume and mute to the real audio element', () => {
+    const { rerender } = render(
+      <CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" soundEnabled outputVolume={0.8} callUserVolume={50} callUserMuted={false} />,
+    );
+    const audio = screen.getByTestId('call-audio-renderer') as HTMLAudioElement;
+    expect(audio.volume).toBeCloseTo(0.4);
+
+    rerender(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" soundEnabled outputVolume={0.8} callUserVolume={50} callUserMuted />);
+    expect(audio.volume).toBe(0);
+    expect(audio.muted).toBe(true);
+
+    rerender(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" soundEnabled outputVolume={0.8} callUserVolume={50} callUserMuted={false} />);
+    expect(audio.volume).toBeCloseTo(0.4);
+  });
 });

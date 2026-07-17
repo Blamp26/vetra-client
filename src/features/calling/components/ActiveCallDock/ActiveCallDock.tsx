@@ -13,9 +13,25 @@ import { serializeResourceRef } from "@/shared/utils/resourceRef";
 import { useAppStore } from "@/store";
 import { UserContextMenu, type UserContextTarget } from "@/features/users/components/UserContextMenu/UserContextMenu";
 import { UserProfileDialog } from "@/features/users/components/UserProfileDialog/UserProfileDialog";
+import { UserNoteDialog } from "@/features/users/components/UserNoteDialog/UserNoteDialog";
+import { getUserNotes, saveUserNote } from "@/features/users/utils/userNotes";
+import type { UserContextInvocation } from "@/features/users/components/UserContextMenu/UserContextMenu";
+import { VolumeX } from "lucide-react";
 
 function isTauriDesktopRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function copyText(value: string, title: string, onSuccess: () => void): void {
+  void Promise.resolve()
+    .then(() => navigator.clipboard?.writeText(value) ?? Promise.reject(new Error("Clipboard unavailable")))
+    .then(() => {
+      window.dispatchEvent(new CustomEvent("vetra:toast", { detail: { title, body: value, durationMs: 3000 } }));
+      onSuccess();
+    })
+    .catch(() => {
+      window.dispatchEvent(new CustomEvent("vetra:toast", { detail: { title: `Could not copy ${title === "Username copied" ? "username" : "user ID"}`, body: "Clipboard access was unavailable.", durationMs: 4000 } }));
+    });
 }
 
 interface ActiveCallDockProps {
@@ -106,8 +122,10 @@ export function ActiveCallDock({
   const mutedCallUserIds = useAppStore((s) => s.mutedCallUserIds) ?? {};
   const setCallUserVolume = useAppStore((s) => s.setCallUserVolume);
   const setCallUserMuted = useAppStore((s) => s.setCallUserMuted);
-  const [contextRequest, setContextRequest] = useState<{ target: UserContextTarget; x: number; y: number; anchorRect?: DOMRect | null } | null>(null);
+  const [contextRequest, setContextRequest] = useState<{ target: UserContextTarget; invocation: UserContextInvocation } | null>(null);
   const [profileTarget, setProfileTarget] = useState<UserContextTarget | null>(null);
+  const [noteTarget, setNoteTarget] = useState<UserContextTarget | null>(null);
+  const [userNotes, setUserNotes] = useState(getUserNotes);
   const contextTriggerRef = useRef<HTMLElement | null>(null);
   const stageRef = useRef<HTMLElement | null>(null);
   const isMountedRef = useRef(true);
@@ -129,14 +147,16 @@ export function ActiveCallDock({
   });
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
-  const remoteTarget: UserContextTarget = { id: remoteUser?.public_id ?? remoteUserId ?? "", username: remoteUser?.username ?? remoteUsername, displayName: remoteUser?.display_name, avatarUrl: remoteUser?.avatar_url, kind: "remote" };
-  const selfTarget: UserContextTarget = { id: currentUser?.public_id ?? currentUser?.id ?? "", username: currentUser?.username ?? "You", displayName: currentUser?.display_name, avatarUrl: currentUser?.avatar_url, kind: "self" };
+  const remoteAudioPreferenceKey = remoteUserId == null ? undefined : serializeResourceRef(remoteUserId);
+  const remoteTarget: UserContextTarget = { profileId: remoteUser?.public_id ?? remoteUserId ?? "", copyId: remoteUser?.public_id ?? remoteUserId ?? "", audioPreferenceKey: remoteAudioPreferenceKey, username: remoteUser?.username ?? remoteUsername, displayName: remoteUser?.display_name, avatarUrl: remoteUser?.avatar_url, kind: "remote" };
+  const selfTarget: UserContextTarget = { profileId: currentUser?.public_id ?? currentUser?.id ?? "", copyId: currentUser?.public_id ?? currentUser?.id ?? "", username: currentUser?.username ?? "You", displayName: currentUser?.display_name, avatarUrl: currentUser?.avatar_url, kind: "self" };
+  const remoteMutedLocally = Boolean(remoteAudioPreferenceKey && mutedCallUserIds[remoteAudioPreferenceKey]);
   const openUserContext = (event: React.MouseEvent | React.KeyboardEvent, target: UserContextTarget) => {
     event.preventDefault();
     event.stopPropagation();
     contextTriggerRef.current = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
-    const rect = event.currentTarget.getBoundingClientRect();
-    setContextRequest({ target, x: "clientX" in event && event.clientX ? event.clientX : rect.left, y: "clientY" in event && event.clientY ? event.clientY : rect.bottom, anchorRect: rect });
+    if ("clientX" in event) setContextRequest({ target, invocation: { mode: "pointer", clientX: event.clientX, clientY: event.clientY } });
+    else setContextRequest({ target, invocation: { mode: "keyboard", anchorRect: event.currentTarget.getBoundingClientRect() } });
   };
   const closeUserContext = () => {
     setContextRequest(null);
@@ -144,7 +164,7 @@ export function ActiveCallDock({
     contextTriggerRef.current = null;
     if (trigger?.isConnected) trigger.focus();
   };
-  useEffect(() => { closeUserContext(); setProfileTarget(null); }, [remoteUserId]);
+  useEffect(() => { closeUserContext(); setProfileTarget(null); setNoteTarget(null); }, [remoteUserId]);
 
 
   useEffect(() => {
@@ -377,18 +397,22 @@ export function ActiveCallDock({
     setIsShareExpanded(false);
   };
 
-  const contextMenu = contextRequest && contextRequest.target.id !== "" && (
+  const contextMenu = contextRequest && contextRequest.target.profileId !== "" && (
     <UserContextMenu
       {...contextRequest}
       onClose={closeUserContext}
       onProfile={() => { closeUserContext(); setProfileTarget(contextRequest.target); }}
-      onHangUp={onHangUp}
-      volume={callUserVolumes[serializeResourceRef(contextRequest.target.id)] ?? 100}
-      muted={Boolean(mutedCallUserIds[serializeResourceRef(contextRequest.target.id)])}
-      onVolumeChange={(volume) => setCallUserVolume(serializeResourceRef(contextRequest.target.id), volume)}
-      onMutedChange={(muted) => setCallUserMuted(serializeResourceRef(contextRequest.target.id), muted)}
+      note={contextRequest.target.audioPreferenceKey ? userNotes[contextRequest.target.audioPreferenceKey] : undefined}
+      volume={contextRequest.target.audioPreferenceKey ? callUserVolumes[contextRequest.target.audioPreferenceKey] ?? 100 : 100}
+      muted={Boolean(contextRequest.target.audioPreferenceKey && mutedCallUserIds[contextRequest.target.audioPreferenceKey])}
+      onVolumeChange={(volume) => { if (contextRequest.target.audioPreferenceKey) setCallUserVolume(contextRequest.target.audioPreferenceKey, volume); }}
+      onMutedChange={(muted) => { if (contextRequest.target.audioPreferenceKey) setCallUserMuted(contextRequest.target.audioPreferenceKey, muted); }}
+      onNote={() => { closeUserContext(); setNoteTarget(contextRequest.target); }}
+      onCopyUsername={() => copyText(contextRequest.target.username, "Username copied", closeUserContext)}
+      onCopyId={() => copyText(String(contextRequest.target.copyId), "User ID copied", closeUserContext)}
     />
   );
+  const noteDialog = noteTarget && <UserNoteDialog initialNote={noteTarget.audioPreferenceKey ? userNotes[noteTarget.audioPreferenceKey] ?? "" : ""} onClose={() => setNoteTarget(null)} onSave={(note) => { if (noteTarget.audioPreferenceKey) setUserNotes(saveUserNote(noteTarget.audioPreferenceKey, note)); setNoteTarget(null); }} />;
 
   if (!hasScreenShare) {
     const voiceStage = (
@@ -424,7 +448,7 @@ export function ActiveCallDock({
         <div className={cn("voice-call-participants flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10", isFullscreen && "fullscreen-voice-participants")} data-testid="active-call-voice-surface">
           <div className="voice-call-tile-row grid w-full max-w-[760px] grid-cols-2 gap-3" data-testid="voice-call-tile-row">
             <VoiceParticipantTile name="You" isMuted={isMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
-            <VoiceParticipantTile name={remoteUsername} onContextMenu={(event) => openUserContext(event, remoteTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, remoteTarget); }} />
+            <VoiceParticipantTile name={remoteUsername} isLocallyMuted={remoteMutedLocally} onContextMenu={(event) => openUserContext(event, remoteTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, remoteTarget); }} />
           </div>
         </div>
 
@@ -444,7 +468,7 @@ export function ActiveCallDock({
         </div>
       </section>
     );
-    return <>{isFullscreen ? (fullscreenRoot ? createPortal(voiceStage, fullscreenRoot) : null) : voiceStage}{contextMenu}{profileTarget && <UserProfileDialog target={profileTarget} onClose={() => setProfileTarget(null)} />}</>;
+    return <>{isFullscreen ? (fullscreenRoot ? createPortal(voiceStage, fullscreenRoot) : null) : voiceStage}{contextMenu}{profileTarget && <UserProfileDialog target={profileTarget} localNote={profileTarget.audioPreferenceKey ? userNotes[profileTarget.audioPreferenceKey] : undefined} onClose={() => setProfileTarget(null)} />}{noteDialog}</>;
   }
 
   if (!isShareExpanded) {
@@ -501,6 +525,7 @@ export function ActiveCallDock({
                 onExpand={() => setIsShareExpanded(true)}
                 onContextMenu={(event) => openUserContext(event, isRemoteScreenAvailable ? remoteTarget : selfTarget)}
                 onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, isRemoteScreenAvailable ? remoteTarget : selfTarget); }}
+                isLocallyMuted={isRemoteScreenAvailable && remoteMutedLocally}
               />
               <FramedParticipantTile name="You" isMuted={isMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
               <FramedParticipantTile
@@ -508,6 +533,7 @@ export function ActiveCallDock({
                 className={isFullscreen ? "col-span-2 w-[calc(50%_-_4px)] justify-self-center" : undefined}
                 onContextMenu={(event) => openUserContext(event, remoteTarget)}
                 onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, remoteTarget); }}
+                isLocallyMuted={remoteMutedLocally}
               />
             </div>
           </div>
@@ -535,7 +561,7 @@ export function ActiveCallDock({
         </div>
       </section>
     );
-    return <>{isFullscreen ? (fullscreenRoot ? createPortal(framedStage, fullscreenRoot) : null) : framedStage}{contextMenu}{profileTarget && <UserProfileDialog target={profileTarget} onClose={() => setProfileTarget(null)} />}</>;
+    return <>{isFullscreen ? (fullscreenRoot ? createPortal(framedStage, fullscreenRoot) : null) : framedStage}{contextMenu}{profileTarget && <UserProfileDialog target={profileTarget} localNote={profileTarget.audioPreferenceKey ? userNotes[profileTarget.audioPreferenceKey] : undefined} onClose={() => setProfileTarget(null)} />}{noteDialog}</>;
   }
 
   const shareStage = (
@@ -589,7 +615,7 @@ export function ActiveCallDock({
         {isFullscreen ? (
           <div className="fullscreen-share-participants relative z-10 mx-auto mb-4 mt-5 grid min-w-0 w-[min(560px,calc(100%-32px))] shrink-0 grid-cols-2 gap-3" data-testid="fullscreen-participant-strip">
             <FramedParticipantTile name="You" isMuted={isMuted} />
-            <FramedParticipantTile name={remoteUsername} />
+            <FramedParticipantTile name={remoteUsername} isLocallyMuted={remoteMutedLocally} />
           </div>
         ) : localScreenStream && remoteScreenStream ? (
           <div className="absolute bottom-20 right-4 h-[90px] w-[160px] overflow-hidden rounded-md bg-zinc-900 shadow-lg" data-testid="local-screen-share-pip"><StreamVideo stream={localScreenStream} label="Your screen share preview" className="h-full w-full object-cover" testId="local-screen-share-pip-video" /></div>
@@ -620,7 +646,7 @@ export function ActiveCallDock({
       </div>
     </section>
   );
-  return <>{isFullscreen ? (fullscreenRoot ? createPortal(shareStage, fullscreenRoot) : null) : shareStage}{contextMenu}{profileTarget && <UserProfileDialog target={profileTarget} onClose={() => setProfileTarget(null)} />}</>;
+  return <>{isFullscreen ? (fullscreenRoot ? createPortal(shareStage, fullscreenRoot) : null) : shareStage}{contextMenu}{profileTarget && <UserProfileDialog target={profileTarget} localNote={profileTarget.audioPreferenceKey ? userNotes[profileTarget.audioPreferenceKey] : undefined} onClose={() => setProfileTarget(null)} />}{noteDialog}</>;
 }
 
 function CallControls({
@@ -648,6 +674,7 @@ function ScreenShareFrame({
   onExpand,
   onContextMenu,
   onKeyDown,
+  isLocallyMuted = false,
 }: {
   stream: MediaStream | null;
   sharerName: string;
@@ -658,6 +685,7 @@ function ScreenShareFrame({
   onExpand: () => void;
   onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
+  isLocallyMuted?: boolean;
 }) {
   const isWatchPlaceholder = isRemote && !isWatching;
   const content = stream ? (
@@ -688,12 +716,12 @@ function ScreenShareFrame({
       onKeyDown={onKeyDown}
     >
       {content}
-      <span className="screen-share-framed-label absolute bottom-2 left-2 max-w-[calc(100%-16px)] truncate px-2 py-1 text-xs text-white">{sharerName} · Screen share</span>
+      <span className="screen-share-framed-label absolute bottom-2 left-2 flex max-w-[calc(100%-16px)] items-center gap-1 truncate px-2 py-1 text-xs text-white">{sharerName} · Screen share{isLocallyMuted && <VolumeX className="h-3.5 w-3.5 shrink-0" aria-label="Muted locally" />}</span>
     </button>
   );
 }
 
-function FramedParticipantTile({ name, isMuted = false, className, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; className?: string; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
+function FramedParticipantTile({ name, isMuted = false, isLocallyMuted = false, className, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; isLocallyMuted?: boolean; className?: string; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
   return (
     <div tabIndex={0} onContextMenu={onContextMenu} onKeyDown={onKeyDown} className={cn("screen-share-framed-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden", className)} data-testid="screen-share-framed-participant-tile">
       <div className="voice-participant-avatar flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-semibold" aria-hidden="true">
@@ -702,12 +730,13 @@ function FramedParticipantTile({ name, isMuted = false, className, onContextMenu
       <div className="absolute bottom-2 left-2 flex min-w-0 max-w-[calc(100%-16px)] items-center gap-1.5 text-xs font-medium" data-testid="screen-share-framed-participant-label">
         <span className="truncate">{name}</span>
         {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label={`${name} muted`} />}
+        {isLocallyMuted && <VolumeX className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Muted locally" />}
       </div>
     </div>
   );
 }
 
-function VoiceParticipantTile({ name, isMuted = false, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
+function VoiceParticipantTile({ name, isMuted = false, isLocallyMuted = false, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; isLocallyMuted?: boolean; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
   return (
     <div tabIndex={0} onContextMenu={onContextMenu} onKeyDown={onKeyDown} className="voice-participant-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" data-testid="active-call-voice-participant-tile">
       <div className="voice-participant-avatar flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-semibold" aria-hidden="true" data-testid="voice-participant-avatar">
@@ -716,6 +745,7 @@ function VoiceParticipantTile({ name, isMuted = false, onContextMenu, onKeyDown 
       <div className="absolute bottom-3 left-3 flex min-w-0 max-w-[calc(100%-24px)] items-center gap-1.5 text-sm font-medium" data-testid="voice-participant-label">
         <span className="truncate">{name}</span>
         {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label={`${name} muted`} />}
+        {isLocallyMuted && <VolumeX className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Muted locally" />}
       </div>
     </div>
   );

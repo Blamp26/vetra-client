@@ -5,6 +5,7 @@ import {
   Play,
   ScreenShare,
   Volume2,
+  VolumeX,
 } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { detachVideo, safelyPlayVideo } from "./mediaVideo";
@@ -20,6 +21,7 @@ export interface ParticipantTileProps {
   screenShareState?: ScreenShareTileState;
   isLocalSharer?: boolean;
   isMuted?: boolean;
+  isLocallyMuted?: boolean;
   onWatch?: () => void;
   onExpand?: () => void;
   onStopScreenShare?: () => void;
@@ -37,6 +39,7 @@ export function ParticipantTile({
   screenShareState = "idle",
   isLocalSharer = false,
   isMuted = false,
+  isLocallyMuted = false,
   onWatch,
   onExpand,
   onStopScreenShare,
@@ -52,6 +55,7 @@ export function ParticipantTile({
         stream={stream}
         state={screenShareState}
         isLocalSharer={isLocalSharer}
+        isLocallyMuted={isLocallyMuted}
         onWatch={onWatch}
         onExpand={onExpand}
         onStopScreenShare={onStopScreenShare}
@@ -87,6 +91,7 @@ export function ParticipantTile({
       >
         {name}
       </p>
+      {isLocallyMuted && <VolumeX className="absolute bottom-3 right-3 h-4 w-4 text-muted-foreground" aria-label="Muted locally" />}
       <span className="sr-only">{isMuted ? "Muted" : label}</span>
     </div>
   );
@@ -103,6 +108,7 @@ function ScreenShareParticipantTile({
   isScreenShareUpdating,
   className,
   testId,
+  isLocallyMuted,
 }: {
   name: string;
   stream: MediaStream | null;
@@ -114,6 +120,7 @@ function ScreenShareParticipantTile({
   isScreenShareUpdating: boolean;
   className?: string;
   testId: string;
+  isLocallyMuted?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isVideoReady, setIsVideoReady] = useState(false);
@@ -229,6 +236,7 @@ function ScreenShareParticipantTile({
         <p className="truncate text-[12px] leading-none text-white" data-testid="participant-screen-name">
           {name}
         </p>
+        {isLocallyMuted && <VolumeX className="h-3.5 w-3.5 shrink-0" aria-label="Muted locally" />}
       </div>
     </div>
   );

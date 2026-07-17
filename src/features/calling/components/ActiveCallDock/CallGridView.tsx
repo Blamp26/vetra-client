@@ -5,6 +5,7 @@ export interface CallGridParticipant {
   name: string;
   label: string;
   isMuted?: boolean;
+  isLocallyMuted?: boolean;
 }
 
 export interface CallGridScreenShare {
@@ -70,6 +71,7 @@ export function CallGridView({
           label={participant.label}
           variant="avatar"
           isMuted={participant.isMuted}
+          isLocallyMuted={participant.isLocallyMuted}
           compact={compactParticipants || hasPrimaryScreenShare}
           className={tileSizeClass}
           data-testid="active-call-participant-tile"
