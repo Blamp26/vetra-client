@@ -10,20 +10,25 @@ mod windows_fullscreen {
     use super::WindowsFullscreenState;
     use std::mem::size_of;
     use std::sync::{Mutex, OnceLock};
-    use tauri::Manager;
     use windows::core::BOOL;
     use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
     use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        RedrawWindow, SendMessageW, RDW_ALLCHILDREN, RDW_ERASE, RDW_FRAME, RDW_INVALIDATE,
-        RDW_UPDATENOW, WM_SETREDRAW,
+    use windows::Win32::Graphics::Gdi::{
+        RedrawWindow, RDW_ALLCHILDREN, RDW_ERASE, RDW_FRAME, RDW_INVALIDATE, RDW_UPDATENOW,
     };
+    use windows::Win32::UI::WindowsAndMessaging::{SendMessageW, WM_SETREDRAW};
 
     static REDRAW_GUARD: OnceLock<Mutex<Option<NativeRedrawGuard>>> = OnceLock::new();
 
     struct NativeRedrawGuard {
-        hwnd: HWND,
+        hwnd_value: usize,
         finished: bool,
+    }
+
+    impl NativeRedrawGuard {
+        fn hwnd(&self) -> HWND {
+            HWND(self.hwnd_value as *mut std::ffi::c_void)
+        }
     }
 
     impl NativeRedrawGuard {
@@ -39,21 +44,21 @@ mod windows_fullscreen {
             }
             .map_err(|error| format!("failed to disable DWM transitions: {error}"))?;
             unsafe {
-                SendMessageW(hwnd, WM_SETREDRAW, WPARAM(0), LPARAM(0));
+                SendMessageW(hwnd, WM_SETREDRAW, Some(WPARAM(0)), Some(LPARAM(0)));
             }
             Ok(Self {
-                hwnd,
+                hwnd_value: hwnd.0 as usize,
                 finished: false,
             })
         }
 
         fn finish(mut self) {
             unsafe {
-                SendMessageW(self.hwnd, WM_SETREDRAW, WPARAM(1), LPARAM(0));
+                SendMessageW(self.hwnd(), WM_SETREDRAW, Some(WPARAM(1)), Some(LPARAM(0)));
             }
             unsafe {
                 let _ = RedrawWindow(
-                    Some(self.hwnd),
+                    Some(self.hwnd()),
                     None,
                     None,
                     RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_UPDATENOW | RDW_ALLCHILDREN,
@@ -67,11 +72,11 @@ mod windows_fullscreen {
         fn drop(&mut self) {
             if !self.finished {
                 unsafe {
-                    SendMessageW(self.hwnd, WM_SETREDRAW, WPARAM(1), LPARAM(0));
+                    SendMessageW(self.hwnd(), WM_SETREDRAW, Some(WPARAM(1)), Some(LPARAM(0)));
                 }
                 unsafe {
                     let _ = RedrawWindow(
-                        Some(self.hwnd),
+                        Some(self.hwnd()),
                         None,
                         None,
                         RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_UPDATENOW | RDW_ALLCHILDREN,
@@ -81,7 +86,7 @@ mod windows_fullscreen {
             let enabled = BOOL(0);
             let _ = unsafe {
                 DwmSetWindowAttribute(
-                    self.hwnd,
+                    self.hwnd(),
                     DWMWA_TRANSITIONS_FORCEDISABLED,
                     &enabled as *const BOOL as *const _,
                     size_of::<BOOL>() as u32,
@@ -107,7 +112,7 @@ mod windows_fullscreen {
         }
         let guard = NativeRedrawGuard::new(hwnd)?;
 
-        let result = (|| {
+        let result: Result<WindowsFullscreenState, String> = (|| {
             if enter {
                 if was_maximized {
                     window.unmaximize().map_err(|error| {
@@ -134,9 +139,9 @@ mod windows_fullscreen {
                 }
             }
             Ok(WindowsFullscreenState {
-                fullscreen: window.is_fullscreen()?,
-                maximized: window.is_maximized()?,
-                resizable: window.is_resizable()?,
+                fullscreen: window.is_fullscreen().map_err(|error| error.to_string())?,
+                maximized: window.is_maximized().map_err(|error| error.to_string())?,
+                resizable: window.is_resizable().map_err(|error| error.to_string())?,
             })
         })();
         let state = result?;
@@ -154,15 +159,15 @@ mod windows_fullscreen {
             .map_err(|_| "fullscreen redraw guard is poisoned")?
             .take();
         if let Some(guard) = guard {
-            if guard.hwnd != hwnd {
+            if guard.hwnd_value != hwnd.0 as usize {
                 return Err("fullscreen redraw guard belongs to another window".to_string());
             }
             guard.finish();
         }
         Ok(WindowsFullscreenState {
-            fullscreen: window.is_fullscreen()?,
-            maximized: window.is_maximized()?,
-            resizable: window.is_resizable()?,
+            fullscreen: window.is_fullscreen().map_err(|error| error.to_string())?,
+            maximized: window.is_maximized().map_err(|error| error.to_string())?,
+            resizable: window.is_resizable().map_err(|error| error.to_string())?,
         })
     }
 }
