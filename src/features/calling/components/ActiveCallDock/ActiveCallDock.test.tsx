@@ -4,65 +4,36 @@ import type { ComponentProps } from "react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 
-const { mockCurrentWindow, mockGetCurrentWindow, mockInvoke, fullscreenState, nativeEventHandlers, nativeWindowState, nativeCallOrder } = vi.hoisted(() => {
+const { mockCurrentWindow, mockGetCurrentWindow, fullscreenState, nativeEventHandlers, nativeCallOrder } = vi.hoisted(() => {
   const state = { value: false };
-  const windowState = { resizable: true, maximized: false };
   const callOrder: string[] = [];
   const handlers = { resize: [] as Array<() => void>, focus: [] as Array<() => void> };
   const currentWindow = {
     setFullscreen: vi.fn(async (fullscreen: boolean) => { callOrder.push(`setFullscreen:${fullscreen}`); state.value = fullscreen; }),
     isFullscreen: vi.fn(async () => { callOrder.push("isFullscreen"); return state.value; }),
-    isResizable: vi.fn(async () => { callOrder.push("isResizable"); return windowState.resizable; }),
-    setResizable: vi.fn(async (resizable: boolean) => { callOrder.push(`setResizable:${resizable}`); windowState.resizable = resizable; }),
-    isMaximized: vi.fn(async () => { callOrder.push("isMaximized"); return windowState.maximized; }),
-    unmaximize: vi.fn(async () => { callOrder.push("unmaximize"); windowState.maximized = false; }),
-    maximize: vi.fn(async () => { callOrder.push("maximize"); windowState.maximized = true; }),
     onResized: vi.fn(async (handler: () => void) => { handlers.resize.push(handler); return () => { handlers.resize = handlers.resize.filter((candidate) => candidate !== handler); }; }),
     onFocusChanged: vi.fn(async (handler: () => void) => { handlers.focus.push(handler); return () => { handlers.focus = handlers.focus.filter((candidate) => candidate !== handler); }; }),
   };
   return {
     mockCurrentWindow: currentWindow,
     mockGetCurrentWindow: vi.fn(() => currentWindow),
-    mockInvoke: vi.fn(),
     fullscreenState: state,
     nativeEventHandlers: handlers,
-    nativeWindowState: windowState,
     nativeCallOrder: callOrder,
   };
 });
 
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: mockGetCurrentWindow }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: mockInvoke }));
 import { ActiveCallDock } from "./ActiveCallDock";
 
 beforeEach(() => {
   vi.clearAllMocks();
   fullscreenState.value = false;
-  nativeWindowState.resizable = true;
-  nativeWindowState.maximized = false;
   nativeCallOrder.length = 0;
   nativeEventHandlers.resize = [];
   nativeEventHandlers.focus = [];
   mockCurrentWindow.setFullscreen.mockImplementation(async (fullscreen: boolean) => { nativeCallOrder.push(`setFullscreen:${fullscreen}`); fullscreenState.value = fullscreen; });
   mockCurrentWindow.isFullscreen.mockImplementation(async () => { nativeCallOrder.push("isFullscreen"); return fullscreenState.value; });
-  mockCurrentWindow.isResizable.mockImplementation(async () => { nativeCallOrder.push("isResizable"); return nativeWindowState.resizable; });
-  mockCurrentWindow.setResizable.mockImplementation(async (resizable: boolean) => { nativeCallOrder.push(`setResizable:${resizable}`); nativeWindowState.resizable = resizable; });
-  mockCurrentWindow.isMaximized.mockImplementation(async () => { nativeCallOrder.push("isMaximized"); return nativeWindowState.maximized; });
-  mockCurrentWindow.unmaximize.mockImplementation(async () => { nativeCallOrder.push("unmaximize"); nativeWindowState.maximized = false; });
-  mockCurrentWindow.maximize.mockImplementation(async () => { nativeCallOrder.push("maximize"); nativeWindowState.maximized = true; });
-  mockInvoke.mockImplementation(async (command: string, args: { enter?: boolean; wasResizable?: boolean; wasMaximized?: boolean }) => {
-    if (command === "begin_call_fullscreen_windows") {
-      if (args.enter && args.wasMaximized) nativeCallOrder.push("unmaximize");
-      if (args.enter) nativeCallOrder.push("setResizable:false");
-      nativeCallOrder.push(`setFullscreen:${Boolean(args.enter)}`);
-      nativeCallOrder.push("isFullscreen");
-      fullscreenState.value = Boolean(args.enter);
-      nativeWindowState.resizable = args.enter ? false : Boolean(args.wasResizable);
-      nativeWindowState.maximized = args.enter ? false : Boolean(args.wasMaximized);
-      return { fullscreen: fullscreenState.value, maximized: nativeWindowState.maximized, resizable: nativeWindowState.resizable };
-    }
-    return { fullscreen: fullscreenState.value, maximized: nativeWindowState.maximized, resizable: nativeWindowState.resizable };
-  });
   Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Mozilla/5.0 (X11; Linux x86_64)" });
   Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} });
 });
@@ -73,7 +44,6 @@ afterEach(() => {
 
 function emitNativeResize() { for (const handler of [...nativeEventHandlers.resize]) handler(); }
 function emitNativeFocus() { for (const handler of [...nativeEventHandlers.focus]) handler(); }
-function useWindowsRuntime() { Object.defineProperty(navigator, "userAgent", { configurable: true, value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }); }
 function expectCallOrder(sequence: string[]) {
   let previousIndex = -1;
   for (const call of sequence) {
@@ -234,8 +204,6 @@ describe("ActiveCallDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
     await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenCalledWith(true));
     expect(requestFullscreen).not.toHaveBeenCalled();
-    expect(mockCurrentWindow.isResizable).not.toHaveBeenCalled();
-    expect(mockCurrentWindow.setResizable).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
     expect(screen.getByTestId("fullscreen-participant-strip")).toHaveClass("mt-5");
     expect(screen.getByTestId("fullscreen-participant-strip")).toBeInTheDocument();
@@ -245,136 +213,25 @@ describe("ActiveCallDock", () => {
     await waitFor(() => expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(false));
   });
 
-  it("removes Windows maximized and resizable state before entering fullscreen", async () => {
-    useWindowsRuntime();
-    nativeWindowState.maximized = true;
+  it("uses only the standard Tauri fullscreen API for entry and exit", async () => {
     renderDock();
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
-    expectCallOrder(["isResizable", "isMaximized", "unmaximize", "setResizable:false", "setFullscreen:true", "isFullscreen"]);
-    expect(nativeWindowState.resizable).toBe(false);
-    expect(nativeWindowState.maximized).toBe(false);
-  });
-
-  it("does not unmaximize a non-maximized Windows window", async () => {
-    useWindowsRuntime();
-    renderDock();
-    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
-    expect(mockCurrentWindow.unmaximize).not.toHaveBeenCalled();
-    expectCallOrder(["isResizable", "isMaximized", "setResizable:false", "setFullscreen:true", "isFullscreen"]);
-  });
-
-  it("restores Windows resizable and maximized state after exit", async () => {
-    useWindowsRuntime();
-    nativeWindowState.maximized = true;
-    renderDock();
-    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
-    nativeCallOrder.length = 0;
-    mockCurrentWindow.setFullscreen.mockClear();
-    mockCurrentWindow.setResizable.mockClear();
-    mockCurrentWindow.maximize.mockClear();
-    mockInvoke.mockClear();
+    expectCallOrder(["setFullscreen:true", "isFullscreen"]);
+    expect(mockCurrentWindow.setFullscreen).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument());
-    expect(mockInvoke).toHaveBeenCalledWith("begin_call_fullscreen_windows", { enter: false, wasResizable: true, wasMaximized: true });
-    expect(mockCurrentWindow.setFullscreen).not.toHaveBeenCalled();
-    expect(mockCurrentWindow.setResizable).not.toHaveBeenCalled();
-    expect(mockCurrentWindow.maximize).not.toHaveBeenCalled();
-    expect(nativeWindowState.resizable).toBe(true);
-    expect(nativeWindowState.maximized).toBe(true);
+    expectCallOrder(["setFullscreen:true", "isFullscreen", "setFullscreen:false", "isFullscreen"]);
+    expect(mockCurrentWindow.setFullscreen).toHaveBeenCalledTimes(2);
   });
 
-  it("preserves a previously non-resizable Windows window after exit", async () => {
-    useWindowsRuntime();
-    nativeWindowState.resizable = false;
+  it("never changes native resizability or maximization during fullscreen", async () => {
     renderDock();
     fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument());
-    expect(nativeWindowState.resizable).toBe(false);
-    expect(mockCurrentWindow.setResizable).not.toHaveBeenCalled();
-  });
-
-  it("restores Windows state after failed fullscreen entry", async () => {
-    useWindowsRuntime();
-    nativeWindowState.maximized = true;
-    mockInvoke.mockImplementationOnce(async (command: string, args: { enter?: boolean; wasResizable?: boolean; wasMaximized?: boolean }) => {
-      if (command === "begin_call_fullscreen_windows" && args.enter) throw new Error("entry failed");
-      return { fullscreen: false, maximized: false, resizable: true };
-    });
-    renderDock();
-    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument());
-    expect(nativeWindowState.resizable).toBe(true);
-    expect(nativeWindowState.maximized).toBe(true);
-    expect(document.getElementById("vetra-call-fullscreen-root")).not.toBeInTheDocument();
-  });
-
-  it("restores Windows state once after an external fullscreen exit", async () => {
-    useWindowsRuntime();
-    nativeWindowState.maximized = true;
-    renderDock({ remoteScreenStream: stream("remote"), isRemoteScreenAvailable: true, isWatchingRemoteScreen: true });
-    expandShare();
-    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
-    nativeCallOrder.length = 0;
-    mockCurrentWindow.setResizable.mockClear();
-    mockCurrentWindow.maximize.mockClear();
-    mockInvoke.mockClear();
-    fullscreenState.value = false;
-    emitNativeResize();
-    emitNativeFocus();
-    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).not.toBeInTheDocument());
-    expect(nativeWindowState.resizable).toBe(true);
-    expect(nativeWindowState.maximized).toBe(true);
-    await waitFor(() => expect(mockInvoke).toHaveBeenCalledTimes(2));
-    expect(mockCurrentWindow.setResizable).not.toHaveBeenCalled();
-    expect(mockCurrentWindow.maximize).not.toHaveBeenCalled();
-    expect(screen.getByTestId("screen-share-stage")).toBeInTheDocument();
-  });
-
-  it("restores Windows state during teardown", async () => {
-    useWindowsRuntime();
-    nativeWindowState.maximized = true;
-    const { unmount } = renderDock();
-    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
-    unmount();
-    await waitFor(() => expect(nativeWindowState.resizable).toBe(true));
-    expect(nativeWindowState.maximized).toBe(true);
-    expect(mockInvoke).toHaveBeenCalledWith("begin_call_fullscreen_windows", { enter: false, wasResizable: true, wasMaximized: true });
-  });
-
-  it("keeps the portal mounted until the atomic Windows exit command resolves", async () => {
-    useWindowsRuntime();
-    renderDock();
-    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
-    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
-    await waitFor(() => expect(document.getElementById("vetra-call-fullscreen-root")).not.toBeInTheDocument());
-  });
-
-  it("falls back to JavaScript restoration when the atomic Windows command fails", async () => {
-    useWindowsRuntime();
-    nativeWindowState.maximized = true;
-    mockInvoke.mockImplementation(async (command: string, args: { enter?: boolean; wasResizable?: boolean; wasMaximized?: boolean }) => {
-      if (command === "begin_call_fullscreen_windows" && args.enter === false) throw new Error("command unavailable");
-      if (command === "begin_call_fullscreen_windows") return { fullscreen: true, maximized: false, resizable: false };
-      return { fullscreen: false, maximized: false, resizable: true };
-    });
-    renderDock();
-    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument());
-    mockCurrentWindow.setResizable.mockClear();
-    mockCurrentWindow.maximize.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument());
-    expect(mockCurrentWindow.setFullscreen).toHaveBeenLastCalledWith(false);
-    expect(mockCurrentWindow.setResizable).toHaveBeenCalledWith(true);
-    expect(mockCurrentWindow.maximize).toHaveBeenCalledTimes(1);
+    expectCallOrder(["setFullscreen:true", "isFullscreen", "setFullscreen:false", "isFullscreen"]);
   });
 
   it("portals fullscreen share presentation directly under body and removes the normal stage", async () => {
@@ -595,8 +452,6 @@ describe("ActiveCallDock", () => {
   it("keeps the native fullscreen capability and title-bar drag permission", () => {
     const capability = readFileSync("src-tauri/capabilities/default.json", "utf8");
     expect(capability).toContain("core:window:allow-set-fullscreen");
-    expect(capability).toContain("core:window:allow-is-resizable");
-    expect(capability).toContain("core:window:allow-set-resizable");
     expect(capability).toContain("core:window:allow-start-dragging");
   });
 
