@@ -444,7 +444,7 @@ describe("ActiveCallDock", () => {
   it("keeps the portal viewport contract in the stylesheet", () => {
     const styles = readFileSync("src/styles.css", "utf8");
     expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*position:\s*fixed/);
-    expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*z-index:\s*2147483647/);
+    expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*z-index:\s*var\(--z-index-call-fullscreen\)/);
     expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*width:\s*100dvw/);
     expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*height:\s*100dvh/);
     expect(styles).toMatch(/\.vetra-call-fullscreen-root[\s\S]*display:\s*flex/);

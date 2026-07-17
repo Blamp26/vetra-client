@@ -3,6 +3,7 @@ import { useAppStore } from "@/store";
 import { CallAudioRenderer } from "@/features/calling/components/CallAudioRenderer/CallAudioRenderer";
 import { useCall } from "@/features/calling/hooks/useCall";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
+import { serializeResourceRef } from "@/shared/utils/resourceRef";
 
 export const CallContext = createContext<UseCallReturn | null>(null);
 
@@ -16,6 +17,8 @@ export function CallProvider({ currentUserId, children }: CallProviderProps) {
   const selectedOutputDeviceId = useAppStore((s) => s.selectedOutputDeviceId);
   const soundEnabled = useAppStore((s) => s.soundEnabled);
   const outputVolume = useAppStore((s) => s.outputVolume);
+  const callUserVolumes = useAppStore((s) => s.callUserVolumes);
+  const mutedCallUserIds = useAppStore((s) => s.mutedCallUserIds);
   const setOutputDevice = useAppStore((s) => s.setOutputDevice);
   const lastOutputDeviceFallbackRef = useRef<string | null>(null);
 
@@ -51,6 +54,8 @@ export function CallProvider({ currentUserId, children }: CallProviderProps) {
         selectedOutputDeviceId={selectedOutputDeviceId}
         soundEnabled={soundEnabled}
         outputVolume={outputVolume}
+        callUserVolume={call.remoteUserId == null ? 100 : (callUserVolumes ?? {})[serializeResourceRef(call.remoteUserId)] ?? 100}
+        callUserMuted={call.remoteUserId != null && Boolean((mutedCallUserIds ?? {})[serializeResourceRef(call.remoteUserId)])}
         onOutputDeviceFallback={handleOutputDeviceFallback}
       />
       {children}

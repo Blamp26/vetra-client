@@ -405,6 +405,9 @@ export function ChatWindow({ activeChat, call }: Props) {
 
       {shouldShowActiveCallDock && (
         <ActiveCallDock
+          currentUser={currentUser}
+          remoteUserId={call.remoteUserId}
+          remoteUser={partner}
           remoteUsername={call.remoteUsername ?? `User #${call.remoteUserId}`}
           callStatus={call.status}
           seconds={call.seconds}

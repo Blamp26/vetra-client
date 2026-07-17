@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
+import type * as React from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Maximize, Mic, MicOff, Minimize, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
@@ -7,12 +8,20 @@ import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
 import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import { detachVideo, safelyPlayVideo } from "./mediaVideo";
+import type { ResourceRef, User } from "@/shared/types";
+import { serializeResourceRef } from "@/shared/utils/resourceRef";
+import { useAppStore } from "@/store";
+import { UserContextMenu, type UserContextTarget } from "@/features/users/components/UserContextMenu/UserContextMenu";
+import { UserProfileDialog } from "@/features/users/components/UserProfileDialog/UserProfileDialog";
 
 function isTauriDesktopRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 interface ActiveCallDockProps {
+  currentUser?: User | null;
+  remoteUserId?: ResourceRef | null;
+  remoteUser?: User | null;
   remoteUsername: string;
   callStatus?: CallStatus;
   seconds: number;
@@ -71,6 +80,9 @@ function StreamVideo({
 }
 
 export function ActiveCallDock({
+  currentUser,
+  remoteUserId,
+  remoteUser,
   remoteUsername,
   callStatus = "active",
   seconds,
@@ -90,6 +102,13 @@ export function ActiveCallDock({
   onWatchRemoteScreen,
   onHangUp,
 }: ActiveCallDockProps) {
+  const callUserVolumes = useAppStore((s) => s.callUserVolumes) ?? {};
+  const mutedCallUserIds = useAppStore((s) => s.mutedCallUserIds) ?? {};
+  const setCallUserVolume = useAppStore((s) => s.setCallUserVolume);
+  const setCallUserMuted = useAppStore((s) => s.setCallUserMuted);
+  const [contextRequest, setContextRequest] = useState<{ target: UserContextTarget; x: number; y: number; anchorRect?: DOMRect | null } | null>(null);
+  const [profileTarget, setProfileTarget] = useState<UserContextTarget | null>(null);
+  const contextTriggerRef = useRef<HTMLElement | null>(null);
   const stageRef = useRef<HTMLElement | null>(null);
   const isMountedRef = useRef(true);
   const nativeFullscreenOwnedRef = useRef(false);
@@ -110,6 +129,22 @@ export function ActiveCallDock({
   });
   const shouldShowDiagnostics =
     import.meta.env.DEV && import.meta.env.VITE_WEBRTC_SHOW_DIAGNOSTICS === "true";
+  const remoteTarget: UserContextTarget = { id: remoteUser?.public_id ?? remoteUserId ?? "", username: remoteUser?.username ?? remoteUsername, displayName: remoteUser?.display_name, avatarUrl: remoteUser?.avatar_url, kind: "remote" };
+  const selfTarget: UserContextTarget = { id: currentUser?.public_id ?? currentUser?.id ?? "", username: currentUser?.username ?? "You", displayName: currentUser?.display_name, avatarUrl: currentUser?.avatar_url, kind: "self" };
+  const openUserContext = (event: React.MouseEvent | React.KeyboardEvent, target: UserContextTarget) => {
+    event.preventDefault();
+    event.stopPropagation();
+    contextTriggerRef.current = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContextRequest({ target, x: "clientX" in event && event.clientX ? event.clientX : rect.left, y: "clientY" in event && event.clientY ? event.clientY : rect.bottom, anchorRect: rect });
+  };
+  const closeUserContext = () => {
+    setContextRequest(null);
+    const trigger = contextTriggerRef.current;
+    contextTriggerRef.current = null;
+    if (trigger?.isConnected) trigger.focus();
+  };
+  useEffect(() => { closeUserContext(); setProfileTarget(null); }, [remoteUserId]);
 
 
   useEffect(() => {
@@ -342,6 +377,19 @@ export function ActiveCallDock({
     setIsShareExpanded(false);
   };
 
+  const contextMenu = contextRequest && contextRequest.target.id !== "" && (
+    <UserContextMenu
+      {...contextRequest}
+      onClose={closeUserContext}
+      onProfile={() => { closeUserContext(); setProfileTarget(contextRequest.target); }}
+      onHangUp={onHangUp}
+      volume={callUserVolumes[serializeResourceRef(contextRequest.target.id)] ?? 100}
+      muted={Boolean(mutedCallUserIds[serializeResourceRef(contextRequest.target.id)])}
+      onVolumeChange={(volume) => setCallUserVolume(serializeResourceRef(contextRequest.target.id), volume)}
+      onMutedChange={(muted) => setCallUserMuted(serializeResourceRef(contextRequest.target.id), muted)}
+    />
+  );
+
   if (!hasScreenShare) {
     const voiceStage = (
       <section
@@ -375,8 +423,8 @@ export function ActiveCallDock({
 
         <div className={cn("voice-call-participants flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10", isFullscreen && "fullscreen-voice-participants")} data-testid="active-call-voice-surface">
           <div className="voice-call-tile-row grid w-full max-w-[760px] grid-cols-2 gap-3" data-testid="voice-call-tile-row">
-            <VoiceParticipantTile name="You" isMuted={isMuted} />
-            <VoiceParticipantTile name={remoteUsername} />
+            <VoiceParticipantTile name="You" isMuted={isMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
+            <VoiceParticipantTile name={remoteUsername} onContextMenu={(event) => openUserContext(event, remoteTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, remoteTarget); }} />
           </div>
         </div>
 
@@ -396,7 +444,7 @@ export function ActiveCallDock({
         </div>
       </section>
     );
-    return isFullscreen ? (fullscreenRoot ? createPortal(voiceStage, fullscreenRoot) : null) : voiceStage;
+    return <>{isFullscreen ? (fullscreenRoot ? createPortal(voiceStage, fullscreenRoot) : null) : voiceStage}{contextMenu}{profileTarget && <UserProfileDialog target={profileTarget} onClose={() => setProfileTarget(null)} />}</>;
   }
 
   if (!isShareExpanded) {
@@ -451,11 +499,15 @@ export function ActiveCallDock({
                 isLoading={isRemoteScreenLoading || isRemoteWatchPending}
                 onWatch={watchRemoteScreen}
                 onExpand={() => setIsShareExpanded(true)}
+                onContextMenu={(event) => openUserContext(event, isRemoteScreenAvailable ? remoteTarget : selfTarget)}
+                onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, isRemoteScreenAvailable ? remoteTarget : selfTarget); }}
               />
-              <FramedParticipantTile name="You" isMuted={isMuted} />
+              <FramedParticipantTile name="You" isMuted={isMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
               <FramedParticipantTile
                 name={remoteUsername}
                 className={isFullscreen ? "col-span-2 w-[calc(50%_-_4px)] justify-self-center" : undefined}
+                onContextMenu={(event) => openUserContext(event, remoteTarget)}
+                onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, remoteTarget); }}
               />
             </div>
           </div>
@@ -483,7 +535,7 @@ export function ActiveCallDock({
         </div>
       </section>
     );
-    return isFullscreen ? (fullscreenRoot ? createPortal(framedStage, fullscreenRoot) : null) : framedStage;
+    return <>{isFullscreen ? (fullscreenRoot ? createPortal(framedStage, fullscreenRoot) : null) : framedStage}{contextMenu}{profileTarget && <UserProfileDialog target={profileTarget} onClose={() => setProfileTarget(null)} />}</>;
   }
 
   const shareStage = (
@@ -515,6 +567,8 @@ export function ActiveCallDock({
           }
           closeExpandedFromStage();
         }}
+        onContextMenu={(event) => openUserContext(event, isRemoteScreenAvailable ? remoteTarget : selfTarget)}
+        onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, isRemoteScreenAvailable ? remoteTarget : selfTarget); }}
         tabIndex={-1}
       >
         <div className={isFullscreen ? "fullscreen-share-video-area relative flex min-h-0 min-w-0 flex-1" : "absolute inset-0"} data-testid={isFullscreen ? "fullscreen-share-video-area" : undefined}>
@@ -566,7 +620,7 @@ export function ActiveCallDock({
       </div>
     </section>
   );
-  return isFullscreen ? (fullscreenRoot ? createPortal(shareStage, fullscreenRoot) : null) : shareStage;
+  return <>{isFullscreen ? (fullscreenRoot ? createPortal(shareStage, fullscreenRoot) : null) : shareStage}{contextMenu}{profileTarget && <UserProfileDialog target={profileTarget} onClose={() => setProfileTarget(null)} />}</>;
 }
 
 function CallControls({
@@ -592,6 +646,8 @@ function ScreenShareFrame({
   isLoading,
   onWatch,
   onExpand,
+  onContextMenu,
+  onKeyDown,
 }: {
   stream: MediaStream | null;
   sharerName: string;
@@ -600,6 +656,8 @@ function ScreenShareFrame({
   isLoading: boolean;
   onWatch: () => Promise<void>;
   onExpand: () => void;
+  onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const isWatchPlaceholder = isRemote && !isWatching;
   const content = stream ? (
@@ -626,6 +684,8 @@ function ScreenShareFrame({
       aria-busy={isWatchPlaceholder && isLoading}
       disabled={isWatchPlaceholder && isLoading}
       onClick={() => { if (isWatchPlaceholder) void onWatch(); else onExpand(); }}
+      onContextMenu={onContextMenu}
+      onKeyDown={onKeyDown}
     >
       {content}
       <span className="screen-share-framed-label absolute bottom-2 left-2 max-w-[calc(100%-16px)] truncate px-2 py-1 text-xs text-white">{sharerName} · Screen share</span>
@@ -633,9 +693,9 @@ function ScreenShareFrame({
   );
 }
 
-function FramedParticipantTile({ name, isMuted = false, className }: { name: string; isMuted?: boolean; className?: string }) {
+function FramedParticipantTile({ name, isMuted = false, className, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; className?: string; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
   return (
-    <div className={cn("screen-share-framed-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden", className)} data-testid="screen-share-framed-participant-tile">
+    <div tabIndex={0} onContextMenu={onContextMenu} onKeyDown={onKeyDown} className={cn("screen-share-framed-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden", className)} data-testid="screen-share-framed-participant-tile">
       <div className="voice-participant-avatar flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-semibold" aria-hidden="true">
         {name.slice(0, 1).toUpperCase()}
       </div>
@@ -647,9 +707,9 @@ function FramedParticipantTile({ name, isMuted = false, className }: { name: str
   );
 }
 
-function VoiceParticipantTile({ name, isMuted = false }: { name: string; isMuted?: boolean }) {
+function VoiceParticipantTile({ name, isMuted = false, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
   return (
-    <div className="voice-participant-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden rounded-lg" data-testid="active-call-voice-participant-tile">
+    <div tabIndex={0} onContextMenu={onContextMenu} onKeyDown={onKeyDown} className="voice-participant-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" data-testid="active-call-voice-participant-tile">
       <div className="voice-participant-avatar flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-semibold" aria-hidden="true" data-testid="voice-participant-avatar">
         {name.slice(0, 1).toUpperCase()}
       </div>

@@ -6,6 +6,8 @@ interface CallAudioRendererProps {
   selectedOutputDeviceId: string;
   soundEnabled: boolean;
   outputVolume: number;
+  callUserVolume?: number;
+  callUserMuted?: boolean;
   onOutputDeviceFallback?: (missingDeviceId: string) => void;
 }
 
@@ -50,6 +52,8 @@ export function CallAudioRenderer({
   selectedOutputDeviceId,
   soundEnabled,
   outputVolume,
+  callUserVolume = 100,
+  callUserMuted = false,
   onOutputDeviceFallback,
 }: CallAudioRendererProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -73,11 +77,11 @@ export function CallAudioRenderer({
 
     const normalizedVolume = Math.min(
       1,
-      Math.max(0, Number.isFinite(outputVolume) ? outputVolume : 1),
+      Math.max(0, (Number.isFinite(outputVolume) ? outputVolume : 1) * (callUserMuted ? 0 : callUserVolume / 100)),
     );
     audio.volume = normalizedVolume;
     audio.muted = !soundEnabled || normalizedVolume === 0;
-  }, [outputVolume, soundEnabled]);
+  }, [callUserMuted, callUserVolume, outputVolume, soundEnabled]);
 
   useEffect(() => {
     const audio = audioRef.current as (HTMLAudioElement & {

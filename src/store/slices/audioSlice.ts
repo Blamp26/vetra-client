@@ -7,6 +7,8 @@ export interface AudioSlice {
   micCascaded: boolean;
   lastVoluntaryMic: boolean;
   outputVolume: number;
+  callUserVolumes: Record<string, number>;
+  mutedCallUserIds: Record<string, true>;
   
   // Device Selection
   selectedInputDeviceId: string;
@@ -20,6 +22,8 @@ export interface AudioSlice {
   toggleMic: () => void;
   toggleSound: () => void;
   setOutputVolume: (volume: number) => void;
+  setCallUserVolume: (userKey: string, volume: number) => void;
+  setCallUserMuted: (userKey: string, muted: boolean) => void;
   setInputDevice: (deviceId: string) => void;
   setOutputDevice: (deviceId: string) => void;
   setNoiseSuppression: (enabled: boolean) => void;
@@ -43,6 +47,8 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
   micCascaded: false,
   lastVoluntaryMic: true,
   outputVolume: 1,
+  callUserVolumes: {},
+  mutedCallUserIds: {},
   
   selectedInputDeviceId: 'default',
   selectedOutputDeviceId: 'default',
@@ -118,6 +124,18 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
 
   setOutputVolume: (volume: number) => set({
     outputVolume: Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : 1)),
+  }),
+  setCallUserVolume: (userKey, volume) => set((state: AudioSlice) => ({
+    callUserVolumes: {
+      ...state.callUserVolumes,
+      [userKey]: Math.min(100, Math.max(0, Number.isFinite(volume) ? Math.round(volume) : 100)),
+    },
+  })),
+  setCallUserMuted: (userKey, muted) => set((state: AudioSlice) => {
+    const next = { ...state.mutedCallUserIds };
+    if (muted) next[userKey] = true;
+    else delete next[userKey];
+    return { mutedCallUserIds: next };
   }),
   setInputDevice: (deviceId: string) => set({ selectedInputDeviceId: deviceId }),
   setOutputDevice: (deviceId: string) => set({ selectedOutputDeviceId: deviceId }),
