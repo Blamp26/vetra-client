@@ -1286,6 +1286,14 @@ body[data-vt-shell-resizing="true"] {
     z-index: 20;
   }
 
+  .vetra-call-fullscreen-root,
+  .vetra-call-fullscreen-root *,
+  .fullscreen-call-surface,
+  .fullscreen-call-surface * {
+    animation: none !important;
+    transition: none !important;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .screen-share-stage__controls {
       transition: none;

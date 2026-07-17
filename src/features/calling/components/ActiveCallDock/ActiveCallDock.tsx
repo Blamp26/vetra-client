@@ -1,4 +1,4 @@
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -43,6 +43,8 @@ interface WindowsFullscreenExitState {
   maximized: boolean;
   resizable: boolean;
 }
+
+type FullscreenHandoff = "enter" | "exit";
 
 function StreamVideo({
   stream,
@@ -108,6 +110,10 @@ export function ActiveCallDock({
   const capturedResizableRef = useRef<boolean | null>(null);
   const capturedMaximizedRef = useRef<boolean | null>(null);
   const nativeStateRestorePromiseRef = useRef<Promise<boolean> | null>(null);
+  const nativeHandoffRef = useRef<FullscreenHandoff | null>(null);
+  const nativeHandoffFrameRef = useRef<number | null>(null);
+  const nativeHandoffVersionRef = useRef(0);
+  const [nativeHandoffVersion, setNativeHandoffVersion] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFullscreenPending, setIsFullscreenPending] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(false);
@@ -146,10 +152,12 @@ export function ActiveCallDock({
     const restoration = (async (): Promise<boolean> => {
       if (isWindowsDesktopRuntime() && capturedResizableRef.current !== null && capturedMaximizedRef.current !== null) {
         try {
-          const state = await invoke<WindowsFullscreenExitState>("exit_call_fullscreen_windows", {
+          const state = await invoke<WindowsFullscreenExitState>("begin_call_fullscreen_windows", {
+            enter: false,
             wasResizable: capturedResizableRef.current,
             wasMaximized: capturedMaximizedRef.current,
           });
+          nativeHandoffRef.current = "exit";
           if (!state.fullscreen) {
             capturedResizableRef.current = null;
             capturedMaximizedRef.current = null;
@@ -173,6 +181,29 @@ export function ActiveCallDock({
     nativeStateRestorePromiseRef.current = trackedRestoration;
     return trackedRestoration;
   };
+
+  const scheduleNativeHandoffFinish = (handoff: FullscreenHandoff) => {
+    nativeHandoffRef.current = handoff;
+    nativeHandoffVersionRef.current += 1;
+    setNativeHandoffVersion(nativeHandoffVersionRef.current);
+  };
+
+  useEffect(() => {
+    if (!nativeHandoffRef.current || !isWindowsDesktopRuntime()) return;
+    const handoff = nativeHandoffRef.current;
+    nativeHandoffFrameRef.current = requestAnimationFrame(() => {
+      nativeHandoffFrameRef.current = null;
+      void invoke<WindowsFullscreenExitState>("finish_call_fullscreen_windows")
+        .catch((error: unknown) => console.warn("[ActiveCallDock] Failed to finish native fullscreen handoff", error))
+        .finally(() => {
+          if (nativeHandoffRef.current === handoff) nativeHandoffRef.current = null;
+        });
+    });
+    return () => {
+      if (nativeHandoffFrameRef.current !== null) cancelAnimationFrame(nativeHandoffFrameRef.current);
+      nativeHandoffFrameRef.current = null;
+    };
+  }, [nativeHandoffVersion]);
 
   useEffect(() => {
     if (!isFullscreen || typeof document === "undefined") return;
@@ -225,7 +256,7 @@ export function ActiveCallDock({
         syncTimer = null;
         void currentWindow.isFullscreen()
           .then((fullscreen) => {
-            if (disposed || !isMountedRef.current || fullscreen) return;
+            if (disposed || !isMountedRef.current || fullscreen || nativeHandoffRef.current !== null) return;
             const restoration = isWindowsDesktopRuntime()
               ? restoreNativeFullscreen(currentWindow)
               : Promise.resolve(false);
@@ -238,7 +269,8 @@ export function ActiveCallDock({
                 nativeFullscreenOwnedRef.current = false;
                 fullscreenPresentationRef.current = null;
                 setIsFullscreenPending(false);
-                setIsFullscreen(false);
+                flushSync(() => setIsFullscreen(false));
+                if (isWindowsDesktopRuntime() && nativeHandoffRef.current !== null) scheduleNativeHandoffFinish("exit");
               });
           })
           .catch((error: unknown) => {
@@ -283,6 +315,10 @@ export function ActiveCallDock({
       void (async () => {
         try {
           await restoreNativeFullscreen(currentWindow);
+          if (nativeHandoffRef.current) {
+            await invoke("finish_call_fullscreen_windows").catch((error: unknown) => console.warn("[ActiveCallDock] Failed to finish native fullscreen cleanup", error));
+            nativeHandoffRef.current = null;
+          }
         } catch (error) {
           console.warn("[ActiveCallDock] Failed to restore native fullscreen during cleanup", error);
         }
@@ -299,11 +335,12 @@ export function ActiveCallDock({
         const fullscreen = await restoreNativeFullscreen(currentWindow);
         if (fullscreen) {
           if (isMountedRef.current) setIsFullscreen(true);
+          if (isWindowsDesktopRuntime() && nativeHandoffRef.current !== null) scheduleNativeHandoffFinish("exit");
           return;
         }
         nativeFullscreenOwnedRef.current = false;
         fullscreenPresentationRef.current = null;
-        if (isMountedRef.current) setIsFullscreen(false);
+        if (isMountedRef.current) flushSync(() => setIsFullscreen(false));
       }
     } catch (error) {
       if (isTauriDesktopRuntime()) {
@@ -386,18 +423,30 @@ export function ActiveCallDock({
             capturedResizableRef.current = await currentWindow.isResizable();
             capturedMaximizedRef.current = await currentWindow.isMaximized();
           }
-          if (capturedMaximizedRef.current) await currentWindow.unmaximize();
-          await currentWindow.setResizable(false);
         }
         if (!targetFullscreen && isWindowsDesktopRuntime()) {
           const fullscreen = await restoreNativeFullscreen(currentWindow);
           if (fullscreen) {
             if (isMountedRef.current) setIsFullscreen(true);
+            if (isWindowsDesktopRuntime() && nativeHandoffRef.current !== null) scheduleNativeHandoffFinish("exit");
             return;
           }
           nativeFullscreenOwnedRef.current = false;
           fullscreenPresentationRef.current = null;
-          if (isMountedRef.current) setIsFullscreen(false);
+          if (isMountedRef.current) flushSync(() => setIsFullscreen(false));
+          if (nativeHandoffRef.current !== null) scheduleNativeHandoffFinish("exit");
+          return;
+        }
+        if (targetFullscreen && isWindowsDesktopRuntime()) {
+          const state = await invoke<WindowsFullscreenExitState>("begin_call_fullscreen_windows", {
+            enter: true,
+            wasResizable: capturedResizableRef.current,
+            wasMaximized: capturedMaximizedRef.current,
+          });
+          nativeFullscreenOwnedRef.current = state.fullscreen;
+          fullscreenPresentationRef.current = state.fullscreen ? (hasScreenShare ? "share" : "voice") : null;
+          if (isMountedRef.current) flushSync(() => setIsFullscreen(state.fullscreen));
+          if (isWindowsDesktopRuntime()) scheduleNativeHandoffFinish("enter");
           return;
         }
         await currentWindow.setFullscreen(targetFullscreen);
@@ -597,7 +646,7 @@ export function ActiveCallDock({
           <div className="absolute bottom-4 right-4 h-[90px] w-[160px] overflow-hidden rounded-md bg-zinc-900 shadow-lg" data-testid="local-screen-share-pip"><StreamVideo stream={localScreenStream} label="Your screen share preview" className="h-full w-full object-cover" testId="local-screen-share-pip-video" /></div>
         ) : null}
 
-        <div className="screen-share-stage__controls stage-controls absolute inset-x-0 bottom-4 flex justify-center transition-[opacity,transform,visibility] duration-150 ease-out" data-testid="active-call-dock-controls" {...controlProps}>
+        <div className={cn("screen-share-stage__controls stage-controls absolute inset-x-0 bottom-4 flex justify-center", !isFullscreen && "transition-[opacity,transform,visibility] duration-150 ease-out")} data-testid="active-call-dock-controls" {...controlProps}>
           <CallControls
             isMuted={isMuted}
             isScreenSharing={isScreenSharing}
