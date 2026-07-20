@@ -1,0 +1,13 @@
+{
+  "protocol_version": 1,
+  "status": "ok",
+  "result": {
+    "call_id": "77777777-7777-4777-8777-777777777777",
+    "state": "unavailable",
+    "state_version": 1,
+    "media": "audio",
+    "participant_role": "initiator",
+    "merged": false,
+    "attempt_created": true
+  }
+}

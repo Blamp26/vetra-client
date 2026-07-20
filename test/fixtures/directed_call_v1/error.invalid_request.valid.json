@@ -1,0 +1,7 @@
+{
+  "protocol_version": 1,
+  "status": "error",
+  "error": {
+    "code": "invalid_request"
+  }
+}

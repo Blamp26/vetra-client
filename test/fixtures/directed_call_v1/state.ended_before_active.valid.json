@@ -1,0 +1,18 @@
+{
+  "protocol_version": 1,
+  "call_id": "66666666-6666-4666-8666-666666666666",
+  "state": "ended",
+  "state_version": 5,
+  "media": "audio",
+  "participant_role": "initiator",
+  "peer": {
+    "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    "username": "bob"
+  },
+  "created_at": "2026-01-02T03:04:05.123456Z",
+  "presented_at": null,
+  "accepted_at": "2026-01-02T03:04:10.123456Z",
+  "connecting_at": null,
+  "active_at": null,
+  "ended_at": "2026-01-02T03:04:11.123456Z"
+}

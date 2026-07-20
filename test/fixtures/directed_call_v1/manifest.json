@@ -1,0 +1,50 @@
+{
+  "protocol_version": 1,
+  "capability": "directed_calls_v1",
+  "valid": [
+    "join.valid.json",
+    "initiate.valid.json",
+    "received.valid.json",
+    "setup_failed.valid.json",
+    "state.presented.valid.json",
+    "state.ended_before_active.valid.json",
+    "initiate.unavailable_reply.valid.json",
+    "command.applied_reply.valid.json",
+    "error.invalid_request.valid.json",
+    "sync.request.valid.json",
+    "sync.response.valid.json",
+    "signal.offer.valid.json",
+    "signal.ice.valid.json",
+    "signal.renegotiate_offer.valid.json"
+  ],
+  "invalid": [
+    "initiate.call_id.invalid.json",
+    "command.unknown_key.invalid.json",
+    "setup_failed.code.invalid.json",
+    "sync.duplicate_call.invalid.json",
+    "signal.state_version.invalid.json",
+    "signal.unknown_kind.invalid.json"
+  ],
+  "sha256": {
+    "command.applied_reply.valid.json": "6a566a6b4c3dd21269c15901fa9d392e5cace8dc2b0fab460d1c0d1c6f09b51c",
+    "command.unknown_key.invalid.json": "f030b585770254a53b00a8320059fce869d294e360e0c30dba78069d8661781d",
+    "error.invalid_request.valid.json": "b7d2f25514f74eeb985b8801451fc0bf87e972a8f78db1786b5feca45e3d2a99",
+    "initiate.unavailable_reply.valid.json": "e5b71abf472cc70e7e641656c0efbc2b48ac4139cb2940c7d836c451176336d8",
+    "initiate.call_id.invalid.json": "424505c514afc3fbda3f2885f1752bcc1acde3c4c0beab8f8d7ecb5936f54a88",
+    "initiate.valid.json": "e92272bf4da6f498c70c352ab90b6dc8d9ee8ba34c9b79f5b986ef17df7d3638",
+    "join.valid.json": "1ea4d924b16aac4e8f89b143b03bf6ee15dc5ab8d811ad115b4bcacfbb3387e2",
+    "received.valid.json": "b11117a554c28b94c4ce5ed09b6710b0c4af8092918f324862291c905e13999b",
+    "setup_failed.valid.json": "b9a000858ae7d96404046d9338900df639991c600231c064fd83c17171fb4774",
+    "setup_failed.code.invalid.json": "d2d63574b956b6cd0ce2c12a1c1fcd293d8cb0e427b1d5c6be27e29724fd6a6c",
+    "signal.ice.valid.json": "63b0da90dd82fe7c203b69172586d67e7d160d195c8f9b735ced71719eb84a3d",
+    "signal.offer.valid.json": "772d7250f1739f04e8f36fd396a3043abcfb978b77a471b54302a62799a81ba7",
+    "signal.renegotiate_offer.valid.json": "b2a232f973ded95b7a712fda5dc8825bb28180effa67dce2319c0770d5d92364",
+    "signal.state_version.invalid.json": "fc92fe702311a906a9c993d72245cedf6460059ce1f32e6e47a546dbe6226c49",
+    "signal.unknown_kind.invalid.json": "b51e9b6f77b7ba4094b02197545efe83109fcb269d47590f571109ae48956c82",
+    "state.ended_before_active.valid.json": "0541de8d10438b6ad5a559a14eddd9727dc53bacac69c258365b7f31ea747a0a",
+    "state.presented.valid.json": "fa317f037a4e429c0b712dfba25c351c6b2a65f54b389ce9e1d2a2e8ee38563b",
+    "sync.request.valid.json": "88be2525dea6d2430409c0586d42f3750d9732ead7a7912a2fa63ee18740348a",
+    "sync.response.valid.json": "a085f2456f0555a556cab604d0b98d71e7d53bd4f3c055b56e70b37332a8b767",
+    "sync.duplicate_call.invalid.json": "eb0e42cc7a55d71d1a268cbe392eeca085454b4b9123b1ab3db267d68683d342"
+  }
+}
