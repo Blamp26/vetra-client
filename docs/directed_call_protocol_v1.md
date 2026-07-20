@@ -17,6 +17,16 @@ signals without passing them to WebRTC. It does not yet integrate with UI,
 lifecycle commands, media, or WebRTC. Reconnect does not recover transient
 signals.
 
+The dormant lifecycle controller now provides explicit APIs for the lifecycle
+events call:initiate, call:received, call:presented, call:accept, call:cancel,
+call:decline, call:hangup, and call:begin_connecting. It owns in-memory command
+IDs and bounded explicit retries, while canonical controller state comes only
+from accepted projections. It does not send received or presented
+automatically, does not switch lifecycle or UI authority, and does not protect
+against multiple-window controller ownership yet. Persistent calling is not
+production-ready; legacy calling remains the sole active runtime and all
+feature gates remain disabled by default.
+
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has
 committed. An operating-system notification alone is not presented.

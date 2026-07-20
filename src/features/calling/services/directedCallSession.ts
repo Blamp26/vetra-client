@@ -36,6 +36,22 @@ export interface DirectedCallSessionOptions {
   enabled?: boolean;
 }
 
+export type DirectedCallCommandTransportError =
+  | { kind: "disposed" }
+  | { kind: "rejected" }
+  | { kind: "transport_timeout" }
+  | { kind: "transport_error" };
+
+export class DirectedCallSessionCommandError extends Error {
+  readonly transport: DirectedCallCommandTransportError;
+
+  constructor(transport: DirectedCallCommandTransportError) {
+    super(transport.kind);
+    this.name = "DirectedCallSessionCommandError";
+    this.transport = transport;
+  }
+}
+
 export interface DirectedCallProjectionStore {
   get(callId: string): StateProjection | null;
   getAll(): StateProjection[];
@@ -211,6 +227,30 @@ export class DirectedCallSession {
   subscribeToSignals(listener: SignalListener): () => void {
     this.signalListeners.add(listener);
     return () => this.signalListeners.delete(listener);
+  }
+
+  pushCommand(event: string, payload: unknown): Promise<unknown> {
+    if (!this.channel || this.disposed) {
+      return Promise.reject(
+        new DirectedCallSessionCommandError({ kind: "disposed" }),
+      );
+    }
+
+    return new Promise<unknown>((resolve, reject) => {
+      this.channel!
+        .push(event, payload as Record<string, unknown>)
+        .receive("ok", resolve)
+        .receive("error", () =>
+          reject(
+            new DirectedCallSessionCommandError({ kind: "rejected" }),
+          ),
+        )
+        .receive("timeout", () =>
+          reject(
+            new DirectedCallSessionCommandError({ kind: "transport_timeout" }),
+          ),
+        );
+    });
   }
 
   async requestSync(_repairCallId?: string): Promise<void> {

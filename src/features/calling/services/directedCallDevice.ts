@@ -1,7 +1,7 @@
 import { isUuid } from "../protocol/directedCallProtocol";
 import { STORAGE_KEYS, storage } from "@/shared/utils/storage";
 
-function generateDeviceId(): string {
+export function createDirectedCallUuid(): string {
   const cryptoApi = globalThis.crypto;
 
   if (cryptoApi?.randomUUID) {
@@ -40,7 +40,7 @@ export function getOrCreateDirectedCallDeviceId(): string {
     storage.remove(STORAGE_KEYS.DIRECTED_CALL_DEVICE_ID);
   }
 
-  const deviceId = generateDeviceId();
+  const deviceId = createDirectedCallUuid();
   storage.setString(STORAGE_KEYS.DIRECTED_CALL_DEVICE_ID, deviceId);
   return deviceId;
 }
