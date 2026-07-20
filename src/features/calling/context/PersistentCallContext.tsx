@@ -4,6 +4,21 @@ import type {
   DirectedCallMediaCoordinatorSnapshot,
 } from "../services/directedCallMediaCoordinator";
 import type { DirectedCallPresentationModel, PersistentPresentationSnapshot, PresentationActionResult } from "../services/directedCallPresentationModel";
+import type { CallAuthorityBackend, CallAuthorityState } from "../services/callAuthorityOwnership";
+
+export interface PersistentCallBoundaryDebugSnapshot {
+  mode: "legacy" | "persistent" | "disabled";
+  tauriDetected: boolean;
+  ownershipBackend: CallAuthorityBackend;
+  ownershipState: CallAuthorityState;
+  ownershipFailureReason: string | null;
+  runtimeConstructed: boolean;
+  contextMounted: boolean;
+  currentUserPublicUuidValid: boolean;
+  stableDeviceUuidValid: boolean;
+}
+
+const PersistentCallBoundaryDebugContext = createContext<PersistentCallBoundaryDebugSnapshot | null>(null);
 
 export interface PersistentCallRuntimeServices {
   presentation: DirectedCallPresentationModel;
@@ -50,6 +65,24 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
   }), [media, presentation, runtime]);
 
   return <PersistentCallContext.Provider value={value}>{children}</PersistentCallContext.Provider>;
+}
+
+export function PersistentCallBoundaryDebugProvider({
+  value,
+  children,
+}: {
+  value: PersistentCallBoundaryDebugSnapshot;
+  children: ReactNode;
+}) {
+  return (
+    <PersistentCallBoundaryDebugContext.Provider value={value}>
+      {children}
+    </PersistentCallBoundaryDebugContext.Provider>
+  );
+}
+
+export function usePersistentCallBoundaryDebug(): PersistentCallBoundaryDebugSnapshot | null {
+  return useContext(PersistentCallBoundaryDebugContext);
 }
 
 export function usePersistentCall(): PersistentCallRuntimeValue {

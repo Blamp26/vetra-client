@@ -22,6 +22,17 @@ vi.mock("@/api/auth", () => ({
 
 vi.mock("@/features/calling/context/PersistentCallContext", () => ({
   useOptionalPersistentCall: () => persistentCallMock.current,
+  usePersistentCallBoundaryDebug: () => ({
+    mode: "legacy",
+    tauriDetected: false,
+    ownershipBackend: "unavailable",
+    ownershipState: "unavailable",
+    ownershipFailureReason: null,
+    runtimeConstructed: false,
+    contextMounted: false,
+    currentUserPublicUuidValid: false,
+    stableDeviceUuidValid: false,
+  }),
 }));
 
 vi.mock("@/features/calling/services/directedCallDiagnostics", () => ({

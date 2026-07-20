@@ -19,6 +19,7 @@ import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import { useOptionalPersistentCall } from "@/features/calling/context/PersistentCallContext";
 import { PersistentCallButton } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
+import { PersistentCallDebugPanel, type PersistentPeerUuidSource } from "@/features/calling/components/PersistentCallDebugPanel";
 import { isUuid } from "@/features/calling/protocol/directedCallProtocol";
 import { cn } from "@/shared/utils/cn";
 import { withFallbackRef } from "@/shared/utils/refs";
@@ -109,12 +110,18 @@ export function ChatWindow({ activeChat, call }: Props) {
       ? conversationPreviews[activePartnerId]?.partner_public_id
       : undefined;
 
-  const persistentPeerPublicId =
-    activeChat.type === "direct"
-      ? [partner?.public_id, directPreviewPublicId, activePartnerRef].find(
-          (value): value is string => typeof value === "string" && isUuid(value),
-        )
-      : null;
+  const persistentPeerCandidates: Array<{ value: unknown; source: PersistentPeerUuidSource }> = [
+    { value: partner?.public_id, source: "user" },
+    { value: directPreviewPublicId, source: "preview" },
+    { value: activePartnerRef, source: "partnerRef" },
+  ];
+  const persistentPeerCandidate = activeChat.type === "direct"
+    ? persistentPeerCandidates.find(({ value }) => typeof value === "string" && isUuid(value))
+    : undefined;
+  const persistentPeerPublicId: string | null = typeof persistentPeerCandidate?.value === "string"
+    ? persistentPeerCandidate.value
+    : null;
+  const persistentPeerUuidSource: PersistentPeerUuidSource = persistentPeerCandidate?.source ?? "none";
 
   const chatContext = useMemo((): ChatContext | null => {
     if (activePartnerId !== null)
@@ -407,6 +414,14 @@ export function ChatWindow({ activeChat, call }: Props) {
   };
 
   return (
+    <>
+    <PersistentCallDebugPanel
+      activeChatType={activeChat.type}
+      directChat={activeChat.type === "direct"}
+      peerUuidSource={persistentPeerUuidSource}
+      peerUuidValid={persistentPeerPublicId !== null}
+      finalButtonPredicate={Boolean(persistentCall && activeChat.type === "direct" && persistentPeerPublicId)}
+    />
     <div className="flex h-full min-w-0 flex-1 overflow-hidden bg-[var(--vetra-shell-chat-bg)]">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       {renderHeader()}
@@ -490,5 +505,6 @@ export function ChatWindow({ activeChat, call }: Props) {
       {pickerOpen && <StickerPicker selectionRequest={pickerSelectionRequest} onSelectionHandled={handleSelectionHandled} onClose={() => setPickerOpen(false)} onInsertCustomEmoji={(emoji) => customEmojiInserterRef.current(emoji)} onSend={async (stickerId) => { await sendMessage({ stickerId }); }} onSendGif={async (gif) => { await sendMessage({ gif: { provider: "giphy", provider_id: gif.providerId, width: gif.width, height: gif.height, title: gif.title } }); }} />}
       {stickerPreview && <StickerPackPreviewDialog request={stickerPreview} onClose={closeStickerPreview} onOpenPack={openStickerPack} />}
     </div>
+    </>
   );
 }

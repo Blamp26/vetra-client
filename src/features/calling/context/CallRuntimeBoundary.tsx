@@ -8,15 +8,21 @@ import { DirectedCallIncomingCoordinator } from "../services/directedCallIncomin
 import { DirectedCallPresentationModel } from "../services/directedCallPresentationModel";
 import { DirectedCallSignalTransport } from "../services/directedCallSignalTransport";
 import { DirectedCallMediaCoordinator } from "../services/directedCallMediaCoordinator";
-import { PersistentCallProvider, type PersistentCallRuntimeServices } from "./PersistentCallContext";
+import {
+  PersistentCallBoundaryDebugProvider,
+  PersistentCallProvider,
+  type PersistentCallRuntimeServices,
+} from "./PersistentCallContext";
 import {
   recordDirectedCallDiagnostic,
   recordDirectedCallRuntimeBranch,
 } from "../services/directedCallDiagnostics";
 import { getOrCreateDirectedCallDeviceId } from "../services/directedCallDevice";
+import { isUuid } from "../protocol/directedCallProtocol";
 import { parseCallRuntimeMode, type CallRuntimeMode } from "../services/callRuntimeMode";
 import {
   CallAuthorityOwnership,
+  isTauriRuntime,
   resolveCallAuthorityScope,
   type CallAuthoritySnapshot,
 } from "../services/callAuthorityOwnership";
@@ -195,14 +201,35 @@ export function CallRuntimeBoundary({
     };
   }, [deviceId, mode, ownership, persistentMediaAvailable, publicUserRef, scope, socketManager]);
 
+  const debugValue = {
+    mode,
+    tauriDetected: isTauriRuntime(),
+    ownershipBackend: ownership.backend,
+    ownershipState: authority.state,
+    ownershipFailureReason:
+      authority.state === "unavailable"
+        ? "ownership_unavailable"
+        : authority.state === "non_owner"
+          ? "another_window_owns_call_runtime"
+          : !scope && mode === "persistent"
+            ? "invalid_persistent_identity"
+            : null,
+    runtimeConstructed: persistentRuntime !== null,
+    contextMounted: mode === "persistent" && authority.state === "owner" && persistentRuntime !== null && persistentContent !== undefined,
+    currentUserPublicUuidValid: typeof publicUserRef === "string" && isUuid(publicUserRef),
+    stableDeviceUuidValid: isUuid(deviceId),
+  };
+
+  let content: ReactNode = nonCallContent;
   if (mode === "legacy" && authority.state === "owner") {
-    return <CallProvider currentUserId={currentUser.id}>{legacyContent}</CallProvider>;
+    content = <CallProvider currentUserId={currentUser.id}>{legacyContent}</CallProvider>;
+  } else if (mode === "persistent" && authority.state === "owner" && persistentRuntime && persistentContent !== undefined) {
+    content = <PersistentCallProvider runtime={persistentRuntime.services}>{persistentContent}</PersistentCallProvider>;
   }
 
-  if (mode === "persistent" && authority.state === "owner" && persistentRuntime) {
-    if (persistentContent === undefined) return <>{nonCallContent}</>;
-    return <PersistentCallProvider runtime={persistentRuntime.services}>{persistentContent}</PersistentCallProvider>;
-  }
-
-  return <>{nonCallContent}</>;
+  return (
+    <PersistentCallBoundaryDebugProvider value={debugValue}>
+      {content}
+    </PersistentCallBoundaryDebugProvider>
+  );
 }

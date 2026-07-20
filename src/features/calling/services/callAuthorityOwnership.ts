@@ -12,6 +12,8 @@ export type CallAuthorityState =
   | "releasing"
   | "released";
 
+export type CallAuthorityBackend = "web-locks" | "native" | "unavailable";
+
 export interface CallAuthoritySnapshot {
   state: CallAuthorityState;
   key: string | null;
@@ -78,7 +80,7 @@ function getDefaultEventTarget(): Pick<Window, "addEventListener" | "removeEvent
   return typeof window === "undefined" ? undefined : window;
 }
 
-function isTauriRuntime(): boolean {
+export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
@@ -119,6 +121,7 @@ export function resolveCallAuthorityScope(options: {
 export class CallAuthorityOwnership {
   readonly ownerId: string;
   readonly key: string | null;
+  readonly backend: CallAuthorityBackend;
 
   private readonly locks: LockManagerLike | null;
   private readonly nativeAuthority: NativeCallAuthorityLike | null;
@@ -143,6 +146,7 @@ export class CallAuthorityOwnership {
     this.nativeAuthority = options.nativeAuthority === undefined
       ? options.locks === undefined ? getDefaultNativeAuthority() : null
       : options.nativeAuthority;
+    this.backend = this.nativeAuthority ? "native" : this.locks ? "web-locks" : "unavailable";
     this.createBroadcastChannel = options.createBroadcastChannel ?? getDefaultBroadcastChannel;
     this.eventTarget = options.eventTarget ?? getDefaultEventTarget();
     this.retryDelayMs = Math.max(250, options.retryDelayMs ?? 2_000);
