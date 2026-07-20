@@ -39,8 +39,8 @@ export interface BroadcastChannelLike {
 }
 
 export interface NativeCallAuthorityLike {
-  acquire(key: string): Promise<boolean>;
-  release(key: string): Promise<void>;
+  acquire(key: string): Promise<string | null>;
+  release(key: string, leaseId: string): Promise<void>;
 }
 
 export interface CallAuthorityOwnershipOptions {
@@ -87,8 +87,8 @@ export function isTauriRuntime(): boolean {
 function getDefaultNativeAuthority(): NativeCallAuthorityLike | null {
   if (!isTauriRuntime()) return null;
   return {
-    acquire: (key) => invoke<boolean>("acquire_call_authority", { key }),
-    release: (key) => invoke<void>("release_call_authority", { key }),
+    acquire: (key) => invoke<string | null>("acquire_call_authority", { key }),
+    release: (key, leaseId) => invoke<void>("release_call_authority", { key, leaseId }),
   };
 }
 
@@ -134,6 +134,7 @@ export class CallAuthorityOwnership {
   private holdResolve: (() => void) | null = null;
   private acquisitionPromise: Promise<CallAuthoritySnapshot> | null = null;
   private lockRequestPromise: Promise<unknown> | null = null;
+  private nativeLeaseId: string | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private releasePromise: Promise<void> | null = null;
@@ -187,19 +188,21 @@ export class CallAuthorityOwnership {
         }
       };
 
-      const onAcquired = async (acquired: boolean) => {
-        if (!acquired) {
+      const onAcquired = async (acquired: boolean | string | null) => {
+        const acquiredOk = typeof acquired === "boolean" ? acquired : acquired !== null;
+        if (!acquiredOk) {
           this.setState("non_owner");
           settle();
           return;
         }
         if (this.disposed) {
-          if (this.nativeAuthority && this.key) {
-            await this.nativeAuthority.release(this.key);
+          if (this.nativeAuthority && this.key && typeof acquired === "string") {
+            await this.nativeAuthority.release(this.key, acquired);
           }
           settle();
           return;
         }
+        this.nativeLeaseId = typeof acquired === "string" ? acquired : null;
         this.setState("owner");
         settle();
         this.channel?.postMessage({ type: "owner_acquired", key: this.key!, owner_id: this.ownerId } satisfies OwnerAnnouncement);
@@ -209,7 +212,7 @@ export class CallAuthorityOwnership {
       };
 
       const request = this.nativeAuthority
-        ? this.nativeAuthority.acquire(this.key!).then((acquired) => onAcquired(acquired))
+        ? this.nativeAuthority.acquire(this.key!).then((leaseId) => onAcquired(leaseId))
         : this.locks!.request(this.key!, { mode: "exclusive", ifAvailable: true }, async (lock) => {
             await onAcquired(Boolean(lock));
           });
@@ -235,8 +238,10 @@ export class CallAuthorityOwnership {
         this.holdResolve = null;
         await this.lockRequestPromise?.catch(() => undefined);
         this.lockRequestPromise = null;
-        if (this.nativeAuthority && this.key) {
-          await this.nativeAuthority.release(this.key);
+        const nativeLeaseId = this.nativeLeaseId;
+        this.nativeLeaseId = null;
+        if (this.nativeAuthority && this.key && nativeLeaseId) {
+          await this.nativeAuthority.release(this.key, nativeLeaseId);
         }
         this.channel?.postMessage({ type: "owner_released", key: this.key!, owner_id: this.ownerId } satisfies OwnerAnnouncement);
       }

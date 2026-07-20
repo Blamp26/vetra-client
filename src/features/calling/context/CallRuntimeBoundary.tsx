@@ -186,7 +186,7 @@ export function CallRuntimeBoundary({
     return () => {
       cancelled = true;
       unsubscribe();
-      queueMicrotask(() => {
+      setTimeout(() => {
         if (effectGenerationRef.current !== effectGeneration && activeOwnershipRef.current === ownership) return;
         if (activeOwnershipRef.current === ownership) activeOwnershipRef.current = null;
         void ownership.dispose(() => {
@@ -197,7 +197,7 @@ export function CallRuntimeBoundary({
           localRuntime?.dispose();
           localRuntime = null;
         });
-      });
+      }, 0);
     };
   }, [deviceId, mode, ownership, persistentMediaAvailable, publicUserRef, scope, socketManager]);
 

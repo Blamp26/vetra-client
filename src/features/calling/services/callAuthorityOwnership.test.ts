@@ -166,26 +166,76 @@ describe("CallAuthorityOwnership", () => {
   });
 
   it("uses the scoped native Tauri authority when Web Locks are unavailable", async () => {
-    const owners = new Set<string>();
-    const nativeAuthority: NativeCallAuthorityLike = {
+    const owners = new Map<string, { window: string; leaseId: string }>();
+    let nextLease = 0;
+    const nativeAuthority = (window: string): NativeCallAuthorityLike => ({
       acquire: vi.fn(async (key) => {
-        if (owners.has(key)) return false;
-        owners.add(key);
-        return true;
+        const current = owners.get(key);
+        if (current && current.window !== window) return null;
+        const leaseId = `${window}:${++nextLease}`;
+        owners.set(key, { window, leaseId });
+        return leaseId;
       }),
-      release: vi.fn(async (key) => {
-        owners.delete(key);
+      release: vi.fn(async (key, leaseId) => {
+        if (owners.get(key)?.leaseId === leaseId) owners.delete(key);
       }),
-    };
-    const first = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority, ownerId: "tauri-a" });
-    const second = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority, ownerId: "tauri-b" });
+    });
+    const firstNative = nativeAuthority("window-a");
+    const secondNative = nativeAuthority("window-b");
+    const first = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority: firstNative, ownerId: "tauri-a" });
+    const second = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority: secondNative, ownerId: "tauri-b" });
 
     await expect(first.acquire()).resolves.toMatchObject({ state: "owner" });
     await expect(second.acquire()).resolves.toMatchObject({ state: "non_owner" });
     await first.dispose();
     await expect(second.acquire()).resolves.toMatchObject({ state: "owner" });
-    expect(nativeAuthority.acquire).toHaveBeenCalledTimes(3);
+    expect(firstNative.acquire).toHaveBeenCalledTimes(1);
+    expect(secondNative.acquire).toHaveBeenCalledTimes(2);
     await second.dispose();
+  });
+
+  it("does not let a stale native release remove a newer same-window lease", async () => {
+    const owners = new Map<string, string>();
+    let nextLease = 0;
+    const nativeAuthority = (window: string): NativeCallAuthorityLike => ({
+      acquire: vi.fn(async (key) => {
+        const leaseId = `${window}:${++nextLease}`;
+        owners.set(key, leaseId);
+        return leaseId;
+      }),
+      release: vi.fn(async (key, leaseId) => {
+        if (owners.get(key) === leaseId) owners.delete(key);
+      }),
+    });
+    const oldGeneration = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority: nativeAuthority("window-a") });
+    const liveGeneration = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority: nativeAuthority("window-a") });
+
+    await oldGeneration.acquire();
+    await liveGeneration.acquire();
+    await oldGeneration.dispose();
+    expect(owners.get(oldGeneration.key!)).toBe("window-a:2");
+    await liveGeneration.dispose();
+  });
+
+  it("releases a native lease that completes after its frontend generation was disposed", async () => {
+    let resolveAcquire!: (leaseId: string) => void;
+    let releasedLease: string | null = null;
+    const nativeAuthority: NativeCallAuthorityLike = {
+      acquire: vi.fn(() => new Promise<string>((resolve) => {
+        resolveAcquire = resolve;
+      })),
+      release: vi.fn(async (_key, leaseId) => {
+        releasedLease = leaseId;
+      }),
+    };
+    const stale = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority });
+    const acquisition = stale.acquire();
+    await stale.dispose();
+    resolveAcquire("stale-lease");
+    await acquisition;
+
+    expect(releasedLease).toBe("stale-lease");
+    expect(stale.getSnapshot().state).toBe("released");
   });
 
   it("cleans listeners and retry timers on disposal", async () => {
