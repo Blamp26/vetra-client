@@ -71,6 +71,7 @@ export type LifecycleCommandOutcome =
 
 export interface DirectedCallSessionPort {
   readonly deviceId: string;
+  getProjections?: () => StateProjection[];
   getProjection(callId: string): StateProjection | null;
   subscribeToProjections(
     listener: (projection: StateProjection, classification: "accepted" | "duplicate") => void,
@@ -96,6 +97,14 @@ const TERMINAL_STATES = new Set<CanonicalState>([
   "ended",
 ]);
 const MAX_EXPLICIT_ATTEMPTS = 3;
+
+function isLiveProjection(projection: StateProjection): boolean {
+  return !TERMINAL_STATES.has(projection.state);
+}
+
+function compareProjection(left: StateProjection, right: StateProjection): number {
+  return left.created_at.localeCompare(right.created_at) || left.call_id.localeCompare(right.call_id);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -169,6 +178,7 @@ export class DirectedCallLifecycleController {
   private readonly session: DirectedCallSessionPort;
   private readonly listeners = new Set<ControllerListener>();
   private readonly unsubscribeProjection: () => void;
+  private readonly unsubscribeSync: () => void;
   private preparing = false;
   private controlledCallId: string | null = null;
   private pendingCommand: CommandRecord | null = null;
@@ -179,14 +189,15 @@ export class DirectedCallLifecycleController {
   constructor(session: DirectedCallSessionPort) {
     this.session = session;
     this.unsubscribeProjection = session.subscribeToProjections((projection) => {
-      if (!this.controlledCallId && !this.preparing) {
-        this.controlledCallId = projection.call_id;
-      }
-      if (projection.call_id === this.controlledCallId) {
-        this.preparing = false;
-      }
+      this.selectFromProjection(projection);
       this.emit();
     });
+    this.unsubscribeSync = session.subscribeToSync
+      ? session.subscribeToSync(() => {
+          this.selectFromStore();
+          this.emit();
+        })
+      : () => undefined;
   }
 
   getSnapshot(): DirectedCallControllerSnapshot {
@@ -313,7 +324,42 @@ export class DirectedCallLifecycleController {
     this.pendingCommand = null;
     this.lastCommandError = null;
     this.unsubscribeProjection();
+    this.unsubscribeSync();
     this.listeners.clear();
+  }
+
+  private selectFromProjection(projection: StateProjection): void {
+    if (this.preparing) {
+      if (this.controlledCallId === projection.call_id) this.preparing = false;
+      return;
+    }
+    const selected = this.controlledCallId ? this.session.getProjection(this.controlledCallId) : null;
+    if (selected && isLiveProjection(selected)) {
+      if (projection.call_id === selected.call_id) this.preparing = false;
+      return;
+    }
+
+    if (!selected && !isLiveProjection(projection)) {
+      this.controlledCallId = projection.call_id;
+      return;
+    }
+
+    const candidates = this.session.getProjections
+      ? this.session.getProjections().filter(isLiveProjection)
+      : [projection].filter(isLiveProjection);
+    const next = candidates.sort(compareProjection)[0];
+    if (next) {
+      this.controlledCallId = next.call_id;
+      this.preparing = false;
+    }
+  }
+
+  private selectFromStore(): void {
+    if (this.preparing) return;
+    const selected = this.controlledCallId ? this.session.getProjection(this.controlledCallId) : null;
+    if (selected && isLiveProjection(selected)) return;
+    const candidates = (this.session.getProjections?.() ?? []).filter(isLiveProjection).sort(compareProjection);
+    if (candidates[0]) this.controlledCallId = candidates[0].call_id;
   }
 
   private command(event: DirectedCallLifecycleEvent, callId: string): Promise<LifecycleCommandOutcome> {

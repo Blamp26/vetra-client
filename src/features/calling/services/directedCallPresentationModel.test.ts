@@ -17,20 +17,23 @@ const CALL_ID = "11111111-1111-4111-8111-111111111111";
 const DEVICE_ID = "22222222-2222-4222-8222-222222222222";
 const PEER_ID = "33333333-3333-4333-8333-333333333333";
 const TARGET_ID = "44444444-4444-4444-8444-444444444444";
+const SECOND_CALL_ID = "66666666-6666-4666-8666-666666666666";
 
 function projection(
   state: StateProjection["state"],
   role: StateProjection["participant_role"] = "initiator",
   version = 1,
+  callId = CALL_ID,
+  username = "Alice",
 ): StateProjection {
   return {
     protocol_version: 1,
-    call_id: CALL_ID,
+    call_id: callId,
     state,
     state_version: version,
     media: "audio",
     participant_role: role,
-    peer: { user_id: PEER_ID, username: "Alice" },
+    peer: { user_id: PEER_ID, username },
     created_at: "2026-07-20T10:00:00.000000Z",
     presented_at: state === "presented" ? "2026-07-20T10:00:02.000000Z" : null,
     accepted_at: ["accepted", "connecting", "active"].includes(state) ? "2026-07-20T10:00:03.000000Z" : null,
@@ -289,6 +292,56 @@ describe("DirectedCallPresentationModel", () => {
     await harness.model.accept();
     harness.emit(projection("declined", "recipient", 2));
     expect(harness.model.getSnapshot()).toMatchObject({ phase: "terminal", terminalState: "declined", terminalLabel: "Call declined", pendingAction: null });
+  });
+
+  it.each(["delivered", "presented"] as const)("rolls from terminal call A to incoming call B in %s", (stateName) => {
+    const harness = createHarness();
+    harness.emit(projection("ended", "initiator", 8, CALL_ID, "Old call"));
+    harness.emit(projection(stateName, "recipient", 1, SECOND_CALL_ID, "New caller"));
+
+    expect(harness.model.getSnapshot()).toMatchObject({
+      callId: SECOND_CALL_ID,
+      phase: "incoming",
+      canonicalState: stateName,
+      peerUsername: "New caller",
+      incomingModal: { visible: true, presentationKey: SECOND_CALL_ID },
+    });
+  });
+
+  it("clears old-call action, error, and fallback data during rollover", async () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient", 1, CALL_ID, "Old caller"));
+    harness.lifecycle.accept.mockResolvedValueOnce({
+      status: "failed",
+      event: "call:accept",
+      commandId: "77777777-7777-4777-8777-777777777777",
+      error: { kind: "rejected" },
+    });
+    await harness.model.accept();
+    expect(harness.model.getSnapshot().recoverableError).toMatchObject({ callId: CALL_ID });
+
+    harness.emit(projection("delivered", "recipient", 1, SECOND_CALL_ID, "New caller"));
+    expect(harness.model.getSnapshot()).toMatchObject({
+      callId: SECOND_CALL_ID,
+      pendingAction: null,
+      recoverableError: null,
+      peerUsername: "New caller",
+    });
+    expect(harness.lifecycle.retryPendingCommand).not.toHaveBeenCalled();
+  });
+
+  it("does not retry an old-call command after rollover", async () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient", 1, CALL_ID));
+    harness.setPending({ event: "call:accept", callId: CALL_ID, commandId: "77777777-7777-4777-8777-777777777777", attempts: 1 });
+    harness.lifecycle.accept.mockResolvedValueOnce(transportFailure("call:accept"));
+    await harness.model.accept();
+    harness.emit(projection("delivered", "recipient", 1, SECOND_CALL_ID, "New caller"));
+    harness.emitSync();
+    await Promise.resolve();
+
+    expect(harness.lifecycle.retryPendingCommand).not.toHaveBeenCalled();
+    expect(harness.model.getSnapshot().callId).toBe(SECOND_CALL_ID);
   });
 
   it("preserves presentation on disconnect-like silence and clears everything on disposal", () => {

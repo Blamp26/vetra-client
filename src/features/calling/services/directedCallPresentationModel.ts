@@ -177,6 +177,14 @@ function actionRequired(action: PersistentPendingUserAction, projection: StatePr
   return HANGUP_STATES.has(projection.state);
 }
 
+function isLiveProjection(projection: StateProjection): boolean {
+  return !TERMINAL_STATES.has(projection.state);
+}
+
+function compareProjection(left: StateProjection, right: StateProjection): number {
+  return left.created_at.localeCompare(right.created_at) || left.call_id.localeCompare(right.call_id);
+}
+
 export class DirectedCallPresentationModel {
   private readonly controller: DirectedCallPresentationLifecyclePort;
   private readonly incoming: DirectedCallPresentationIncomingPort;
@@ -229,6 +237,13 @@ export class DirectedCallPresentationModel {
     });
     this.unsubscribeController = lifecycleController.subscribe((snapshot) => {
       this.controllerSnapshot = snapshot;
+      const selectedCallId = snapshot.projection?.call_id ?? snapshot.callId;
+      if (selectedCallId && this.actionRecord && this.actionRecord.callId !== selectedCallId) {
+        this.clearActionRecord();
+        this.fallbackPeer = null;
+        this.initiationResult = null;
+        this.cancelIntent = false;
+      }
       this.emit();
     });
     this.unsubscribeIncoming = incomingCoordinator.subscribe((snapshot) => {
@@ -390,9 +405,12 @@ export class DirectedCallPresentationModel {
 
   private currentProjection(): StateProjection | null {
     const controllerProjection = this.controllerSnapshot.projection;
-    if (controllerProjection) return controllerProjection;
-    if (this.incomingSnapshot.projection) return this.incomingSnapshot.projection;
-    return this.authoritativeProjection;
+    const alternateProjections = [this.incomingSnapshot.projection, this.authoritativeProjection]
+      .filter((projection): projection is StateProjection => projection !== null && isLiveProjection(projection))
+      .sort(compareProjection);
+    if (controllerProjection && isLiveProjection(controllerProjection)) return controllerProjection;
+    if (alternateProjections[0]) return alternateProjections[0];
+    return controllerProjection ?? this.authoritativeProjection;
   }
 
   private clearActionRecord(): void {
@@ -473,10 +491,13 @@ export class DirectedCallPresentationModel {
 
   private handleProjection(projection: StateProjection): void {
     if (this.disposed) return;
-    const currentCallId = this.currentProjection()?.call_id ?? this.actionRecord?.callId ?? null;
-    if (currentCallId && currentCallId !== projection.call_id) {
-      if (this.actionRecord) this.clearActionRecord();
+    const selectedProjection = this.currentProjection();
+    if (this.actionRecord && selectedProjection?.call_id === projection.call_id && this.actionRecord.callId !== projection.call_id) {
+      this.clearActionRecord();
       this.scopedError = null;
+      this.fallbackPeer = null;
+      this.initiationResult = null;
+      this.cancelIntent = false;
     }
     if (!this.authoritativeProjection || this.authoritativeProjection.call_id === projection.call_id ||
         TERMINAL_STATES.has(this.authoritativeProjection.state) ||
@@ -575,6 +596,12 @@ export class DirectedCallPresentationModel {
     }
 
     if (outcome.status === "failed") {
+      if (outcome.error.kind === "retry_exhausted") {
+        this.actionRecord = { action, callId, status: "exhausted" };
+        this.scopedError = scopeError(commandError(outcome), action, callId);
+        this.emit();
+        return { status: "failed", error: this.scopedError };
+      }
       if (outcome.error.kind === "transport_timeout" || outcome.error.kind === "transport_error") {
         const pending = this.controller.getSnapshot().pendingCommand;
         if (pending?.event === actionEvent(action) && pending.callId === callId) {
@@ -619,6 +646,21 @@ export class DirectedCallPresentationModel {
     this.cancelIntent = false;
     this.clearActionRecord();
     if (outcome.status === "failed") {
+      const pending = this.controller.getSnapshot().pendingCommand;
+      if (
+        (outcome.error.kind === "transport_timeout" || outcome.error.kind === "transport_error") &&
+        pending?.event === "call:initiate" &&
+        pending.attempts >= 3
+      ) {
+        const exhausted = scopeError(
+          { kind: "retry_exhausted", message: "The call action could not be completed. Try again." },
+          "call:initiate",
+          this.initiationResult?.call_id ?? null,
+        );
+        this.scopedError = exhausted;
+        this.emit();
+        return { status: "failed", error: exhausted };
+      }
       this.emit();
       return { status: "failed", error: commandError(outcome) };
     }

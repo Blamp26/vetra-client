@@ -65,6 +65,15 @@ and scoped errors. Uncertain initiate cancellation re-reads the newest
 projection before sending a distinct cancel. B4 ownership and all media work
 remain deferred.
 
+Lifecycle selection is sticky for a selected live call. When the selected call
+is terminal, a live call may replace it; terminal projections remain in the
+session store. Sync selection is deterministic by `created_at`, then
+`call_id`, and does not depend on subscription timing or map iteration. A
+rollover clears action, error, initiation, and fallback presentation data scoped
+to the old call. After the third transport attempt, the retained action is
+`retry_exhausted`, cannot issue a fourth attempt, and remains scoped to its
+original call and action until authoritative advancement makes it obsolete.
+
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has
 committed. An operating-system notification alone is not presented.

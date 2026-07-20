@@ -65,6 +65,10 @@ function semanticallyEqual(left: StateProjection, right: StateProjection): boole
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function compareProjection(left: StateProjection, right: StateProjection): number {
+  return left.created_at.localeCompare(right.created_at) || left.call_id.localeCompare(right.call_id);
+}
+
 export function createDirectedCallProjectionStore(
   onConflict?: (callId: string) => void,
 ): DirectedCallProjectionStore {
@@ -282,7 +286,7 @@ export class DirectedCallSession {
               reject(new Error("Invalid directed-call sync response"));
               return;
             }
-            decoded.calls.forEach((projection) => this.projections.apply(projection));
+            decoded.calls.sort(compareProjection).forEach((projection) => this.projections.apply(projection));
             this.syncListeners.forEach((listener) => listener());
             resolve();
           })

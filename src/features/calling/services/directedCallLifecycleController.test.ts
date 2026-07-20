@@ -12,15 +12,16 @@ import { DirectedCallSessionCommandError } from "./directedCallSession";
 const deviceId = "11111111-1111-4111-8111-111111111111";
 const targetId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const callId = "33333333-3333-4333-8333-333333333333";
-const state = (stateName: StateProjection["state"] = "dispatching", version = 1): StateProjection => ({
+const secondCallId = "55555555-5555-4555-8555-555555555555";
+const state = (stateName: StateProjection["state"] = "dispatching", version = 1, selectedCallId = callId, createdAt = "2026-01-02T03:04:05.123456Z"): StateProjection => ({
   protocol_version: 1,
-  call_id: callId,
+  call_id: selectedCallId,
   state: stateName,
   state_version: version,
   media: "audio",
   participant_role: "initiator",
   peer: { user_id: targetId, username: "alice" },
-  created_at: "2026-01-02T03:04:05.123456Z",
+  created_at: createdAt,
   presented_at: null,
   accepted_at: null,
   connecting_at: null,
@@ -60,17 +61,25 @@ function commandReply(stateName: StateProjection["state"] = "dispatching") {
 function createSession(responses: unknown[] = []) {
   const projections = new Map<string, StateProjection>();
   const listeners = new Set<(projection: StateProjection, classification: "accepted" | "duplicate") => void>();
+  const syncListeners = new Set<() => void>();
   const pushes: Array<{ event: string; payload: Record<string, unknown> }> = [];
   const queued = [...responses];
   const session: DirectedCallSessionPort & {
     pushes: typeof pushes;
     emit: (projection: StateProjection) => void;
+    emitSync: () => void;
+    load: (projection: StateProjection) => void;
   } = {
     deviceId,
+    getProjections: () => Array.from(projections.values()),
     getProjection: (id) => projections.get(id) ?? null,
     subscribeToProjections: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    subscribeToSync: (listener) => {
+      syncListeners.add(listener);
+      return () => syncListeners.delete(listener);
     },
     pushCommand: vi.fn((event: string, payload: unknown) => {
       pushes.push({ event, payload: payload as Record<string, unknown> });
@@ -83,6 +92,8 @@ function createSession(responses: unknown[] = []) {
       projections.set(projection.call_id, projection);
       listeners.forEach((listener) => listener(projection, "accepted"));
     },
+    emitSync: () => syncListeners.forEach((listener) => listener()),
+    load: (projection) => projections.set(projection.call_id, projection),
   };
   return session;
 }
@@ -162,6 +173,8 @@ describe("DirectedCallLifecycleController", () => {
     expect(exhausted).toMatchObject({ status: "failed", error: { kind: "retry_exhausted" } });
     expect(session.pushes).toHaveLength(3);
     expect(new Set(session.pushes.map(({ payload }) => payload.command_id)).size).toBe(1);
+    expect(session.pushes[1].payload).toEqual(session.pushes[0].payload);
+    expect(session.pushes[2].payload).toEqual(session.pushes[0].payload);
   });
 
   it("does not invent a call ID or make acknowledgements canonical", async () => {
@@ -298,5 +311,58 @@ describe("DirectedCallLifecycleController", () => {
     );
     expect(controller.getSnapshot()).not.toHaveProperty("peerConnection");
     expect(controller.getSnapshot()).not.toHaveProperty("microphone");
+  });
+
+  it("yields a terminal selection to a later live call while retaining both projections", () => {
+    const session = createSession();
+    const controller = new DirectedCallLifecycleController(session);
+    const terminalA = state("ended", 8, callId, "2026-01-02T03:04:05.123456Z");
+    const liveB = state("delivered", 1, secondCallId, "2026-01-03T03:04:05.123456Z");
+
+    session.emit(terminalA);
+    session.emit(liveB);
+
+    expect(controller.getSnapshot()).toMatchObject({ callId: secondCallId, projection: liveB, phase: "live" });
+    expect(session.getProjection(callId)).toEqual(terminalA);
+    expect(session.getProjection(secondCallId)).toEqual(liveB);
+  });
+
+  it("keeps a selected live call sticky when another live projection arrives", () => {
+    const session = createSession();
+    const controller = new DirectedCallLifecycleController(session);
+    const liveA = state("dispatching", 1, callId, "2026-01-02T03:04:05.123456Z");
+    const liveB = state("delivered", 2, secondCallId, "2026-01-01T03:04:05.123456Z");
+
+    session.emit(liveA);
+    session.emit(liveB);
+
+    expect(controller.getSnapshot()).toMatchObject({ callId, projection: liveA });
+  });
+
+  it("selects a deterministic live projection after sync when selection is empty or terminal", () => {
+    const session = createSession();
+    const controller = new DirectedCallLifecycleController(session);
+    const later = state("active", 2, secondCallId, "2026-01-03T03:04:05.123456Z");
+    const earlier = state("delivered", 1, callId, "2026-01-02T03:04:05.123456Z");
+
+    session.load(later);
+    session.load(earlier);
+    session.emitSync();
+    expect(controller.getSnapshot().callId).toBe(callId);
+
+    session.emit(state("ended", 3, callId, "2026-01-02T03:04:05.123456Z"));
+    session.emitSync();
+    expect(controller.getSnapshot().callId).toBe(secondCallId);
+  });
+
+  it("clears terminal selection before a new outgoing preparation", async () => {
+    const session = createSession([initiateReply()]);
+    const controller = new DirectedCallLifecycleController(session);
+    session.emit(state("ended", 8));
+
+    const operation = controller.initiate(targetId);
+    expect(controller.getSnapshot()).toMatchObject({ phase: "preparing", preparing: true, callId: null, projection: null });
+    await operation;
+    expect(controller.getSnapshot().callId).toBe(callId);
   });
 });
