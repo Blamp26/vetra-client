@@ -21,6 +21,7 @@ type ProjectionListener = (
   classification: "accepted" | "duplicate",
 ) => void;
 type SignalListener = (signal: SignalEnvelope) => void;
+type SyncListener = () => void;
 
 export type StateApplyResult =
   | "accepted"
@@ -154,6 +155,7 @@ export class DirectedCallSession {
   private syncInFlight = false;
   private readonly projectionListeners = new Set<ProjectionListener>();
   private readonly signalListeners = new Set<SignalListener>();
+  private readonly syncListeners = new Set<SyncListener>();
   private readonly channelRefs: Array<{ event: string; ref: number }> = [];
   private socketOpenRef: string | null = null;
 
@@ -229,6 +231,11 @@ export class DirectedCallSession {
     return () => this.signalListeners.delete(listener);
   }
 
+  subscribeToSync(listener: SyncListener): () => void {
+    this.syncListeners.add(listener);
+    return () => this.syncListeners.delete(listener);
+  }
+
   pushCommand(event: string, payload: unknown): Promise<unknown> {
     if (!this.channel || this.disposed) {
       return Promise.reject(
@@ -276,6 +283,7 @@ export class DirectedCallSession {
               return;
             }
             decoded.calls.forEach((projection) => this.projections.apply(projection));
+            this.syncListeners.forEach((listener) => listener());
             resolve();
           })
           .receive("error", reject)
@@ -295,6 +303,7 @@ export class DirectedCallSession {
     this.channel = null;
     this.projectionListeners.clear();
     this.signalListeners.clear();
+    this.syncListeners.clear();
     this.projections.clear();
   }
 }

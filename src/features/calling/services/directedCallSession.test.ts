@@ -192,6 +192,24 @@ describe("DirectedCallSession", () => {
     ]);
   });
 
+  it("publishes a completion notification only after each successful sync", async () => {
+    const channel = createMockChannel();
+    const socket = createMockSocket(channel);
+    const session = new DirectedCallSession({
+      socket: socket as unknown as Socket,
+      publicUserRef: peerId,
+      deviceId,
+      enabled: true,
+    });
+    const syncCompleted = vi.fn();
+    session.subscribeToSync?.(syncCompleted);
+
+    await session.start();
+    expect(syncCompleted).toHaveBeenCalledTimes(1);
+    socket.emitOpen();
+    expect(syncCompleted).toHaveBeenCalledTimes(2);
+  });
+
   it("delivers valid signals independently and rejects malformed signals", async () => {
     const channel = createMockChannel();
     const socket = createMockSocket(channel);

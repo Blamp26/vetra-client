@@ -38,6 +38,13 @@ followed through authoritative projections, and disconnect does not infer a
 terminal result. The coordinator is not instantiated by the Stage A session and
 remains behind the disabled persistent-runtime boundary.
 
+If a `call:received` or `call:presented` transport command fails, its original
+command identity remains pending in the lifecycle controller. After a successful
+reconnect and completed sync, only an action still required by the authoritative
+projection is retried, using that same command identity and the controller's
+bounded attempt limit. Authoritative advancement suppresses obsolete retries and
+stale local transport errors; no terminal state is inferred locally.
+
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has
 committed. An operating-system notification alone is not presented.

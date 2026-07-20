@@ -1,15 +1,17 @@
 import { decodeState, type CanonicalState, type StateProjection } from "../protocol/directedCallProtocol";
 import {
+  type DirectedCallControllerSnapshot,
   type DirectedCallSessionPort,
   type LifecycleCommandOutcome,
 } from "./directedCallLifecycleController";
 
 const INCOMING_STATES = new Set<CanonicalState>(["dispatching", "delivered", "presented"]);
 export type IncomingCommandAction = "call:received" | "call:presented";
-export type IncomingCoordinatorErrorKind = "transport_timeout" | "transport_error";
+export type IncomingCoordinatorErrorKind = "transport_timeout" | "transport_error" | "retry_exhausted";
 
 export interface IncomingCoordinatorError {
   action: IncomingCommandAction;
+  callId: string;
   kind: IncomingCoordinatorErrorKind;
 }
 
@@ -24,6 +26,8 @@ export interface IncomingPresentationSnapshot {
 export interface DirectedCallIncomingControllerPort {
   received(callId: string): Promise<LifecycleCommandOutcome>;
   presented(callId: string): Promise<LifecycleCommandOutcome>;
+  retryPendingCommand(): Promise<LifecycleCommandOutcome>;
+  getSnapshot(): DirectedCallControllerSnapshot;
 }
 
 type IncomingListener = (snapshot: IncomingPresentationSnapshot) => void;
@@ -32,7 +36,7 @@ function isIncomingProjection(projection: StateProjection): boolean {
   return projection.participant_role === "recipient" && INCOMING_STATES.has(projection.state);
 }
 
-function transportFailureKind(outcome: LifecycleCommandOutcome): IncomingCoordinatorErrorKind | null {
+function transportFailureKind(outcome: LifecycleCommandOutcome): "transport_timeout" | "transport_error" | null {
   if (outcome.status !== "failed") return null;
   return outcome.error.kind === "transport_timeout" || outcome.error.kind === "transport_error"
     ? outcome.error.kind
@@ -51,6 +55,9 @@ export class DirectedCallIncomingCoordinator {
   private readonly receivedActions = new Set<string>();
   private readonly presentedActions = new Set<string>();
   private readonly unsubscribeProjection: () => void;
+  private readonly unsubscribeSync: () => void;
+  private readonly retryEligibility = new Map<string, IncomingCommandAction>();
+  private readonly retriesInFlight = new Set<string>();
   private incomingProjection: StateProjection | null = null;
   private recoverableError: IncomingCoordinatorError | null = null;
   private disposed = false;
@@ -67,6 +74,9 @@ export class DirectedCallIncomingCoordinator {
       ? session.subscribeToProjections((projection, classification) => {
           if (classification === "accepted") this.acceptProjection(projection);
         })
+      : () => undefined;
+    this.unsubscribeSync = this.enabled && session.subscribeToSync
+      ? session.subscribeToSync(() => this.retryAfterSync())
       : () => undefined;
   }
 
@@ -106,10 +116,13 @@ export class DirectedCallIncomingCoordinator {
     if (this.disposed) return;
     this.disposed = true;
     this.unsubscribeProjection();
+    this.unsubscribeSync();
     this.incomingProjection = null;
     this.recoverableError = null;
     this.receivedActions.clear();
     this.presentedActions.clear();
+    this.retryEligibility.clear();
+    this.retriesInFlight.clear();
     this.listeners.clear();
   }
 
@@ -120,11 +133,12 @@ export class DirectedCallIncomingCoordinator {
     projection = validatedProjection;
 
     if (!isIncomingProjection(projection)) {
+      this.clearObsoleteActions(projection);
       if (this.incomingProjection?.call_id === projection.call_id) this.clearIncoming();
       return;
     }
 
-    this.recoverableError = null;
+    this.clearObsoleteActions(projection);
     if (projection.state === "dispatching") {
       if (this.incomingProjection?.call_id === projection.call_id) this.incomingProjection = null;
       this.emit();
@@ -146,6 +160,100 @@ export class DirectedCallIncomingCoordinator {
     this.emit();
   }
 
+  private actionKey(action: IncomingCommandAction, callId: string): string {
+    return `${action}:${callId}`;
+  }
+
+  private actionRequired(action: IncomingCommandAction, projection: StateProjection | null): boolean {
+    if (!projection || projection.participant_role !== "recipient") return false;
+    return action === "call:received"
+      ? projection.state === "dispatching"
+      : projection.state === "delivered";
+  }
+
+  private clearAction(action: IncomingCommandAction, callId: string): void {
+    this.retryEligibility.delete(this.actionKey(action, callId));
+    if (this.recoverableError?.action === action && this.recoverableError.callId === callId) {
+      this.recoverableError = null;
+    }
+  }
+
+  private clearObsoleteActions(projection: StateProjection): void {
+    (['call:received', 'call:presented'] as const).forEach((action) => {
+      if (!this.actionRequired(action, projection)) this.clearAction(action, projection.call_id);
+    });
+    if (this.recoverableError && this.recoverableError.callId !== projection.call_id) {
+      this.recoverableError = null;
+    }
+  }
+
+  private pendingMatches(action: IncomingCommandAction, callId: string): boolean {
+    const pending = this.controller.getSnapshot().pendingCommand;
+    return pending?.event === action && pending.callId === callId;
+  }
+
+  private recordTransportFailure(
+    action: IncomingCommandAction,
+    callId: string,
+    kind: "transport_timeout" | "transport_error",
+  ): void {
+    if (!this.pendingMatches(action, callId)) return;
+    const pending = this.controller.getSnapshot().pendingCommand;
+    if (pending && pending.attempts >= 3) {
+      this.retryEligibility.delete(this.actionKey(action, callId));
+      this.recoverableError = { action, callId, kind: "retry_exhausted" };
+      return;
+    }
+    this.retryEligibility.set(this.actionKey(action, callId), action);
+    this.recoverableError = { action, callId, kind };
+  }
+
+  private retryAfterSync(): void {
+    if (this.disposed || !this.enabled) return;
+
+    Array.from(this.retryEligibility.entries()).forEach(([key, action]) => {
+      const callId = key.slice(action.length + 1);
+      const projection = this.session.getProjection(callId);
+      if (!this.actionRequired(action, projection)) {
+        this.clearAction(action, callId);
+        return;
+      }
+      if (this.retriesInFlight.has(key) || !this.pendingMatches(action, callId)) return;
+
+      this.retriesInFlight.add(key);
+      void this.controller.retryPendingCommand().then((outcome) => {
+        this.retriesInFlight.delete(key);
+        if (this.disposed) return;
+
+        const latest = this.session.getProjection(callId);
+        if (!this.actionRequired(action, latest)) {
+          this.clearAction(action, callId);
+          this.emit();
+          return;
+        }
+
+        if (
+          outcome.status === "failed" &&
+          (outcome.error.kind === "transport_timeout" || outcome.error.kind === "transport_error")
+        ) {
+          this.recordTransportFailure(action, callId, outcome.error.kind);
+          this.emit();
+          return;
+        }
+        if (outcome.status === "failed" && outcome.error.kind === "retry_exhausted") {
+          this.retryEligibility.delete(key);
+          this.recoverableError = { action, callId, kind: "retry_exhausted" };
+          this.emit();
+          return;
+        }
+        this.clearAction(action, callId);
+        this.emit();
+      }).catch(() => {
+        this.retriesInFlight.delete(key);
+      });
+    });
+  }
+
   private async runCommand(action: IncomingCommandAction, callId: string): Promise<void> {
     if (this.disposed) return;
 
@@ -155,19 +263,30 @@ export class DirectedCallIncomingCoordinator {
         ? await this.controller.received(callId)
         : await this.controller.presented(callId);
     } catch {
-      if (!this.disposed) {
-        this.recoverableError = { action, kind: "transport_error" };
-        this.emit();
+      if (this.disposed) return;
+      const latest = this.session.getProjection(callId);
+      if (!this.actionRequired(action, latest)) {
+        this.clearAction(action, callId);
+        return;
       }
+      this.recordTransportFailure(action, callId, "transport_error");
+      this.emit();
       return;
     }
 
-    if (this.disposed || (action === "call:presented" && this.incomingProjection?.call_id !== callId)) return;
+    if (this.disposed) return;
+    const latest = this.session.getProjection(callId);
+    if (!this.actionRequired(action, latest)) {
+      this.clearAction(action, callId);
+      return;
+    }
     const transportKind = transportFailureKind(outcome);
     if (transportKind) {
-      this.recoverableError = { action, kind: transportKind };
+      this.recordTransportFailure(action, callId, transportKind);
       this.emit();
+      return;
     }
+    this.clearAction(action, callId);
   }
 
   private emit(): void {

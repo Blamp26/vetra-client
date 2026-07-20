@@ -136,6 +136,7 @@ describe("DirectedCallLifecycleController", () => {
 
     const first = await controller.initiate(targetId);
     const firstId = session.pushes[0].payload.command_id;
+    const firstPayload = { ...session.pushes[0].payload };
     const retry = await controller.retryPendingCommand();
     const retryId = session.pushes[1].payload.command_id;
     await controller.received(callId);
@@ -144,6 +145,7 @@ describe("DirectedCallLifecycleController", () => {
     expect(first.status).toBe("failed");
     expect(retry.status).toBe("acknowledged");
     expect(retryId).toBe(firstId);
+    expect(session.pushes[1].payload).toEqual(firstPayload);
     expect(secondId).not.toBe(firstId);
   });
 

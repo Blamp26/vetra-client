@@ -40,6 +40,7 @@ export interface ControllerCommandError {
 
 export interface PendingLifecycleCommand {
   event: DirectedCallLifecycleEvent | "call:initiate";
+  callId: string | null;
   commandId: string;
   attempts: number;
 }
@@ -74,6 +75,7 @@ export interface DirectedCallSessionPort {
   subscribeToProjections(
     listener: (projection: StateProjection, classification: "accepted" | "duplicate") => void,
   ): () => void;
+  subscribeToSync?: (listener: () => void) => () => void;
   pushCommand(event: string, payload: unknown): Promise<unknown>;
 }
 
@@ -210,6 +212,7 @@ export class DirectedCallLifecycleController {
       pendingCommand: this.pendingCommand
         ? {
             event: this.pendingCommand.event,
+            callId: this.pendingCommand.callId,
             commandId: this.pendingCommand.commandId,
             attempts: this.pendingCommand.attempts,
           }
@@ -238,6 +241,7 @@ export class DirectedCallLifecycleController {
     this.lastCommandError = null;
     return this.dispatch({
       event: "call:initiate",
+      callId: null,
       commandId,
       attempts: 0,
       payload,
@@ -324,6 +328,7 @@ export class DirectedCallLifecycleController {
 
     return this.dispatch({
       event,
+      callId,
       commandId,
       attempts: 0,
       payload,
