@@ -111,8 +111,20 @@ The current server relays a valid signal to every connected device on the peer
 participant topic; sender/recipient device routing is not present and remains
 deferred. Signal payloads and SDP/ICE contents are never logged or exposed in
 transport errors. C1 provides only the transport boundary and a media-free
-coordinator skeleton. C2 will add audio WebRTC and authoritative media
-lifecycle integration.
+coordinator skeleton. C2 now adds isolated audio-only WebRTC and
+authoritative media lifecycle integration. The original initiator prepares and
+sends the offer, while the recipient prepares and sends the answer. The offer
+is relayed only after authoritative `connecting`; both participants report
+`call:media_ready`, and only the server may produce canonical `active`.
+
+C2 maps confirmed local setup failures to the existing privacy-safe failure
+codes and sends `call:setup_failed` only while the same owned call remains in
+an allowed canonical state. Terminal projections, ownership loss, logout,
+runtime disposal, and socket disconnect do not create setup failures. Local
+audio tracks, remote audio, peer connections, queued ICE, subscriptions, and
+pending work are cleaned up deterministically. Transient SDP/ICE is not
+recovered after reconnect; C3 owns hardened recovery, diagnostics, and UI
+activation.
 
 The current implementation is covered by browser-style injected ownership
 tests. Sharing of Web Locks between target Windows WebViews/Tauri windows, and

@@ -2,9 +2,11 @@ import {
   CANONICAL_STATES,
   buildCommand,
   buildInitiate,
+  buildSetupFailed,
   isUuid,
   type CanonicalState,
   type CommandResult,
+  type FailureCode,
   type InitiateResult,
   type ParticipantRole,
   type StateProjection,
@@ -22,7 +24,9 @@ export type DirectedCallLifecycleEvent =
   | "call:cancel"
   | "call:decline"
   | "call:hangup"
-  | "call:begin_connecting";
+  | "call:begin_connecting"
+  | "call:media_ready"
+  | "call:setup_failed";
 
 export type ControllerPhase = "idle" | "preparing" | "live" | "terminal" | "disposed";
 
@@ -286,6 +290,30 @@ export class DirectedCallLifecycleController {
 
   beginConnecting(callId: string): Promise<LifecycleCommandOutcome> {
     return this.command("call:begin_connecting", callId);
+  }
+
+  mediaReady(callId: string): Promise<LifecycleCommandOutcome> {
+    return this.command("call:media_ready", callId);
+  }
+
+  setupFailed(callId: string, failureCode: FailureCode): Promise<LifecycleCommandOutcome> {
+    let commandId: string;
+    let payload: unknown;
+    try {
+      commandId = createDirectedCallUuid();
+      payload = buildSetupFailed(callId, commandId, this.session.deviceId, failureCode);
+    } catch {
+      return Promise.resolve(this.fail("call:setup_failed", null, { kind: "protocol_validation" }));
+    }
+
+    return this.dispatch({
+      event: "call:setup_failed",
+      callId,
+      commandId,
+      attempts: 0,
+      payload,
+      generation: this.generation,
+    });
   }
 
   retryPendingCommand(): Promise<LifecycleCommandOutcome> {

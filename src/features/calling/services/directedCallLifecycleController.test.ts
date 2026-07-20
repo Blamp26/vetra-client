@@ -195,8 +195,8 @@ describe("DirectedCallLifecycleController", () => {
     expect(controller.getSnapshot().preparing).toBe(false);
   });
 
-  it("keeps decline, hangup, and begin_connecting explicit without optimistic transitions", async () => {
-    const session = createSession([commandReply(), commandReply(), commandReply()]);
+  it("keeps lifecycle and media commands explicit without optimistic transitions", async () => {
+    const session = createSession([commandReply(), commandReply(), commandReply(), commandReply(), commandReply()]);
     const controller = new DirectedCallLifecycleController(session);
     session.emit(state("presented"));
 
@@ -206,11 +206,16 @@ describe("DirectedCallLifecycleController", () => {
     expect(controller.getSnapshot().projection?.state).toBe("presented");
     await controller.beginConnecting(callId);
     expect(controller.getSnapshot().projection?.state).toBe("presented");
+    await controller.mediaReady(callId);
+    await controller.setupFailed(callId, "sdp_failed");
     expect(session.pushes.map(({ event }) => event)).toEqual([
       "call:decline",
       "call:hangup",
       "call:begin_connecting",
+      "call:media_ready",
+      "call:setup_failed",
     ]);
+    expect(session.pushes[session.pushes.length - 1]?.payload).toMatchObject({ failure_code: "sdp_failed" });
   });
 
   it("never sends received or presented automatically", async () => {

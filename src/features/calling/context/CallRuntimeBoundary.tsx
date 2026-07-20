@@ -96,7 +96,11 @@ export function CallRuntimeBoundary({
       const mediaCoordinator = new DirectedCallMediaCoordinator(
         session,
         signalTransport,
+        controller,
         `${effectGeneration}:${deviceId}`,
+        {
+          isGenerationCurrent: (generation) => generation.startsWith(`${effectGeneration}:`),
+        },
       );
       const runtime: PersistentRuntime = {
         start: () => mediaCoordinator.start(),
