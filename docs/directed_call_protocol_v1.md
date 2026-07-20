@@ -45,6 +45,16 @@ projection is retried, using that same command identity and the controller's
 bounded attempt limit. Authoritative advancement suppresses obsolete retries and
 stale local transport errors; no terminal state is inferred locally.
 
+The dormant B3 presentation model now maps authoritative projections into a
+persistent-specific presentation phase and exposes explicit outgoing,
+accept, decline, cancel, and hangup actions without mounting them in the
+active UI. Ringing still begins only at authoritative `presented`; accept and
+decline may remain local intents until that boundary. Uncertain initiation
+cancellation resolves the original initiate command with bounded retries before
+issuing a distinct cancel when a cancellable call ID is known. `begin_connecting`
+and all media work remain deferred, and cross-window ownership remains a B4
+boundary. The persistent runtime is still disabled by default.
+
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has
 committed. An operating-system notification alone is not presented.
