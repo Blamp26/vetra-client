@@ -230,8 +230,8 @@ describe("DirectedCallSession", () => {
       username_fragment: null,
     });
     const { device_id: _, ...inbound } = signal;
-    channel.emit("call:signal", { ...inbound, state_version: 1 });
-    channel.emit("call:signal", { ...inbound, state_version: 2 });
+    channel.emit("call:signal", inbound);
+    channel.emit("call:signal", inbound);
     channel.emit("call:signal", { ...inbound, payload: { candidate: "" } });
 
     expect(signals).toEqual([signalId, signalId]);

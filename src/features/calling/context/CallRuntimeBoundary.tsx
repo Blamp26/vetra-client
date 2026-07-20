@@ -6,6 +6,8 @@ import { DirectedCallSession } from "../services/directedCallSession";
 import { DirectedCallLifecycleController } from "../services/directedCallLifecycleController";
 import { DirectedCallIncomingCoordinator } from "../services/directedCallIncomingCoordinator";
 import { DirectedCallPresentationModel } from "../services/directedCallPresentationModel";
+import { DirectedCallSignalTransport } from "../services/directedCallSignalTransport";
+import { DirectedCallMediaCoordinator } from "../services/directedCallMediaCoordinator";
 import { getOrCreateDirectedCallDeviceId } from "../services/directedCallDevice";
 import { parseCallRuntimeMode, type CallRuntimeMode } from "../services/callRuntimeMode";
 import {
@@ -15,6 +17,7 @@ import {
 } from "../services/callAuthorityOwnership";
 
 interface PersistentRuntime {
+  start: () => void;
   dispose: () => void;
 }
 
@@ -86,8 +89,20 @@ export function CallRuntimeBoundary({
       const controller = new DirectedCallLifecycleController(session);
       const incoming = new DirectedCallIncomingCoordinator(session, controller, { enabled: true });
       const presentation = new DirectedCallPresentationModel(session, controller, incoming, { enabled: true });
+      const signalTransport = new DirectedCallSignalTransport(session, {
+        generation: `${effectGeneration}:${deviceId}`,
+        isGenerationCurrent: (generation) => generation.startsWith(`${effectGeneration}:`),
+      });
+      const mediaCoordinator = new DirectedCallMediaCoordinator(
+        session,
+        signalTransport,
+        `${effectGeneration}:${deviceId}`,
+      );
       const runtime: PersistentRuntime = {
+        start: () => mediaCoordinator.start(),
         dispose: () => {
+          mediaCoordinator.dispose();
+          signalTransport.dispose();
           presentation.dispose();
           incoming.dispose();
           controller.dispose();
@@ -107,6 +122,7 @@ export function CallRuntimeBoundary({
       persistentRuntimeRef.current = runtime;
       try {
         await session.start();
+        runtime.start();
       } catch {
         runtime.dispose();
         localRuntime = null;

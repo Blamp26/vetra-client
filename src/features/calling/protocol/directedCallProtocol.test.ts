@@ -83,11 +83,24 @@ describe("directed call V1 protocol", () => {
   it("keeps signaling independent of state version and strips device identity on decode", () => {
     const outbound = buildSignal(call, "99999999-9999-4999-8999-999999999999", device, "offer", { sdp: "v=0" });
     expect(outbound.device_id).toBe(device);
-    const inbound = decodeSignal({ ...outbound, state_version: 3 });
+    const { device_id: _deviceId, ...inboundPayload } = outbound;
+    const inbound = decodeSignal(inboundPayload);
     expect(inbound).not.toBeNull();
     expect(inbound).not.toHaveProperty("device_id");
+    expect(decodeSignal({ ...inboundPayload, state_version: 3 })).toBeNull();
     expect(decodeSignal({ ...outbound, kind: "unknown" })).toBeNull();
+    const answer = buildSignal(call, "88888888-8888-4888-8888-888888888888", device, "answer", { sdp: "v=0" });
+    const { device_id: _answerDeviceId, ...answerInbound } = answer;
+    expect(decodeSignal(answerInbound)).toMatchObject({ kind: "answer", call_id: call });
     expect(buildSignal(call, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", device, "ice_candidate", { candidate: "candidate:1", sdp_mid: null, sdp_mline_index: 0, username_fragment: null }).signal_id).not.toBe(outbound.signal_id);
+    const secret = "secret-sdp";
+    expect(() => buildSignal(call, "77777777-7777-4777-8777-777777777777", device, "offer", { sdp: "x".repeat(262145) })).toThrow("invalid directed-call signal");
+    expect(() => buildSignal(call, "66666666-6666-4666-8666-666666666666", device, "offer", { sdp: secret, screen_share: true } as never)).toThrow("invalid directed-call signal");
+    try {
+      buildSignal(call, "55555555-5555-4555-8555-555555555555", device, "offer", { sdp: secret, screen_share: true } as never);
+    } catch (error) {
+      expect(String(error)).not.toContain(secret);
+    }
   });
 
   it("keeps the wire state enum free of local and viewer-projection states", () => {
@@ -100,7 +113,9 @@ describe("directed call V1 protocol", () => {
     const root = resolve(process.cwd(), "test/fixtures/directed_call_v1");
     const manifest = JSON.parse(readFileSync(resolve(root, "manifest.json"), "utf8"));
     expect(decodeState(JSON.parse(readFileSync(resolve(root, "state.presented.valid.json"), "utf8")))).not.toBeNull();
-    expect(decodeSignal(JSON.parse(readFileSync(resolve(root, "signal.offer.valid.json"), "utf8")))).not.toBeNull();
+    const validSignal = JSON.parse(readFileSync(resolve(root, "signal.offer.valid.json"), "utf8"));
+    const { device_id: _fixtureDeviceId, ...validInboundSignal } = validSignal;
+    expect(decodeSignal(validInboundSignal)).not.toBeNull();
     expect(decodeState({ ...state, state: "preparing" })).toBeNull();
     for (const name of manifest.invalid as string[]) {
       const fixture = JSON.parse(readFileSync(resolve(root, name), "utf8"));
@@ -127,8 +142,7 @@ describe("directed call V1 protocol", () => {
       } else {
         decoded = decodeSignal(fixture);
         if (name.includes("state_version")) {
-          expect(decoded).not.toBeNull();
-          expect(decoded).not.toHaveProperty("state_version");
+          expect(decoded).toBeNull();
           continue;
         }
       }

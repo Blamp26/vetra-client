@@ -26,7 +26,8 @@ export const FAILURE_CODES = [
   "ice_failed",
   "media_binding_failed",
 ] as const;
-export const SIGNAL_KINDS = ["offer", "answer", "ice_candidate", "renegotiate_offer", "renegotiate_answer"] as const;
+/** Signal kinds supported by the persistent initial-negotiation boundary. */
+export const SIGNAL_KINDS = ["offer", "answer", "ice_candidate"] as const;
 export const CANONICAL_STATES = ["dispatching", "delivered", "presented", "accepted", "connecting", "active", "unavailable", "undelivered", "busy", "declined", "cancelled", "no_answer", "connection_failed", "ended"] as const;
 export const PARTICIPANT_ROLES = ["initiator", "recipient"] as const;
 
@@ -123,7 +124,7 @@ export function decodeState(value: unknown): StateProjection | null {
 }
 
 export function decodeSignal(value: unknown): SignalEnvelope | null {
-  if (!isRecord(value) || value.protocol_version !== 1 || !isUuid(value.call_id) || !isUuid(value.signal_id) || !SIGNAL_KINDS.includes(value.kind as SignalKind) || !validSignalPayload(value.kind as SignalKind, value.payload)) return null;
+  if (!isRecord(value) || !hasOnlyKeys(value, ["protocol_version", "call_id", "signal_id", "kind", "payload"]) || value.protocol_version !== 1 || !isUuid(value.call_id) || !isUuid(value.signal_id) || !SIGNAL_KINDS.includes(value.kind as SignalKind) || !validSignalPayload(value.kind as SignalKind, value.payload)) return null;
   return { protocol_version: 1, call_id: canonicalUuid(value.call_id), signal_id: canonicalUuid(value.signal_id), kind: value.kind as SignalKind, payload: value.payload as SignalPayload | IcePayload };
 }
 
@@ -146,6 +147,6 @@ function isRecord(value: unknown): value is Record<string, any> { return typeof 
 function hasOnlyKeys(value: Record<string, any>, keys: string[]): boolean { return Object.keys(value).every((key) => keys.includes(key)); }
 function validSignalPayload(kind: SignalKind, value: unknown): boolean {
   if (!isRecord(value)) return false;
-  if (kind === "ice_candidate") return typeof value.candidate === "string" && value.candidate.length > 0 && value.candidate.length <= 8192 && (value.sdp_mid === null || typeof value.sdp_mid === "string") && (value.sdp_mline_index === null || isSafeInteger(value.sdp_mline_index)) && (value.username_fragment === null || typeof value.username_fragment === "string");
-  return typeof value.sdp === "string" && value.sdp.length > 0 && value.sdp.length <= 262144 && (kind.startsWith("renegotiate_") ? typeof value.screen_share === "boolean" : !Object.prototype.hasOwnProperty.call(value, "screen_share"));
+  if (kind === "ice_candidate") return hasOnlyKeys(value, ["candidate", "sdp_mid", "sdp_mline_index", "username_fragment"]) && typeof value.candidate === "string" && value.candidate.length > 0 && value.candidate.length <= 8192 && (value.sdp_mid === null || (typeof value.sdp_mid === "string" && value.sdp_mid.length <= 256)) && (value.sdp_mline_index === null || isSafeInteger(value.sdp_mline_index)) && (value.username_fragment === null || (typeof value.username_fragment === "string" && value.username_fragment.length <= 256));
+  return hasOnlyKeys(value, ["sdp"]) && typeof value.sdp === "string" && value.sdp.length > 0 && value.sdp.length <= 262144;
 }

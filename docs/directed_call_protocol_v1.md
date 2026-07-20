@@ -92,14 +92,27 @@ stealing, or automatic persistent-to-legacy fallback.
 
 The owner-only boundary mounts exactly one legacy `CallProvider` in legacy mode,
 or constructs the dormant pre-media persistent session, lifecycle controller,
-incoming coordinator, and presentation model in persistent mode. A non-owner,
+incoming coordinator, presentation model, transient signal transport, and
+media-coordinator skeleton in persistent mode. A non-owner,
 disabled mode, invalid persistent identity, or unavailable Web Locks renders
 ordinary messaging without either call authority, call channels, call controls,
 or incoming-call presentation. Runtime disposal precedes lock release; logout,
 profile replacement, and unmount perform that cleanup without sending a
 canonical terminal command. Socket disconnect does not transfer ownership or
 infer call termination. Persistent mode remains headless and pre-media: it
-does not create a microphone, WebRTC object, SDP, ICE, or media track.
+does not create a microphone, WebRTC object, SDP, ICE, or media track. The C1
+signal transport is scoped to one call and runtime generation, rejects foreign
+or stale call IDs, and has no lifecycle or media authority.
+
+Initial persistent signaling supports only `offer`, `answer`, and
+`ice_candidate`. Signals are transient, non-canonical, are not persisted or
+replayed after reconnect, and are decoded before subscribers receive them.
+The current server relays a valid signal to every connected device on the peer
+participant topic; sender/recipient device routing is not present and remains
+deferred. Signal payloads and SDP/ICE contents are never logged or exposed in
+transport errors. C1 provides only the transport boundary and a media-free
+coordinator skeleton. C2 will add audio WebRTC and authoritative media
+lifecycle integration.
 
 The current implementation is covered by browser-style injected ownership
 tests. Sharing of Web Locks between target Windows WebViews/Tauri windows, and
@@ -117,8 +130,9 @@ Signaling has independent identifiers and is never filtered by canonical state
 version. The current call UI, signaling service, WebRTC service, provider,
 fullscreen behavior, and screen sharing are unchanged.
 
-The server strictly validates V1 inbound payloads; client decoders may ignore
-unknown future fields but only retain known validated fields. Phoenix
+The server strictly validates V1 inbound payloads; the C1 client signal
+decoder also requires the exact V1 signal envelope and payload keys for the
+three supported initial kinds. Phoenix
 integration, sync execution, retry scheduling, and runtime device-ID storage
 belong to later stages.
 

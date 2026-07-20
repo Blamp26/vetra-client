@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   Controller: vi.fn(class { dispose = vi.fn(); }),
   Incoming: vi.fn(class { dispose = vi.fn(); }),
   Presentation: vi.fn(class { dispose = vi.fn(); }),
+  SignalTransport: vi.fn(class { dispose = vi.fn(); }),
+  MediaCoordinator: vi.fn(class { start = vi.fn(); dispose = vi.fn(); }),
 }));
 
 vi.mock("./CallProvider", () => ({ CallProvider: mocks.CallProvider }));
@@ -18,6 +20,8 @@ vi.mock("../services/directedCallSession", () => ({ DirectedCallSession: mocks.S
 vi.mock("../services/directedCallLifecycleController", () => ({ DirectedCallLifecycleController: mocks.Controller }));
 vi.mock("../services/directedCallIncomingCoordinator", () => ({ DirectedCallIncomingCoordinator: mocks.Incoming }));
 vi.mock("../services/directedCallPresentationModel", () => ({ DirectedCallPresentationModel: mocks.Presentation }));
+vi.mock("../services/directedCallSignalTransport", () => ({ DirectedCallSignalTransport: mocks.SignalTransport }));
+vi.mock("../services/directedCallMediaCoordinator", () => ({ DirectedCallMediaCoordinator: mocks.MediaCoordinator }));
 vi.mock("../services/directedCallDevice", () => ({
   getOrCreateDirectedCallDeviceId: () => "11111111-1111-4111-8111-111111111111",
 }));
@@ -79,6 +83,8 @@ describe("CallRuntimeBoundary", () => {
     expect(mocks.CallProvider).not.toHaveBeenCalled();
     expect(mocks.Incoming).toHaveBeenCalledTimes(1);
     expect(mocks.Presentation).toHaveBeenCalledTimes(1);
+    expect(mocks.SignalTransport).toHaveBeenCalledTimes(1);
+    expect(mocks.MediaCoordinator).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed for non-owners, unavailable ownership, and invalid persistent identity", async () => {

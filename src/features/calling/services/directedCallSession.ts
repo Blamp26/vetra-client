@@ -4,10 +4,14 @@ import {
   DIRECTED_CALL_TOPIC_PREFIX,
   buildJoin,
   buildSync,
+  buildSignal,
   decodeSignal,
   decodeState,
   isUuid,
   type SignalEnvelope,
+  type IcePayload,
+  type SignalKind,
+  type SignalPayload,
   type StateProjection,
 } from "../protocol/directedCallProtocol";
 import { getOrCreateDirectedCallDeviceId } from "./directedCallDevice";
@@ -229,6 +233,18 @@ export class DirectedCallSession {
   subscribeToSignals(listener: SignalListener): () => void {
     this.signalListeners.add(listener);
     return () => this.signalListeners.delete(listener);
+  }
+
+  sendSignal(
+    callId: string,
+    signalId: string,
+    kind: SignalKind,
+    payload: SignalPayload | IcePayload,
+  ): Promise<unknown> {
+    return this.pushCommand(
+      DIRECTED_CALL_EVENTS.signal,
+      buildSignal(callId, signalId, this.deviceId, kind, payload),
+    );
   }
 
   subscribeToSync(listener: SyncListener): () => void {
