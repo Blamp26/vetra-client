@@ -91,7 +91,15 @@ export function CallRuntimeBoundary({
         if (activeOwnershipRef.current !== ownership) await ownership.dispose();
         return;
       }
-      if (acquired.state !== "owner" || mode !== "persistent") return;
+      if (acquired.state !== "owner" || mode !== "persistent") {
+        if (mode === "persistent") {
+          recordDirectedCallDiagnostic("failure", {
+            failureKind: acquired.state === "unavailable" ? "persistent_authority_unavailable" : "persistent_authority_not_owned",
+            reason: acquired.state === "unavailable" ? "web_locks_unavailable_or_failed" : "another_window_owns_call_runtime",
+          });
+        }
+        return;
+      }
       if (!scope || !socketManager || !publicUserRef || !persistentMediaAvailable) {
         recordDirectedCallDiagnostic("failure", { failureKind: !persistentMediaAvailable ? "persistent_media_unavailable" : "persistent_runtime_unavailable" });
         await ownership.dispose();

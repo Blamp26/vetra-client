@@ -19,6 +19,7 @@ import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import { useOptionalPersistentCall } from "@/features/calling/context/PersistentCallContext";
 import { PersistentCallButton } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
+import { isUuid } from "@/features/calling/protocol/directedCallProtocol";
 import { cn } from "@/shared/utils/cn";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
@@ -107,6 +108,13 @@ export function ChatWindow({ activeChat, call }: Props) {
     activePartnerId !== null
       ? conversationPreviews[activePartnerId]?.partner_public_id
       : undefined;
+
+  const persistentPeerPublicId =
+    activeChat.type === "direct"
+      ? [partner?.public_id, directPreviewPublicId, activePartnerRef].find(
+          (value): value is string => typeof value === "string" && isUuid(value),
+        )
+      : null;
 
   const chatContext = useMemo((): ChatContext | null => {
     if (activePartnerId !== null)
@@ -354,7 +362,7 @@ export function ChatWindow({ activeChat, call }: Props) {
             />}
             {persistentCall && activeChat.type === "direct" && (
               <PersistentCallButton
-                targetUserId={partner?.public_id ?? directPreviewPublicId}
+                targetUserId={persistentPeerPublicId}
                 targetUsername={partner?.display_name || partner?.username || "user"}
               />
             )}

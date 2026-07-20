@@ -1,10 +1,11 @@
 import { Phone, PhoneOff, RotateCw } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Button } from "@/shared/components/Button";
 import { IncomingCallModal } from "../IncomingCallModal";
 import { PersistentRemoteAudioRenderer } from "./PersistentRemoteAudioRenderer";
 import { useOptionalPersistentCall, usePersistentCall } from "../../context/PersistentCallContext";
 import { isUuid } from "../../protocol/directedCallProtocol";
+import { recordDirectedCallDiagnostic } from "../../services/directedCallDiagnostics";
 
 export function PersistentCallSurface({ children }: { children: ReactNode }) {
   const call = usePersistentCall();
@@ -68,9 +69,18 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
 
 export function PersistentCallButton({ targetUserId, targetUsername }: { targetUserId: string | null | undefined; targetUsername: string }) {
   const call = useOptionalPersistentCall();
-  if (!call) return null;
-  const canStart = call.presentation.phase === "idle" || call.presentation.phase === "terminal";
   const validTarget = typeof targetUserId === "string" && isUuid(targetUserId);
+
+  useEffect(() => {
+    if (call && validTarget) return;
+    recordDirectedCallDiagnostic("failure", {
+      failureKind: "persistent_call_controls_unavailable",
+      reason: !call ? "persistent_owner_context_unavailable" : "invalid_peer_public_id",
+    });
+  }, [call, validTarget]);
+
+  if (!call || !validTarget) return null;
+  const canStart = call.presentation.phase === "idle" || call.presentation.phase === "terminal";
   return (
     <button
       className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
