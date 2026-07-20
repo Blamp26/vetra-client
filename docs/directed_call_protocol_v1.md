@@ -55,6 +55,16 @@ issuing a distinct cancel when a cancellable call ID is known. `begin_connecting
 and all media work remain deferred, and cross-window ownership remains a B4
 boundary. The persistent runtime is still disabled by default.
 
+Explicit B3 lifecycle actions retain their logical command identity after
+transport uncertainty. The presentation model retries the retained command only
+while the authoritative projection still requires that action, using the
+bounded controller attempt limit; acknowledgements do not end local pending
+presentation before projection advancement. Rejected replies are not treated as
+successful transitions, and authoritative advancement clears obsolete actions
+and scoped errors. Uncertain initiate cancellation re-reads the newest
+projection before sending a distinct cancel. B4 ownership and all media work
+remain deferred.
+
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has
 committed. An operating-system notification alone is not presented.

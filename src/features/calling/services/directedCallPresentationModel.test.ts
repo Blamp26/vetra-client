@@ -4,6 +4,7 @@ import type {
   DirectedCallControllerSnapshot,
   DirectedCallSessionPort,
   LifecycleCommandOutcome,
+  PendingLifecycleCommand,
 } from "./directedCallLifecycleController";
 import type { IncomingPresentationSnapshot } from "./directedCallIncomingCoordinator";
 import {
@@ -50,8 +51,18 @@ function commandReply(event: string): LifecycleCommandOutcome {
   } as LifecycleCommandOutcome;
 }
 
+function transportFailure(event: "call:accept" | "call:decline" | "call:cancel" | "call:hangup"): LifecycleCommandOutcome {
+  return {
+    status: "failed",
+    event,
+    commandId: "55555555-5555-4555-8555-555555555555",
+    error: { kind: "transport_timeout" },
+  };
+}
+
 function createHarness() {
   let projectionListener: ((value: StateProjection, classification: "accepted" | "duplicate") => void) | null = null;
+  let syncListener: (() => void) | null = null;
   let controllerListener: ((snapshot: DirectedCallControllerSnapshot) => void) | null = null;
   let incomingListener: ((snapshot: IncomingPresentationSnapshot) => void) | null = null;
   const pushes: Array<{ event: string; payload?: unknown }> = [];
@@ -78,10 +89,14 @@ function createHarness() {
       projectionListener = listener;
       return () => { projectionListener = null; };
     },
+    subscribeToSync: (listener) => {
+      syncListener = listener;
+      return () => { syncListener = null; };
+    },
     pushCommand: vi.fn(),
   };
-  const lifecycle: DirectedCallPresentationLifecyclePort = {
-    initiate: vi.fn(async () => commandReply("call:initiate")),
+  const lifecycle = {
+    initiate: vi.fn(async (_target: string) => commandReply("call:initiate")),
     received: vi.fn(async () => commandReply("call:received")),
     presented: vi.fn(async () => commandReply("call:presented")),
     accept: vi.fn(async () => commandReply("call:accept")),
@@ -94,7 +109,7 @@ function createHarness() {
       controllerListener = listener;
       return () => { controllerListener = null; };
     },
-  };
+  } satisfies DirectedCallPresentationLifecyclePort;
   const incoming: DirectedCallPresentationIncomingPort = {
     getSnapshot: () => incomingState,
     subscribe: (listener) => {
@@ -115,7 +130,22 @@ function createHarness() {
     controllerListener?.(state);
     incomingListener?.(incomingState);
   };
-  return { model, lifecycle, incoming, session, state, incomingState, pushes, emit, setPreparing: (value: boolean) => { state.preparing = value; controllerListener?.(state); } };
+  return {
+    model,
+    lifecycle,
+    incoming,
+    session,
+    state,
+    incomingState,
+    pushes,
+    emit,
+    emitSync: () => syncListener?.(),
+    setPending: (pending: PendingLifecycleCommand | null) => {
+      state.pendingCommand = pending;
+      controllerListener?.(state);
+    },
+    setPreparing: (value: boolean) => { state.preparing = value; controllerListener?.(state); },
+  };
 }
 
 describe("DirectedCallPresentationModel", () => {
@@ -223,6 +253,20 @@ describe("DirectedCallPresentationModel", () => {
     });
     harness.lifecycle.initiate = initiate;
     harness.lifecycle.getSnapshot = () => ({ ...harness.state, pendingCommand: { event: "call:initiate", callId: null, commandId: "77777777-7777-4777-8777-777777777777", attempts: 1 } });
+    harness.lifecycle.retryPendingCommand = vi.fn(async (): Promise<LifecycleCommandOutcome> => ({
+      status: "acknowledged",
+      event: "call:initiate",
+      commandId: "77777777-7777-4777-8777-777777777777",
+      result: {
+        call_id: CALL_ID,
+        state: "dispatching",
+        state_version: 1,
+        media: "audio",
+        participant_role: "initiator",
+        merged: false,
+        attempt_created: true,
+      },
+    }));
     const operation = harness.model.startCall(TARGET_ID, "Alice");
     await harness.model.cancelCall();
     resolveInitiate({ status: "failed", event: "call:initiate", commandId: "77777777-7777-4777-8777-777777777777", error: { kind: "transport_timeout" } });
@@ -254,5 +298,117 @@ describe("DirectedCallPresentationModel", () => {
     harness.model.dispose();
     expect(harness.model.getSnapshot()).toMatchObject({ disposed: true, callId: null, pendingAction: null });
     expect(harness.lifecycle.hangup).not.toHaveBeenCalled();
+  });
+
+  it("retains an accept transport failure and retries the controller command without a second accept", async () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient"));
+    harness.setPending({ event: "call:accept", callId: CALL_ID, commandId: "77777777-7777-4777-8777-777777777777", attempts: 1 });
+    harness.lifecycle.accept.mockResolvedValueOnce(transportFailure("call:accept"));
+    await harness.model.accept();
+
+    expect(harness.model.getSnapshot()).toMatchObject({ pendingAction: "accepting", recoverableError: { kind: "transport" } });
+    harness.lifecycle.retryPendingCommand.mockResolvedValueOnce(commandReply("call:accept"));
+    harness.emitSync();
+    await Promise.resolve();
+
+    expect(harness.lifecycle.accept).toHaveBeenCalledTimes(1);
+    expect(harness.lifecycle.retryPendingCommand).toHaveBeenCalledTimes(1);
+    expect(harness.model.getSnapshot()).toMatchObject({ pendingAction: "accepting", canonicalState: "presented" });
+  });
+
+  it.each([
+    ["decline", "presented", "recipient", "declining", "call:decline"],
+    ["cancel", "delivered", "initiator", "cancelling", "call:cancel"],
+    ["hangup", "active", "recipient", "hanging_up", "call:hangup"],
+  ] as const)("recovers a %s transport failure through the retained command", async (action, stateName, role, pending, event) => {
+    const harness = createHarness();
+    harness.emit(projection(stateName, role));
+    harness.setPending({ event, callId: CALL_ID, commandId: "77777777-7777-4777-8777-777777777777", attempts: 1 });
+    const method = action === "decline" ? harness.lifecycle.decline : action === "cancel" ? harness.lifecycle.cancel : harness.lifecycle.hangup;
+    method.mockResolvedValueOnce(transportFailure(event));
+    const result = action === "decline" ? harness.model.decline() : action === "cancel" ? harness.model.cancelCall() : harness.model.hangup();
+    await result;
+
+    expect(harness.model.getSnapshot().pendingAction).toBe(pending);
+    harness.lifecycle.retryPendingCommand.mockResolvedValueOnce(commandReply(event));
+    harness.emitSync();
+    await Promise.resolve();
+    expect(method).toHaveBeenCalledTimes(1);
+    expect(harness.lifecycle.retryPendingCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports explicit retry, coalesces sync, and never makes a fourth attempt", async () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient"));
+    harness.setPending({ event: "call:accept", callId: CALL_ID, commandId: "77777777-7777-4777-8777-777777777777", attempts: 2 });
+    harness.lifecycle.accept.mockResolvedValueOnce(transportFailure("call:accept"));
+    await harness.model.accept();
+    let resolveRetry!: (outcome: LifecycleCommandOutcome) => void;
+    harness.lifecycle.retryPendingCommand.mockImplementationOnce(() => new Promise((resolve) => { resolveRetry = resolve; }));
+    const firstRetry = harness.model.retryPendingAction();
+    const secondRetry = harness.model.retryPendingAction();
+    harness.emitSync();
+    expect(harness.lifecycle.retryPendingCommand).toHaveBeenCalledTimes(1);
+    await expect(secondRetry).resolves.toMatchObject({ status: "ignored" });
+    resolveRetry({
+      status: "failed",
+      event: "call:accept",
+      commandId: "77777777-7777-4777-8777-777777777777",
+      error: { kind: "retry_exhausted" },
+    });
+    await firstRetry;
+    expect(harness.model.getSnapshot().recoverableError).toMatchObject({ kind: "retry_exhausted" });
+    harness.emitSync();
+    expect(harness.lifecycle.retryPendingCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not treat applied, duplicate, or no-op replies as canonical projection changes", async () => {
+    for (const resultCode of ["applied", "duplicate", "no_op"] as const) {
+      const harness = createHarness();
+      harness.emit(projection("presented", "recipient"));
+      harness.lifecycle.accept.mockResolvedValueOnce({
+        ...commandReply("call:accept"),
+        result: { call_id: CALL_ID, state: "accepted", state_version: 2, result_code: resultCode },
+      } as LifecycleCommandOutcome);
+      await harness.model.accept();
+      expect(harness.model.getSnapshot().canonicalState).toBe("presented");
+      expect(harness.model.getSnapshot().pendingAction).toBe("accepting");
+    }
+  });
+
+  it("scopes rejection errors and clears them when authoritative state advances", async () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient"));
+    harness.lifecycle.accept.mockResolvedValueOnce({
+      status: "acknowledged",
+      event: "call:accept",
+      commandId: "55555555-5555-4555-8555-555555555555",
+      result: { call_id: CALL_ID, state: "presented", state_version: 1, result_code: "rejected" },
+    });
+    await harness.model.accept();
+    expect(harness.model.getSnapshot().recoverableError).toMatchObject({ kind: "rejected", callId: CALL_ID, action: "accepting" });
+    harness.emit(projection("accepted", "recipient", 2));
+    expect(harness.model.getSnapshot().recoverableError).toBeNull();
+  });
+
+  it("checks the newest projection before uncertain initiation cancellation", async () => {
+    const harness = createHarness();
+    let resolveInitiate!: (outcome: LifecycleCommandOutcome) => void;
+    harness.lifecycle.initiate = vi.fn((_target: string) => {
+      harness.setPreparing(true);
+      return new Promise<LifecycleCommandOutcome>((resolve) => { resolveInitiate = resolve; });
+    });
+    const operation = harness.model.startCall(TARGET_ID, "Alice");
+    await harness.model.cancelCall();
+    harness.emit(projection("accepted", "initiator", 2));
+    resolveInitiate({
+      status: "acknowledged",
+      event: "call:initiate",
+      commandId: "77777777-7777-4777-8777-777777777777",
+      result: { call_id: CALL_ID, state: "dispatching", state_version: 1, media: "audio", participant_role: "initiator", merged: false, attempt_created: true },
+    });
+    await operation;
+    expect(harness.lifecycle.cancel).not.toHaveBeenCalled();
   });
 });

@@ -37,6 +37,8 @@ export type PersistentPendingUserAction =
 export interface PersistentPresentationError {
   kind: "protocol_validation" | "rejected" | "transport" | "retry_exhausted";
   message: string;
+  action?: PersistentPendingUserAction | "call:initiate" | "call:received" | "call:presented";
+  callId?: string | null;
 }
 
 export interface IncomingModalPresentationProps {
@@ -99,6 +101,12 @@ export interface DirectedCallPresentationIncomingPort {
 }
 
 type PresentationListener = (snapshot: PersistentPresentationSnapshot) => void;
+type ActionStatus = "queued" | "submitted" | "acknowledged" | "retryable" | "retrying" | "exhausted" | "rejected";
+interface ActionRecord {
+  action: PersistentPendingUserAction;
+  callId: string;
+  status: ActionStatus;
+}
 
 const TERMINAL_STATES = new Set<CanonicalState>([
   "unavailable",
@@ -143,20 +151,48 @@ function commandError(outcome: Extract<LifecycleCommandOutcome, { status: "faile
   return { kind: "transport", message: "The call connection was interrupted. Try again." };
 }
 
+function scopeError(
+  error: PersistentPresentationError,
+  action: PersistentPendingUserAction | "call:initiate" | "call:received" | "call:presented",
+  callId: string | null,
+): PersistentPresentationError {
+  return { ...error, action, callId };
+}
+
+function actionEvent(action: PersistentPendingUserAction): DirectedCallLifecycleEvent {
+  if (action === "accepting") return "call:accept";
+  if (action === "declining") return "call:decline";
+  if (action === "cancelling") return "call:cancel";
+  return "call:hangup";
+}
+
+function actionRequired(action: PersistentPendingUserAction, projection: StateProjection | null): boolean {
+  if (!projection) return false;
+  if (action === "accepting" || action === "declining") {
+    return projection.participant_role === "recipient" && projection.state === "presented";
+  }
+  if (action === "cancelling") {
+    return projection.participant_role === "initiator" && CANCEL_STATES.has(projection.state);
+  }
+  return HANGUP_STATES.has(projection.state);
+}
+
 export class DirectedCallPresentationModel {
   private readonly controller: DirectedCallPresentationLifecyclePort;
   private readonly incoming: DirectedCallPresentationIncomingPort;
   private readonly enabled: boolean;
   private readonly listeners = new Set<PresentationListener>();
-  private readonly sentActions = new Set<string>();
   private readonly unsubscribeProjection: () => void;
   private readonly unsubscribeController: () => void;
   private readonly unsubscribeIncoming: () => void;
+  private readonly unsubscribeSync: () => void;
+  private readonly session: DirectedCallPresentationSessionPort;
   private authoritativeProjection: StateProjection | null = null;
   private controllerSnapshot: DirectedCallControllerSnapshot;
   private incomingSnapshot: IncomingPresentationSnapshot;
   private fallbackPeer: { id: string; username: string } | null = null;
-  private pendingAction: PersistentPendingUserAction | null = null;
+  private actionRecord: ActionRecord | null = null;
+  private scopedError: PersistentPresentationError | null = null;
   private cancelIntent = false;
   private initiationPromise: Promise<LifecycleCommandOutcome> | null = null;
   private initiationResult: InitiateResult | null = null;
@@ -170,6 +206,7 @@ export class DirectedCallPresentationModel {
   ) {
     this.controller = lifecycleController;
     this.incoming = incomingCoordinator;
+    this.session = session;
     this.enabled = options.enabled ?? false;
     this.controllerSnapshot = lifecycleController.getSnapshot();
     this.incomingSnapshot = incomingCoordinator.getSnapshot();
@@ -178,6 +215,7 @@ export class DirectedCallPresentationModel {
       this.unsubscribeProjection = () => undefined;
       this.unsubscribeController = () => undefined;
       this.unsubscribeIncoming = () => undefined;
+      this.unsubscribeSync = () => undefined;
       return;
     }
 
@@ -197,6 +235,9 @@ export class DirectedCallPresentationModel {
       this.incomingSnapshot = snapshot;
       this.emit();
     });
+    this.unsubscribeSync = session.subscribeToSync
+      ? session.subscribeToSync(() => this.retryAfterSync())
+      : () => undefined;
   }
 
   getSnapshot(): PersistentPresentationSnapshot {
@@ -232,7 +273,7 @@ export class DirectedCallPresentationModel {
           }
         : null,
       terminalState,
-      pendingAction: this.pendingAction,
+      pendingAction: this.visiblePendingAction(),
       recoverableError,
       statusLabel: this.statusLabel(phase),
       terminalLabel: terminalState ? TERMINAL_LABELS[terminalState] : null,
@@ -243,7 +284,7 @@ export class DirectedCallPresentationModel {
       incomingModal: {
         visible: modalVisible,
         callerDisplayName: peerUsername ?? "Unknown caller",
-        isPending: this.pendingAction === "accepting" || this.pendingAction === "declining",
+        isPending: this.visiblePendingAction() === "accepting" || this.visiblePendingAction() === "declining",
         presentationKey: modalVisible ? callId : null,
         onPresented: modalVisible && callId ? () => this.incoming.onModalPresented(callId) : undefined,
         onAccept: () => this.accept(),
@@ -262,10 +303,13 @@ export class DirectedCallPresentationModel {
     if (this.disposed || !this.enabled || !isUuid(targetPublicUserId)) {
       return { status: "failed", error: { kind: "protocol_validation", message: "A public user ID is required." } };
     }
-    if (this.controllerSnapshot.preparing || this.currentProjection()) return { status: "ignored" };
+    const existingProjection = this.currentProjection();
+    if (this.controllerSnapshot.preparing || (existingProjection && !TERMINAL_STATES.has(existingProjection.state))) return { status: "ignored" };
 
     this.fallbackPeer = { id: targetPublicUserId.toLowerCase(), username: targetUsername };
-    this.pendingAction = null;
+    this.clearActionRecord();
+    this.authoritativeProjection = null;
+    this.scopedError = null;
     this.initiationResult = null;
     this.emit();
     const operation = this.controller.initiate(targetPublicUserId);
@@ -275,6 +319,8 @@ export class DirectedCallPresentationModel {
 
     if (this.cancelIntent) return this.resolveCancelledInitiation(outcome);
     if (outcome.status === "failed") {
+      this.scopedError = scopeError(commandError(outcome), "call:initiate", null);
+      this.emit();
       return { status: "failed", error: commandError(outcome) };
     }
     this.initiationResult = outcome.result as InitiateResult;
@@ -294,12 +340,12 @@ export class DirectedCallPresentationModel {
     if (this.disposed || !this.enabled) return { status: "ignored" };
     const projection = this.currentProjection();
     if (!projection && this.initiationResult && CANCEL_STATES.has(this.initiationResult.state)) {
-      return this.sendAction("cancelling", this.initiationResult.call_id);
+      return this.submitAction("cancelling", this.initiationResult.call_id);
     }
     if (!projection && (this.controllerSnapshot.preparing || this.controllerSnapshot.pendingCommand?.event === "call:initiate")) {
       if (this.cancelIntent) return { status: "queued", action: "cancelling" };
       this.cancelIntent = true;
-      this.pendingAction = "cancelling";
+      this.actionRecord = { action: "cancelling", callId: this.controllerSnapshot.callId ?? "", status: "queued" };
       this.emit();
       if (!this.initiationPromise) {
         const pending = this.controller.retryPendingCommand();
@@ -311,7 +357,7 @@ export class DirectedCallPresentationModel {
     if (!projection || projection.participant_role !== "initiator" || !CANCEL_STATES.has(projection.state)) {
       return { status: "ignored" };
     }
-    return this.sendAction("cancelling", projection.call_id);
+    return this.submitAction("cancelling", projection.call_id);
   }
 
   async hangup(): Promise<PresentationActionResult> {
@@ -319,7 +365,7 @@ export class DirectedCallPresentationModel {
     if (this.disposed || !this.enabled || !projection || !HANGUP_STATES.has(projection.state)) {
       return { status: "ignored" };
     }
-    return this.sendAction("hanging_up", projection.call_id);
+    return this.submitAction("hanging_up", projection.call_id);
   }
 
   dispose(): void {
@@ -328,15 +374,17 @@ export class DirectedCallPresentationModel {
     this.unsubscribeProjection();
     this.unsubscribeController();
     this.unsubscribeIncoming();
+    this.unsubscribeSync();
     this.authoritativeProjection = null;
     this.fallbackPeer = null;
     this.controllerSnapshot = { ...this.controllerSnapshot, callId: null, projection: null, preparing: false, pendingCommand: null };
     this.incomingSnapshot = { ...this.incomingSnapshot, callId: null, projection: null, visible: false };
-    this.pendingAction = null;
+    this.clearActionRecord();
     this.cancelIntent = false;
     this.initiationPromise = null;
     this.initiationResult = null;
-    this.sentActions.clear();
+    this.clearActionRecord();
+    this.scopedError = null;
     this.listeners.clear();
   }
 
@@ -347,31 +395,53 @@ export class DirectedCallPresentationModel {
     return this.authoritativeProjection;
   }
 
+  private clearActionRecord(): void {
+    this.actionRecord = null;
+    this.scopedError = null;
+  }
+
   private currentError(): PersistentPresentationError | null {
     const incomingError = this.incomingSnapshot.recoverableError;
     if (incomingError) {
-      return { kind: incomingError.kind === "retry_exhausted" ? "retry_exhausted" : "transport", message: "The incoming call connection was interrupted. Try again." };
+      if (this.callIdForIncomingError() !== (this.currentProjection()?.call_id ?? null)) return null;
+      return {
+        kind: incomingError.kind === "retry_exhausted" ? "retry_exhausted" : "transport",
+        message: "The incoming call connection was interrupted. Try again.",
+        action: incomingError.action,
+        callId: incomingError.callId,
+      };
     }
-    const controllerError = this.controllerSnapshot.lastCommandError;
-    if (!controllerError || controllerError.kind === "disposed") return null;
-    return commandError({ status: "failed", event: "call:hangup", commandId: null, error: controllerError });
+    const currentCallId = this.currentProjection()?.call_id ?? this.initiationResult?.call_id ?? null;
+    if (!this.scopedError) return null;
+    if (this.scopedError.callId !== currentCallId) return null;
+    if (this.scopedError.action !== "call:initiate" && this.actionRecord && this.scopedError.action !== this.actionRecord.action) return null;
+    return this.scopedError;
+  }
+
+  private callIdForIncomingError(): string | null {
+    return this.incomingSnapshot.recoverableError?.callId ?? null;
+  }
+
+  private visiblePendingAction(): PersistentPendingUserAction | null {
+    if (!this.actionRecord || this.actionRecord.status === "rejected") return null;
+    return this.actionRecord.action;
   }
 
   private mapPhase(projection: StateProjection | null, role: ParticipantRole | null, terminalState: CanonicalState | null): PersistentPresentationPhase {
     if (this.disposed) return "idle";
-    if (!projection && this.controllerSnapshot.preparing) return this.pendingAction === "cancelling" ? "cancelling" : "preparing";
+    if (!projection && this.controllerSnapshot.preparing) return this.visiblePendingAction() === "cancelling" ? "cancelling" : "preparing";
     if (!projection) return "idle";
     if (terminalState) return "terminal";
-    if (this.pendingAction === "cancelling") return "cancelling";
-    if (this.pendingAction === "hanging_up") return projection.state === "active" ? "active" : "connecting";
+    if (this.visiblePendingAction() === "cancelling") return "cancelling";
+    if (this.visiblePendingAction() === "hanging_up") return projection.state === "active" ? "active" : "connecting";
     if (role === "initiator") {
       if (projection.state === "presented") return "ringing";
       if (["accepted", "connecting"].includes(projection.state)) return "connecting";
       if (projection.state === "active") return "active";
       return "calling";
     }
-    if (this.pendingAction === "accepting") return "accepting";
-    if (this.pendingAction === "declining") return "declining";
+    if (this.visiblePendingAction() === "accepting") return "accepting";
+    if (this.visiblePendingAction() === "declining") return "declining";
     if (projection.state === "dispatching") return "idle";
     if (["accepted", "connecting"].includes(projection.state)) return "connecting";
     if (projection.state === "active") return "active";
@@ -403,21 +473,29 @@ export class DirectedCallPresentationModel {
 
   private handleProjection(projection: StateProjection): void {
     if (this.disposed) return;
-    if (this.authoritativeProjection?.call_id === projection.call_id) this.authoritativeProjection = projection;
-    if (projection.call_id === this.controllerSnapshot.callId && TERMINAL_STATES.has(projection.state)) {
-      this.pendingAction = null;
-      this.cancelIntent = false;
+    const currentCallId = this.currentProjection()?.call_id ?? this.actionRecord?.callId ?? null;
+    if (currentCallId && currentCallId !== projection.call_id) {
+      if (this.actionRecord) this.clearActionRecord();
+      this.scopedError = null;
     }
-    if (projection.participant_role === "recipient" &&
-        (!["delivered", "presented"].includes(projection.state) || TERMINAL_STATES.has(projection.state))) {
-      this.pendingAction = null;
+    if (!this.authoritativeProjection || this.authoritativeProjection.call_id === projection.call_id ||
+        TERMINAL_STATES.has(this.authoritativeProjection.state) ||
+        (this.controllerSnapshot.preparing && projection.participant_role === "initiator")) {
+      this.authoritativeProjection = projection;
     }
-    if (this.pendingAction === "accepting" || this.pendingAction === "declining") {
-      if (projection.state === "presented" && projection.participant_role === "recipient") {
-        void this.sendAction(this.pendingAction, projection.call_id);
-      } else if (projection.state !== "delivered" && projection.state !== "presented") {
-        this.pendingAction = null;
-      }
+
+    const record = this.actionRecord;
+    if (record && record.callId === projection.call_id && !actionRequired(record.action, projection)) {
+      this.clearActionRecord();
+      this.scopedError = null;
+      if (record.action === "cancelling") this.cancelIntent = false;
+    }
+    const currentRecord = this.actionRecord;
+    if (currentRecord && currentRecord.callId === projection.call_id &&
+        (currentRecord.action === "accepting" || currentRecord.action === "declining") &&
+        currentRecord.status === "queued" && projection.state === "presented" &&
+        projection.participant_role === "recipient") {
+      void this.submitAction(currentRecord.action, projection.call_id);
     }
     this.emit();
   }
@@ -428,31 +506,26 @@ export class DirectedCallPresentationModel {
     if (!projection || projection.participant_role !== "recipient" || !["delivered", "presented"].includes(projection.state)) {
       return { status: "ignored" };
     }
-    if (this.pendingAction && this.pendingAction !== action) return { status: "ignored" };
+    if (this.actionRecord && this.actionRecord.action !== action) return { status: "ignored" };
     if (projection.state === "delivered") {
-      this.pendingAction = action;
+      this.actionRecord = { action, callId: projection.call_id, status: "queued" };
       this.emit();
       return { status: "queued", action };
     }
-    return this.sendAction(action, projection.call_id);
+    return this.submitAction(action, projection.call_id);
   }
 
-  private async sendAction(action: PersistentPendingUserAction, callId: string): Promise<PresentationActionResult> {
-    const key = `${action}:${callId}`;
-    if (this.sentActions.has(key)) return { status: "ignored" };
-    if (this.pendingAction && this.pendingAction !== action) return { status: "ignored" };
-    this.sentActions.add(key);
-    this.pendingAction = action;
+  private async submitAction(action: PersistentPendingUserAction, callId: string): Promise<PresentationActionResult> {
+    if (this.actionRecord && (this.actionRecord.action !== action || this.actionRecord.callId !== callId)) return { status: "ignored" };
+    if (this.actionRecord?.status === "submitted" || this.actionRecord?.status === "retrying" ||
+        this.actionRecord?.status === "acknowledged" || this.actionRecord?.status === "retryable" ||
+        this.actionRecord?.status === "exhausted" || this.actionRecord?.status === "rejected") return { status: "ignored" };
+    this.actionRecord = { action, callId, status: "submitted" };
+    this.scopedError = null;
     this.emit();
     const outcome = await this.invokeAction(action, callId);
     if (this.disposed) return { status: "ignored" };
-    this.pendingAction = null;
-    if (outcome.status === "failed") {
-      this.emit();
-      return { status: "failed", error: commandError(outcome) };
-    }
-    this.emit();
-    return { status: "acknowledged", event: outcome.event };
+    return this.finishAction(outcome, action, callId);
   }
 
   private invokeAction(action: PersistentPendingUserAction, callId: string): Promise<LifecycleCommandOutcome> {
@@ -460,6 +533,75 @@ export class DirectedCallPresentationModel {
     if (action === "declining") return this.controller.decline(callId);
     if (action === "cancelling") return this.controller.cancel(callId);
     return this.controller.hangup(callId);
+  }
+
+  async retryPendingAction(): Promise<PresentationActionResult> {
+    if (this.disposed || !this.enabled || !this.actionRecord || this.actionRecord.status !== "retryable") return { status: "ignored" };
+    const { action, callId } = this.actionRecord;
+    if (!actionRequired(action, this.session.getProjection(callId))) {
+      this.clearActionRecord();
+      return { status: "ignored" };
+    }
+    const pending = this.controller.getSnapshot().pendingCommand;
+    if (!pending || pending.event !== actionEvent(action) || pending.callId !== callId) {
+      this.clearActionRecord();
+      return { status: "ignored" };
+    }
+    return this.retryAction(action, callId);
+  }
+
+  private retryAfterSync(): void {
+    if (!this.actionRecord || this.actionRecord.status !== "retryable" || this.disposed) return;
+    void this.retryPendingAction();
+  }
+
+  private async retryAction(action: PersistentPendingUserAction, callId: string): Promise<PresentationActionResult> {
+    if (!this.actionRecord || this.actionRecord.action !== action || this.actionRecord.callId !== callId || this.actionRecord.status !== "retryable") return { status: "ignored" };
+    this.actionRecord.status = "retrying";
+    this.emit();
+    const outcome = await this.controller.retryPendingCommand();
+    if (this.disposed) return { status: "ignored" };
+    return this.finishAction(outcome, action, callId);
+  }
+
+  private finishAction(outcome: LifecycleCommandOutcome, action: PersistentPendingUserAction, callId: string): PresentationActionResult {
+    if (this.disposed) return { status: "ignored" };
+    const latest = this.session.getProjection(callId);
+    if (!actionRequired(action, latest)) {
+      this.clearActionRecord();
+      this.scopedError = null;
+      this.emit();
+      return { status: "ignored" };
+    }
+
+    if (outcome.status === "failed") {
+      if (outcome.error.kind === "transport_timeout" || outcome.error.kind === "transport_error") {
+        const pending = this.controller.getSnapshot().pendingCommand;
+        if (pending?.event === actionEvent(action) && pending.callId === callId) {
+          this.actionRecord = { action, callId, status: pending.attempts >= 3 ? "exhausted" : "retryable" };
+          this.scopedError = scopeError(commandError(outcome), action, callId);
+        } else {
+          this.clearActionRecord();
+        }
+      } else {
+        this.actionRecord = { action, callId, status: "rejected" };
+        this.scopedError = scopeError(commandError(outcome), action, callId);
+      }
+      this.emit();
+      return { status: "failed", error: this.scopedError ?? commandError(outcome) };
+    }
+
+    const result = outcome.result;
+    if ("result_code" in result && result.result_code === "rejected") {
+      this.actionRecord = { action, callId, status: "rejected" };
+      this.scopedError = scopeError({ kind: "rejected", message: "This call action is no longer available." }, action, callId);
+      this.emit();
+      return { status: "failed", error: this.scopedError };
+    }
+    this.actionRecord = { action, callId, status: "acknowledged" };
+    this.scopedError = null;
+    this.emit();
+    return { status: "acknowledged", event: outcome.event };
   }
 
   private async resolveCancelledInitiation(initial: LifecycleCommandOutcome): Promise<PresentationActionResult> {
@@ -475,16 +617,21 @@ export class DirectedCallPresentationModel {
 
     if (this.disposed) return { status: "ignored" };
     this.cancelIntent = false;
-    this.pendingAction = null;
+    this.clearActionRecord();
     if (outcome.status === "failed") {
       this.emit();
       return { status: "failed", error: commandError(outcome) };
     }
     this.initiationResult = outcome.result as InitiateResult;
     const result = this.initiationResult;
-    if (CANCEL_STATES.has(result.state)) {
+    const latest = this.session.getProjection(result.call_id);
+    const latestCanCancel = latest
+      ? latest.participant_role === "initiator" && CANCEL_STATES.has(latest.state)
+      : result.participant_role === "initiator" && CANCEL_STATES.has(result.state);
+    if (latestCanCancel) {
+      this.actionRecord = { action: "cancelling", callId: result.call_id, status: "queued" };
       this.emit();
-      return this.sendAction("cancelling", result.call_id);
+      return this.submitAction("cancelling", result.call_id);
     }
     this.emit();
     return { status: "acknowledged", event: "call:initiate" };
