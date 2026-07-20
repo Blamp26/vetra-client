@@ -14,6 +14,10 @@ import type {
 } from "@/shared/types";
 import { callSignalingService } from "@/features/calling/services/callSignalingService";
 import {
+  DirectedCallSession,
+  directedCallSessionEnabled,
+} from "@/features/calling/services/directedCallSession";
+import {
   logAttachmentDebug,
   summarizeMessageMedia,
 } from "@/features/messaging/utils/attachmentDebug";
@@ -153,6 +157,7 @@ export function buildSocketMessagePayload(
 export interface SocketManager {
   socket: Socket;
   userChannel: Channel;
+  directedCallSession?: DirectedCallSession | null;
 
   onMessage: (handler: MessageHandler) => () => void;
   onStatusUpdate: (handler: StatusUpdateHandler) => () => void;
@@ -468,6 +473,15 @@ export async function connectSocket(
       .receive("timeout", () => reject(new Error("Channel join timed out")));
   });
   callSignalingService.initialize(socket, userChannel, userId, callUserRef);
+  let directedCallSession: DirectedCallSession | null = null;
+  if (directedCallSessionEnabled && typeof callUserRef === "string") {
+    directedCallSession = new DirectedCallSession({
+      socket,
+      publicUserRef: callUserRef,
+      enabled: true,
+    });
+    await directedCallSession.start();
+  }
 
   // ── Room channel registry ─────────────────────────────────────────────────
 
@@ -493,6 +507,7 @@ export async function connectSocket(
   return {
     socket,
     userChannel,
+    directedCallSession,
 
     onMessage: (h) => messageBus.subscribe(h),
     onStatusUpdate: (h) =>
@@ -756,6 +771,7 @@ export async function connectSocket(
 
     disconnect() {
       allowAuthRefresh = false;
+      directedCallSession?.dispose();
       callSignalingService.disconnect();
       roomChannels.forEach((ch) => ch.leave());
       roomChannels.clear();

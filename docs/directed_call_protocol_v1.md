@@ -9,6 +9,14 @@ persisted across application restarts; it is not a secret or hardware identity.
 Each logical command owns a UUID command_id and exact retries reuse it.
 Every signaling message has a fresh signal_id; sync uses a separate request_id.
 
+The client now contains a dormant persistent session foundation. Its feature
+gate is disabled by default, so legacy calling remains the sole active call
+authority. The foundation joins the directed-call topic, stores durable state,
+recovers projections through sync after reconnect, and observes transient
+signals without passing them to WebRTC. It does not yet integrate with UI,
+lifecycle commands, media, or WebRTC. Reconnect does not recover transient
+signals.
+
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has
 committed. An operating-system notification alone is not presented.

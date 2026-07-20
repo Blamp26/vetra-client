@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   TOKEN: "vetra_token",
   THEME: "vetra_theme",
   APP_STATE: "vetra-storage", // Zustand persist key
+  DIRECTED_CALL_DEVICE_ID: "vetra_directed_call_device_id",
 } as const;
 
 export const storage = {

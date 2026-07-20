@@ -121,6 +121,19 @@ describe("connectSocket", () => {
     });
   });
 
+  it("does not join the dormant directed-call topic while its gate is disabled", async () => {
+    createSocketTicket.mockResolvedValue({ socket_ticket: "ticket-123" });
+
+    await connectSocket(
+      "access-token",
+      42,
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    );
+
+    expect(socketInstances[0].channel).toHaveBeenCalledTimes(1);
+    expect(socketInstances[0].channel).toHaveBeenCalledWith("user:42", {});
+  });
+
   it("falls back to the legacy token param when ticket fetch fails", async () => {
     createSocketTicket.mockRejectedValue(new Error("missing endpoint"));
 
