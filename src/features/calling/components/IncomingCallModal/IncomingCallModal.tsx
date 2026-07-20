@@ -1,5 +1,5 @@
 // src/features/calling/components/IncomingCallModal/IncomingCallModal.tsx
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Phone, PhoneOff } from "lucide-react";
 import { Button } from "@/shared/components/Button";
 import { Dialog } from "@/shared/components/Dialog";
@@ -10,14 +10,32 @@ interface Props {
   isPending?: boolean;
   onAccept: () => void;
   onReject: () => void;
+  presentationKey?: string;
+  onPresented?: () => void;
 }
 
-export function IncomingCallModal({ callerName, isPending = false, onAccept, onReject }: Props) {
+export function IncomingCallModal({
+  callerName,
+  isPending = false,
+  onAccept,
+  onReject,
+  presentationKey,
+  onPresented,
+}: Props) {
   const [hasResponded, setHasResponded] = useState(false);
   const titleId = useId();
   const descriptionId = useId();
   const declineRef = useRef<HTMLButtonElement>(null);
+  const presentedKeyRef = useRef<string | null>(null);
   const isResponding = isPending || hasResponded;
+
+  useEffect(() => {
+    if (!onPresented) return;
+    const key = presentationKey ?? "default";
+    if (presentedKeyRef.current === key) return;
+    presentedKeyRef.current = key;
+    onPresented();
+  }, [onPresented, presentationKey]);
 
   const handleAccept = () => {
     if (isResponding) return;

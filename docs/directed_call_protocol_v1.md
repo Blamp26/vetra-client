@@ -27,6 +27,17 @@ against multiple-window controller ownership yet. Persistent calling is not
 production-ready; legacy calling remains the sole active runtime and all
 feature gates remain disabled by default.
 
+The dormant incoming presentation coordinator now handles recipient projections
+through the dispatching-to-delivered-to-presented sequence. It sends
+`call:received` once for an eligible dispatching projection, exposes only
+authoritative delivered or presented projections for a future incoming modal,
+and sends `call:presented` only from an explicit post-commit callback for that
+exact call. Accepted, connecting, active, and terminal projections dismiss the
+presentation; accept and decline remain unwired. Multi-device advancement is
+followed through authoritative projections, and disconnect does not infer a
+terminal result. The coordinator is not instantiated by the Stage A session and
+remains behind the disabled persistent-runtime boundary.
+
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has
 committed. An operating-system notification alone is not presented.

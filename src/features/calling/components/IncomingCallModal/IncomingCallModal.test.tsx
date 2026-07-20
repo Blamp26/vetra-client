@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { StrictMode } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { IncomingCallModal } from './IncomingCallModal';
@@ -162,6 +163,59 @@ describe('IncomingCallModal', () => {
     fireEvent.click(btn);
     expect(onReject).toHaveBeenCalledTimes(1);
     expect(onAccept).not.toHaveBeenCalled();
+  });
+
+  it('fires the optional presentation callback after commit only once per presentation key', () => {
+    const onPresented = vi.fn();
+    const { rerender } = render(
+      <IncomingCallModal
+        callerName="Alice"
+        onAccept={onAccept}
+        onReject={onReject}
+        presentationKey="call-1"
+        onPresented={onPresented}
+      />,
+    );
+
+    expect(onPresented).toHaveBeenCalledTimes(1);
+    rerender(
+      <IncomingCallModal
+        callerName="Alice"
+        onAccept={onAccept}
+        onReject={onReject}
+        presentationKey="call-1"
+        onPresented={onPresented}
+      />,
+    );
+    expect(onPresented).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <IncomingCallModal
+        callerName="Alice"
+        onAccept={onAccept}
+        onReject={onReject}
+        presentationKey="call-2"
+        onPresented={onPresented}
+      />,
+    );
+    expect(onPresented).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not duplicate the optional presentation callback under Strict Mode replay', () => {
+    const onPresented = vi.fn();
+    render(
+      <StrictMode>
+        <IncomingCallModal
+          callerName="Alice"
+          onAccept={onAccept}
+          onReject={onReject}
+          presentationKey="call-1"
+          onPresented={onPresented}
+        />
+      </StrictMode>,
+    );
+
+    expect(onPresented).toHaveBeenCalledTimes(1);
   });
 
   // ── Граничные случаи ─────────────────────────────────────────────────────────
