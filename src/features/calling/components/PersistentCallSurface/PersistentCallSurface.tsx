@@ -1,0 +1,86 @@
+import { Phone, PhoneOff, RotateCw } from "lucide-react";
+import type { ReactNode } from "react";
+import { Button } from "@/shared/components/Button";
+import { IncomingCallModal } from "../IncomingCallModal";
+import { PersistentRemoteAudioRenderer } from "./PersistentRemoteAudioRenderer";
+import { useOptionalPersistentCall, usePersistentCall } from "../../context/PersistentCallContext";
+import { isUuid } from "../../protocol/directedCallProtocol";
+
+export function PersistentCallSurface({ children }: { children: ReactNode }) {
+  const call = usePersistentCall();
+  const mediaStream = call.media.remoteAudioStream as MediaStream | null;
+  const showAudio = Boolean(mediaStream);
+  const showIssue = call.presentation.callIssue ?? (call.media.localIssue ? {
+    kind: "transport" as const,
+    message: call.media.localIssue === "transport_recovery" ? "The call setup was interrupted. Try again." : "Call audio setup needs attention.",
+    callId: call.presentation.callId,
+  } : null);
+  const canRetry = Boolean(call.presentation.recoverableError);
+
+  return (
+    <>
+      {children}
+      {showAudio && (
+        <PersistentRemoteAudioRenderer stream={mediaStream} />
+      )}
+      {call.presentation.incomingModal.visible && (
+        <IncomingCallModal
+          callerName={call.presentation.incomingModal.callerDisplayName}
+          isPending={call.presentation.incomingModal.isPending}
+          presentationKey={call.presentation.incomingModal.presentationKey ?? undefined}
+          onPresented={call.presentation.incomingModal.onPresented}
+          onAccept={call.presentation.incomingModal.onAccept}
+          onReject={call.presentation.incomingModal.onDecline}
+        />
+      )}
+      {call.presentation.phase !== "idle" && !call.presentation.incomingModal.visible && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center" data-testid="persistent-call-surface">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-foreground">{call.presentation.peerUsername ?? "Directed call"}</div>
+              <div className="text-xs text-muted-foreground">{call.presentation.statusLabel}</div>
+              {showIssue && <div className="text-xs text-destructive">{showIssue.message}</div>}
+            </div>
+            {canRetry && (
+              <Button variant="secondary" type="button" onClick={() => void call.retry()} aria-label="Retry call action">
+                <RotateCw className="h-4 w-4" />
+                <span>Retry</span>
+              </Button>
+            )}
+            {call.presentation.canCancel && (
+              <Button variant="danger" type="button" onClick={() => void call.cancel()} aria-label="Cancel call">
+                <PhoneOff className="h-4 w-4" />
+                <span>Cancel</span>
+              </Button>
+            )}
+            {call.presentation.canHangup && (
+              <Button variant="danger" type="button" onClick={() => void call.hangup()} aria-label="Hang up call">
+                <PhoneOff className="h-4 w-4" />
+                <span>Hang up</span>
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export function PersistentCallButton({ targetUserId, targetUsername }: { targetUserId: string | null | undefined; targetUsername: string }) {
+  const call = useOptionalPersistentCall();
+  if (!call) return null;
+  const canStart = call.presentation.phase === "idle" || call.presentation.phase === "terminal";
+  const validTarget = typeof targetUserId === "string" && isUuid(targetUserId);
+  return (
+    <button
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+      onClick={() => { if (validTarget) void call.startCall(targetUserId, targetUsername); }}
+      disabled={!canStart || !validTarget}
+      title={validTarget ? `Call ${targetUsername}` : "Call unavailable: missing public user ID"}
+      aria-label={validTarget ? `Call ${targetUsername}` : "Call unavailable"}
+      data-testid="persistent-call-button"
+    >
+      <Phone className="h-4 w-4" />
+    </button>
+  );
+}

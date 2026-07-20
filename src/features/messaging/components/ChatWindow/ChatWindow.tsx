@@ -17,6 +17,8 @@ import { CallButton } from "@/features/calling/components/CallButton";
 import { ActiveCallDock } from "@/features/calling/components/ActiveCallDock";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { normalizeCallIssue } from "@/features/calling/utils/callUxText";
+import { useOptionalPersistentCall } from "@/features/calling/context/PersistentCallContext";
+import { PersistentCallButton } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
 import { cn } from "@/shared/utils/cn";
 import { withFallbackRef } from "@/shared/utils/refs";
 import {
@@ -63,6 +65,7 @@ function isActiveCallForChat(
 }
 
 export function ChatWindow({ activeChat, call }: Props) {
+  const persistentCall = useOptionalPersistentCall();
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
 
@@ -349,6 +352,12 @@ export function ChatWindow({ activeChat, call }: Props) {
               onUnavailable={handleCallUnavailable}
               className="h-10 w-10 rounded-full border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-0"
             />}
+            {persistentCall && activeChat.type === "direct" && (
+              <PersistentCallButton
+                targetUserId={partner?.public_id ?? directPreviewPublicId}
+                targetUsername={partner?.display_name || partner?.username || "user"}
+              />
+            )}
             <IconButton
               label="Search messages"
               onClick={() => setIsSearchOpen(true)}

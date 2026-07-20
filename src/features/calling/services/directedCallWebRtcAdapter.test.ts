@@ -7,8 +7,10 @@ function createHarness() {
   const pc = {
     localDescription: null as RTCSessionDescription | null,
     remoteDescription: null as RTCSessionDescription | null,
+    connectionState: "new" as RTCPeerConnectionState,
     onicecandidate: null as ((event: RTCPeerConnectionIceEvent) => void) | null,
     ontrack: null as ((event: RTCTrackEvent) => void) | null,
+    onconnectionstatechange: null as (() => void) | null,
     addTrack: vi.fn(),
     createOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "offer" }),
     createAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "answer" }),

@@ -10,9 +10,24 @@ const mocks = vi.hoisted(() => ({
   Session: vi.fn(class { start = vi.fn().mockResolvedValue(true); dispose = vi.fn(); }),
   Controller: vi.fn(class { dispose = vi.fn(); }),
   Incoming: vi.fn(class { dispose = vi.fn(); }),
-  Presentation: vi.fn(class { dispose = vi.fn(); }),
+  Presentation: vi.fn(class {
+    dispose = vi.fn();
+    getSnapshot = vi.fn(() => ({ disposed: false, phase: "idle", callId: null, participantRole: null, peerPublicId: null, peerUsername: null, canonicalState: null, stateVersion: null, timestamps: null, terminalState: null, pendingAction: null, recoverableError: null, statusLabel: "Ready", terminalLabel: null, callIssue: null, canCancel: false, canHangup: false, mediaControlsAvailable: false, incomingModal: { visible: false, callerDisplayName: "", isPending: false, presentationKey: null, onPresented: undefined, onAccept: vi.fn(), onDecline: vi.fn() } }));
+    subscribe = vi.fn(() => () => undefined);
+    startCall = vi.fn();
+    accept = vi.fn();
+    decline = vi.fn();
+    cancelCall = vi.fn();
+    hangup = vi.fn();
+    retryPendingAction = vi.fn();
+  }),
   SignalTransport: vi.fn(class { dispose = vi.fn(); }),
-  MediaCoordinator: vi.fn(class { start = vi.fn(); dispose = vi.fn(); }),
+  MediaCoordinator: vi.fn(class {
+    start = vi.fn();
+    dispose = vi.fn();
+    getSnapshot = vi.fn(() => ({ state: "idle", callId: null, participantRole: null, projection: null, generation: "test", remoteAudioStream: null, localIssue: null }));
+    subscribe = vi.fn(() => () => undefined);
+  }),
 }));
 
 vi.mock("./CallProvider", () => ({ CallProvider: mocks.CallProvider }));
@@ -57,6 +72,7 @@ function renderBoundary(
       currentUser={user}
       socketManager={{ socket: {} } as never}
       mode={mode}
+      persistentMediaAvailable
       ownershipFactory={() => ownership}
       legacyContent={<div data-testid="legacy-content">legacy</div>}
       nonCallContent={<div data-testid="non-call-content">messaging</div>}
@@ -98,6 +114,23 @@ describe("CallRuntimeBoundary", () => {
     expect(mocks.CallProvider).not.toHaveBeenCalled();
   });
 
+  it("fails closed when persistent browser media APIs are unavailable", async () => {
+    render(
+      <CallRuntimeBoundary
+        currentUser={USER_A}
+        socketManager={{ socket: {} } as never}
+        mode="persistent"
+        persistentMediaAvailable={false}
+        ownershipFactory={() => makeOwnership("owner")}
+        legacyContent={<div>legacy</div>}
+        nonCallContent={<div data-testid="non-call-content">messaging</div>}
+        persistentContent={<div data-testid="persistent-content">persistent</div>}
+      />,
+    );
+    expect(await screen.findByTestId("non-call-content")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.Session).not.toHaveBeenCalled());
+  });
+
   it("does not duplicate a persistent runtime during StrictMode replay", async () => {
     const ownership = makeOwnership("owner");
     render(
@@ -106,6 +139,7 @@ describe("CallRuntimeBoundary", () => {
           currentUser={USER_A}
           socketManager={{ socket: {} } as never}
           mode="persistent"
+          persistentMediaAvailable
           ownershipFactory={() => ownership}
           legacyContent={<div>legacy</div>}
           nonCallContent={<div data-testid="non-call-content">messaging</div>}

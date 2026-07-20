@@ -18,21 +18,23 @@ export class DirectedCallWebRtcError extends Error {
   }
 }
 
-interface MediaStreamTrackLike {
+export interface DirectedCallMediaStreamTrack {
   stop(): void;
 }
 
-interface MediaStreamLike {
-  getTracks(): MediaStreamTrackLike[];
-  addTrack?(track: MediaStreamTrackLike): void;
+export interface DirectedCallMediaStream {
+  getTracks(): DirectedCallMediaStreamTrack[];
+  addTrack?(track: DirectedCallMediaStreamTrack): void;
 }
 
 interface PeerConnectionLike {
+  connectionState?: RTCPeerConnectionState;
+  onconnectionstatechange: ((event: Event) => void) | null;
   localDescription: RTCSessionDescription | null;
   remoteDescription: RTCSessionDescription | null;
   onicecandidate: ((event: RTCPeerConnectionIceEvent) => void) | null;
   ontrack: ((event: RTCTrackEvent) => void) | null;
-  addTrack(track: MediaStreamTrackLike, stream: MediaStreamLike): unknown;
+  addTrack(track: DirectedCallMediaStreamTrack, stream: DirectedCallMediaStream): unknown;
   createOffer(): Promise<RTCSessionDescriptionInit>;
   createAnswer(): Promise<RTCSessionDescriptionInit>;
   setLocalDescription(description: RTCSessionDescriptionInit): Promise<void>;
@@ -42,15 +44,17 @@ interface PeerConnectionLike {
 }
 
 export interface DirectedCallWebRtcAdapterDependencies {
-  getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStreamLike>;
+  getUserMedia: (constraints: MediaStreamConstraints) => Promise<DirectedCallMediaStream>;
   createPeerConnection: () => PeerConnectionLike;
-  createRemoteStream?: () => MediaStreamLike;
+  createRemoteStream?: () => DirectedCallMediaStream;
   createSignalId?: () => string;
 }
 
 export interface DirectedCallWebRtcAdapterOptions {
   dependencies?: DirectedCallWebRtcAdapterDependencies;
   onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
+  onRemoteStream?: (stream: DirectedCallMediaStream) => void;
+  onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
 }
 
 function defaultDependencies(): DirectedCallWebRtcAdapterDependencies {
@@ -82,11 +86,13 @@ function candidateKey(candidate: RTCIceCandidateInit): string {
 export class DirectedCallWebRtcAdapter {
   private readonly dependencies: DirectedCallWebRtcAdapterDependencies;
   private readonly onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
+  private readonly onRemoteStream?: (stream: DirectedCallMediaStream) => void;
+  private readonly onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
   private readonly queuedCandidates: RTCIceCandidateInit[] = [];
   private readonly seenCandidates = new Set<string>();
   private peerConnection: PeerConnectionLike | null = null;
-  private localStream: MediaStreamLike | null = null;
-  private remoteStream: MediaStreamLike | null = null;
+  private localStream: DirectedCallMediaStream | null = null;
+  private remoteStream: DirectedCallMediaStream | null = null;
   private disposed = false;
   private offerPrepared = false;
 
@@ -94,13 +100,15 @@ export class DirectedCallWebRtcAdapter {
     const dependencies = defaultDependencies();
     this.dependencies = { ...dependencies, ...options.dependencies };
     this.onIceCandidate = options.onIceCandidate;
+    this.onRemoteStream = options.onRemoteStream;
+    this.onPeerConnectionState = options.onPeerConnectionState;
   }
 
-  get localMediaStream(): MediaStreamLike | null {
+  get localMediaStream(): DirectedCallMediaStream | null {
     return this.localStream;
   }
 
-  get remoteMediaStream(): MediaStreamLike | null {
+  get remoteMediaStream(): DirectedCallMediaStream | null {
     return this.remoteStream;
   }
 
@@ -199,10 +207,14 @@ export class DirectedCallWebRtcAdapter {
           void this.onIceCandidate?.(candidate);
         }
       };
+      this.peerConnection.onconnectionstatechange = () => {
+        if (this.peerConnection?.connectionState) this.onPeerConnectionState?.(this.peerConnection.connectionState);
+      };
       this.peerConnection.ontrack = (event) => {
         if (this.disposed) return;
         this.remoteStream = event.streams[0] ?? this.remoteStream ?? this.dependencies.createRemoteStream?.() ?? null;
         if (!event.streams[0]) this.remoteStream?.addTrack?.(event.track);
+        if (this.remoteStream) this.onRemoteStream?.(this.remoteStream);
       };
       for (const track of this.localStream.getTracks()) this.peerConnection.addTrack(track, this.localStream);
     } catch {

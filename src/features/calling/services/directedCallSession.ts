@@ -15,6 +15,7 @@ import {
   type StateProjection,
 } from "../protocol/directedCallProtocol";
 import { getOrCreateDirectedCallDeviceId } from "./directedCallDevice";
+import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
 
 type ProjectionListener = (
   projection: StateProjection,
@@ -162,6 +163,7 @@ export class DirectedCallSession {
   private readonly syncListeners = new Set<SyncListener>();
   private readonly channelRefs: Array<{ event: string; ref: number }> = [];
   private socketOpenRef: string | null = null;
+  private socketCloseRef: string | null = null;
 
   constructor(options: DirectedCallSessionOptions) {
     this.socket = options.socket;
@@ -203,8 +205,14 @@ export class DirectedCallSession {
     );
 
     this.socketOpenRef = this.socket.onOpen(() => {
+      recordDirectedCallDiagnostic("socket", { socket: "connected" });
       void this.requestSync();
     });
+    if (typeof this.socket.onClose === "function") {
+      this.socketCloseRef = this.socket.onClose(() => {
+        recordDirectedCallDiagnostic("socket", { socket: "disconnected" });
+      });
+    }
 
     await new Promise<void>((resolve, reject) => {
       this.channel!
@@ -214,6 +222,7 @@ export class DirectedCallSession {
         .receive("timeout", () => reject(new Error("Directed-call topic join timed out")));
     });
     await this.requestSync();
+    recordDirectedCallDiagnostic("socket", { socket: "connected" });
     return true;
   }
 
@@ -314,6 +323,7 @@ export class DirectedCallSession {
     if (this.disposed) return;
     this.disposed = true;
     if (this.socketOpenRef !== null) this.socket.off([this.socketOpenRef]);
+    if (this.socketCloseRef !== null) this.socket.off([this.socketCloseRef]);
     this.channelRefs.forEach(({ event, ref }) => this.channel?.off(event, ref));
     this.channel?.leave();
     this.channel = null;

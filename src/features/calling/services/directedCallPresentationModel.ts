@@ -89,6 +89,8 @@ export interface DirectedCallPresentationLifecyclePort {
   cancel(callId: string): Promise<LifecycleCommandOutcome>;
   decline(callId: string): Promise<LifecycleCommandOutcome>;
   hangup(callId: string): Promise<LifecycleCommandOutcome>;
+  mediaReady?(callId: string): Promise<LifecycleCommandOutcome>;
+  setupFailed?(callId: string, failureCode: string): Promise<LifecycleCommandOutcome>;
   retryPendingCommand(): Promise<LifecycleCommandOutcome>;
   getSnapshot(): DirectedCallControllerSnapshot;
   subscribe(listener: (snapshot: DirectedCallControllerSnapshot) => void): () => void;

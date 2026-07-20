@@ -21,6 +21,7 @@ import { Button } from "@/shared/components/Button";
 import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
 import { useCallContext } from "@/features/calling/context";
 import { CallRuntimeBoundary } from "@/features/calling/context/CallRuntimeBoundary";
+import { PersistentCallSurface } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
 import type { ActiveChat } from "@/shared/types";
@@ -88,8 +89,13 @@ function App() {
       socketManager={socketManager}
       legacyContent={<LegacyCallApplication />}
       nonCallContent={<AppShell call={null} />}
+      persistentContent={<PersistentCallApplication />}
     />
   );
+}
+
+function PersistentCallApplication() {
+  return <PersistentCallSurface><AppShell call={null} /></PersistentCallSurface>;
 }
 
 function LegacyCallApplication() {

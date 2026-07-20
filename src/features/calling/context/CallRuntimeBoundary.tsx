@@ -8,6 +8,8 @@ import { DirectedCallIncomingCoordinator } from "../services/directedCallIncomin
 import { DirectedCallPresentationModel } from "../services/directedCallPresentationModel";
 import { DirectedCallSignalTransport } from "../services/directedCallSignalTransport";
 import { DirectedCallMediaCoordinator } from "../services/directedCallMediaCoordinator";
+import { PersistentCallProvider, type PersistentCallRuntimeServices } from "./PersistentCallContext";
+import { recordDirectedCallDiagnostic } from "../services/directedCallDiagnostics";
 import { getOrCreateDirectedCallDeviceId } from "../services/directedCallDevice";
 import { parseCallRuntimeMode, type CallRuntimeMode } from "../services/callRuntimeMode";
 import {
@@ -19,6 +21,7 @@ import {
 interface PersistentRuntime {
   start: () => void;
   dispose: () => void;
+  services: PersistentCallRuntimeServices;
 }
 
 export interface CallRuntimeBoundaryProps {
@@ -26,8 +29,10 @@ export interface CallRuntimeBoundaryProps {
   socketManager: SocketManager | null;
   legacyContent: ReactNode;
   nonCallContent: ReactNode;
+  persistentContent?: ReactNode;
   mode?: CallRuntimeMode;
   ownershipFactory?: OwnershipFactory;
+  persistentMediaAvailable?: boolean;
 }
 
 type OwnershipFactory = (options: ConstructorParameters<typeof CallAuthorityOwnership>[0]) => CallAuthorityOwnership;
@@ -38,8 +43,10 @@ export function CallRuntimeBoundary({
   socketManager,
   legacyContent,
   nonCallContent,
+  persistentContent,
   mode = parseCallRuntimeMode(),
   ownershipFactory = defaultOwnershipFactory,
+  persistentMediaAvailable = typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia) && typeof RTCPeerConnection !== "undefined",
 }: CallRuntimeBoundaryProps) {
   const deviceId = useMemo(() => getOrCreateDirectedCallDeviceId(), []);
   const publicUserRef = currentUser.public_id ?? null;
@@ -56,6 +63,7 @@ export function CallRuntimeBoundary({
     deviceId,
   }), [currentUser.id, deviceId, mode, ownershipFactory, publicUserRef, mode === "persistent" ? socketManager : null]);
   const [authority, setAuthority] = useState<CallAuthoritySnapshot>(() => ownership.getSnapshot());
+  const [persistentRuntime, setPersistentRuntime] = useState<PersistentRuntime | null>(null);
   const persistentRuntimeRef = useRef<PersistentRuntime | null>(null);
   const activeOwnershipRef = useRef<CallAuthorityOwnership | null>(null);
   const effectGenerationRef = useRef(0);
@@ -64,7 +72,11 @@ export function CallRuntimeBoundary({
     const effectGeneration = ++effectGenerationRef.current;
     activeOwnershipRef.current = ownership;
     setAuthority(ownership.getSnapshot());
-    const unsubscribe = ownership.subscribe(setAuthority);
+    const onAuthority = (snapshot: CallAuthoritySnapshot) => {
+      setAuthority(snapshot);
+      recordDirectedCallDiagnostic("authority", { mode, authority: snapshot.state });
+    };
+    const unsubscribe = ownership.subscribe(onAuthority);
     let cancelled = false;
     let localRuntime: PersistentRuntime | null = null;
 
@@ -74,11 +86,17 @@ export function CallRuntimeBoundary({
       // observe the still-owned runtime.
       await Promise.resolve();
       const acquired = await ownership.acquire();
+      recordDirectedCallDiagnostic("runtime_mode", { mode, authority: acquired.state });
       if (cancelled || activeOwnershipRef.current !== ownership) {
         if (activeOwnershipRef.current !== ownership) await ownership.dispose();
         return;
       }
-      if (acquired.state !== "owner" || mode !== "persistent" || !scope || !socketManager || !publicUserRef) return;
+      if (acquired.state !== "owner" || mode !== "persistent") return;
+      if (!scope || !socketManager || !publicUserRef || !persistentMediaAvailable) {
+        recordDirectedCallDiagnostic("failure", { failureKind: !persistentMediaAvailable ? "persistent_media_unavailable" : "persistent_runtime_unavailable" });
+        await ownership.dispose();
+        return;
+      }
 
       const session = new DirectedCallSession({
         socket: socketManager.socket,
@@ -104,6 +122,7 @@ export function CallRuntimeBoundary({
       );
       const runtime: PersistentRuntime = {
         start: () => mediaCoordinator.start(),
+        services: { presentation, media: mediaCoordinator },
         dispose: () => {
           mediaCoordinator.dispose();
           signalTransport.dispose();
@@ -124,6 +143,7 @@ export function CallRuntimeBoundary({
       }
       localRuntime = runtime;
       persistentRuntimeRef.current = runtime;
+      setPersistentRuntime(runtime);
       try {
         await session.start();
         runtime.start();
@@ -131,6 +151,7 @@ export function CallRuntimeBoundary({
         runtime.dispose();
         localRuntime = null;
         persistentRuntimeRef.current = null;
+        setPersistentRuntime(null);
         await ownership.dispose();
       }
     })();
@@ -142,16 +163,24 @@ export function CallRuntimeBoundary({
         if (effectGenerationRef.current !== effectGeneration && activeOwnershipRef.current === ownership) return;
         if (activeOwnershipRef.current === ownership) activeOwnershipRef.current = null;
         void ownership.dispose(() => {
-          if (persistentRuntimeRef.current === localRuntime) persistentRuntimeRef.current = null;
+          if (persistentRuntimeRef.current === localRuntime) {
+            persistentRuntimeRef.current = null;
+            setPersistentRuntime(null);
+          }
           localRuntime?.dispose();
           localRuntime = null;
         });
       });
     };
-  }, [deviceId, mode, ownership, publicUserRef, scope, socketManager]);
+  }, [deviceId, mode, ownership, persistentMediaAvailable, publicUserRef, scope, socketManager]);
 
   if (mode === "legacy" && authority.state === "owner") {
     return <CallProvider currentUserId={currentUser.id}>{legacyContent}</CallProvider>;
+  }
+
+  if (mode === "persistent" && authority.state === "owner" && persistentRuntime) {
+    if (persistentContent === undefined) return <>{nonCallContent}</>;
+    return <PersistentCallProvider runtime={persistentRuntime.services}>{persistentContent}</PersistentCallProvider>;
   }
 
   return <>{nonCallContent}</>;

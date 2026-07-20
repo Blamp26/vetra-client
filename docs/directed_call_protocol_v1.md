@@ -148,6 +148,34 @@ three supported initial kinds. Phoenix
 integration, sync execution, retry scheduling, and runtime device-ID storage
 belong to later stages.
 
+C3 connects the persistent owner runtime to a persistent-specific presentation
+context and thin call surface. It is the only owner of the persistent incoming
+modal, action source, active surface, and remote-audio renderer; non-owner
+windows expose ordinary messaging without call controls. Legacy mode continues
+to use its existing provider and UI authority unchanged.
+
+After reconnect, the session rejoins and syncs normally. Durable projections
+are trusted, terminal projections dispose media immediately, and transient SDP
+or ICE is never replayed. An incomplete setup whose transient signaling may
+have been lost is disposed locally and reported as a recoverable call issue;
+no canonical state is invented and no setup failure is sent solely for
+disconnect or ownership loss. An active peer connection is retained only while
+its authoritative projection remains active and the local adapter remains
+healthy. A new owner after a crash does not recreate an offer for an active or
+ambiguous call.
+
+C3 diagnostics use the existing opt-in call diagnostics setting and record only
+redacted call IDs, runtime/ownership state, canonical state, local media phase,
+socket and peer-connection state, typed failure kinds, and cleanup reasons.
+SDP, ICE candidates, IP addresses, media contents, tokens, and private user
+data are never logged. Persistent mode remains explicit through
+`VITE_CALL_RUNTIME_MODE=persistent`; missing configuration remains legacy and
+unavailable browser media APIs fail closed without fallback. Peer signals are
+still transient and currently fan out to all peer devices. Owner crash cannot
+resume the previous WebRTC session, no TURN-specific rollout is included, and
+Windows/Tauri runtime verification remains unclaimed. C3 leaves hardened
+transient recovery and broader rollout safeguards for later work.
+
 The shared fixture bundle contains 14 valid and 12 invalid fixtures, including
 numeric target and peer IDs, unknown keys, invalid failure codes, negative
 versions, forbidden state or signal fields, missing signal IDs, oversized SDP,

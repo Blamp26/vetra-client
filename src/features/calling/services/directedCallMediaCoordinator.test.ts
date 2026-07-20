@@ -28,6 +28,7 @@ function projection(state: "accepted" | "connecting" | "active" | "ended") {
 function createSession() {
   const projectionListeners = new Set<(value: any) => void>();
   const signalListeners = new Set<(value: any) => void>();
+  const syncListeners = new Set<() => void>();
   const stored: any[] = [];
   const session = {
     getProjections: vi.fn(() => stored),
@@ -47,8 +48,16 @@ function createSession() {
       signalListeners.add(listener);
       return () => signalListeners.delete(listener);
     }),
+    subscribeToSync: vi.fn((listener: () => void) => {
+      syncListeners.add(listener);
+      return () => syncListeners.delete(listener);
+    }),
+    emitSync() {
+      syncListeners.forEach((listener) => listener());
+    },
+    requestSync: vi.fn().mockResolvedValue(undefined),
     sendSignal: vi.fn(),
-  } as unknown as DirectedCallSession & { emit: (value: any) => void; emitSignal: (value: any) => void };
+  } as unknown as DirectedCallSession & { emit: (value: any) => void; emitSignal: (value: any) => void; emitSync: () => void };
   return session;
 }
 
@@ -155,6 +164,25 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(coordinator.getSnapshot().state).toBe("disposed");
     expect(transportDispose).toHaveBeenCalledTimes(1);
     expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("disposes incomplete setup after sync without sending setup_failed", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      adapterFactory: () => adapter,
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    session.emit(projection("connecting"));
+    session.emitSync();
+
+    expect(adapter.dispose).toHaveBeenCalled();
+    expect(coordinator.getSnapshot().localIssue).toBe("transport_recovery");
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
   });
 
   it("does not bind a terminal or second call and can be deterministically disposed", () => {
