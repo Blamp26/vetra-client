@@ -4,6 +4,7 @@ import {
   resolveCallAuthorityScope,
   type BroadcastChannelLike,
   type LockManagerLike,
+  type NativeCallAuthorityLike,
 } from "./callAuthorityOwnership";
 
 const DEVICE_A = "11111111-1111-4111-8111-111111111111";
@@ -48,7 +49,7 @@ function createChannels() {
   };
 }
 
-function options(locks: LockManagerLike, deviceId = DEVICE_A, publicUserRef = USER_A) {
+function options(locks: LockManagerLike | null, deviceId = DEVICE_A, publicUserRef = USER_A) {
   return {
     mode: "persistent" as const,
     publicUserRef,
@@ -162,6 +163,29 @@ describe("CallAuthorityOwnership", () => {
     const unavailable = new CallAuthorityOwnership({ ...options(locks), locks: null });
     await expect(unavailable.acquire()).resolves.toMatchObject({ state: "unavailable" });
     await unavailable.dispose();
+  });
+
+  it("uses the scoped native Tauri authority when Web Locks are unavailable", async () => {
+    const owners = new Set<string>();
+    const nativeAuthority: NativeCallAuthorityLike = {
+      acquire: vi.fn(async (key) => {
+        if (owners.has(key)) return false;
+        owners.add(key);
+        return true;
+      }),
+      release: vi.fn(async (key) => {
+        owners.delete(key);
+      }),
+    };
+    const first = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority, ownerId: "tauri-a" });
+    const second = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority, ownerId: "tauri-b" });
+
+    await expect(first.acquire()).resolves.toMatchObject({ state: "owner" });
+    await expect(second.acquire()).resolves.toMatchObject({ state: "non_owner" });
+    await first.dispose();
+    await expect(second.acquire()).resolves.toMatchObject({ state: "owner" });
+    expect(nativeAuthority.acquire).toHaveBeenCalledTimes(3);
+    await second.dispose();
   });
 
   it("cleans listeners and retry timers on disposal", async () => {

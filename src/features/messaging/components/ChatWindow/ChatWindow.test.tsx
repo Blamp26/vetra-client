@@ -213,10 +213,10 @@ describe("ChatWindow presence rendering", () => {
     );
     expect(await screen.findByTestId("chat-header")).toBeInTheDocument();
     expect(screen.queryByTestId("persistent-call-button")).not.toBeInTheDocument();
-    expect(recordDiagnostic).toHaveBeenCalledWith("failure", expect.objectContaining({
+    await waitFor(() => expect(recordDiagnostic).toHaveBeenCalledWith("failure", expect.objectContaining({
       failureKind: "persistent_call_controls_unavailable",
       reason: "invalid_peer_public_id",
-    }));
+    })));
   });
 
   it("shows a normalized last-seen status when the user is offline", async () => {

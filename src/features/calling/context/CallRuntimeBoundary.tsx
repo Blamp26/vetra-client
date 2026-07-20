@@ -9,7 +9,10 @@ import { DirectedCallPresentationModel } from "../services/directedCallPresentat
 import { DirectedCallSignalTransport } from "../services/directedCallSignalTransport";
 import { DirectedCallMediaCoordinator } from "../services/directedCallMediaCoordinator";
 import { PersistentCallProvider, type PersistentCallRuntimeServices } from "./PersistentCallContext";
-import { recordDirectedCallDiagnostic } from "../services/directedCallDiagnostics";
+import {
+  recordDirectedCallDiagnostic,
+  recordDirectedCallRuntimeBranch,
+} from "../services/directedCallDiagnostics";
 import { getOrCreateDirectedCallDeviceId } from "../services/directedCallDevice";
 import { parseCallRuntimeMode, type CallRuntimeMode } from "../services/callRuntimeMode";
 import {
@@ -93,6 +96,10 @@ export function CallRuntimeBoundary({
       }
       if (acquired.state !== "owner" || mode !== "persistent") {
         if (mode === "persistent") {
+          recordDirectedCallRuntimeBranch(
+            acquired.state === "non_owner" ? "non-owner" : "unavailable",
+            acquired.state === "non_owner" ? undefined : "ownership_unavailable",
+          );
           recordDirectedCallDiagnostic("failure", {
             failureKind: acquired.state === "unavailable" ? "persistent_authority_unavailable" : "persistent_authority_not_owned",
             reason: acquired.state === "unavailable" ? "web_locks_unavailable_or_failed" : "another_window_owns_call_runtime",
@@ -101,6 +108,10 @@ export function CallRuntimeBoundary({
         return;
       }
       if (!scope || !socketManager || !publicUserRef || !persistentMediaAvailable) {
+        recordDirectedCallRuntimeBranch(
+          "unavailable",
+          !persistentMediaAvailable ? "media_api_unavailable" : "persistent_runtime_unavailable",
+        );
         recordDirectedCallDiagnostic("failure", { failureKind: !persistentMediaAvailable ? "persistent_media_unavailable" : "persistent_runtime_unavailable" });
         await ownership.dispose();
         return;
@@ -155,7 +166,9 @@ export function CallRuntimeBoundary({
       try {
         await session.start();
         runtime.start();
+        recordDirectedCallRuntimeBranch("owner");
       } catch {
+        recordDirectedCallRuntimeBranch("unavailable", "persistent_runtime_start_failed");
         runtime.dispose();
         localRuntime = null;
         persistentRuntimeRef.current = null;

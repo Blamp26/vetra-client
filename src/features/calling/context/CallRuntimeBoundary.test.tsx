@@ -143,9 +143,11 @@ describe("CallRuntimeBoundary", () => {
           ownershipFactory={() => ownership}
           legacyContent={<div>legacy</div>}
           nonCallContent={<div data-testid="non-call-content">messaging</div>}
+          persistentContent={<div data-testid="persistent-content">persistent</div>}
         />
       </StrictMode>,
     );
     await waitFor(() => expect(mocks.Session).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId("persistent-content")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { createDirectedCallUuid } from "./directedCallDevice";
 import { isUuid } from "../protocol/directedCallProtocol";
 import type { CallRuntimeMode } from "./callRuntimeMode";
+import { invoke } from "@tauri-apps/api/core";
 
 export type CallAuthorityState =
   | "uninitialized"
@@ -35,6 +36,11 @@ export interface BroadcastChannelLike {
   close(): void;
 }
 
+export interface NativeCallAuthorityLike {
+  acquire(key: string): Promise<boolean>;
+  release(key: string): Promise<void>;
+}
+
 export interface CallAuthorityOwnershipOptions {
   mode: CallRuntimeMode;
   publicUserRef?: string | null;
@@ -45,6 +51,7 @@ export interface CallAuthorityOwnershipOptions {
   eventTarget?: Pick<Window, "addEventListener" | "removeEventListener">;
   ownerId?: string;
   retryDelayMs?: number;
+  nativeAuthority?: NativeCallAuthorityLike | null;
 }
 
 export interface CallAuthorityScope {
@@ -69,6 +76,18 @@ function getDefaultBroadcastChannel(name: string): BroadcastChannelLike | null {
 
 function getDefaultEventTarget(): Pick<Window, "addEventListener" | "removeEventListener"> | undefined {
   return typeof window === "undefined" ? undefined : window;
+}
+
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function getDefaultNativeAuthority(): NativeCallAuthorityLike | null {
+  if (!isTauriRuntime()) return null;
+  return {
+    acquire: (key) => invoke<boolean>("acquire_call_authority", { key }),
+    release: (key) => invoke<void>("release_call_authority", { key }),
+  };
 }
 
 export function resolveCallAuthorityScope(options: {
@@ -102,6 +121,7 @@ export class CallAuthorityOwnership {
   readonly key: string | null;
 
   private readonly locks: LockManagerLike | null;
+  private readonly nativeAuthority: NativeCallAuthorityLike | null;
   private readonly createBroadcastChannel: (name: string) => BroadcastChannelLike | null;
   private readonly eventTarget?: Pick<Window, "addEventListener" | "removeEventListener">;
   private readonly retryDelayMs: number;
@@ -110,6 +130,7 @@ export class CallAuthorityOwnership {
   private channel: BroadcastChannelLike | null = null;
   private holdResolve: (() => void) | null = null;
   private acquisitionPromise: Promise<CallAuthoritySnapshot> | null = null;
+  private lockRequestPromise: Promise<unknown> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private releasePromise: Promise<void> | null = null;
@@ -119,6 +140,9 @@ export class CallAuthorityOwnership {
     this.ownerId = options.ownerId ?? createDirectedCallUuid();
     this.key = scope?.key ?? null;
     this.locks = options.locks === undefined ? getDefaultLocks() : options.locks;
+    this.nativeAuthority = options.nativeAuthority === undefined
+      ? options.locks === undefined ? getDefaultNativeAuthority() : null
+      : options.nativeAuthority;
     this.createBroadcastChannel = options.createBroadcastChannel ?? getDefaultBroadcastChannel;
     this.eventTarget = options.eventTarget ?? getDefaultEventTarget();
     this.retryDelayMs = Math.max(250, options.retryDelayMs ?? 2_000);
@@ -142,7 +166,7 @@ export class CallAuthorityOwnership {
     if (this.acquisitionPromise) return this.acquisitionPromise;
 
     this.setState("acquiring");
-    if (!this.key || !this.locks) {
+    if (!this.key || (!this.locks && !this.nativeAuthority)) {
       this.setState("unavailable");
       return this.snapshot;
     }
@@ -159,13 +183,16 @@ export class CallAuthorityOwnership {
         }
       };
 
-      this.locks!.request(this.key!, { mode: "exclusive", ifAvailable: true }, async (lock) => {
-        if (!lock) {
+      const onAcquired = async (acquired: boolean) => {
+        if (!acquired) {
           this.setState("non_owner");
           settle();
           return;
         }
         if (this.disposed) {
+          if (this.nativeAuthority && this.key) {
+            await this.nativeAuthority.release(this.key);
+          }
           settle();
           return;
         }
@@ -175,7 +202,15 @@ export class CallAuthorityOwnership {
         await new Promise<void>((resolveHold) => {
           this.holdResolve = resolveHold;
         });
-      }).catch(() => {
+      };
+
+      const request = this.nativeAuthority
+        ? this.nativeAuthority.acquire(this.key!).then((acquired) => onAcquired(acquired))
+        : this.locks!.request(this.key!, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+            await onAcquired(Boolean(lock));
+          });
+      this.lockRequestPromise = request;
+      request.catch(() => {
         if (!this.disposed) this.setState("unavailable");
         settle();
       });
@@ -194,6 +229,11 @@ export class CallAuthorityOwnership {
         await disposeOwner?.();
         this.holdResolve?.();
         this.holdResolve = null;
+        await this.lockRequestPromise?.catch(() => undefined);
+        this.lockRequestPromise = null;
+        if (this.nativeAuthority && this.key) {
+          await this.nativeAuthority.release(this.key);
+        }
         this.channel?.postMessage({ type: "owner_released", key: this.key!, owner_id: this.ownerId } satisfies OwnerAnnouncement);
       }
       if (this.retryTimer) clearTimeout(this.retryTimer);

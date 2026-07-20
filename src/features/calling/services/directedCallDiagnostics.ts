@@ -1,5 +1,22 @@
 import { debugCall } from "../utils/callDebug";
 
+const runtimeBranchDiagnostics = new Set<string>();
+
+export function recordDirectedCallRuntimeBranch(
+  branch: "owner" | "non-owner" | "unavailable",
+  reason?: string,
+): void {
+  if (!import.meta.env.DEV) return;
+  const message = branch === "owner"
+    ? "persistent call runtime: owner"
+    : branch === "non-owner"
+      ? "persistent call runtime: non-owner"
+      : `persistent call runtime unavailable: ${reason ?? "unknown"}`;
+  if (runtimeBranchDiagnostics.has(message)) return;
+  runtimeBranchDiagnostics.add(message);
+  console.info(message);
+}
+
 export type DirectedCallDiagnosticEvent =
   | "runtime_mode"
   | "authority"
