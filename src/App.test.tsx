@@ -115,11 +115,11 @@ vi.mock("@/features/messaging/components/ChatWindow/ChatWindow", () => ({
     call,
   }: {
     activeChat: { type: string; partnerId?: number; partnerRef?: string | number };
-    call: { status: string; remoteUserId: number | string | null };
+    call: { status: string; remoteUserId: number | string | null } | null;
   }) => (
     <div>
       chat
-      {call.status === "active" &&
+      {call?.status === "active" &&
         activeChat.type === "direct" &&
         (String(activeChat.partnerId) === String(call.remoteUserId) ||
           String(activeChat.partnerRef) === String(call.remoteUserId)) && (
@@ -184,6 +184,13 @@ describe("App hash sync", () => {
     audioUnmounts.current = 0;
     window.location.hash = "#";
     window.localStorage.clear();
+    Object.defineProperty(navigator, "locks", {
+      configurable: true,
+      value: {
+        request: async (name: string, _options: unknown, callback: (lock: { name: string }) => unknown) =>
+          callback({ name }),
+      },
+    });
   });
 
   it("renders the conversation EmptyPane and opens the picker once", () => {
@@ -512,6 +519,7 @@ describe("App hash sync", () => {
 
     render(<App />);
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "open settings" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "open settings" }));
 
     await waitFor(() => expect(window.location.hash).toBe("#/settings"));
@@ -545,9 +553,10 @@ describe("App hash sync", () => {
 
     render(<App />);
 
+    await waitFor(() => expect(screen.getByTestId("call-audio-renderer")).toBeInTheDocument());
     expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
     expect(screen.getByTestId("active-call-dock")).toBeTruthy();
-    expect(audioMounts.current).toBe(1);
+    await waitFor(() => expect(audioMounts.current).toBe(1));
     expect(useCallMock).toHaveBeenCalledTimes(1);
     expect(useCallMock).toHaveBeenCalledWith(1);
 
@@ -557,7 +566,7 @@ describe("App hash sync", () => {
     expect(screen.getByText("settings")).toBeTruthy();
     expect(screen.queryByTestId("active-call-dock")).toBeNull();
     expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
-    expect(audioMounts.current).toBe(1);
+    await waitFor(() => expect(audioMounts.current).toBe(1));
     expect(audioUnmounts.current).toBe(0);
     expect(useCallMock).toHaveBeenCalledTimes(1);
     expect(startCall).not.toHaveBeenCalled();
@@ -591,7 +600,8 @@ describe("App hash sync", () => {
 
     expect(screen.getByText("settings")).toBeTruthy();
     expect(screen.queryByTestId("active-call-dock")).toBeNull();
-    expect(audioMounts.current).toBe(1);
+    await waitFor(() => expect(audioMounts.current).toBe(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "return to call" })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "return to call" }));
 
@@ -637,6 +647,7 @@ describe("App hash sync", () => {
 
     expect(screen.queryByTestId("active-call-dock")).toBeNull();
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "return to call" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "return to call" }));
 
     await waitFor(() => expect(window.location.hash).toBe("#/2"));
@@ -670,6 +681,7 @@ describe("App hash sync", () => {
 
     const view = render(<App />);
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "open settings" })).toBeInTheDocument());
     Object.assign(callState, {
       status: "active",
       remoteUserId: "alice-public-id",
@@ -681,6 +693,7 @@ describe("App hash sync", () => {
     };
     view.rerender(<App />);
 
+    await waitFor(() => expect(screen.getByRole("button", { name: "open settings" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "open settings" }));
     await waitFor(() => expect(window.location.hash).toBe("#/settings"));
     expect(screen.getByText("settings")).toBeTruthy();
@@ -718,6 +731,7 @@ describe("App hash sync", () => {
 
     render(<App />);
 
+    await waitFor(() => expect(screen.getByTestId("active-call-dock")).toBeInTheDocument());
     expect(screen.getByTestId("active-call-dock")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "return to call" }));

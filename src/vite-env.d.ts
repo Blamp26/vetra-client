@@ -9,6 +9,7 @@ interface ImportMetaEnv {
     readonly VITE_WEBRTC_TURN_USERNAME?: string;
     readonly VITE_WEBRTC_TURN_CREDENTIAL?: string;
     readonly VITE_WEBRTC_SHOW_DIAGNOSTICS?: string;
+    readonly VITE_CALL_RUNTIME_MODE?: string;
 }
 
 interface ImportMeta {

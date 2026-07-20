@@ -19,7 +19,9 @@ import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 import { EmptyPane } from "@/shared/components/EmptyPane";
 import { Button } from "@/shared/components/Button";
 import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
-import { CallProvider, useCallContext } from "@/features/calling/context";
+import { useCallContext } from "@/features/calling/context";
+import { CallRuntimeBoundary } from "@/features/calling/context/CallRuntimeBoundary";
+import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
 import type { ActiveChat } from "@/shared/types";
 
@@ -72,6 +74,7 @@ function getInitialLeftPaneWidth(): number {
 
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
+  const socketManager = useAppStore((s) => s.socketManager);
   useAuthHydration();
   useSocketEvents();
 
@@ -80,30 +83,37 @@ function App() {
   }
 
   return (
-    <CallProvider currentUserId={currentUser.id}>
-      <AppShell />
-    </CallProvider>
+    <CallRuntimeBoundary
+      currentUser={currentUser}
+      socketManager={socketManager}
+      legacyContent={<LegacyCallApplication />}
+      nonCallContent={<AppShell call={null} />}
+    />
   );
 }
 
-function AppShell() {
-  const currentUser = useAppStore((s) => s.currentUser);
+function LegacyCallApplication() {
   const call = useCallContext();
+  return <AppShell call={call} />;
+}
+
+interface AppShellProps {
+  call: UseCallReturn | null;
+}
+
+function AppShell({ call }: AppShellProps) {
+  const currentUser = useAppStore((s) => s.currentUser);
   const {
-    status,
-    remoteUsername,
-    remoteUserId,
-    isMuted,
-    isScreenSharing,
-    isScreenShareUpdating,
-    seconds,
-    callIssue,
-    isIncomingActionPending,
-    toggleMute,
-    hangUp,
-    acceptCall,
-    rejectCall,
-  } = call;
+    status = "idle",
+    remoteUsername = null,
+    remoteUserId = null,
+    isMuted = false,
+    isScreenSharing = false,
+    isScreenShareUpdating = false,
+    seconds = 0,
+    callIssue = null,
+    isIncomingActionPending = false,
+  } = call ?? {};
   const activeChat = useAppStore((s) => s.activeChat);
   const conversationPreviews = useAppStore((s) => s.conversationPreviews);
   const roomPreviews = useAppStore((s) => s.roomPreviews);
@@ -575,22 +585,24 @@ function AppShell() {
             )}
           </div>
 
-          <SidebarFooter
-            callStatus={status}
-            remoteUsername={remoteUsername}
-            callSeconds={seconds}
-            isMuted={isMuted}
-            isScreenSharing={isScreenSharing}
-            isScreenShareUpdating={isScreenShareUpdating}
-            callIssue={callIssue}
-            isIncomingActionPending={isIncomingActionPending}
-            onMuteToggle={toggleMute}
-            onHangUp={hangUp}
-            onAcceptCall={acceptCall}
-            onRejectCall={rejectCall}
-            onOpenSettings={() => navigateToHash("#/settings")}
-            onReturnToCall={handleReturnToActiveCall}
-          />
+          {call && (
+            <SidebarFooter
+              callStatus={status}
+              remoteUsername={remoteUsername}
+              callSeconds={seconds}
+              isMuted={isMuted}
+              isScreenSharing={isScreenSharing}
+              isScreenShareUpdating={isScreenShareUpdating}
+              callIssue={callIssue}
+              isIncomingActionPending={isIncomingActionPending}
+              onMuteToggle={call.toggleMute}
+              onHangUp={call.hangUp}
+              onAcceptCall={call.acceptCall}
+              onRejectCall={call.rejectCall}
+              onOpenSettings={() => navigateToHash("#/settings")}
+              onReturnToCall={handleReturnToActiveCall}
+            />
+          )}
         </div>
 
         <div
@@ -638,12 +650,12 @@ function AppShell() {
         )}
       </div>
 
-      {status === "ringing" && (
+      {call && status === "ringing" && (
         <IncomingCallModal
           callerName={remoteUsername ?? `User #${remoteUserId}`}
           isPending={isIncomingActionPending}
-          onAccept={acceptCall}
-          onReject={rejectCall}
+          onAccept={call.acceptCall}
+          onReject={call.rejectCall}
         />
       )}
 

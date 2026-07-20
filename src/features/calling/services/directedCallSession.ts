@@ -12,10 +12,6 @@ import {
 } from "../protocol/directedCallProtocol";
 import { getOrCreateDirectedCallDeviceId } from "./directedCallDevice";
 
-export const DIRECTED_CALL_SESSION_FEATURE_ENV = "VITE_ENABLE_DIRECTED_CALL_SESSION";
-export const directedCallSessionEnabled =
-  import.meta.env.VITE_ENABLE_DIRECTED_CALL_SESSION === "true";
-
 type ProjectionListener = (
   projection: StateProjection,
   classification: "accepted" | "duplicate",
@@ -168,7 +164,7 @@ export class DirectedCallSession {
     this.publicUserRef = options.publicUserRef;
     this.deviceId = options.deviceId ?? getOrCreateDirectedCallDeviceId();
     this.topic = DIRECTED_CALL_TOPIC_PREFIX + this.publicUserRef;
-    this.enabled = options.enabled ?? directedCallSessionEnabled;
+    this.enabled = options.enabled ?? false;
     this.projections = createDirectedCallProjectionStore((callId) => {
       void this.requestSync(callId);
     });

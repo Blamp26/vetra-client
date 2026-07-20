@@ -74,6 +74,38 @@ to the old call. After the third transport attempt, the retained action is
 `retry_exhausted`, cannot issue a fourth attempt, and remains scoped to its
 original call and action until authoritative advancement makes it obsolete.
 
+B4 introduces one exclusive client runtime mode, resolved from
+`VITE_CALL_RUNTIME_MODE`: missing, empty, or `legacy` means legacy; `persistent`
+is opt-in; and any other explicit value fails closed as `disabled`. The retired
+`VITE_ENABLE_DIRECTED_CALL_SESSION` boolean is not read and cannot enable a
+persistent runtime. The legacy mode remains the compatibility default.
+
+Call authority is scoped by authenticated profile and the stable directed-call
+`device_id`: `vetra:call-authority:<profile-scope>:<device-id>`. Persistent mode
+requires a valid public-user UUID. Legacy mode uses that UUID when available or
+a clearly prefixed numeric-user scope otherwise. Web Locks are the sole
+authority mechanism and are acquired exclusively with `ifAvailable`; an
+acquired lock is held until the owned runtime has disposed. BroadcastChannel,
+when available, is advisory only: it can announce release and prompt a bounded
+retry, but it can never grant ownership. There is no timestamp lease, timeout
+stealing, or automatic persistent-to-legacy fallback.
+
+The owner-only boundary mounts exactly one legacy `CallProvider` in legacy mode,
+or constructs the dormant pre-media persistent session, lifecycle controller,
+incoming coordinator, and presentation model in persistent mode. A non-owner,
+disabled mode, invalid persistent identity, or unavailable Web Locks renders
+ordinary messaging without either call authority, call channels, call controls,
+or incoming-call presentation. Runtime disposal precedes lock release; logout,
+profile replacement, and unmount perform that cleanup without sending a
+canonical terminal command. Socket disconnect does not transfer ownership or
+infer call termination. Persistent mode remains headless and pre-media: it
+does not create a microphone, WebRTC object, SDP, ICE, or media track.
+
+The current implementation is covered by browser-style injected ownership
+tests. Sharing of Web Locks between target Windows WebViews/Tauri windows, and
+manual multi-window verification there, remain later runtime verification
+items; no Windows or Tauri multi-WebView claim is made here.
+
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has
 committed. An operating-system notification alone is not presented.

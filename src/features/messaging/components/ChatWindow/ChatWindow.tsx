@@ -27,7 +27,7 @@ import { Search } from "lucide-react";
 
 interface Props {
   activeChat: ActiveChat;
-  call: UseCallReturn;
+  call: UseCallReturn | null;
 }
 
 interface ReplyTarget {
@@ -47,10 +47,10 @@ function TypingIndicator({ nickname }: { nickname: string }) {
 
 function isActiveCallForChat(
   activeChat: ActiveChat,
-  call: UseCallReturn,
+  call: UseCallReturn | null,
   conversationPreviews: RootState["conversationPreviews"],
 ): boolean {
-  if (call.status !== "active") return false;
+  if (!call || call.status !== "active") return false;
   if (activeChat.type !== "direct") return false;
   if (call.remoteUserId === null || call.remoteUserId === undefined) return false;
 
@@ -223,7 +223,7 @@ export function ChatWindow({ activeChat, call }: Props) {
   const handleStartCall = useCallback(
     (targetUserId: string | number, targetUsername?: string) => {
       setCallStartIssue(null);
-      call.startCall(targetUserId, targetUsername);
+      call?.startCall(targetUserId, targetUsername);
     },
     [call],
   );
@@ -271,7 +271,7 @@ export function ChatWindow({ activeChat, call }: Props) {
   if (!currentUser) return null;
 
   const shouldShowActiveCallDock = isActiveCallForChat(activeChat, call, conversationPreviews);
-  const displayCallIssue = normalizeCallIssue(call.callIssue);
+  const displayCallIssue = normalizeCallIssue(call?.callIssue ?? null);
 
   const renderHeader = () => {
     if (activeChat.type === "direct") {
@@ -336,7 +336,7 @@ export function ChatWindow({ activeChat, call }: Props) {
             </div>
           </div>
           <div className="flex h-full shrink-0 items-center" data-testid="chat-header-actions">
-            <CallButton
+            {call && <CallButton
               targetUserId={
                 partner?.public_id ??
                 activeChat.partnerRef ??
@@ -348,7 +348,7 @@ export function ChatWindow({ activeChat, call }: Props) {
               onCall={handleStartCall}
               onUnavailable={handleCallUnavailable}
               className="h-10 w-10 rounded-full border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-0"
-            />
+            />}
             <IconButton
               label="Search messages"
               onClick={() => setIsSearchOpen(true)}
@@ -394,7 +394,7 @@ export function ChatWindow({ activeChat, call }: Props) {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       {renderHeader()}
 
-      {(callStartIssue || (call.status === "idle" && displayCallIssue?.message)) && (
+      {(callStartIssue || (call?.status === "idle" && displayCallIssue?.message)) && (
         <div
           className="border-b border-destructive/40 bg-destructive/10 px-5 py-2 text-sm text-foreground"
           data-testid="call-start-issue"
@@ -406,26 +406,26 @@ export function ChatWindow({ activeChat, call }: Props) {
       {shouldShowActiveCallDock && (
         <ActiveCallDock
           currentUser={currentUser}
-          remoteUserId={call.remoteUserId}
+          remoteUserId={call!.remoteUserId}
           remoteUser={partner}
-          remoteUsername={call.remoteUsername ?? `User #${call.remoteUserId}`}
-          callStatus={call.status}
-          seconds={call.seconds}
-          isMuted={call.isMuted}
-          isScreenSharing={call.isScreenSharing}
-          isScreenShareUpdating={call.isScreenShareUpdating}
-          isRemoteScreenLoading={call.isRemoteScreenLoading}
-          isRemoteScreenAvailable={call.isRemoteScreenAvailable}
-          isWatchingRemoteScreen={call.isWatchingRemoteScreen}
-          callIssue={call.callIssue}
-          remoteScreenStream={call.remoteScreenStream}
-          localScreenStream={call.localScreenStream}
-          diagnostics={call.diagnostics}
-          onMuteToggle={call.toggleMute}
-          onStartScreenShare={call.startScreenShare}
-          onStopScreenShare={call.stopScreenShare}
-          onWatchRemoteScreen={call.watchRemoteScreen}
-          onHangUp={call.hangUp}
+          remoteUsername={call!.remoteUsername ?? `User #${call!.remoteUserId}`}
+          callStatus={call!.status}
+          seconds={call!.seconds}
+          isMuted={call!.isMuted}
+          isScreenSharing={call!.isScreenSharing}
+          isScreenShareUpdating={call!.isScreenShareUpdating}
+          isRemoteScreenLoading={call!.isRemoteScreenLoading}
+          isRemoteScreenAvailable={call!.isRemoteScreenAvailable}
+          isWatchingRemoteScreen={call!.isWatchingRemoteScreen}
+          callIssue={call!.callIssue}
+          remoteScreenStream={call!.remoteScreenStream}
+          localScreenStream={call!.localScreenStream}
+          diagnostics={call!.diagnostics}
+          onMuteToggle={call!.toggleMute}
+          onStartScreenShare={call!.startScreenShare}
+          onStopScreenShare={call!.stopScreenShare}
+          onWatchRemoteScreen={call!.watchRemoteScreen}
+          onHangUp={call!.hangUp}
         />
       )}
 
