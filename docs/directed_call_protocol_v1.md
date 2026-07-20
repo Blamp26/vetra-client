@@ -24,3 +24,14 @@ The server strictly validates V1 inbound payloads; client decoders may ignore
 unknown future fields but only retain known validated fields. Phoenix
 integration, sync execution, retry scheduling, and runtime device-ID storage
 belong to later stages.
+
+The shared fixture bundle contains 14 valid and 12 invalid fixtures, including
+numeric target and peer IDs, unknown keys, invalid failure codes, negative
+versions, forbidden state or signal fields, missing signal IDs, oversized SDP,
+duplicate sync calls, and unknown signal kinds. The oversized-SDP fixture is
+compact metadata: tests expand its SDP to exactly 262145 bytes, one byte above
+the shared 262144-byte limit. Fixture filenames, bytes, hashes, enums,
+timestamps, and nullability match the server bundle. Strict server validation
+rejects unknown keys; client inbound decoders may ignore unknown future fields
+and retain only known fields, including stripping the extra state `device_id`
+and signal `state_version` fields.

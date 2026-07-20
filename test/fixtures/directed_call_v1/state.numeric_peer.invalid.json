@@ -1,0 +1,1 @@
+{"protocol_version":1,"call_id":"33333333-3333-4333-8333-333333333333","state":"presented","state_version":3,"media":"audio","participant_role":"recipient","peer":{"user_id":42,"username":"alice"},"created_at":"2026-01-02T03:04:05.123456Z","presented_at":"2026-01-02T03:04:09.123456Z","accepted_at":null,"connecting_at":null,"active_at":null,"ended_at":null}

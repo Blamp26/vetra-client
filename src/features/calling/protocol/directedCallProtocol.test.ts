@@ -14,8 +14,12 @@ import {
   buildSignal,
   buildSync,
   classifyState,
+  decodeCommand,
+  decodeInitiate,
   decodeSignal,
   decodeState,
+  decodeSetupFailed,
+  decodeSync,
 } from "./directedCallProtocol";
 
 const device = "11111111-1111-4111-8111-111111111111";
@@ -98,7 +102,39 @@ describe("directed call V1 protocol", () => {
     expect(decodeState(JSON.parse(readFileSync(resolve(root, "state.presented.valid.json"), "utf8")))).not.toBeNull();
     expect(decodeSignal(JSON.parse(readFileSync(resolve(root, "signal.offer.valid.json"), "utf8")))).not.toBeNull();
     expect(decodeState({ ...state, state: "preparing" })).toBeNull();
-    expect(decodeSignal(JSON.parse(readFileSync(resolve(root, "signal.unknown_kind.invalid.json"), "utf8")))).toBeNull();
+    for (const name of manifest.invalid as string[]) {
+      const fixture = JSON.parse(readFileSync(resolve(root, name), "utf8"));
+      let decoded: unknown;
+
+      if (name.startsWith("initiate.")) decoded = decodeInitiate(fixture);
+      else if (name.startsWith("command.")) decoded = decodeCommand(fixture);
+      else if (name.startsWith("setup_failed.")) decoded = decodeSetupFailed(fixture);
+      else if (name.startsWith("state.")) {
+        if (name.includes("device_id")) {
+          decoded = decodeState(fixture);
+          expect(decoded).not.toBeNull();
+          expect(decoded).not.toHaveProperty("device_id");
+          continue;
+        }
+        decoded = decodeState(fixture);
+      } else if (name.startsWith("sync.")) decoded = decodeSync(fixture);
+      else if (name.includes("oversized_sdp")) {
+        decoded = decodeSignal({
+          ...fixture,
+          signal_id: "99999999-9999-4999-8999-999999999999",
+          payload: { sdp: "x".repeat(fixture.sdp_bytes) },
+        });
+      } else {
+        decoded = decodeSignal(fixture);
+        if (name.includes("state_version")) {
+          expect(decoded).not.toBeNull();
+          expect(decoded).not.toHaveProperty("state_version");
+          continue;
+        }
+      }
+
+      expect(decoded).toBeNull();
+    }
     for (const [name, expected] of Object.entries<string>(manifest.sha256)) {
       const actual = createHash("sha256").update(readFileSync(resolve(root, name))).digest("hex");
       expect(actual).toBe(expected);

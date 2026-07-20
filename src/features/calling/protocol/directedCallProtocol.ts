@@ -94,6 +94,29 @@ export function buildSignal(callId: UUID, signalId: UUID, deviceId: UUID, kind: 
   return { protocol_version: 1, call_id: canonicalUuid(callId), signal_id: canonicalUuid(signalId), device_id: canonicalUuid(deviceId), kind, payload };
 }
 
+export function decodeInitiate(value: unknown): InitiatePayload | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["protocol_version", "command_id", "device_id", "target_user_id", "media"]) || value.protocol_version !== 1 || !isUuid(value.command_id) || !isUuid(value.device_id) || !isUuid(value.target_user_id) || value.media !== "audio") return null;
+  return { protocol_version: 1, command_id: canonicalUuid(value.command_id), device_id: canonicalUuid(value.device_id), target_user_id: canonicalUuid(value.target_user_id), media: "audio" };
+}
+
+export function decodeCommand(value: unknown): CommandPayload | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["protocol_version", "call_id", "command_id", "device_id"]) || value.protocol_version !== 1 || !isUuid(value.call_id) || !isUuid(value.command_id) || !isUuid(value.device_id)) return null;
+  return { protocol_version: 1, call_id: canonicalUuid(value.call_id), command_id: canonicalUuid(value.command_id), device_id: canonicalUuid(value.device_id) };
+}
+
+export function decodeSetupFailed(value: unknown): SetupFailedPayload | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["protocol_version", "call_id", "command_id", "device_id", "failure_code"]) || !FAILURE_CODES.includes(value.failure_code as FailureCode)) return null;
+  const command = decodeCommand(value);
+  return command ? { ...command, failure_code: value.failure_code as FailureCode } : null;
+}
+
+export function decodeSync(value: unknown): SyncPayload | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["protocol_version", "request_id", "device_id", "known_calls"]) || value.protocol_version !== 1 || !isUuid(value.request_id) || !isUuid(value.device_id) || !Array.isArray(value.known_calls) || value.known_calls.length > 16) return null;
+  const knownCalls = value.known_calls;
+  if (new Set(knownCalls.map((call) => isRecord(call) ? call.call_id : undefined)).size !== knownCalls.length || knownCalls.some((call) => !isRecord(call) || !hasOnlyKeys(call, ["call_id", "state_version"]) || !isUuid(call.call_id) || !isSafeInteger(call.state_version))) return null;
+  return { protocol_version: 1, request_id: canonicalUuid(value.request_id), device_id: canonicalUuid(value.device_id), known_calls: knownCalls.map((call) => ({ call_id: canonicalUuid((call as Record<string, any>).call_id), state_version: (call as Record<string, any>).state_version })) };
+}
+
 export function decodeState(value: unknown): StateProjection | null {
   if (!isRecord(value) || value.protocol_version !== 1 || !isUuid(value.call_id) || !CANONICAL_STATES.includes(value.state as CanonicalState) || !isSafeInteger(value.state_version) || value.media !== "audio" || !PARTICIPANT_ROLES.includes(value.participant_role as ParticipantRole) || !isPeer(value.peer) || !isTimestamp(value.created_at) || !optionalTimestamp(value.presented_at) || !optionalTimestamp(value.accepted_at) || !optionalTimestamp(value.connecting_at) || !optionalTimestamp(value.active_at) || !optionalTimestamp(value.ended_at)) return null;
   return { protocol_version: 1, call_id: canonicalUuid(value.call_id), state: value.state as CanonicalState, state_version: value.state_version, media: "audio", participant_role: value.participant_role as ParticipantRole, peer: { user_id: canonicalUuid(value.peer.user_id), username: value.peer.username }, created_at: value.created_at, presented_at: value.presented_at, accepted_at: value.accepted_at, connecting_at: value.connecting_at, active_at: value.active_at, ended_at: value.ended_at };
@@ -120,6 +143,7 @@ function isTimestamp(value: unknown): value is string { return typeof value === 
 function optionalTimestamp(value: unknown): value is string | null { return value === null || isTimestamp(value); }
 function isPeer(value: unknown): value is Peer { return isRecord(value) && typeof value.user_id === "string" && PUBLIC_ID_RE.test(value.user_id) && typeof value.username === "string" && value.username.length > 0 && value.username.length <= 32; }
 function isRecord(value: unknown): value is Record<string, any> { return typeof value === "object" && value !== null && !Array.isArray(value); }
+function hasOnlyKeys(value: Record<string, any>, keys: string[]): boolean { return Object.keys(value).every((key) => keys.includes(key)); }
 function validSignalPayload(kind: SignalKind, value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (kind === "ice_candidate") return typeof value.candidate === "string" && value.candidate.length > 0 && value.candidate.length <= 8192 && (value.sdp_mid === null || typeof value.sdp_mid === "string") && (value.sdp_mline_index === null || isSafeInteger(value.sdp_mline_index)) && (value.username_fragment === null || typeof value.username_fragment === "string");
