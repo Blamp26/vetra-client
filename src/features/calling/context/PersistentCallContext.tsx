@@ -4,7 +4,7 @@ import type {
   DirectedCallMediaCoordinatorSnapshot,
 } from "../services/directedCallMediaCoordinator";
 import type { DirectedCallPresentationModel, PersistentPresentationSnapshot, PresentationActionResult } from "../services/directedCallPresentationModel";
-import type { CallAuthorityBackend, CallAuthorityState } from "../services/callAuthorityOwnership";
+import type { CallAuthorityBackend, CallAuthorityState, CallAuthorityTraceEvent } from "../services/callAuthorityOwnership";
 
 export interface PersistentCallBoundaryDebugSnapshot {
   mode: "legacy" | "persistent" | "disabled";
@@ -16,6 +16,11 @@ export interface PersistentCallBoundaryDebugSnapshot {
   contextMounted: boolean;
   currentUserPublicUuidValid: boolean;
   stableDeviceUuidValid: boolean;
+  nativeHolderPresent: boolean;
+  currentFrontendGeneration: number;
+  currentLeaseSuffix: string | null;
+  lastOwnershipEvent: CallAuthorityTraceEvent | null;
+  ownershipEventTimeline: CallAuthorityTraceEvent[];
 }
 
 const PersistentCallBoundaryDebugContext = createContext<PersistentCallBoundaryDebugSnapshot | null>(null);

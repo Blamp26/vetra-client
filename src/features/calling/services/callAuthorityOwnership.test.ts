@@ -194,6 +194,29 @@ describe("CallAuthorityOwnership", () => {
     await second.dispose();
   });
 
+  it("records a redacted native lifecycle timeline", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const nativeAuthority: NativeCallAuthorityLike = {
+      acquire: vi.fn(async () => "window-a:lease-secret"),
+      release: vi.fn(async () => true),
+      snapshot: vi.fn(async () => ({ present: true, keyHash: "safe", leaseSuffix: "secret", windowLabel: "window-a" })),
+    };
+    const owner = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority });
+    owner.setTraceContext(7, "window-a");
+    await owner.acquire();
+    await owner.dispose();
+
+    const events = owner.getTraceSnapshot().events;
+    expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
+      "acquire_requested", "rust_acquire_received", "rust_acquire_granted",
+      "acquire_promise_resolved", "release_requested", "rust_release_received",
+      "rust_release_accepted", "frontend_state_released", "native_holder_snapshot",
+    ]));
+    expect(events.every((event) => !JSON.stringify(event).includes(owner.key!))).toBe(true);
+    expect(events.every((event) => !JSON.stringify(event).includes("lease-secret"))).toBe(true);
+    expect(info).toHaveBeenCalledWith("[persistent-call-ownership-trace]", expect.any(Object));
+  });
+
   it("does not let a stale native release remove a newer same-window lease", async () => {
     const owners = new Map<string, string>();
     let nextLease = 0;

@@ -29,7 +29,7 @@ export function PersistentCallDebugPanel({
   const persistentCall = useOptionalPersistentCall();
 
   const fields = useMemo(() => {
-    const value = boundary ?? {
+    const value = {
       mode: "disabled" as const,
       tauriDetected: false,
       ownershipBackend: "unavailable" as const,
@@ -39,6 +39,12 @@ export function PersistentCallDebugPanel({
       contextMounted: false,
       currentUserPublicUuidValid: false,
       stableDeviceUuidValid: false,
+      nativeHolderPresent: false,
+      currentFrontendGeneration: 0,
+      currentLeaseSuffix: null,
+      lastOwnershipEvent: null,
+      ownershipEventTimeline: [],
+      ...boundary,
     };
     const contextMounted = persistentCall !== null;
     const failedGates = [
@@ -62,6 +68,11 @@ export function PersistentCallDebugPanel({
       "PersistentCallContext provider mounted": yesNo(contextMounted),
       "current-user public UUID valid": yesNo(value.currentUserPublicUuidValid),
       "stable device UUID valid": yesNo(value.stableDeviceUuidValid),
+      "native holder present": yesNo(value.nativeHolderPresent),
+      "current frontend generation": value.currentFrontendGeneration,
+      "current lease suffix": value.currentLeaseSuffix ?? "none",
+      "last ownership event": value.lastOwnershipEvent?.event ?? "none",
+      "ownership event timeline": value.ownershipEventTimeline.map((event) => `${event.sequence}:${event.event}`).join(" | ") || "none",
       "active chat type": activeChatType,
       "direct-chat check": directChat ? "pass" : "fail",
       "peer UUID source": peerUuidSource,

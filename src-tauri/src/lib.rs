@@ -14,6 +14,24 @@ struct CallAuthorityRegistry {
     next_lease_id: Mutex<u64>,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeHolderSnapshot {
+    present: bool,
+    key_hash: Option<String>,
+    lease_suffix: Option<String>,
+    window_label: Option<String>,
+}
+
+fn key_hash(key: &str) -> String {
+    let mut hash: u32 = 2_166_136_261;
+    for byte in key.as_bytes() {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(16_777_619);
+    }
+    format!("{hash:08x}")
+}
+
 #[tauri::command]
 fn acquire_call_authority(
     window: tauri::Window,
@@ -50,15 +68,58 @@ fn release_call_authority(
     registry: tauri::State<'_, CallAuthorityRegistry>,
     key: String,
     lease_id: String,
-) {
+) -> bool {
     let Ok(mut owners) = registry.owners.lock() else {
-        return;
+        return false;
     };
     if owners
         .get(&key)
         .is_some_and(|owner| owner.window_label == window.label() && owner.lease_id == lease_id)
     {
         owners.remove(&key);
+        true
+    } else {
+        false
+    }
+}
+
+#[tauri::command]
+fn get_call_authority_snapshot(
+    window: tauri::Window,
+    registry: tauri::State<'_, CallAuthorityRegistry>,
+    key: String,
+) -> NativeHolderSnapshot {
+    let Ok(owners) = registry.owners.lock() else {
+        return NativeHolderSnapshot {
+            present: false,
+            key_hash: None,
+            lease_suffix: None,
+            window_label: Some(window.label().to_string()),
+        };
+    };
+    match owners.get(&key) {
+        Some(owner) => NativeHolderSnapshot {
+            present: true,
+            key_hash: Some(key_hash(&key)),
+            lease_suffix: Some(
+                owner
+                    .lease_id
+                    .chars()
+                    .rev()
+                    .take(8)
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect(),
+            ),
+            window_label: Some(owner.window_label.clone()),
+        },
+        None => NativeHolderSnapshot {
+            present: false,
+            key_hash: Some(key_hash(&key)),
+            lease_suffix: None,
+            window_label: Some(window.label().to_string()),
+        },
     }
 }
 
@@ -69,6 +130,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             acquire_call_authority,
             release_call_authority,
+            get_call_authority_snapshot,
         ])
         .on_window_event(|window, event| {
             if !matches!(event, WindowEvent::Destroyed) {

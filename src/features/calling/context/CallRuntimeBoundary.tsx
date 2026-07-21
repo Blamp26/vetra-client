@@ -72,6 +72,7 @@ export function CallRuntimeBoundary({
     deviceId,
   }), [currentUser.id, deviceId, mode, ownershipFactory, publicUserRef, mode === "persistent" ? socketManager : null]);
   const [authority, setAuthority] = useState<CallAuthoritySnapshot>(() => ownership.getSnapshot());
+  const ownershipTrace = ownership.getTraceSnapshot?.() ?? { events: [], lastEvent: null, nativeHolderPresent: false };
   const [persistentRuntime, setPersistentRuntime] = useState<PersistentRuntime | null>(null);
   const persistentRuntimeRef = useRef<PersistentRuntime | null>(null);
   const activeOwnershipRef = useRef<CallAuthorityOwnership | null>(null);
@@ -79,6 +80,9 @@ export function CallRuntimeBoundary({
 
   useEffect(() => {
     const effectGeneration = ++effectGenerationRef.current;
+    ownership.setTraceContext?.(effectGeneration);
+    ownership.trace?.("ownership_generation_created", { reason: "effect_generation" });
+    ownership.trace?.("boundary_mount");
     activeOwnershipRef.current = ownership;
     setAuthority(ownership.getSnapshot());
     const onAuthority = (snapshot: CallAuthoritySnapshot) => {
@@ -86,6 +90,8 @@ export function CallRuntimeBoundary({
       recordDirectedCallDiagnostic("authority", { mode, authority: snapshot.state });
     };
     const unsubscribe = ownership.subscribe(onAuthority);
+    const onWindowDestroy = () => ownership.trace?.("window_destroy_cleanup", { reason: "beforeunload" });
+    window.addEventListener("beforeunload", onWindowDestroy);
     let cancelled = false;
     let localRuntime: PersistentRuntime | null = null;
 
@@ -97,9 +103,14 @@ export function CallRuntimeBoundary({
       const acquired = await ownership.acquire();
       recordDirectedCallDiagnostic("runtime_mode", { mode, authority: acquired.state });
       if (cancelled || activeOwnershipRef.current !== ownership) {
+        ownership.trace?.("frontend_owner_rejected_stale", { outcome: "stale", reason: "obsolete_boundary_generation" });
         if (activeOwnershipRef.current !== ownership) await ownership.dispose();
         return;
       }
+      ownership.trace?.(acquired.state === "owner" ? "frontend_owner_applied" : "frontend_owner_rejected_stale", {
+        outcome: acquired.state === "owner" ? "accepted" : "denied",
+        reason: acquired.state === "owner" ? "current_boundary_generation" : "acquire_not_granted",
+      });
       if (acquired.state !== "owner" || mode !== "persistent") {
         if (mode === "persistent") {
           recordDirectedCallRuntimeBranch(
@@ -186,8 +197,14 @@ export function CallRuntimeBoundary({
     return () => {
       cancelled = true;
       unsubscribe();
+      window.removeEventListener("beforeunload", onWindowDestroy);
+      ownership.trace?.("boundary_cleanup", { reason: "react_effect_cleanup" });
+      ownership.trace?.("release_scheduled", { reason: "deferred_boundary_cleanup" });
       setTimeout(() => {
-        if (effectGenerationRef.current !== effectGeneration && activeOwnershipRef.current === ownership) return;
+        if (effectGenerationRef.current !== effectGeneration && activeOwnershipRef.current === ownership) {
+          ownership.trace?.("scheduled_release_cancelled", { outcome: "cancelled", reason: "replacement_generation" });
+          return;
+        }
         if (activeOwnershipRef.current === ownership) activeOwnershipRef.current = null;
         void ownership.dispose(() => {
           if (persistentRuntimeRef.current === localRuntime) {
@@ -218,6 +235,11 @@ export function CallRuntimeBoundary({
     contextMounted: mode === "persistent" && authority.state === "owner" && persistentRuntime !== null && persistentContent !== undefined,
     currentUserPublicUuidValid: typeof publicUserRef === "string" && isUuid(publicUserRef),
     stableDeviceUuidValid: isUuid(deviceId),
+    nativeHolderPresent: ownershipTrace.nativeHolderPresent,
+    currentFrontendGeneration: effectGenerationRef.current,
+    currentLeaseSuffix: ownershipTrace.lastEvent?.leaseSuffix ?? null,
+    lastOwnershipEvent: ownershipTrace.lastEvent,
+    ownershipEventTimeline: ownership.getTraceSnapshot?.().events ?? [],
   };
 
   let content: ReactNode = nonCallContent;

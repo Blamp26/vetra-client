@@ -18,6 +18,11 @@ const boundary = {
   contextMounted: true,
   currentUserPublicUuidValid: true,
   stableDeviceUuidValid: true,
+  nativeHolderPresent: true,
+  currentFrontendGeneration: 3,
+  currentLeaseSuffix: "lease-42",
+  lastOwnershipEvent: null,
+  ownershipEventTimeline: [],
 };
 
 function Runtime({ children }: { children: ReactNode }) {
