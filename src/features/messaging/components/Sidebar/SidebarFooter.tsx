@@ -32,10 +32,10 @@ interface SidebarFooterProps {
   isScreenShareUpdating: boolean;
   callIssue: CallIssue | null;
   isIncomingActionPending: boolean;
-  onMuteToggle: () => void;
-  onHangUp: () => void;
-  onAcceptCall: () => void;
-  onRejectCall: () => void;
+  onMuteToggle?: () => void;
+  onHangUp?: () => void;
+  onAcceptCall?: () => void;
+  onRejectCall?: () => void;
   onOpenSettings: () => void;
   onReturnToCall?: () => void;
   isCollapsed?: boolean;
@@ -231,7 +231,7 @@ export function SidebarFooter({
                   <button
                   onClick={(event) => {
                       event.stopPropagation();
-                      onAcceptCall();
+                      onAcceptCall?.();
                     }}
                     title="Accept call"
                     aria-label="Accept call"
@@ -243,7 +243,7 @@ export function SidebarFooter({
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
-                      onRejectCall();
+                      onRejectCall?.();
                     }}
                     title="Decline call"
                     aria-label="Decline call"
@@ -259,7 +259,7 @@ export function SidebarFooter({
                   onClick={(event) => {
                     event.stopPropagation();
                     callStatus === "calling"
-                      ? onHangUp()
+                      ? onHangUp?.()
                       : setConfirmHangUp(true);
                   }}
                   title="Hang up"
@@ -382,7 +382,7 @@ export function SidebarFooter({
           isDanger
           onConfirm={() => {
             setConfirmHangUp(false);
-            onHangUp();
+            onHangUp?.();
           }}
           onCancel={() => setConfirmHangUp(false)}
         />

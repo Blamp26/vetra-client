@@ -591,24 +591,22 @@ function AppShell({ call }: AppShellProps) {
             )}
           </div>
 
-          {call && (
-            <SidebarFooter
-              callStatus={status}
-              remoteUsername={remoteUsername}
-              callSeconds={seconds}
-              isMuted={isMuted}
-              isScreenSharing={isScreenSharing}
-              isScreenShareUpdating={isScreenShareUpdating}
-              callIssue={callIssue}
-              isIncomingActionPending={isIncomingActionPending}
-              onMuteToggle={call.toggleMute}
-              onHangUp={call.hangUp}
-              onAcceptCall={call.acceptCall}
-              onRejectCall={call.rejectCall}
-              onOpenSettings={() => navigateToHash("#/settings")}
-              onReturnToCall={handleReturnToActiveCall}
-            />
-          )}
+          <SidebarFooter
+            callStatus={status}
+            remoteUsername={remoteUsername}
+            callSeconds={seconds}
+            isMuted={isMuted}
+            isScreenSharing={isScreenSharing}
+            isScreenShareUpdating={isScreenShareUpdating}
+            callIssue={callIssue}
+            isIncomingActionPending={isIncomingActionPending}
+            onMuteToggle={call?.toggleMute}
+            onHangUp={call?.hangUp}
+            onAcceptCall={call?.acceptCall}
+            onRejectCall={call?.rejectCall}
+            onOpenSettings={() => navigateToHash("#/settings")}
+            onReturnToCall={handleReturnToActiveCall}
+          />
         </div>
 
         <div

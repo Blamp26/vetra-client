@@ -128,6 +128,15 @@ describe("SidebarFooter call UX", () => {
     expect(screen.getByTestId("sidebar-footer-status")).toHaveTextContent("Online");
   });
 
+  it("keeps the ordinary profile and settings footer visible without call runtime state", () => {
+    renderFooter({ callStatus: "idle" });
+
+    expect(screen.getByTestId("sidebar-footer-identity-row")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open profile for Tester" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+    expect(screen.queryByText("Calling...")).not.toBeInTheDocument();
+  });
+
   it("renders the connected call block as a return-to-call navigation control", () => {
     const onReturnToCall = vi.fn();
     renderFooter({ callStatus: "active", onReturnToCall });
