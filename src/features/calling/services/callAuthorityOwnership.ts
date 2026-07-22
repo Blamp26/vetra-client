@@ -41,6 +41,7 @@ export interface CallAuthorityTraceEvent {
   sessionPhase?: string;
   errorCategory?: string;
   errorDetails?: string;
+  serverErrorCode?: "invalid_request" | "unsupported_protocol" | "feature_disabled" | "unavailable" | "command_key_reused" | "deadline_expired" | "rate_limited" | "internal_error";
 }
 
 export interface NativeHolderSnapshot {
@@ -251,7 +252,7 @@ export class CallAuthorityOwnership {
     return () => this.traceListeners.delete(listener);
   }
 
-  trace(event: CallAuthorityTraceEventName, details: Partial<Pick<CallAuthorityTraceEvent, "reason" | "outcome" | "leaseSuffix" | "rustHolderPresent" | "startupPhase" | "errorType" | "errorMessage" | "sessionPhase" | "errorCategory" | "errorDetails">> = {}): void {
+  trace(event: CallAuthorityTraceEventName, details: Partial<Pick<CallAuthorityTraceEvent, "reason" | "outcome" | "leaseSuffix" | "rustHolderPresent" | "startupPhase" | "errorType" | "errorMessage" | "sessionPhase" | "errorCategory" | "errorDetails" | "serverErrorCode">> = {}): void {
     if (!import.meta.env.DEV) return;
     const traceEvent: CallAuthorityTraceEvent = {
       sequence: ++this.traceSequence,
@@ -271,6 +272,7 @@ export class CallAuthorityOwnership {
       sessionPhase: details.sessionPhase,
       errorCategory: details.errorCategory,
       errorDetails: details.errorDetails,
+      serverErrorCode: details.serverErrorCode,
     };
     this.traceRustHolderPresent = traceEvent.rustHolderPresent;
     this.traceEvents.push(traceEvent);

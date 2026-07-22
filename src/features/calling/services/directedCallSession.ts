@@ -54,8 +54,19 @@ export type DirectedCallSessionTrace = (
     sessionPhase: DirectedCallSessionPhase;
     errorCategory?: string;
     errorDetails?: string;
+    serverErrorCode?: DirectedCallServerErrorCode;
   },
 ) => void;
+
+export type DirectedCallServerErrorCode =
+  | "invalid_request"
+  | "unsupported_protocol"
+  | "feature_disabled"
+  | "unavailable"
+  | "command_key_reused"
+  | "deadline_expired"
+  | "rate_limited"
+  | "internal_error";
 
 export type DirectedCallCommandTransportError =
   | { kind: "disposed" }
@@ -90,8 +101,18 @@ function compareProjection(left: StateProjection, right: StateProjection): numbe
 }
 
 const SAFE_REJECTION_KEYS = ["status", "reason", "code", "event"] as const;
+const SERVER_ERROR_CODES = new Set<DirectedCallServerErrorCode>([
+  "invalid_request",
+  "unsupported_protocol",
+  "feature_disabled",
+  "unavailable",
+  "command_key_reused",
+  "deadline_expired",
+  "rate_limited",
+  "internal_error",
+]);
 
-function describeRejection(value: unknown): { errorCategory: string; errorDetails: string } {
+function describeRejection(value: unknown): { errorCategory: string; errorDetails: string; serverErrorCode?: DirectedCallServerErrorCode } {
   if (value instanceof Error) {
     return { errorCategory: value.name || "Error", errorDetails: "error_instance" };
   }
@@ -100,6 +121,11 @@ function describeRejection(value: unknown): { errorCategory: string; errorDetail
   if (Array.isArray(value)) return { errorCategory: "array", errorDetails: "array_value" };
 
   const record = value as Record<string, unknown>;
+  const nestedError = record.error;
+  const serverErrorCode =
+    typeof nestedError === "object" && nestedError !== null && !Array.isArray(nestedError) && SERVER_ERROR_CODES.has((nestedError as Record<string, unknown>).code as DirectedCallServerErrorCode)
+      ? (nestedError as Record<string, unknown>).code as DirectedCallServerErrorCode
+      : undefined;
   const keys = Object.keys(record).sort().slice(0, 12);
   const safeFields = SAFE_REJECTION_KEYS.flatMap((key) => {
     const field = record[key];
@@ -112,6 +138,7 @@ function describeRejection(value: unknown): { errorCategory: string; errorDetail
   return {
     errorCategory: "plain_object",
     errorDetails: [`keys=${keys.join(",") || "none"}`, ...safeFields].join("; "),
+    serverErrorCode,
   };
 }
 

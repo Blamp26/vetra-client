@@ -154,7 +154,7 @@ describe("DirectedCallSession", () => {
 
   it("traces each startup phase and safely serializes a Phoenix plain-object join rejection", async () => {
     const channel = createMockChannel();
-    channel.queueJoinResponse("error", { status: "error", reason: "unauthorized", code: "unauthorized", secret: "must not log" });
+    channel.queueJoinResponse("error", { error: { code: "feature_disabled", secret: "must not log" }, protocol_version: 1, status: "error" });
     const socket = createMockSocket(channel);
     const trace = vi.fn();
     const session = new DirectedCallSession({
@@ -165,7 +165,7 @@ describe("DirectedCallSession", () => {
       trace,
     });
 
-    await expect(session.start()).rejects.toEqual({ status: "error", reason: "unauthorized", code: "unauthorized", secret: "must not log" });
+    await expect(session.start()).rejects.toEqual({ error: { code: "feature_disabled", secret: "must not log" }, protocol_version: 1, status: "error" });
     expect(trace.mock.calls.map(([event, details]) => [event, details.sessionPhase])).toEqual([
       ["session_start_phase_started", "channel_creation"],
       ["session_start_phase_succeeded", "channel_creation"],
@@ -179,7 +179,8 @@ describe("DirectedCallSession", () => {
     const failure = trace.mock.calls.find(([event]) => event === "session_start_phase_failed");
     expect(failure?.[1]).toMatchObject({
       errorCategory: "plain_object",
-      errorDetails: "keys=code,reason,secret,status; status=error; reason=unauthorized; code=unauthorized",
+      errorDetails: "keys=error,protocol_version,status; status=error",
+      serverErrorCode: "feature_disabled",
     });
     expect(failure?.[1].errorDetails).not.toContain("must not log");
   });
