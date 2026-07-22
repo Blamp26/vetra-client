@@ -37,6 +37,14 @@ export interface DirectedCallSessionOptions {
   deviceId?: string;
   enabled?: boolean;
   trace?: DirectedCallSessionTrace;
+  retry?: DirectedCallSessionRetryOptions;
+}
+
+export interface DirectedCallSessionRetryOptions {
+  setTimeout?: (callback: () => void, delayMs: number) => ReturnType<typeof globalThis.setTimeout>;
+  clearTimeout?: (timer: ReturnType<typeof globalThis.setTimeout>) => void;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
 }
 
 export type DirectedCallSessionPhase =
@@ -228,9 +236,14 @@ export class DirectedCallSession {
   private readonly socket: Socket;
   private readonly enabled: boolean;
   private readonly trace?: DirectedCallSessionTrace;
+  private readonly retry: Required<DirectedCallSessionRetryOptions>;
   private channel: Channel | null = null;
   private disposed = false;
-  private syncInFlight = false;
+  private socketAvailable = true;
+  private generation = 0;
+  private syncInFlight: Promise<void> | null = null;
+  private retryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  private retryAttempt = 0;
   private readonly projectionListeners = new Set<ProjectionListener>();
   private readonly signalListeners = new Set<SignalListener>();
   private readonly syncListeners = new Set<SyncListener>();
@@ -245,6 +258,12 @@ export class DirectedCallSession {
     this.topic = DIRECTED_CALL_TOPIC_PREFIX + this.publicUserRef;
     this.enabled = options.enabled ?? false;
     this.trace = options.trace;
+    this.retry = {
+      setTimeout: options.retry?.setTimeout ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs)),
+      clearTimeout: options.retry?.clearTimeout ?? ((timer) => globalThis.clearTimeout(timer)),
+      baseDelayMs: options.retry?.baseDelayMs ?? 100,
+      maxDelayMs: options.retry?.maxDelayMs ?? 2000,
+    };
     this.projections = createDirectedCallProjectionStore((callId) => {
       void this.requestSync(callId);
     });
@@ -259,9 +278,7 @@ export class DirectedCallSession {
     if (this.channel) return true;
     this.trace?.("session_start_phase_started", { reason: "channel_creation", sessionPhase: "channel_creation" });
     try {
-      this.channel = this.socket.channel(this.topic, {
-        ...buildJoin(this.deviceId),
-      });
+      this.createChannel();
       this.trace?.("session_start_phase_succeeded", { reason: "channel_creation", sessionPhase: "channel_creation" });
     } catch (error) {
       const details = describeRejection(error);
@@ -271,29 +288,16 @@ export class DirectedCallSession {
 
     this.trace?.("session_start_phase_started", { reason: "subscription_installation", sessionPhase: "subscription_installation" });
     try {
-      this.channelRefs.push(
-        {
-          event: DIRECTED_CALL_EVENTS.state,
-          ref: this.channel.on(DIRECTED_CALL_EVENTS.state, (payload) => {
-            this.projections.apply(payload);
-          }),
-        },
-        {
-          event: DIRECTED_CALL_EVENTS.signal,
-          ref: this.channel.on(DIRECTED_CALL_EVENTS.signal, (payload) => {
-            const signal = decodeSignal(payload);
-            if (!signal) return;
-            this.signalListeners.forEach((listener) => listener(signal));
-          }),
-        },
-      );
-
       this.socketOpenRef = this.socket.onOpen(() => {
+        const wasAvailable = this.socketAvailable;
+        this.socketAvailable = true;
         recordDirectedCallDiagnostic("socket", { socket: "connected" });
-        void this.requestSync();
+        if (!wasAvailable || typeof this.socket.onClose !== "function") void this.recoverConnection();
       });
       if (typeof this.socket.onClose === "function") {
         this.socketCloseRef = this.socket.onClose(() => {
+          this.socketAvailable = false;
+          this.cancelRetry();
           recordDirectedCallDiagnostic("socket", { socket: "disconnected" });
         });
       }
@@ -307,27 +311,14 @@ export class DirectedCallSession {
     this.trace?.("session_start_phase_started", { reason: "channel_join_request", sessionPhase: "channel_join_request" });
     try {
       this.trace?.("session_start_phase_started", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement" });
-      await new Promise<void>((resolve, reject) => {
-        this.channel!
-          .join()
-          .receive("ok", () => {
-            this.trace?.("session_start_phase_succeeded", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement" });
-            resolve();
-          })
-          .receive("error", (reason) => {
-            const details = describeRejection(reason);
-            this.trace?.("session_start_phase_failed", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement", ...details });
-            reject(reason);
-          })
-          .receive("timeout", () => {
-            const error = new Error("Directed-call topic join timed out");
-            const details = describeRejection(error);
-            this.trace?.("session_start_phase_failed", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement", ...details });
-            reject(error);
-          });
-      });
+      await this.joinChannel(this.generation);
+      this.trace?.("session_start_phase_succeeded", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement" });
+      this.generation += 1;
+      this.retryAttempt = 0;
       this.trace?.("session_start_phase_succeeded", { reason: "channel_join_request", sessionPhase: "channel_join_request" });
     } catch (error) {
+      this.trace?.("session_start_phase_failed", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement", ...describeRejection(error) });
+      this.scheduleRetry(this.generation);
       this.trace?.("session_start_phase_failed", { reason: "channel_join_request", sessionPhase: "channel_join_request", ...describeRejection(error) });
       throw error;
     }
@@ -343,6 +334,75 @@ export class DirectedCallSession {
     }
     recordDirectedCallDiagnostic("socket", { socket: "connected" });
     return true;
+  }
+
+  private createChannel(): void {
+    this.channel = this.socket.channel(this.topic, { ...buildJoin(this.deviceId) });
+    this.channelRefs.push(
+      { event: DIRECTED_CALL_EVENTS.state, ref: this.channel.on(DIRECTED_CALL_EVENTS.state, (payload) => { this.projections.apply(payload); }) },
+      {
+        event: DIRECTED_CALL_EVENTS.signal,
+        ref: this.channel.on(DIRECTED_CALL_EVENTS.signal, (payload) => {
+          const signal = decodeSignal(payload);
+          if (!signal) return;
+          this.signalListeners.forEach((listener) => listener(signal));
+        }),
+      },
+    );
+  }
+
+  private async joinChannel(generation: number): Promise<void> {
+    const channel = this.channel;
+    if (!channel || this.disposed || generation !== this.generation || !this.socketAvailable) return;
+    await new Promise<void>((resolve, reject) => {
+      channel
+        .join()
+        .receive("ok", () => {
+          if (this.disposed || generation !== this.generation || !this.socketAvailable) {
+            reject(new Error("Stale directed-call topic join acknowledgement"));
+            return;
+          }
+          resolve();
+        })
+        .receive("error", reject)
+        .receive("timeout", () => reject(new Error("Directed-call topic join timed out")));
+    });
+  }
+
+  private async recoverConnection(): Promise<void> {
+    if (this.disposed || !this.socketAvailable) return;
+    const generation = ++this.generation;
+    this.cancelRetry();
+    this.channelRefs.forEach(({ event, ref }) => this.channel?.off(event, ref));
+    this.channel?.leave();
+    this.channelRefs.length = 0;
+    this.createChannel();
+    const channel = this.channel;
+    if (!channel) return;
+    channel
+      .join()
+      .receive("ok", () => {
+        if (this.disposed || generation !== this.generation || !this.socketAvailable) return;
+        void this.requestSync().catch(() => undefined);
+      })
+      .receive("error", () => this.scheduleRetry(generation))
+      .receive("timeout", () => this.scheduleRetry(generation));
+  }
+
+  private scheduleRetry(generation: number): void {
+    if (this.retryTimer || this.disposed || generation !== this.generation || !this.socketAvailable) return;
+    const delay = Math.min(this.retry.maxDelayMs, this.retry.baseDelayMs * 2 ** this.retryAttempt);
+    this.retryAttempt = Math.min(this.retryAttempt + 1, 31);
+    this.retryTimer = this.retry.setTimeout(() => {
+      this.retryTimer = null;
+      if (this.disposed || generation !== this.generation || !this.socketAvailable) return;
+      void this.recoverConnection();
+    }, delay);
+  }
+
+  private cancelRetry(): void {
+    if (this.retryTimer !== null) this.retry.clearTimeout(this.retryTimer);
+    this.retryTimer = null;
   }
 
   getProjection(callId: string): StateProjection | null {
@@ -405,23 +465,28 @@ export class DirectedCallSession {
   }
 
   async requestSync(_repairCallId?: string, traceStartupPhase = false): Promise<void> {
-    if (!this.channel || this.disposed || this.syncInFlight) return;
+    if (!this.channel || this.disposed || !this.socketAvailable) return;
+    if (this.syncInFlight) {
+      return this.syncInFlight;
+    }
 
-    this.syncInFlight = true;
-    const requestId = crypto.randomUUID();
-    try {
+    const generation = this.generation;
+    const run = async (): Promise<void> => {
+      const requestId = crypto.randomUUID();
       const payload = buildSync(
         requestId,
         this.deviceId,
-        this.getProjections()
-          .slice(0, 16)
-          .map(({ call_id, state_version }) => ({ call_id, state_version })),
+        this.getProjections().slice(0, 16).map(({ call_id, state_version }) => ({ call_id, state_version })),
       );
       await new Promise<void>((resolve, reject) => {
         if (traceStartupPhase) this.trace?.("session_start_phase_started", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement" });
         this.channel!
           .push(DIRECTED_CALL_EVENTS.sync, payload)
           .receive("ok", (response: unknown) => {
+            if (this.disposed || generation !== this.generation || !this.socketAvailable) {
+              resolve();
+              return;
+            }
             const decoded = decodeSyncResponse(response);
             if (!decoded || decoded.requestId !== requestId) {
               const error = new Error("Invalid directed-call sync response");
@@ -430,28 +495,32 @@ export class DirectedCallSession {
               return;
             }
             decoded.calls.sort(compareProjection).forEach((projection) => this.projections.apply(projection));
+            this.retryAttempt = 0;
             this.syncListeners.forEach((listener) => listener());
             if (traceStartupPhase) this.trace?.("session_start_phase_succeeded", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement" });
             resolve();
           })
-          .receive("error", (error) => {
-            if (traceStartupPhase) this.trace?.("session_start_phase_failed", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement", ...describeRejection(error) });
-            reject(error);
-          })
-          .receive("timeout", () => {
-            const error = new Error("Directed-call sync timed out");
-            if (traceStartupPhase) this.trace?.("session_start_phase_failed", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement", ...describeRejection(error) });
-            reject(error);
-          });
+          .receive("error", reject)
+          .receive("timeout", () => reject(new Error("Directed-call sync timed out")));
       });
+    };
+
+    this.syncInFlight = run();
+    try {
+      await this.syncInFlight;
+    } catch (error) {
+      this.scheduleRetry(generation);
+      throw error;
     } finally {
-      this.syncInFlight = false;
+      this.syncInFlight = null;
     }
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.cancelRetry();
+    this.generation += 1;
     if (this.socketOpenRef !== null) this.socket.off([this.socketOpenRef]);
     if (this.socketCloseRef !== null) this.socket.off([this.socketCloseRef]);
     this.channelRefs.forEach(({ event, ref }) => this.channel?.off(event, ref));

@@ -1,5 +1,5 @@
 import { Phone, PhoneOff, RotateCw } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Button } from "@/shared/components/Button";
 import { IncomingCallModal } from "../IncomingCallModal";
 import { PersistentRemoteAudioRenderer } from "./PersistentRemoteAudioRenderer";

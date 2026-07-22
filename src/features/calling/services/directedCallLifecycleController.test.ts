@@ -160,6 +160,23 @@ describe("DirectedCallLifecycleController", () => {
     expect(secondId).not.toBe(firstId);
   });
 
+  it("reconciles an ambiguous lifecycle acknowledgement through authoritative projection", async () => {
+    const session = createSession();
+    let rejectPush!: (error: unknown) => void;
+    session.pushCommand = vi.fn(() => new Promise((_, reject) => { rejectPush = reject; }));
+    const controller = new DirectedCallLifecycleController(session);
+    const operation = controller.accept(callId);
+
+    expect(controller.getSnapshot().pendingCommand?.commandId).toBeTruthy();
+    session.emit(state("accepted", 2));
+    expect(controller.getSnapshot()).toMatchObject({ projection: state("accepted", 2), pendingCommand: null, lastCommandError: null });
+
+    rejectPush(new DirectedCallSessionCommandError({ kind: "transport_timeout" }));
+    await expect(operation).resolves.toMatchObject({ status: "failed", error: { kind: "transport_timeout" } });
+    expect(controller.getSnapshot().lastCommandError).toBeNull();
+    expect(session.pushes).toHaveLength(0);
+  });
+
   it("bounds explicit retries without generating a replacement logical command", async () => {
     const timeout = () => new DirectedCallSessionCommandError({ kind: "transport_timeout" });
     const session = createSession([timeout(), timeout(), timeout()]);

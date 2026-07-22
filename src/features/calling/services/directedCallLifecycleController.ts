@@ -189,6 +189,7 @@ export class DirectedCallLifecycleController {
   private lastCommandError: ControllerCommandError | null = null;
   private disposed = false;
   private generation = 0;
+  private readonly authoritativelyAdvancedCommands = new Set<string>();
 
   constructor(session: DirectedCallSessionPort) {
     this.session = session;
@@ -340,6 +341,7 @@ export class DirectedCallLifecycleController {
     this.preparing = false;
     this.pendingCommand = null;
     this.lastCommandError = null;
+    this.authoritativelyAdvancedCommands.clear();
     this.emit();
   }
 
@@ -351,12 +353,18 @@ export class DirectedCallLifecycleController {
     this.controlledCallId = null;
     this.pendingCommand = null;
     this.lastCommandError = null;
+    this.authoritativelyAdvancedCommands.clear();
     this.unsubscribeProjection();
     this.unsubscribeSync();
     this.listeners.clear();
   }
 
   private selectFromProjection(projection: StateProjection): void {
+    if (this.pendingCommand?.callId === projection.call_id) {
+      this.authoritativelyAdvancedCommands.add(this.pendingCommand.commandId);
+      this.pendingCommand = null;
+      this.lastCommandError = null;
+    }
     if (this.preparing) {
       if (this.controlledCallId === projection.call_id) this.preparing = false;
       return;
@@ -454,6 +462,9 @@ export class DirectedCallLifecycleController {
       };
     } catch (error) {
       const mapped = mapTransportError(error);
+      if (this.authoritativelyAdvancedCommands.delete(record.commandId)) {
+        return { status: "failed", event: record.event, commandId: record.commandId, error: mapped };
+      }
       if (mapped.kind !== "transport_timeout" && mapped.kind !== "transport_error") {
         this.pendingCommand = null;
       }

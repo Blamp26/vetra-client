@@ -334,4 +334,60 @@ describe("DirectedCallSession", () => {
     expect(next.topic).toBe("directed_call:" + nextUser);
     expect(next.getProjection(callId)).toBeNull();
   });
+
+  it("retries a transient sync failure with bounded injectable backoff and resets after success", async () => {
+    const channel = createMockChannel();
+    channel.queueResponse(new Error("temporary sync failure"));
+    const socket = createMockSocket(channel);
+    const timers: Array<{ callback: () => void; delay: number }> = [];
+    const clearTimeout = vi.fn();
+    const session = new DirectedCallSession({
+      socket: socket as unknown as Socket,
+      publicUserRef: peerId,
+      deviceId,
+      enabled: true,
+      retry: {
+        setTimeout: (callback, delay) => {
+          timers.push({ callback, delay });
+          return timers.length as unknown as ReturnType<typeof setTimeout>;
+        },
+        clearTimeout,
+        baseDelayMs: 25,
+        maxDelayMs: 40,
+      },
+    });
+
+    await expect(session.start()).rejects.toBeTruthy();
+    expect(timers).toHaveLength(1);
+    expect(timers[0].delay).toBe(25);
+    timers.shift()!.callback();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(channel.pushes.filter(({ event }) => event === "call:sync")).toHaveLength(2);
+
+    channel.queueResponse(new Error("temporary sync failure"));
+    socket.emitOpen();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(timers[0]?.delay).toBe(25);
+  });
+
+  it("cancels retry work on disposal", async () => {
+    const channel = createMockChannel();
+    channel.queueResponse(new Error("temporary sync failure"));
+    const socket = createMockSocket(channel);
+    const timer = vi.fn(() => 1 as unknown as ReturnType<typeof setTimeout>);
+    const clearTimeout = vi.fn();
+    const session = new DirectedCallSession({
+      socket: socket as unknown as Socket,
+      publicUserRef: peerId,
+      deviceId,
+      enabled: true,
+      retry: { setTimeout: timer, clearTimeout },
+    });
+
+    await expect(session.start()).rejects.toBeTruthy();
+    session.dispose();
+    expect(clearTimeout).toHaveBeenCalledWith(1);
+  });
 });
