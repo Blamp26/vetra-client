@@ -11,7 +11,9 @@ export type CallAuthorityTraceEventName =
   | "release_requested" | "rust_release_received" | "rust_release_accepted"
   | "rust_release_rejected" | "frontend_state_released" | "window_destroy_cleanup"
   | "native_holder_snapshot" | "runtime_start_requested" | "session_start_succeeded"
-  | "runtime_start_succeeded" | "runtime_start_failed";
+  | "runtime_start_succeeded" | "runtime_start_failed"
+  | "session_start_phase_started" | "session_start_phase_succeeded"
+  | "session_start_phase_failed";
 
 export type CallAuthorityDisposeReason =
   | "stale_generation"
@@ -36,6 +38,9 @@ export interface CallAuthorityTraceEvent {
   startupPhase?: "session_start" | "runtime_start";
   errorType?: string;
   errorMessage?: string;
+  sessionPhase?: string;
+  errorCategory?: string;
+  errorDetails?: string;
 }
 
 export interface NativeHolderSnapshot {
@@ -246,7 +251,7 @@ export class CallAuthorityOwnership {
     return () => this.traceListeners.delete(listener);
   }
 
-  trace(event: CallAuthorityTraceEventName, details: Partial<Pick<CallAuthorityTraceEvent, "reason" | "outcome" | "leaseSuffix" | "rustHolderPresent" | "startupPhase" | "errorType" | "errorMessage">> = {}): void {
+  trace(event: CallAuthorityTraceEventName, details: Partial<Pick<CallAuthorityTraceEvent, "reason" | "outcome" | "leaseSuffix" | "rustHolderPresent" | "startupPhase" | "errorType" | "errorMessage" | "sessionPhase" | "errorCategory" | "errorDetails">> = {}): void {
     if (!import.meta.env.DEV) return;
     const traceEvent: CallAuthorityTraceEvent = {
       sequence: ++this.traceSequence,
@@ -263,6 +268,9 @@ export class CallAuthorityOwnership {
       startupPhase: details.startupPhase,
       errorType: details.errorType,
       errorMessage: details.errorMessage,
+      sessionPhase: details.sessionPhase,
+      errorCategory: details.errorCategory,
+      errorDetails: details.errorDetails,
     };
     this.traceRustHolderPresent = traceEvent.rustHolderPresent;
     this.traceEvents.push(traceEvent);

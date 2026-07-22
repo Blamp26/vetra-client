@@ -48,15 +48,20 @@ type OwnershipFactory = (options: ConstructorParameters<typeof CallAuthorityOwne
 const defaultOwnershipFactory: OwnershipFactory = (options) => new CallAuthorityOwnership(options);
 
 function describeStartupError(error: unknown): { errorType: string; errorMessage: string } {
-  const errorType = error instanceof Error && error.name ? error.name.slice(0, 64) : typeof error;
-  const rawMessage = error instanceof Error ? error.message : String(error);
-  const errorMessage = rawMessage
-    .replace(/https?:\/\/[^\s]+/gi, "<redacted-url>")
-    .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "<redacted-uuid>")
-    .replace(/\b(?:token|authorization|password|sdp|ice|payload|message|user|device)\b[^,;]*/gi, "<redacted-sensitive-field>")
-    .replace(/[A-Za-z0-9_-]{32,}/g, "<redacted-id>")
-    .slice(0, 160) || "unknown startup error";
-  return { errorType, errorMessage };
+  if (error instanceof Error) return { errorType: error.name.slice(0, 64) || "Error", errorMessage: "error_instance" };
+  if (error === null) return { errorType: "null", errorMessage: "null" };
+  if (typeof error !== "object") return { errorType: typeof error, errorMessage: "primitive" };
+  if (Array.isArray(error)) return { errorType: "array", errorMessage: "array_value" };
+
+  const record = error as Record<string, unknown>;
+  const keys = Object.keys(record).sort().slice(0, 12);
+  const safeFields = ["status", "reason", "code", "event"].flatMap((key) => {
+    const value = record[key];
+    if (typeof value === "string" && value.length > 0) return [`${key}=${value.replace(/[^A-Za-z0-9._:/ -]/g, "").slice(0, 64)}`];
+    if (typeof value === "number" || typeof value === "boolean") return [`${key}=${String(value)}`];
+    return [];
+  });
+  return { errorType: "plain_object", errorMessage: [`keys=${keys.join(",") || "none"}`, ...safeFields].join("; ") };
 }
 
 export function CallRuntimeBoundary({
@@ -154,6 +159,7 @@ export function CallRuntimeBoundary({
         publicUserRef,
         deviceId,
         enabled: true,
+        trace: (event, details) => ownership.trace?.(event, details),
       });
       const controller = new DirectedCallLifecycleController(session);
       const incoming = new DirectedCallIncomingCoordinator(session, controller, { enabled: true });

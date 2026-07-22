@@ -30,6 +30,7 @@ function createMockChannel() {
   const pushes: Array<{ event: string; payload: unknown }> = [];
   let nextRef = 1;
   let nextResponse: unknown[] = [];
+  let joinResponse: { event: "ok" | "error" | "timeout"; value?: unknown } = { event: "ok" };
 
   const channel = {
     on: vi.fn((event: string, handler: Handler) => {
@@ -62,8 +63,8 @@ function createMockChannel() {
       };
     }),
     join: vi.fn(() => ({
-      receive(receiveEvent: string, callback: () => void) {
-        if (receiveEvent === "ok") callback();
+      receive(receiveEvent: string, callback: (value?: unknown) => void) {
+        if (receiveEvent === joinResponse.event) callback(joinResponse.value);
         return this;
       },
     })),
@@ -71,6 +72,9 @@ function createMockChannel() {
     pushes,
     queueResponse(response: unknown) {
       nextResponse.push(response);
+    },
+    queueJoinResponse(event: "ok" | "error" | "timeout", value?: unknown) {
+      joinResponse = { event, value };
     },
   };
 
@@ -118,11 +122,13 @@ describe("DirectedCallSession", () => {
   it("joins the exact directed-call topic and performs bounded initial sync", async () => {
     const channel = createMockChannel();
     const socket = createMockSocket(channel);
+    const trace = vi.fn();
     const session = new DirectedCallSession({
       socket: socket as unknown as Socket,
       publicUserRef: peerId,
       deviceId,
       enabled: true,
+      trace,
     });
 
     await session.start();
@@ -136,6 +142,46 @@ describe("DirectedCallSession", () => {
     expect(channel.push).toHaveBeenCalledTimes(1);
     expect(channel.pushes[0].event).toBe("call:sync");
     expect((channel.pushes[0].payload as { known_calls: unknown[] }).known_calls).toEqual([]);
+    expect(trace.mock.calls.filter(([event]) => event === "session_start_phase_succeeded").map(([, details]) => details.sessionPhase)).toEqual([
+      "channel_creation",
+      "subscription_installation",
+      "channel_join_acknowledgement",
+      "channel_join_request",
+      "sync_acknowledgement",
+      "initial_request_sync",
+    ]);
+  });
+
+  it("traces each startup phase and safely serializes a Phoenix plain-object join rejection", async () => {
+    const channel = createMockChannel();
+    channel.queueJoinResponse("error", { status: "error", reason: "unauthorized", code: "unauthorized", secret: "must not log" });
+    const socket = createMockSocket(channel);
+    const trace = vi.fn();
+    const session = new DirectedCallSession({
+      socket: socket as unknown as Socket,
+      publicUserRef: peerId,
+      deviceId,
+      enabled: true,
+      trace,
+    });
+
+    await expect(session.start()).rejects.toEqual({ status: "error", reason: "unauthorized", code: "unauthorized", secret: "must not log" });
+    expect(trace.mock.calls.map(([event, details]) => [event, details.sessionPhase])).toEqual([
+      ["session_start_phase_started", "channel_creation"],
+      ["session_start_phase_succeeded", "channel_creation"],
+      ["session_start_phase_started", "subscription_installation"],
+      ["session_start_phase_succeeded", "subscription_installation"],
+      ["session_start_phase_started", "channel_join_request"],
+      ["session_start_phase_started", "channel_join_acknowledgement"],
+      ["session_start_phase_failed", "channel_join_acknowledgement"],
+      ["session_start_phase_failed", "channel_join_request"],
+    ]);
+    const failure = trace.mock.calls.find(([event]) => event === "session_start_phase_failed");
+    expect(failure?.[1]).toMatchObject({
+      errorCategory: "plain_object",
+      errorDetails: "keys=code,reason,secret,status; status=error; reason=unauthorized; code=unauthorized",
+    });
+    expect(failure?.[1].errorDetails).not.toContain("must not log");
   });
 
   it("classifies projections and publishes only valid durable states", () => {

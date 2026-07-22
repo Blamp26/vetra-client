@@ -36,7 +36,26 @@ export interface DirectedCallSessionOptions {
   publicUserRef: string;
   deviceId?: string;
   enabled?: boolean;
+  trace?: DirectedCallSessionTrace;
 }
+
+export type DirectedCallSessionPhase =
+  | "channel_creation"
+  | "subscription_installation"
+  | "channel_join_request"
+  | "channel_join_acknowledgement"
+  | "initial_request_sync"
+  | "sync_acknowledgement";
+
+export type DirectedCallSessionTrace = (
+  event: "session_start_phase_started" | "session_start_phase_succeeded" | "session_start_phase_failed",
+  details: {
+    reason: string;
+    sessionPhase: DirectedCallSessionPhase;
+    errorCategory?: string;
+    errorDetails?: string;
+  },
+) => void;
 
 export type DirectedCallCommandTransportError =
   | { kind: "disposed" }
@@ -68,6 +87,32 @@ function semanticallyEqual(left: StateProjection, right: StateProjection): boole
 
 function compareProjection(left: StateProjection, right: StateProjection): number {
   return left.created_at.localeCompare(right.created_at) || left.call_id.localeCompare(right.call_id);
+}
+
+const SAFE_REJECTION_KEYS = ["status", "reason", "code", "event"] as const;
+
+function describeRejection(value: unknown): { errorCategory: string; errorDetails: string } {
+  if (value instanceof Error) {
+    return { errorCategory: value.name || "Error", errorDetails: "error_instance" };
+  }
+  if (value === null) return { errorCategory: "null", errorDetails: "null" };
+  if (typeof value !== "object") return { errorCategory: typeof value, errorDetails: "primitive" };
+  if (Array.isArray(value)) return { errorCategory: "array", errorDetails: "array_value" };
+
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort().slice(0, 12);
+  const safeFields = SAFE_REJECTION_KEYS.flatMap((key) => {
+    const field = record[key];
+    if (typeof field === "string" && field.length > 0) {
+      return [`${key}=${field.replace(/[^A-Za-z0-9._:/ -]/g, "").slice(0, 64)}`];
+    }
+    if (typeof field === "number" || typeof field === "boolean") return [`${key}=${String(field)}`];
+    return [];
+  });
+  return {
+    errorCategory: "plain_object",
+    errorDetails: [`keys=${keys.join(",") || "none"}`, ...safeFields].join("; "),
+  };
 }
 
 export function createDirectedCallProjectionStore(
@@ -155,6 +200,7 @@ export class DirectedCallSession {
 
   private readonly socket: Socket;
   private readonly enabled: boolean;
+  private readonly trace?: DirectedCallSessionTrace;
   private channel: Channel | null = null;
   private disposed = false;
   private syncInFlight = false;
@@ -171,6 +217,7 @@ export class DirectedCallSession {
     this.deviceId = options.deviceId ?? getOrCreateDirectedCallDeviceId();
     this.topic = DIRECTED_CALL_TOPIC_PREFIX + this.publicUserRef;
     this.enabled = options.enabled ?? false;
+    this.trace = options.trace;
     this.projections = createDirectedCallProjectionStore((callId) => {
       void this.requestSync(callId);
     });
@@ -183,45 +230,90 @@ export class DirectedCallSession {
     if (!this.enabled || this.disposed || !this.publicUserRef) return false;
 
     if (this.channel) return true;
-    this.channel = this.socket.channel(this.topic, {
-      ...buildJoin(this.deviceId),
-    });
-
-    this.channelRefs.push(
-      {
-        event: DIRECTED_CALL_EVENTS.state,
-        ref: this.channel.on(DIRECTED_CALL_EVENTS.state, (payload) => {
-          this.projections.apply(payload);
-        }),
-      },
-      {
-        event: DIRECTED_CALL_EVENTS.signal,
-        ref: this.channel.on(DIRECTED_CALL_EVENTS.signal, (payload) => {
-          const signal = decodeSignal(payload);
-          if (!signal) return;
-          this.signalListeners.forEach((listener) => listener(signal));
-        }),
-      },
-    );
-
-    this.socketOpenRef = this.socket.onOpen(() => {
-      recordDirectedCallDiagnostic("socket", { socket: "connected" });
-      void this.requestSync();
-    });
-    if (typeof this.socket.onClose === "function") {
-      this.socketCloseRef = this.socket.onClose(() => {
-        recordDirectedCallDiagnostic("socket", { socket: "disconnected" });
+    this.trace?.("session_start_phase_started", { reason: "channel_creation", sessionPhase: "channel_creation" });
+    try {
+      this.channel = this.socket.channel(this.topic, {
+        ...buildJoin(this.deviceId),
       });
+      this.trace?.("session_start_phase_succeeded", { reason: "channel_creation", sessionPhase: "channel_creation" });
+    } catch (error) {
+      const details = describeRejection(error);
+      this.trace?.("session_start_phase_failed", { reason: "channel_creation", sessionPhase: "channel_creation", ...details });
+      throw error;
     }
 
-    await new Promise<void>((resolve, reject) => {
-      this.channel!
-        .join()
-        .receive("ok", () => resolve())
-        .receive("error", (reason) => reject(reason))
-        .receive("timeout", () => reject(new Error("Directed-call topic join timed out")));
-    });
-    await this.requestSync();
+    this.trace?.("session_start_phase_started", { reason: "subscription_installation", sessionPhase: "subscription_installation" });
+    try {
+      this.channelRefs.push(
+        {
+          event: DIRECTED_CALL_EVENTS.state,
+          ref: this.channel.on(DIRECTED_CALL_EVENTS.state, (payload) => {
+            this.projections.apply(payload);
+          }),
+        },
+        {
+          event: DIRECTED_CALL_EVENTS.signal,
+          ref: this.channel.on(DIRECTED_CALL_EVENTS.signal, (payload) => {
+            const signal = decodeSignal(payload);
+            if (!signal) return;
+            this.signalListeners.forEach((listener) => listener(signal));
+          }),
+        },
+      );
+
+      this.socketOpenRef = this.socket.onOpen(() => {
+        recordDirectedCallDiagnostic("socket", { socket: "connected" });
+        void this.requestSync();
+      });
+      if (typeof this.socket.onClose === "function") {
+        this.socketCloseRef = this.socket.onClose(() => {
+          recordDirectedCallDiagnostic("socket", { socket: "disconnected" });
+        });
+      }
+      this.trace?.("session_start_phase_succeeded", { reason: "subscription_installation", sessionPhase: "subscription_installation" });
+    } catch (error) {
+      const details = describeRejection(error);
+      this.trace?.("session_start_phase_failed", { reason: "subscription_installation", sessionPhase: "subscription_installation", ...details });
+      throw error;
+    }
+
+    this.trace?.("session_start_phase_started", { reason: "channel_join_request", sessionPhase: "channel_join_request" });
+    try {
+      this.trace?.("session_start_phase_started", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement" });
+      await new Promise<void>((resolve, reject) => {
+        this.channel!
+          .join()
+          .receive("ok", () => {
+            this.trace?.("session_start_phase_succeeded", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement" });
+            resolve();
+          })
+          .receive("error", (reason) => {
+            const details = describeRejection(reason);
+            this.trace?.("session_start_phase_failed", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement", ...details });
+            reject(reason);
+          })
+          .receive("timeout", () => {
+            const error = new Error("Directed-call topic join timed out");
+            const details = describeRejection(error);
+            this.trace?.("session_start_phase_failed", { reason: "channel_join_acknowledgement", sessionPhase: "channel_join_acknowledgement", ...details });
+            reject(error);
+          });
+      });
+      this.trace?.("session_start_phase_succeeded", { reason: "channel_join_request", sessionPhase: "channel_join_request" });
+    } catch (error) {
+      this.trace?.("session_start_phase_failed", { reason: "channel_join_request", sessionPhase: "channel_join_request", ...describeRejection(error) });
+      throw error;
+    }
+
+    this.trace?.("session_start_phase_started", { reason: "initial_request_sync", sessionPhase: "initial_request_sync" });
+    try {
+      await this.requestSync(undefined, true);
+      this.trace?.("session_start_phase_succeeded", { reason: "initial_request_sync", sessionPhase: "initial_request_sync" });
+    } catch (error) {
+      const details = describeRejection(error);
+      this.trace?.("session_start_phase_failed", { reason: "initial_request_sync", sessionPhase: "initial_request_sync", ...details });
+      throw error;
+    }
     recordDirectedCallDiagnostic("socket", { socket: "connected" });
     return true;
   }
@@ -285,7 +377,7 @@ export class DirectedCallSession {
     });
   }
 
-  async requestSync(_repairCallId?: string): Promise<void> {
+  async requestSync(_repairCallId?: string, traceStartupPhase = false): Promise<void> {
     if (!this.channel || this.disposed || this.syncInFlight) return;
 
     this.syncInFlight = true;
@@ -299,20 +391,31 @@ export class DirectedCallSession {
           .map(({ call_id, state_version }) => ({ call_id, state_version })),
       );
       await new Promise<void>((resolve, reject) => {
+        if (traceStartupPhase) this.trace?.("session_start_phase_started", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement" });
         this.channel!
           .push(DIRECTED_CALL_EVENTS.sync, payload)
           .receive("ok", (response: unknown) => {
             const decoded = decodeSyncResponse(response);
             if (!decoded || decoded.requestId !== requestId) {
-              reject(new Error("Invalid directed-call sync response"));
+              const error = new Error("Invalid directed-call sync response");
+              if (traceStartupPhase) this.trace?.("session_start_phase_failed", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement", ...describeRejection(error) });
+              reject(error);
               return;
             }
             decoded.calls.sort(compareProjection).forEach((projection) => this.projections.apply(projection));
             this.syncListeners.forEach((listener) => listener());
+            if (traceStartupPhase) this.trace?.("session_start_phase_succeeded", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement" });
             resolve();
           })
-          .receive("error", reject)
-          .receive("timeout", () => reject(new Error("Directed-call sync timed out")));
+          .receive("error", (error) => {
+            if (traceStartupPhase) this.trace?.("session_start_phase_failed", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement", ...describeRejection(error) });
+            reject(error);
+          })
+          .receive("timeout", () => {
+            const error = new Error("Directed-call sync timed out");
+            if (traceStartupPhase) this.trace?.("session_start_phase_failed", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement", ...describeRejection(error) });
+            reject(error);
+          });
       });
     } finally {
       this.syncInFlight = false;

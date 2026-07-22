@@ -209,7 +209,7 @@ describe("CallRuntimeBoundary", () => {
       reason: "runtime_start_failed",
       startupPhase: "session_start",
       errorType: "Error",
-      errorMessage: "topic join failed for <redacted-sensitive-field>",
+      errorMessage: "error_instance",
     });
   });
 
