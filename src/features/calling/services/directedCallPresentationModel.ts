@@ -208,6 +208,7 @@ export class DirectedCallPresentationModel {
   private initiationPromise: Promise<LifecycleCommandOutcome> | null = null;
   private initiationResult: InitiateResult | null = null;
   private initiationGeneration = 0;
+  private selectedCallId: string | null = null;
   private disposed = false;
 
   constructor(
@@ -242,6 +243,13 @@ export class DirectedCallPresentationModel {
     this.unsubscribeController = lifecycleController.subscribe((snapshot) => {
       this.controllerSnapshot = snapshot;
       const selectedCallId = snapshot.projection?.call_id ?? snapshot.callId;
+      if (selectedCallId && this.selectedCallId && selectedCallId !== this.selectedCallId) {
+        this.clearActionRecord();
+        this.fallbackPeer = null;
+        this.initiationResult = null;
+        this.cancelIntent = false;
+      }
+      this.selectedCallId = selectedCallId ?? null;
       if (selectedCallId && this.actionRecord && this.actionRecord.callId !== selectedCallId) {
         this.clearActionRecord();
         this.fallbackPeer = null;
@@ -408,6 +416,7 @@ export class DirectedCallPresentationModel {
     this.authoritativeProjection = null;
     this.fallbackPeer = null;
     this.controllerSnapshot = { ...this.controllerSnapshot, callId: null, projection: null, preparing: false, pendingCommand: null };
+    this.selectedCallId = null;
     this.incomingSnapshot = { ...this.incomingSnapshot, callId: null, projection: null, visible: false };
     this.clearActionRecord();
     this.cancelIntent = false;

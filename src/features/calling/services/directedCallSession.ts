@@ -242,6 +242,7 @@ export class DirectedCallSession {
   private socketAvailable = true;
   private generation = 0;
   private syncInFlight: Promise<void> | null = null;
+  private syncGeneration: number | null = null;
   private retryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private retryAttempt = 0;
   private readonly projectionListeners = new Set<ProjectionListener>();
@@ -337,12 +338,15 @@ export class DirectedCallSession {
   }
 
   private createChannel(): void {
-    this.channel = this.socket.channel(this.topic, { ...buildJoin(this.deviceId) });
+    const channel = this.socket.channel(this.topic, { ...buildJoin(this.deviceId) });
+    this.channel = channel;
+    const isCurrent = () => !this.disposed && this.channel === channel;
     this.channelRefs.push(
-      { event: DIRECTED_CALL_EVENTS.state, ref: this.channel.on(DIRECTED_CALL_EVENTS.state, (payload) => { this.projections.apply(payload); }) },
+      { event: DIRECTED_CALL_EVENTS.state, ref: channel.on(DIRECTED_CALL_EVENTS.state, (payload) => { if (isCurrent()) this.projections.apply(payload); }) },
       {
         event: DIRECTED_CALL_EVENTS.signal,
-        ref: this.channel.on(DIRECTED_CALL_EVENTS.signal, (payload) => {
+        ref: channel.on(DIRECTED_CALL_EVENTS.signal, (payload) => {
+          if (!isCurrent()) return;
           const signal = decodeSignal(payload);
           if (!signal) return;
           this.signalListeners.forEach((listener) => listener(signal));
@@ -466,7 +470,7 @@ export class DirectedCallSession {
 
   async requestSync(_repairCallId?: string, traceStartupPhase = false): Promise<void> {
     if (!this.channel || this.disposed || !this.socketAvailable) return;
-    if (this.syncInFlight) {
+    if (this.syncInFlight && this.syncGeneration === this.generation) {
       return this.syncInFlight;
     }
 
@@ -476,7 +480,10 @@ export class DirectedCallSession {
       const payload = buildSync(
         requestId,
         this.deviceId,
-        this.getProjections().slice(0, 16).map(({ call_id, state_version }) => ({ call_id, state_version })),
+        this.getProjections()
+          .sort(compareProjection)
+          .slice(0, 16)
+          .map(({ call_id, state_version }) => ({ call_id, state_version })),
       );
       await new Promise<void>((resolve, reject) => {
         if (traceStartupPhase) this.trace?.("session_start_phase_started", { reason: "sync_acknowledgement", sessionPhase: "sync_acknowledgement" });
@@ -505,14 +512,19 @@ export class DirectedCallSession {
       });
     };
 
-    this.syncInFlight = run();
+    const syncPromise = run();
+    this.syncInFlight = syncPromise;
+    this.syncGeneration = generation;
     try {
-      await this.syncInFlight;
+      await syncPromise;
     } catch (error) {
       this.scheduleRetry(generation);
       throw error;
     } finally {
-      this.syncInFlight = null;
+      if (this.syncInFlight === syncPromise) {
+        this.syncInFlight = null;
+        this.syncGeneration = null;
+      }
     }
   }
 

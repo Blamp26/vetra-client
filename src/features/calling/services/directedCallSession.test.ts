@@ -239,6 +239,27 @@ describe("DirectedCallSession", () => {
     ]);
   });
 
+  it("orders reconnect sync hints deterministically instead of using map insertion order", async () => {
+    const channel = createMockChannel();
+    const socket = createMockSocket(channel);
+    const session = new DirectedCallSession({
+      socket: socket as unknown as Socket,
+      publicUserRef: peerId,
+      deviceId,
+      enabled: true,
+    });
+    const earlierId = "22222222-2222-4222-8222-222222222222";
+    await session.start();
+    channel.emit("call:state", { ...state(2), call_id: earlierId });
+    channel.emit("call:state", state(4));
+    socket.emitOpen();
+
+    expect((channel.pushes[1].payload as { known_calls: unknown[] }).known_calls).toEqual([
+      { call_id: earlierId, state_version: 2 },
+      { call_id: callId, state_version: 4 },
+    ]);
+  });
+
   it("publishes a completion notification only after each successful sync", async () => {
     const channel = createMockChannel();
     const socket = createMockSocket(channel);
