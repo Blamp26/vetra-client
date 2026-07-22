@@ -2,11 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getUser, useAppStoreMock, persistentCallMock, recordDiagnostic } = vi.hoisted(() => ({
+const { getUser, useAppStoreMock, persistentCallMock } = vi.hoisted(() => ({
   getUser: vi.fn(),
   useAppStoreMock: vi.fn(),
   persistentCallMock: { current: null as unknown },
-  recordDiagnostic: vi.fn(),
 }));
 
 vi.mock("@/store", () => ({
@@ -33,10 +32,6 @@ vi.mock("@/features/calling/context/PersistentCallContext", () => ({
     currentUserPublicUuidValid: false,
     stableDeviceUuidValid: false,
   }),
-}));
-
-vi.mock("@/features/calling/services/directedCallDiagnostics", () => ({
-  recordDirectedCallDiagnostic: recordDiagnostic,
 }));
 
 vi.mock("@/features/messaging/hooks/useUnifiedMessages", () => ({
@@ -95,7 +90,7 @@ import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 
 function makeState() {
   return {
-    currentUser: { id: 1, username: "me", display_name: "Me" },
+    currentUser: { id: 1, public_id: undefined as string | undefined, username: "me", display_name: "Me" },
     socketManager: null,
     onlineUserIds: new Set<number>(),
     userStatuses: {} as Record<number, "online" | "away" | "dnd" | "offline">,
@@ -152,7 +147,6 @@ describe("ChatWindow presence rendering", () => {
     getUser.mockReset();
     useAppStoreMock.mockReset();
     persistentCallMock.current = null;
-    recordDiagnostic.mockReset();
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
@@ -160,9 +154,10 @@ describe("ChatWindow presence rendering", () => {
 
   it("shows one persistent call button for an owner with a direct chat public ref", async () => {
     const state = makeState();
+    const startCall = vi.fn();
     persistentCallMock.current = {
       presentation: { phase: "idle" },
-      startCall: vi.fn(),
+      startCall,
     };
     useAppStoreMock.mockImplementation(
       (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
@@ -186,15 +181,19 @@ describe("ChatWindow presence rendering", () => {
           partnerRef: "33333333-3333-4333-8333-333333333333",
         }}
         call={makeCall()}
+        persistentCallAffordance={{ state: "owner" }}
       />,
     );
 
     expect(await screen.findByTestId("persistent-call-button")).toBeInTheDocument();
     expect(screen.getAllByTestId("persistent-call-button")).toHaveLength(1);
     expect(screen.getByTestId("persistent-call-button")).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId("persistent-call-button"));
+    expect(startCall).toHaveBeenCalledTimes(1);
+    expect(startCall).toHaveBeenCalledWith("33333333-3333-4333-8333-333333333333", "Alice");
   });
 
-  it("does not expose persistent controls for a group or an invalid peer ref", async () => {
+  it("does not expose persistent controls for groups, channels, or invalid peer refs", async () => {
     const state = makeState();
     persistentCallMock.current = { presentation: { phase: "idle" }, startCall: vi.fn() };
     useAppStoreMock.mockImplementation(
@@ -218,16 +217,115 @@ describe("ChatWindow presence rendering", () => {
 
     rerender(
       <ChatWindow
+        activeChat={{ type: "channel", channelId: 5, serverId: 6 }}
+        call={makeCall()}
+        persistentCallAffordance={{ state: "owner" }}
+      />,
+    );
+    expect(screen.queryByTestId("persistent-call-button")).not.toBeInTheDocument();
+
+    rerender(
+      <ChatWindow
         activeChat={{ type: "direct", partnerId: 2, partnerRef: "not-a-public-uuid" }}
         call={makeCall()}
       />,
     );
     expect(await screen.findByTestId("chat-header")).toBeInTheDocument();
     expect(screen.queryByTestId("persistent-call-button")).not.toBeInTheDocument();
-    await waitFor(() => expect(recordDiagnostic).toHaveBeenCalledWith("failure", expect.objectContaining({
-      failureKind: "persistent_call_controls_unavailable",
-      reason: "invalid_peer_public_id",
-    })));
+  });
+
+  it("shows a disabled managed-in-another-window affordance without invoking a call action", async () => {
+    const state = makeState();
+    const startCall = vi.fn();
+    persistentCallMock.current = null;
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      public_id: "33333333-3333-4333-8333-333333333333",
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2 }}
+        call={makeCall()}
+        persistentCallAffordance={{ state: "non_owner", reason: "managed_in_other_window" }}
+      />,
+    );
+
+    const button = await screen.findByTestId("persistent-call-button");
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleName("Звонками управляет другое окно");
+    expect(button).toHaveAttribute("title", "Звонками управляет другое окно");
+    fireEvent.click(button);
+    expect(startCall).not.toHaveBeenCalled();
+  });
+
+  it("shows a disabled unavailable affordance without exposing startup details", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      public_id: "33333333-3333-4333-8333-333333333333",
+      username: "alice",
+      display_name: "Alice",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 2 }}
+        call={makeCall()}
+        persistentCallAffordance={{ state: "unavailable", reason: "persistent_runtime_start_failed" }}
+      />,
+    );
+
+    const button = await screen.findByTestId("persistent-call-button");
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleName("Звонки временно недоступны");
+    expect(button).toHaveAttribute("title", "Звонки временно недоступны");
+    expect(button).not.toHaveAttribute("title", expect.stringContaining("persistent_runtime_start_failed"));
+  });
+
+  it("hides the personal-call affordance for the current user's own identity", async () => {
+    const state = makeState();
+    state.currentUser.public_id = "33333333-3333-4333-8333-333333333333";
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 1,
+      public_id: state.currentUser.public_id,
+      username: "me",
+      display_name: "Me",
+      bio: null,
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    render(
+      <ChatWindow
+        activeChat={{ type: "direct", partnerId: 1, partnerRef: state.currentUser.public_id }}
+        call={makeCall()}
+        persistentCallAffordance={{ state: "owner" }}
+      />,
+    );
+
+    await screen.findByTestId("chat-header");
+    expect(screen.queryByTestId("persistent-call-button")).not.toBeInTheDocument();
   });
 
   it("shows a normalized last-seen status when the user is offline", async () => {

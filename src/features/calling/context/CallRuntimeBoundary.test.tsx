@@ -200,9 +200,21 @@ describe("CallRuntimeBoundary", () => {
   it("traces the safe rejected session-start error before rolling ownership back", async () => {
     mocks.startupFailure = new Error("topic join failed for device 11111111-1111-4111-8111-111111111111");
     const ownership = makeTraceableOwnership("owner");
-    renderBoundary("persistent", ownership);
+    render(
+      <CallRuntimeBoundary
+        currentUser={USER_A}
+        socketManager={{ socket: {} } as never}
+        mode="persistent"
+        persistentMediaAvailable
+        ownershipFactory={() => ownership}
+        legacyContent={<div>legacy</div>}
+        nonCallContent={<div>non-call</div>}
+        persistentContent={(affordance) => <div data-testid={`affordance-${affordance.state}`}>{affordance.state}</div>}
+      />,
+    );
 
     await waitFor(() => expect(ownership.dispose).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId("affordance-unavailable")).toBeInTheDocument();
     expect(ownership.capturedTraceEvents).toContainEqual({ event: "runtime_start_requested", reason: "session_start", startupPhase: undefined, errorType: undefined, errorMessage: undefined });
     expect(ownership.capturedTraceEvents).toContainEqual({
       event: "runtime_start_failed",
@@ -247,6 +259,34 @@ describe("CallRuntimeBoundary", () => {
     expect(mocks.CallProvider).not.toHaveBeenCalled();
   });
 
+  it("renders presentation affordances without constructing persistent or legacy runtimes", async () => {
+    const nonOwner = makeOwnership("non_owner");
+    const unavailable = makeOwnership("unavailable");
+
+    const renderPresentation = (ownership: CallAuthorityOwnership) => render(
+      <CallRuntimeBoundary
+        currentUser={USER_A}
+        socketManager={{ socket: {} } as never}
+        mode="persistent"
+        persistentMediaAvailable
+        ownershipFactory={() => ownership}
+        legacyContent={<div data-testid="legacy-content">legacy</div>}
+        nonCallContent={<div>non-call</div>}
+        persistentContent={(affordance) => <div data-testid={`affordance-${affordance.state}`}>{affordance.state}</div>}
+      />,
+    );
+
+    renderPresentation(nonOwner);
+    expect(await screen.findByTestId("affordance-non_owner")).toBeInTheDocument();
+    expect(mocks.Session).not.toHaveBeenCalled();
+    expect(mocks.CallProvider).not.toHaveBeenCalled();
+
+    renderPresentation(unavailable);
+    expect(await screen.findByTestId("affordance-unavailable")).toBeInTheDocument();
+    expect(mocks.Session).not.toHaveBeenCalled();
+    expect(mocks.CallProvider).not.toHaveBeenCalled();
+  });
+
   it("fails closed when persistent browser media APIs are unavailable", async () => {
     render(
       <CallRuntimeBoundary
@@ -260,7 +300,7 @@ describe("CallRuntimeBoundary", () => {
         persistentContent={<div data-testid="persistent-content">persistent</div>}
       />,
     );
-    expect(await screen.findByTestId("non-call-content")).toBeInTheDocument();
+    expect(await screen.findByTestId("persistent-content")).toBeInTheDocument();
     await waitFor(() => expect(mocks.Session).not.toHaveBeenCalled());
   });
 

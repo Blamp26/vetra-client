@@ -4,8 +4,8 @@ import { Button } from "@/shared/components/Button";
 import { IncomingCallModal } from "../IncomingCallModal";
 import { PersistentRemoteAudioRenderer } from "./PersistentRemoteAudioRenderer";
 import { useOptionalPersistentCall, usePersistentCall } from "../../context/PersistentCallContext";
+import type { PersistentCallAffordance } from "../../context/CallRuntimeBoundary";
 import { isUuid } from "../../protocol/directedCallProtocol";
-import { recordDirectedCallDiagnostic } from "../../services/directedCallDiagnostics";
 
 export function PersistentCallSurface({ children }: { children: ReactNode }) {
   const call = usePersistentCall();
@@ -67,27 +67,29 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
   );
 }
 
-export function PersistentCallButton({ targetUserId, targetUsername }: { targetUserId: string | null | undefined; targetUsername: string }) {
+export function PersistentCallButton({
+  targetUserId,
+  targetUsername,
+  affordance,
+}: {
+  targetUserId: string | null | undefined;
+  targetUsername: string;
+  affordance: PersistentCallAffordance;
+}) {
   const call = useOptionalPersistentCall();
   const validTarget = typeof targetUserId === "string" && isUuid(targetUserId);
-
-  useEffect(() => {
-    if (call && validTarget) return;
-    recordDirectedCallDiagnostic("failure", {
-      failureKind: "persistent_call_controls_unavailable",
-      reason: !call ? "persistent_owner_context_unavailable" : "invalid_peer_public_id",
-    });
-  }, [call, validTarget]);
-
-  if (!call || !validTarget) return null;
-  const canStart = call.presentation.phase === "idle" || call.presentation.phase === "terminal";
+  const canStart = affordance.state === "owner" && Boolean(call) && validTarget &&
+    (call?.presentation.phase === "idle" || call?.presentation.phase === "terminal");
+  const unavailableLabel = affordance.state === "non_owner"
+    ? "Звонками управляет другое окно"
+    : "Звонки временно недоступны";
   return (
     <button
       className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-      onClick={() => { if (validTarget) void call.startCall(targetUserId, targetUsername); }}
-      disabled={!canStart || !validTarget}
-      title={validTarget ? `Call ${targetUsername}` : "Call unavailable: missing public user ID"}
-      aria-label={validTarget ? `Call ${targetUsername}` : "Call unavailable"}
+      onClick={() => { if (canStart && call) void call.startCall(targetUserId as string, targetUsername); }}
+      disabled={!canStart}
+      title={canStart ? `Call ${targetUsername}` : unavailableLabel}
+      aria-label={canStart ? `Call ${targetUsername}` : unavailableLabel}
       data-testid="persistent-call-button"
     >
       <Phone className="h-4 w-4" />

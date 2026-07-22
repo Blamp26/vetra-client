@@ -20,7 +20,7 @@ import { EmptyPane } from "@/shared/components/EmptyPane";
 import { Button } from "@/shared/components/Button";
 import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
 import { useCallContext } from "@/features/calling/context";
-import { CallRuntimeBoundary } from "@/features/calling/context/CallRuntimeBoundary";
+import { CallRuntimeBoundary, type PersistentCallAffordance } from "@/features/calling/context/CallRuntimeBoundary";
 import { PersistentCallSurface } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
@@ -89,13 +89,14 @@ function App() {
       socketManager={socketManager}
       legacyContent={<LegacyCallApplication />}
       nonCallContent={<AppShell call={null} />}
-      persistentContent={<PersistentCallApplication />}
+      persistentContent={(affordance) => <PersistentCallApplication affordance={affordance} />}
     />
   );
 }
 
-function PersistentCallApplication() {
-  return <PersistentCallSurface><AppShell call={null} /></PersistentCallSurface>;
+function PersistentCallApplication({ affordance }: { affordance: PersistentCallAffordance }) {
+  const appShell = <AppShell call={null} persistentCallAffordance={affordance} />;
+  return affordance.state === "owner" ? <PersistentCallSurface>{appShell}</PersistentCallSurface> : appShell;
 }
 
 function LegacyCallApplication() {
@@ -105,9 +106,10 @@ function LegacyCallApplication() {
 
 interface AppShellProps {
   call: UseCallReturn | null;
+  persistentCallAffordance?: PersistentCallAffordance;
 }
 
-function AppShell({ call }: AppShellProps) {
+function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const currentUser = useAppStore((s) => s.currentUser);
   const {
     status = "idle",
@@ -630,6 +632,7 @@ function AppShell({ call }: AppShellProps) {
             <ChatWindow
               activeChat={chatTarget}
               call={call}
+              persistentCallAffordance={persistentCallAffordance}
             />
           ) : !isSettingsRoute && activeChat?.type === "server" ? (
             <EmptyPane

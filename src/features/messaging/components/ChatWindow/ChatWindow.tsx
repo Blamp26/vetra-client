@@ -18,6 +18,7 @@ import { ActiveCallDock } from "@/features/calling/components/ActiveCallDock";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import { useOptionalPersistentCall } from "@/features/calling/context/PersistentCallContext";
+import type { PersistentCallAffordance } from "@/features/calling/context/CallRuntimeBoundary";
 import { PersistentCallButton } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
 import { PersistentCallDebugPanel, type PersistentPeerUuidSource } from "@/features/calling/components/PersistentCallDebugPanel";
 import { isUuid } from "@/features/calling/protocol/directedCallProtocol";
@@ -32,6 +33,7 @@ import { Search } from "lucide-react";
 interface Props {
   activeChat: ActiveChat;
   call: UseCallReturn | null;
+  persistentCallAffordance?: PersistentCallAffordance;
 }
 
 interface ReplyTarget {
@@ -66,7 +68,7 @@ function isActiveCallForChat(
   );
 }
 
-export function ChatWindow({ activeChat, call }: Props) {
+export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props) {
   const persistentCall = useOptionalPersistentCall();
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
@@ -367,10 +369,11 @@ export function ChatWindow({ activeChat, call }: Props) {
               onUnavailable={handleCallUnavailable}
               className="h-10 w-10 rounded-full border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-0"
             />}
-            {persistentCall && activeChat.type === "direct" && (
+            {persistentCallAffordance && activeChat.type === "direct" && persistentPeerPublicId && persistentPeerPublicId !== currentUser.public_id && (
               <PersistentCallButton
                 targetUserId={persistentPeerPublicId}
                 targetUsername={partner?.display_name || partner?.username || "user"}
+                affordance={persistentCallAffordance}
               />
             )}
             <IconButton

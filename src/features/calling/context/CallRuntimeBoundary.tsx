@@ -38,11 +38,16 @@ export interface CallRuntimeBoundaryProps {
   socketManager: SocketManager | null;
   legacyContent: ReactNode;
   nonCallContent: ReactNode;
-  persistentContent?: ReactNode;
+  persistentContent?: ReactNode | ((affordance: PersistentCallAffordance) => ReactNode);
   mode?: CallRuntimeMode;
   ownershipFactory?: OwnershipFactory;
   persistentMediaAvailable?: boolean;
 }
+
+export type PersistentCallAffordance =
+  | { state: "owner" }
+  | { state: "non_owner"; reason: "managed_in_other_window" }
+  | { state: "unavailable"; reason: string };
 
 type OwnershipFactory = (options: ConstructorParameters<typeof CallAuthorityOwnership>[0]) => CallAuthorityOwnership;
 const defaultOwnershipFactory: OwnershipFactory = (options) => new CallAuthorityOwnership(options);
@@ -275,11 +280,24 @@ export function CallRuntimeBoundary({
     ownershipEventTimeline: ownership.getTraceSnapshot?.().events ?? [],
   };
 
+  const persistentCallAffordance: PersistentCallAffordance =
+    mode === "persistent" && authority.state === "owner" && persistentRuntime
+      ? { state: "owner" }
+      : authority.state === "non_owner"
+        ? { state: "non_owner", reason: "managed_in_other_window" }
+        : { state: "unavailable", reason: "persistent_call_unavailable" };
+
+  const renderedPersistentContent = typeof persistentContent === "function"
+    ? persistentContent(persistentCallAffordance)
+    : persistentContent;
+
   let content: ReactNode = nonCallContent;
   if (mode === "legacy" && authority.state === "owner") {
     content = <CallProvider currentUserId={currentUser.id}>{legacyContent}</CallProvider>;
   } else if (mode === "persistent" && authority.state === "owner" && persistentRuntime && persistentContent !== undefined) {
-    content = <PersistentCallProvider runtime={persistentRuntime.services}>{persistentContent}</PersistentCallProvider>;
+    content = <PersistentCallProvider runtime={persistentRuntime.services}>{renderedPersistentContent}</PersistentCallProvider>;
+  } else if (mode === "persistent" && renderedPersistentContent !== undefined) {
+    content = renderedPersistentContent;
   }
 
   return (
