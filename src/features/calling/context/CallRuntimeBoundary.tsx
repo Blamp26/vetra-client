@@ -70,12 +70,13 @@ export function CallRuntimeBoundary({
     publicUserRef,
     numericUserId: currentUser.id,
     deviceId,
-  }), [currentUser.id, deviceId, mode, ownershipFactory, publicUserRef, mode === "persistent" ? socketManager : null]);
+  }), [currentUser.id, deviceId, mode, ownershipFactory, publicUserRef]);
   const [authority, setAuthority] = useState<CallAuthoritySnapshot>(() => ownership.getSnapshot());
   const ownershipTrace = ownership.getTraceSnapshot?.() ?? { events: [], lastEvent: null, nativeHolderPresent: false };
   const [persistentRuntime, setPersistentRuntime] = useState<PersistentRuntime | null>(null);
   const persistentRuntimeRef = useRef<PersistentRuntime | null>(null);
   const activeOwnershipRef = useRef<CallAuthorityOwnership | null>(null);
+  const acquiredOwnershipsRef = useRef(new Set<CallAuthorityOwnership>());
   const effectGenerationRef = useRef(0);
 
   useEffect(() => {
@@ -100,6 +101,8 @@ export function CallRuntimeBoundary({
       // replacement acquisition runs, while allowing StrictMode replay to
       // observe the still-owned runtime.
       await Promise.resolve();
+      if (mode === "persistent" && !socketManager) return;
+      acquiredOwnershipsRef.current.add(ownership);
       const acquired = await ownership.acquire();
       recordDirectedCallDiagnostic("runtime_mode", { mode, authority: acquired.state });
       if (cancelled || activeOwnershipRef.current !== ownership) {
@@ -199,6 +202,7 @@ export function CallRuntimeBoundary({
       unsubscribe();
       window.removeEventListener("beforeunload", onWindowDestroy);
       ownership.trace?.("boundary_cleanup", { reason: "react_effect_cleanup" });
+      if (!acquiredOwnershipsRef.current.has(ownership) && !localRuntime) return;
       ownership.trace?.("release_scheduled", { reason: "deferred_boundary_cleanup" });
       setTimeout(() => {
         if (effectGenerationRef.current !== effectGeneration && activeOwnershipRef.current === ownership) {

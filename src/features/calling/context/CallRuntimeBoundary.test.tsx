@@ -103,6 +103,82 @@ describe("CallRuntimeBoundary", () => {
     expect(mocks.MediaCoordinator).toHaveBeenCalledTimes(1);
   });
 
+  it("waits for the persistent socket prerequisite without releasing a granted owner", async () => {
+    const ownership = makeOwnership("owner");
+    const view = render(
+      <CallRuntimeBoundary
+        currentUser={USER_A}
+        socketManager={null}
+        mode="persistent"
+        persistentMediaAvailable
+        ownershipFactory={() => ownership}
+        legacyContent={<div>legacy</div>}
+        nonCallContent={<div data-testid="non-call-content">messaging</div>}
+        persistentContent={<div data-testid="persistent-content">persistent</div>}
+      />,
+    );
+
+    await Promise.resolve();
+    expect(ownership.acquire).not.toHaveBeenCalled();
+    expect(ownership.dispose).not.toHaveBeenCalled();
+
+    view.rerender(
+      <CallRuntimeBoundary
+        currentUser={USER_A}
+        socketManager={{ socket: {} } as never}
+        mode="persistent"
+        persistentMediaAvailable
+        ownershipFactory={() => ownership}
+        legacyContent={<div>legacy</div>}
+        nonCallContent={<div data-testid="non-call-content">messaging</div>}
+        persistentContent={<div data-testid="persistent-content">persistent</div>}
+      />,
+    );
+    await waitFor(() => expect(ownership.acquire).toHaveBeenCalledTimes(1));
+    expect(ownership.dispose).not.toHaveBeenCalled();
+
+    view.rerender(
+      <CallRuntimeBoundary
+        currentUser={USER_A}
+        socketManager={{ socket: {} } as never}
+        mode="persistent"
+        persistentMediaAvailable
+        ownershipFactory={() => ownership}
+        legacyContent={<div>legacy</div>}
+        nonCallContent={<div data-testid="non-call-content">messaging</div>}
+        persistentContent={<div data-testid="persistent-content">persistent</div>}
+      />,
+    );
+    expect(ownership.acquire).toHaveBeenCalledTimes(1);
+    expect(ownership.dispose).not.toHaveBeenCalled();
+
+    view.unmount();
+    await waitFor(() => expect(ownership.dispose).toHaveBeenCalledTimes(1));
+  });
+
+  it("releases only the old authority when the stable profile identity changes", async () => {
+    const first = makeOwnership("owner");
+    const second = makeOwnership("owner");
+    const view = renderBoundary("persistent", first);
+    await waitFor(() => expect(first.acquire).toHaveBeenCalledTimes(1));
+
+    view.rerender(
+      <CallRuntimeBoundary
+        currentUser={{ ...USER_A, public_id: "33333333-3333-4333-8333-333333333333" } as User}
+        socketManager={{ socket: {} } as never}
+        mode="persistent"
+        persistentMediaAvailable
+        ownershipFactory={() => second}
+        legacyContent={<div>legacy</div>}
+        nonCallContent={<div data-testid="non-call-content">messaging</div>}
+        persistentContent={<div data-testid="persistent-content">persistent</div>}
+      />,
+    );
+    await waitFor(() => expect(second.acquire).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(first.dispose).toHaveBeenCalledTimes(1));
+    expect(second.dispose).not.toHaveBeenCalled();
+  });
+
   it("fails closed for non-owners, unavailable ownership, and invalid persistent identity", async () => {
     renderBoundary("legacy", makeOwnership("non_owner"));
     expect(await screen.findByTestId("non-call-content")).toBeInTheDocument();
