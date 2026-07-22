@@ -89,6 +89,11 @@ type CommandRecord = PendingLifecycleCommand & {
   payload: unknown;
   generation: number;
 };
+type InFlightCommand = {
+  event: DirectedCallLifecycleEvent | "call:initiate";
+  callId: string | null;
+  promise: Promise<LifecycleCommandOutcome>;
+};
 
 const TERMINAL_STATES = new Set<CanonicalState>([
   "unavailable",
@@ -108,6 +113,34 @@ function isLiveProjection(projection: StateProjection): boolean {
 
 function compareProjection(left: StateProjection, right: StateProjection): number {
   return left.created_at.localeCompare(right.created_at) || left.call_id.localeCompare(right.call_id);
+}
+
+function confirmsCommand(command: PendingLifecycleCommand, projection: StateProjection): boolean {
+  if (command.callId !== projection.call_id) return false;
+  if (TERMINAL_STATES.has(projection.state)) return true;
+
+  switch (command.event) {
+    case "call:received":
+      return ["delivered", "presented", "accepted", "connecting", "active"].includes(projection.state);
+    case "call:presented":
+      return ["presented", "accepted", "connecting", "active"].includes(projection.state);
+    case "call:accept":
+      return ["accepted", "connecting", "active"].includes(projection.state);
+    case "call:decline":
+      return false;
+    case "call:cancel":
+      return false;
+    case "call:hangup":
+      return false;
+    case "call:begin_connecting":
+      return ["connecting", "active"].includes(projection.state);
+    case "call:setup_failed":
+      return projection.state === "connection_failed";
+    case "call:media_ready":
+      return ["connecting", "active"].includes(projection.state);
+    case "call:initiate":
+      return true;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -190,6 +223,7 @@ export class DirectedCallLifecycleController {
   private disposed = false;
   private generation = 0;
   private readonly authoritativelyAdvancedCommands = new Set<string>();
+  private inFlightCommand: InFlightCommand | null = null;
 
   constructor(session: DirectedCallSessionPort) {
     this.session = session;
@@ -256,7 +290,7 @@ export class DirectedCallLifecycleController {
     this.preparing = true;
     this.controlledCallId = null;
     this.lastCommandError = null;
-    return this.dispatch({
+    return this.trackDispatch({
       event: "call:initiate",
       callId: null,
       commandId,
@@ -299,6 +333,10 @@ export class DirectedCallLifecycleController {
   }
 
   setupFailed(callId: string, failureCode: FailureCode): Promise<LifecycleCommandOutcome> {
+    if (this.inFlightCommand?.event === "call:setup_failed" && this.inFlightCommand.callId === callId) {
+      return this.inFlightCommand.promise;
+    }
+
     let commandId: string;
     let payload: unknown;
     try {
@@ -308,7 +346,7 @@ export class DirectedCallLifecycleController {
       return Promise.resolve(this.fail("call:setup_failed", null, { kind: "protocol_validation" }));
     }
 
-    return this.dispatch({
+    return this.trackDispatch({
       event: "call:setup_failed",
       callId,
       commandId,
@@ -323,6 +361,10 @@ export class DirectedCallLifecycleController {
     if (!this.pendingCommand) {
       return Promise.resolve(this.fail("call:hangup", null, { kind: "retry_exhausted" }));
     }
+    if (this.inFlightCommand?.event === this.pendingCommand.event &&
+        this.inFlightCommand.callId === this.pendingCommand.callId) {
+      return this.inFlightCommand.promise;
+    }
     if (this.pendingCommand.attempts >= MAX_EXPLICIT_ATTEMPTS) {
       return Promise.resolve(this.fail(this.pendingCommand.event, this.pendingCommand.commandId, { kind: "retry_exhausted" }));
     }
@@ -330,7 +372,7 @@ export class DirectedCallLifecycleController {
     if (this.pendingCommand.event === "call:initiate") {
       this.preparing = true;
     }
-    return this.dispatch({
+    return this.trackDispatch({
       ...this.pendingCommand,
       generation: this.generation,
     });
@@ -341,6 +383,7 @@ export class DirectedCallLifecycleController {
     this.generation += 1;
     this.preparing = false;
     this.pendingCommand = null;
+    this.inFlightCommand = null;
     this.lastCommandError = null;
     this.authoritativelyAdvancedCommands.clear();
     this.emit();
@@ -353,6 +396,7 @@ export class DirectedCallLifecycleController {
     this.preparing = false;
     this.controlledCallId = null;
     this.pendingCommand = null;
+    this.inFlightCommand = null;
     this.lastCommandError = null;
     this.authoritativelyAdvancedCommands.clear();
     this.unsubscribeProjection();
@@ -361,11 +405,12 @@ export class DirectedCallLifecycleController {
   }
 
   private selectFromProjection(projection: StateProjection): void {
-    if (this.pendingCommand?.callId === projection.call_id) {
+    if (this.pendingCommand && confirmsCommand(this.pendingCommand, projection)) {
       this.authoritativelyAdvancedCommands.add(this.pendingCommand.commandId);
       this.pendingCommand = null;
       this.lastCommandError = null;
     }
+    const previousControlledCallId = this.controlledCallId;
     if (this.preparing) {
       if (this.controlledCallId === projection.call_id) this.preparing = false;
       return;
@@ -389,6 +434,13 @@ export class DirectedCallLifecycleController {
       this.controlledCallId = next.call_id;
       this.preparing = false;
     }
+
+    if (previousControlledCallId && this.controlledCallId && previousControlledCallId !== this.controlledCallId) {
+      this.generation += 1;
+      this.pendingCommand = null;
+      this.lastCommandError = null;
+      this.authoritativelyAdvancedCommands.clear();
+    }
   }
 
   private selectFromStore(): void {
@@ -400,6 +452,10 @@ export class DirectedCallLifecycleController {
   }
 
   private command(event: DirectedCallLifecycleEvent, callId: string): Promise<LifecycleCommandOutcome> {
+    if (this.inFlightCommand?.event === event && this.inFlightCommand.callId === callId) {
+      return this.inFlightCommand.promise;
+    }
+
     let commandId: string;
     let payload: unknown;
     try {
@@ -409,7 +465,7 @@ export class DirectedCallLifecycleController {
       return Promise.resolve(this.fail(event, null, { kind: "protocol_validation" }));
     }
 
-    return this.dispatch({
+    return this.trackDispatch({
       event,
       callId,
       commandId,
@@ -417,6 +473,17 @@ export class DirectedCallLifecycleController {
       payload,
       generation: this.generation,
     });
+  }
+
+  private trackDispatch(record: CommandRecord): Promise<LifecycleCommandOutcome> {
+    const promise = this.dispatch(record);
+    const tracked: InFlightCommand = { event: record.event, callId: record.callId, promise };
+    this.inFlightCommand = tracked;
+    void promise.then(
+      () => { if (this.inFlightCommand?.promise === promise) this.inFlightCommand = null; },
+      () => { if (this.inFlightCommand?.promise === promise) this.inFlightCommand = null; },
+    );
+    return promise;
   }
 
   private async dispatch(record: CommandRecord): Promise<LifecycleCommandOutcome> {

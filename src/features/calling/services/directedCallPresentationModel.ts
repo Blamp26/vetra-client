@@ -107,6 +107,7 @@ type ActionStatus = "queued" | "submitted" | "acknowledged" | "retryable" | "ret
 interface ActionRecord {
   action: PersistentPendingUserAction;
   callId: string;
+  commandId: string | null;
   status: ActionStatus;
 }
 
@@ -374,7 +375,7 @@ export class DirectedCallPresentationModel {
     if (!projection && (this.controllerSnapshot.preparing || this.controllerSnapshot.pendingCommand?.event === "call:initiate")) {
       if (this.cancelIntent) return { status: "queued", action: "cancelling" };
       this.cancelIntent = true;
-      this.actionRecord = { action: "cancelling", callId: this.controllerSnapshot.callId ?? "", status: "queued" };
+      this.actionRecord = { action: "cancelling", callId: this.controllerSnapshot.callId ?? "", commandId: null, status: "queued" };
       this.emit();
       if (!this.initiationPromise) {
         const pending = this.controller.retryPendingCommand();
@@ -438,7 +439,13 @@ export class DirectedCallPresentationModel {
     if (incomingError) {
       if (this.callIdForIncomingError() !== (this.currentProjection()?.call_id ?? null)) return null;
       return {
-        kind: incomingError.kind === "retry_exhausted" ? "retry_exhausted" : "transport",
+        kind: incomingError.kind === "retry_exhausted"
+          ? "retry_exhausted"
+          : incomingError.kind === "rejected"
+            ? "rejected"
+            : incomingError.kind === "protocol_validation"
+              ? "protocol_validation"
+              : "transport",
         message: "The incoming call connection was interrupted. Try again.",
         action: incomingError.action,
         callId: incomingError.callId,
@@ -564,7 +571,7 @@ export class DirectedCallPresentationModel {
     }
     if (this.actionRecord && this.actionRecord.action !== action) return { status: "ignored" };
     if (projection.state === "delivered") {
-      this.actionRecord = { action, callId: projection.call_id, status: "queued" };
+      this.actionRecord = { action, callId: projection.call_id, commandId: null, status: "queued" };
       this.emit();
       return { status: "queued", action };
     }
@@ -576,10 +583,19 @@ export class DirectedCallPresentationModel {
     if (this.actionRecord?.status === "submitted" || this.actionRecord?.status === "retrying" ||
         this.actionRecord?.status === "acknowledged" || this.actionRecord?.status === "retryable" ||
         this.actionRecord?.status === "exhausted" || this.actionRecord?.status === "rejected") return { status: "ignored" };
-    this.actionRecord = { action, callId, status: "submitted" };
+    this.actionRecord = {
+      action,
+      callId,
+      commandId: this.controller.getSnapshot().pendingCommand?.commandId ?? null,
+      status: "submitted",
+    };
     this.scopedError = null;
+    const outcomePromise = this.invokeAction(action, callId);
+    if (this.actionRecord?.action === action && this.actionRecord.callId === callId) {
+      this.actionRecord.commandId = this.controller.getSnapshot().pendingCommand?.commandId ?? null;
+    }
     this.emit();
-    const outcome = await this.invokeAction(action, callId);
+    const outcome = await outcomePromise;
     if (this.disposed) return { status: "ignored" };
     return this.finishAction(outcome, action, callId);
   }
@@ -622,6 +638,9 @@ export class DirectedCallPresentationModel {
 
   private finishAction(outcome: LifecycleCommandOutcome, action: PersistentPendingUserAction, callId: string): PresentationActionResult {
     if (this.disposed) return { status: "ignored" };
+    if (!this.actionRecord || this.actionRecord.action !== action || this.actionRecord.callId !== callId) {
+      return { status: "ignored" };
+    }
     const latest = this.session.getProjection(callId);
     if (!actionRequired(action, latest)) {
       this.clearActionRecord();
@@ -632,7 +651,7 @@ export class DirectedCallPresentationModel {
 
     if (outcome.status === "failed") {
       if (outcome.error.kind === "retry_exhausted") {
-        this.actionRecord = { action, callId, status: "exhausted" };
+        this.actionRecord = { ...this.actionRecord, action, callId, status: "exhausted" };
         this.scopedError = scopeError(commandError(outcome), action, callId);
         this.emit();
         return { status: "failed", error: this.scopedError };
@@ -640,13 +659,18 @@ export class DirectedCallPresentationModel {
       if (outcome.error.kind === "transport_timeout" || outcome.error.kind === "transport_error") {
         const pending = this.controller.getSnapshot().pendingCommand;
         if (pending?.event === actionEvent(action) && pending.callId === callId) {
-          this.actionRecord = { action, callId, status: pending.attempts >= 3 ? "exhausted" : "retryable" };
+          this.actionRecord = {
+            ...this.actionRecord,
+            action,
+            callId,
+            status: pending.attempts >= 3 ? "exhausted" : "retryable",
+          };
           this.scopedError = scopeError(commandError(outcome), action, callId);
         } else {
           this.clearActionRecord();
         }
       } else {
-        this.actionRecord = { action, callId, status: "rejected" };
+        this.actionRecord = { ...this.actionRecord, action, callId, status: "rejected" };
         this.scopedError = scopeError(commandError(outcome), action, callId);
       }
       this.emit();
@@ -655,12 +679,12 @@ export class DirectedCallPresentationModel {
 
     const result = outcome.result;
     if ("result_code" in result && result.result_code === "rejected") {
-      this.actionRecord = { action, callId, status: "rejected" };
+      this.actionRecord = { ...this.actionRecord, action, callId, status: "rejected" };
       this.scopedError = scopeError({ kind: "rejected", message: "This call action is no longer available." }, action, callId);
       this.emit();
       return { status: "failed", error: this.scopedError };
     }
-    this.actionRecord = { action, callId, status: "acknowledged" };
+    this.actionRecord = { ...this.actionRecord, status: "acknowledged" };
     this.scopedError = null;
     this.emit();
     return { status: "acknowledged", event: outcome.event };
@@ -706,7 +730,7 @@ export class DirectedCallPresentationModel {
       ? latest.participant_role === "initiator" && CANCEL_STATES.has(latest.state)
       : result.participant_role === "initiator" && CANCEL_STATES.has(result.state);
     if (latestCanCancel) {
-      this.actionRecord = { action: "cancelling", callId: result.call_id, status: "queued" };
+      this.actionRecord = { action: "cancelling", callId: result.call_id, commandId: null, status: "queued" };
       this.emit();
       return this.submitAction("cancelling", result.call_id);
     }

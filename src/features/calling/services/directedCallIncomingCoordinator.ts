@@ -7,7 +7,12 @@ import {
 
 const INCOMING_STATES = new Set<CanonicalState>(["dispatching", "delivered", "presented"]);
 export type IncomingCommandAction = "call:received" | "call:presented";
-export type IncomingCoordinatorErrorKind = "transport_timeout" | "transport_error" | "retry_exhausted";
+export type IncomingCoordinatorErrorKind =
+  | "transport_timeout"
+  | "transport_error"
+  | "retry_exhausted"
+  | "rejected"
+  | "protocol_validation";
 
 export interface IncomingCoordinatorError {
   action: IncomingCommandAction;
@@ -59,6 +64,7 @@ export class DirectedCallIncomingCoordinator {
   private readonly retryEligibility = new Map<string, IncomingCommandAction>();
   private readonly retriesInFlight = new Set<string>();
   private incomingProjection: StateProjection | null = null;
+  private incomingCallId: string | null = null;
   private recoverableError: IncomingCoordinatorError | null = null;
   private disposed = false;
 
@@ -118,6 +124,7 @@ export class DirectedCallIncomingCoordinator {
     this.unsubscribeProjection();
     this.unsubscribeSync();
     this.incomingProjection = null;
+    this.incomingCallId = null;
     this.recoverableError = null;
     this.receivedActions.clear();
     this.presentedActions.clear();
@@ -132,9 +139,19 @@ export class DirectedCallIncomingCoordinator {
     if (!validatedProjection) return;
     projection = validatedProjection;
 
+    if (this.incomingCallId && this.incomingCallId !== projection.call_id) {
+      this.retryEligibility.clear();
+      this.retriesInFlight.clear();
+      this.recoverableError = null;
+    }
+
+    if (projection.participant_role === "recipient" && INCOMING_STATES.has(projection.state)) {
+      this.incomingCallId = projection.call_id;
+    }
+
     if (!isIncomingProjection(projection)) {
       this.clearObsoleteActions(projection);
-      if (this.incomingProjection?.call_id === projection.call_id) this.clearIncoming();
+      if (this.incomingCallId === projection.call_id) this.clearIncoming();
       return;
     }
 
@@ -156,6 +173,7 @@ export class DirectedCallIncomingCoordinator {
 
   private clearIncoming(): void {
     this.incomingProjection = null;
+    this.incomingCallId = null;
     this.recoverableError = null;
     this.emit();
   }
@@ -214,7 +232,7 @@ export class DirectedCallIncomingCoordinator {
     Array.from(this.retryEligibility.entries()).forEach(([key, action]) => {
       const callId = key.slice(action.length + 1);
       const projection = this.session.getProjection(callId);
-      if (!this.actionRequired(action, projection)) {
+      if (this.incomingCallId !== callId || !this.actionRequired(action, projection)) {
         this.clearAction(action, callId);
         return;
       }
@@ -226,7 +244,7 @@ export class DirectedCallIncomingCoordinator {
         if (this.disposed) return;
 
         const latest = this.session.getProjection(callId);
-        if (!this.actionRequired(action, latest)) {
+        if (this.incomingCallId !== callId || !this.actionRequired(action, latest)) {
           this.clearAction(action, callId);
           this.emit();
           return;
@@ -243,6 +261,16 @@ export class DirectedCallIncomingCoordinator {
         if (outcome.status === "failed" && outcome.error.kind === "retry_exhausted") {
           this.retryEligibility.delete(key);
           this.recoverableError = { action, callId, kind: "retry_exhausted" };
+          this.emit();
+          return;
+        }
+        if (outcome.status === "failed") {
+          this.retryEligibility.delete(key);
+          this.recoverableError = {
+            action,
+            callId,
+            kind: outcome.error.kind === "protocol_validation" ? "protocol_validation" : "rejected",
+          };
           this.emit();
           return;
         }
@@ -276,13 +304,23 @@ export class DirectedCallIncomingCoordinator {
 
     if (this.disposed) return;
     const latest = this.session.getProjection(callId);
-    if (!this.actionRequired(action, latest)) {
+    if (this.incomingCallId !== callId || !this.actionRequired(action, latest)) {
       this.clearAction(action, callId);
       return;
     }
     const transportKind = transportFailureKind(outcome);
     if (transportKind) {
       this.recordTransportFailure(action, callId, transportKind);
+      this.emit();
+      return;
+    }
+    if (outcome.status === "failed") {
+      this.retryEligibility.delete(this.actionKey(action, callId));
+      this.recoverableError = {
+        action,
+        callId,
+        kind: outcome.error.kind === "protocol_validation" ? "protocol_validation" : "rejected",
+      };
       this.emit();
       return;
     }

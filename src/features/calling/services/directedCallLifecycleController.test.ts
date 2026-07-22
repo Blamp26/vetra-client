@@ -212,6 +212,27 @@ describe("DirectedCallLifecycleController", () => {
     expect(controller.getSnapshot().preparing).toBe(false);
   });
 
+  it("coalesces duplicate in-flight submissions and clears only on confirming projection", async () => {
+    let resolvePush!: (value: unknown) => void;
+    const session = createSession();
+    session.pushCommand = vi.fn(() => new Promise((resolve) => { resolvePush = resolve; }));
+    const controller = new DirectedCallLifecycleController(session);
+
+    const first = controller.accept(callId);
+    const duplicate = controller.accept(callId);
+    expect(duplicate).toBe(first);
+    expect(session.pushCommand).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot().pendingCommand?.callId).toBe(callId);
+
+    session.emit(state("presented"));
+    expect(controller.getSnapshot().pendingCommand?.callId).toBe(callId);
+    session.emit(state("accepted", 2));
+    expect(controller.getSnapshot().pendingCommand).toBeNull();
+
+    resolvePush(commandReply("accepted"));
+    await first;
+  });
+
   it("keeps lifecycle and media commands explicit without optimistic transitions", async () => {
     const session = createSession([commandReply(), commandReply(), commandReply(), commandReply(), commandReply()]);
     const controller = new DirectedCallLifecycleController(session);
