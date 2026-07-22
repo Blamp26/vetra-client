@@ -62,6 +62,20 @@ function makeOwnership(state: "owner" | "non_owner" | "unavailable") {
   } as unknown as CallAuthorityOwnership;
 }
 
+function makeTraceableOwnership(state: "owner" | "non_owner" | "unavailable") {
+  const events: Array<{ event: string; reason?: string | null }> = [];
+  const ownership = makeOwnership(state) as unknown as CallAuthorityOwnership & {
+    trace: (event: string, details?: { reason?: string | null }) => void;
+    capturedTraceEvents: typeof events;
+  };
+  ownership.trace = (event, details) => events.push({ event, reason: details?.reason });
+  ownership.capturedTraceEvents = events;
+  ownership.dispose = vi.fn(async (_disposeOwner, reason) => {
+    ownership.trace("release_requested", { reason });
+  });
+  return ownership;
+}
+
 function renderBoundary(
   mode: "legacy" | "persistent" | "disabled",
   ownership: CallAuthorityOwnership,
@@ -154,6 +168,25 @@ describe("CallRuntimeBoundary", () => {
 
     view.unmount();
     await waitFor(() => expect(ownership.dispose).toHaveBeenCalledTimes(1));
+  });
+
+  it("records the rollback reason for an acquired owner when runtime prerequisites fail", async () => {
+    const ownership = makeTraceableOwnership("owner");
+    render(
+      <CallRuntimeBoundary
+        currentUser={USER_A}
+        socketManager={{ socket: {} } as never}
+        mode="persistent"
+        persistentMediaAvailable={false}
+        ownershipFactory={() => ownership}
+        legacyContent={<div>legacy</div>}
+        nonCallContent={<div data-testid="non-call-content">messaging</div>}
+        persistentContent={<div data-testid="persistent-content">persistent</div>}
+      />,
+    );
+
+    await waitFor(() => expect(ownership.dispose).toHaveBeenCalledTimes(1));
+    expect(ownership.capturedTraceEvents).toContainEqual({ event: "release_requested", reason: "runtime_prerequisite_unavailable" });
   });
 
   it("releases only the old authority when the stable profile identity changes", async () => {

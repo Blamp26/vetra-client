@@ -75,6 +75,38 @@ describe("PersistentCallDebugPanel", () => {
     }));
   });
 
+  it("shows safe ownership release reasons in the visible timeline", () => {
+    render(
+      <PersistentCallBoundaryDebugProvider value={{
+        ...boundary,
+        ownershipEventTimeline: [{
+          sequence: 15,
+          elapsedMs: 42,
+          event: "release_requested",
+          frontendGeneration: 3,
+          windowLabel: "main",
+          ownershipKeyHash: "safe",
+          leaseSuffix: null,
+          reason: "runtime_start_failed",
+          frontendState: "owner",
+          rustHolderPresent: true,
+          outcome: null,
+        }],
+        lastOwnershipEvent: null,
+      }}>
+        <PersistentCallDebugPanel
+          activeChatType="direct"
+          directChat
+          peerUuidSource="partnerRef"
+          peerUuidValid
+          finalButtonPredicate
+        />
+      </PersistentCallBoundaryDebugProvider>,
+    );
+
+    expect(screen.getByTestId("persistent-call-debug-panel")).toHaveTextContent("15:release_requested(runtime_start_failed)");
+  });
+
   it("lists only the failed gates for a hidden button without exposing identifiers", () => {
     render(
       <PersistentCallBoundaryDebugProvider value={{

@@ -12,6 +12,14 @@ export type CallAuthorityTraceEventName =
   | "rust_release_rejected" | "frontend_state_released" | "window_destroy_cleanup"
   | "native_holder_snapshot";
 
+export type CallAuthorityDisposeReason =
+  | "stale_generation"
+  | "runtime_prerequisite_unavailable"
+  | "runtime_generation_stale"
+  | "runtime_start_failed"
+  | "boundary_cleanup"
+  | "unspecified";
+
 export interface CallAuthorityTraceEvent {
   sequence: number;
   elapsedMs: number;
@@ -349,10 +357,10 @@ export class CallAuthorityOwnership {
     });
   }
 
-  async release(disposeOwner?: () => void | Promise<void>): Promise<void> {
+  async release(disposeOwner?: () => void | Promise<void>, reason: CallAuthorityDisposeReason = "unspecified"): Promise<void> {
     if (this.releasePromise) return this.releasePromise;
     this.releasePromise = (async () => {
-      this.trace("release_requested");
+      this.trace("release_requested", { reason });
       if (this.snapshot.state === "owner") {
         this.setState("releasing");
         await disposeOwner?.();
@@ -388,9 +396,9 @@ export class CallAuthorityOwnership {
     return this.releasePromise;
   }
 
-  dispose(disposeOwner?: () => void | Promise<void>): Promise<void> {
+  dispose(disposeOwner?: () => void | Promise<void>, reason: CallAuthorityDisposeReason = "unspecified"): Promise<void> {
     this.disposed = true;
-    return this.release(disposeOwner);
+    return this.release(disposeOwner, reason);
   }
 
   private openChannel(): void {

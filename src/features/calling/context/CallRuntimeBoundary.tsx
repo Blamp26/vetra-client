@@ -107,7 +107,7 @@ export function CallRuntimeBoundary({
       recordDirectedCallDiagnostic("runtime_mode", { mode, authority: acquired.state });
       if (cancelled || activeOwnershipRef.current !== ownership) {
         ownership.trace?.("frontend_owner_rejected_stale", { outcome: "stale", reason: "obsolete_boundary_generation" });
-        if (activeOwnershipRef.current !== ownership) await ownership.dispose();
+        if (activeOwnershipRef.current !== ownership) await ownership.dispose(undefined, "stale_generation");
         return;
       }
       ownership.trace?.(acquired.state === "owner" ? "frontend_owner_applied" : "frontend_owner_rejected_stale", {
@@ -133,7 +133,7 @@ export function CallRuntimeBoundary({
           !persistentMediaAvailable ? "media_api_unavailable" : "persistent_runtime_unavailable",
         );
         recordDirectedCallDiagnostic("failure", { failureKind: !persistentMediaAvailable ? "persistent_media_unavailable" : "persistent_runtime_unavailable" });
-        await ownership.dispose();
+        await ownership.dispose(undefined, "runtime_prerequisite_unavailable");
         return;
       }
 
@@ -177,7 +177,7 @@ export function CallRuntimeBoundary({
       }
       if (cancelled || ownership.getSnapshot().state !== "owner") {
         runtime.dispose();
-        await ownership.dispose();
+        await ownership.dispose(undefined, "runtime_generation_stale");
         return;
       }
       localRuntime = runtime;
@@ -193,7 +193,7 @@ export function CallRuntimeBoundary({
         localRuntime = null;
         persistentRuntimeRef.current = null;
         setPersistentRuntime(null);
-        await ownership.dispose();
+        await ownership.dispose(undefined, "runtime_start_failed");
       }
     })();
 
@@ -217,7 +217,7 @@ export function CallRuntimeBoundary({
           }
           localRuntime?.dispose();
           localRuntime = null;
-        });
+        }, "boundary_cleanup");
       }, 0);
     };
   }, [deviceId, mode, ownership, persistentMediaAvailable, publicUserRef, scope, socketManager]);
