@@ -252,6 +252,7 @@ export class DirectedCallLifecycleController {
       return Promise.resolve(this.fail("call:initiate", null, { kind: "protocol_validation" }));
     }
 
+    this.generation += 1;
     this.preparing = true;
     this.controlledCallId = null;
     this.lastCommandError = null;
@@ -429,7 +430,7 @@ export class DirectedCallLifecycleController {
     try {
       const response = await this.session.pushCommand(record.event, record.payload);
       if (record.generation !== this.generation || this.disposed) {
-        return this.fail(record.event, record.commandId, { kind: "disposed" });
+        return { status: "failed", event: record.event, commandId: record.commandId, error: { kind: "disposed" } };
       }
 
       const result = record.event === "call:initiate"
@@ -449,9 +450,6 @@ export class DirectedCallLifecycleController {
       if (record.event === "call:initiate") {
         const initiateResult = result as InitiateResult;
         this.controlledCallId = initiateResult.call_id;
-        if (initiateResult.state === "unavailable" || this.session.getProjection(initiateResult.call_id)) {
-          this.preparing = false;
-        }
       }
       this.emit();
       return {
@@ -461,6 +459,9 @@ export class DirectedCallLifecycleController {
         result,
       };
     } catch (error) {
+      if (record.generation !== this.generation || this.disposed) {
+        return { status: "failed", event: record.event, commandId: record.commandId, error: { kind: "disposed" } };
+      }
       const mapped = mapTransportError(error);
       if (this.authoritativelyAdvancedCommands.delete(record.commandId)) {
         return { status: "failed", event: record.event, commandId: record.commandId, error: mapped };

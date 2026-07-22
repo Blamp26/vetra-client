@@ -206,6 +206,7 @@ export class DirectedCallPresentationModel {
   private cancelIntent = false;
   private initiationPromise: Promise<LifecycleCommandOutcome> | null = null;
   private initiationResult: InitiateResult | null = null;
+  private initiationGeneration = 0;
   private disposed = false;
 
   constructor(
@@ -259,10 +260,18 @@ export class DirectedCallPresentationModel {
 
   getSnapshot(): PersistentPresentationSnapshot {
     const projection = this.disposed ? null : this.currentProjection();
-    const callId = this.disposed ? null : projection?.call_id ?? this.controllerSnapshot.callId ?? this.incomingSnapshot.callId;
-    const role = projection?.participant_role ?? null;
-    const terminalState = projection && TERMINAL_STATES.has(projection.state) ? projection.state : null;
-    const phase = this.mapPhase(projection, role, terminalState);
+    const reply = this.disposed || projection ? null : this.initiationResult;
+    const callId = this.disposed
+      ? null
+      : projection?.call_id ?? reply?.call_id ??
+        (this.controllerSnapshot.preparing ? null : this.controllerSnapshot.callId) ?? this.incomingSnapshot.callId;
+    const role = projection?.participant_role ?? reply?.participant_role ?? null;
+    const terminalState = projection && TERMINAL_STATES.has(projection.state)
+      ? projection.state
+      : reply && TERMINAL_STATES.has(reply.state)
+        ? reply.state
+        : null;
+    const phase = this.mapPhase(projection, reply, role, terminalState);
     const fallback = this.fallbackPeer;
     const peerPublicId = projection?.peer.user_id ?? fallback?.id ?? null;
     const peerUsername = projection?.peer.username ?? fallback?.username ?? null;
@@ -321,8 +330,10 @@ export class DirectedCallPresentationModel {
       return { status: "failed", error: { kind: "protocol_validation", message: "A public user ID is required." } };
     }
     const existingProjection = this.currentProjection();
-    if (this.controllerSnapshot.preparing || (existingProjection && !TERMINAL_STATES.has(existingProjection.state))) return { status: "ignored" };
+    if ((this.controllerSnapshot.preparing && !this.initiationResult) ||
+        (existingProjection && !TERMINAL_STATES.has(existingProjection.state))) return { status: "ignored" };
 
+    const generation = ++this.initiationGeneration;
     this.fallbackPeer = { id: targetPublicUserId.toLowerCase(), username: targetUsername };
     this.clearActionRecord();
     this.authoritativeProjection = null;
@@ -332,6 +343,7 @@ export class DirectedCallPresentationModel {
     const operation = this.controller.initiate(targetPublicUserId);
     this.initiationPromise = operation;
     const outcome = await operation;
+    if (generation !== this.initiationGeneration || this.disposed) return { status: "ignored" };
     if (this.initiationPromise === operation) this.initiationPromise = null;
 
     if (this.cancelIntent) return this.resolveCancelledInitiation(outcome);
@@ -400,6 +412,7 @@ export class DirectedCallPresentationModel {
     this.cancelIntent = false;
     this.initiationPromise = null;
     this.initiationResult = null;
+    this.initiationGeneration += 1;
     this.clearActionRecord();
     this.scopedError = null;
     this.listeners.clear();
@@ -447,8 +460,27 @@ export class DirectedCallPresentationModel {
     return this.actionRecord.action;
   }
 
-  private mapPhase(projection: StateProjection | null, role: ParticipantRole | null, terminalState: CanonicalState | null): PersistentPresentationPhase {
+  private mapPhase(
+    projection: StateProjection | null,
+    reply: InitiateResult | null,
+    role: ParticipantRole | null,
+    terminalState: CanonicalState | null,
+  ): PersistentPresentationPhase {
     if (this.disposed) return "idle";
+    if (!projection && terminalState) return "terminal";
+    if (!projection && reply) {
+      if (this.visiblePendingAction() === "cancelling") return "cancelling";
+      if (role === "initiator") {
+        if (reply.state === "presented") return "ringing";
+        if (["accepted", "connecting"].includes(reply.state)) return "connecting";
+        if (reply.state === "active") return "active";
+        return "calling";
+      }
+      if (reply.state === "presented") return "ringing";
+      if (["accepted", "connecting"].includes(reply.state)) return "connecting";
+      if (reply.state === "active") return "active";
+      return "incoming";
+    }
     if (!projection && this.controllerSnapshot.preparing) return this.visiblePendingAction() === "cancelling" ? "cancelling" : "preparing";
     if (!projection) return "idle";
     if (terminalState) return "terminal";
@@ -463,6 +495,7 @@ export class DirectedCallPresentationModel {
     if (this.visiblePendingAction() === "accepting") return "accepting";
     if (this.visiblePendingAction() === "declining") return "declining";
     if (projection.state === "dispatching") return "idle";
+    if (projection.state === "presented") return "ringing";
     if (["accepted", "connecting"].includes(projection.state)) return "connecting";
     if (projection.state === "active") return "active";
     return "incoming";

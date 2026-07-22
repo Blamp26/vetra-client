@@ -54,6 +54,23 @@ function commandReply(event: string): LifecycleCommandOutcome {
   } as LifecycleCommandOutcome;
 }
 
+function initiateOutcome(state: StateProjection["state"] = "dispatching", callId = CALL_ID): LifecycleCommandOutcome {
+  return {
+    status: "acknowledged",
+    event: "call:initiate",
+    commandId: "55555555-5555-4555-8555-555555555555",
+    result: {
+      call_id: callId,
+      state,
+      state_version: 1,
+      media: "audio",
+      participant_role: "initiator",
+      merged: false,
+      attempt_created: true,
+    },
+  };
+}
+
 function transportFailure(event: "call:accept" | "call:decline" | "call:cancel" | "call:hangup"): LifecycleCommandOutcome {
   return {
     status: "failed",
@@ -99,14 +116,14 @@ function createHarness() {
     pushCommand: vi.fn(),
   };
   const lifecycle = {
-    initiate: vi.fn(async (_target: string) => commandReply("call:initiate")),
+    initiate: vi.fn(async (_target: string) => initiateOutcome()),
     received: vi.fn(async () => commandReply("call:received")),
     presented: vi.fn(async () => commandReply("call:presented")),
     accept: vi.fn(async () => commandReply("call:accept")),
     cancel: vi.fn(async () => commandReply("call:cancel")),
     decline: vi.fn(async () => commandReply("call:decline")),
     hangup: vi.fn(async () => commandReply("call:hangup")),
-    retryPendingCommand: vi.fn(async () => commandReply("call:initiate")),
+    retryPendingCommand: vi.fn(async () => initiateOutcome()),
     getSnapshot: () => state,
     subscribe: (listener) => {
       controllerListener = listener;
@@ -168,7 +185,7 @@ describe("DirectedCallPresentationModel", () => {
     expect(harness.lifecycle.initiate).toHaveBeenCalledWith(TARGET_ID);
   });
 
-  it("exposes preparing before initiation completes and never invents a call ID", async () => {
+  it("exposes preparing before initiation completes and keeps reply state provisional", async () => {
     const harness = createHarness();
     let resolve!: (outcome: LifecycleCommandOutcome) => void;
     harness.lifecycle.initiate = vi.fn((_target: string) => {
@@ -177,9 +194,81 @@ describe("DirectedCallPresentationModel", () => {
     });
     const operation = harness.model.startCall(TARGET_ID, "Alice");
     expect(harness.model.getSnapshot()).toMatchObject({ phase: "preparing", callId: null, peerUsername: "Alice" });
-    resolve(commandReply("call:initiate"));
+    resolve(initiateOutcome());
     await operation;
-    expect(harness.model.getSnapshot().callId).toBeNull();
+    expect(harness.model.getSnapshot()).toMatchObject({
+      phase: "calling",
+      callId: CALL_ID,
+      canonicalState: null,
+      stateVersion: null,
+    });
+  });
+
+  it("renders a successful initiate reply as provisional calling without a projection", async () => {
+    const harness = createHarness();
+    let resolve!: (outcome: LifecycleCommandOutcome) => void;
+    harness.lifecycle.initiate = vi.fn((_target: string) => {
+      harness.setPreparing(true);
+      return new Promise<LifecycleCommandOutcome>((next) => { resolve = next; });
+    });
+
+    const operation = harness.model.startCall(TARGET_ID, "Alice");
+    expect(harness.model.getSnapshot().phase).toBe("preparing");
+    resolve(initiateOutcome("dispatching"));
+    await operation;
+
+    expect(harness.model.getSnapshot()).toMatchObject({
+      phase: "calling",
+      callId: CALL_ID,
+      canonicalState: null,
+      stateVersion: null,
+    });
+    expect(harness.session.getProjection(CALL_ID)).toBeNull();
+
+    harness.emit(projection("delivered"));
+    expect(harness.model.getSnapshot()).toMatchObject({
+      phase: "calling",
+      canonicalState: "delivered",
+      stateVersion: 1,
+    });
+  });
+
+  it("renders immediate unavailable without a projection and clears it on a new initiation", async () => {
+    const harness = createHarness();
+    harness.lifecycle.initiate = vi.fn()
+      .mockResolvedValueOnce(initiateOutcome("unavailable"))
+      .mockResolvedValueOnce(initiateOutcome("dispatching", SECOND_CALL_ID));
+
+    await harness.model.startCall(TARGET_ID, "Alice");
+    expect(harness.model.getSnapshot()).toMatchObject({
+      phase: "terminal",
+      callId: CALL_ID,
+      terminalState: "unavailable",
+      canonicalState: null,
+      stateVersion: null,
+    });
+    expect(harness.model.getSnapshot().recoverableError).toBeNull();
+
+    await harness.model.startCall(TARGET_ID, "Alice");
+    expect(harness.model.getSnapshot()).toMatchObject({ phase: "calling", callId: SECOND_CALL_ID });
+    expect(harness.model.getSnapshot().terminalState).toBeNull();
+  });
+
+  it("does not let a late older initiate reply replace a newer initiation", async () => {
+    const harness = createHarness();
+    let resolveFirst!: (outcome: LifecycleCommandOutcome) => void;
+    harness.lifecycle.initiate = vi.fn()
+      .mockImplementationOnce((_target: string) => new Promise<LifecycleCommandOutcome>((resolve) => { resolveFirst = resolve; }))
+      .mockResolvedValueOnce(initiateOutcome("dispatching", SECOND_CALL_ID));
+
+    const first = harness.model.startCall(TARGET_ID, "Old caller");
+    harness.setPreparing(false);
+    const second = harness.model.startCall(TARGET_ID, "New caller");
+    await second;
+    resolveFirst(initiateOutcome("dispatching", CALL_ID));
+    await first;
+
+    expect(harness.model.getSnapshot()).toMatchObject({ phase: "calling", callId: SECOND_CALL_ID, peerUsername: "New caller" });
   });
 
   it.each([
@@ -192,11 +281,35 @@ describe("DirectedCallPresentationModel", () => {
     expect(harness.model.getSnapshot().phase).toBe(phase);
   });
 
-  it.each(["delivered", "presented"] as const)("maps recipient %s to incoming", (state) => {
+  it("maps recipient delivered to incoming and keeps the modal presentable", () => {
     const harness = createHarness();
-    harness.emit(projection(state, "recipient"));
+    harness.emit(projection("delivered", "recipient"));
     expect(harness.model.getSnapshot()).toMatchObject({ phase: "incoming", callId: CALL_ID, peerUsername: "Alice" });
     expect(harness.model.getSnapshot().incomingModal.presentationKey).toBe(CALL_ID);
+  });
+
+  it("maps recipient presented to ringing without resending presented", async () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient"));
+    const snapshot = harness.model.getSnapshot();
+
+    expect(snapshot).toMatchObject({ phase: "ringing", canonicalState: "presented" });
+    expect(snapshot.incomingModal.presentationKey).toBe(CALL_ID);
+    await snapshot.incomingModal.onAccept();
+    await snapshot.incomingModal.onDecline();
+    expect(harness.incoming.onModalPresented).not.toHaveBeenCalled();
+    expect(harness.lifecycle.accept).toHaveBeenCalledTimes(1);
+    expect(harness.lifecycle.decline).toHaveBeenCalledTimes(0);
+  });
+
+  it.each([
+    ["accepted", "connecting"],
+    ["connecting", "connecting"],
+    ["active", "active"],
+  ] as const)("maps recipient %s to %s", (state, phase) => {
+    const harness = createHarness();
+    harness.emit(projection(state, "recipient"));
+    expect(harness.model.getSnapshot().phase).toBe(phase);
   });
 
   it("maps recipient dispatching to no visible incoming presentation", () => {
@@ -294,14 +407,14 @@ describe("DirectedCallPresentationModel", () => {
     expect(harness.model.getSnapshot()).toMatchObject({ phase: "terminal", terminalState: "declined", terminalLabel: "Call declined", pendingAction: null });
   });
 
-  it.each(["delivered", "presented"] as const)("rolls from terminal call A to incoming call B in %s", (stateName) => {
+  it.each(["delivered", "presented"] as const)("rolls from terminal call A to the correct presentation for call B in %s", (stateName) => {
     const harness = createHarness();
     harness.emit(projection("ended", "initiator", 8, CALL_ID, "Old call"));
     harness.emit(projection(stateName, "recipient", 1, SECOND_CALL_ID, "New caller"));
 
     expect(harness.model.getSnapshot()).toMatchObject({
       callId: SECOND_CALL_ID,
-      phase: "incoming",
+      phase: stateName === "presented" ? "ringing" : "incoming",
       canonicalState: stateName,
       peerUsername: "New caller",
       incomingModal: { visible: true, presentationKey: SECOND_CALL_ID },
