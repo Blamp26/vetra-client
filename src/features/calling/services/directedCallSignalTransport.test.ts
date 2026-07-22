@@ -73,4 +73,17 @@ describe("DirectedCallSignalTransport", () => {
     expect(received).not.toHaveBeenCalled();
     await expect(transport.send(signalId, "offer", { sdp: "v=0" })).rejects.toThrow("disposed directed-call signal transport");
   });
+
+  it("fences an in-flight signal when the media attempt is invalidated", async () => {
+    let resolveSend!: (value: unknown) => void;
+    const session = createSession();
+    (session.sendSignal as any).mockImplementationOnce(() => new Promise((resolve) => { resolveSend = resolve; }));
+    const transport = new DirectedCallSignalTransport(session, { callId, generation: "g1" });
+    const operation = transport.send(signalId, "offer", { sdp: "v=0" });
+
+    transport.invalidate();
+    resolveSend({ ok: true });
+
+    await expect(operation).rejects.toThrow("stale directed-call signal");
+  });
 });

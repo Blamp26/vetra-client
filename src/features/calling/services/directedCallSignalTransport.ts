@@ -28,6 +28,7 @@ export class DirectedCallSignalTransport {
   private readonly listeners = new Set<DirectedCallSignalListener>();
   private readonly unsubscribeSession: () => void;
   private disposed = false;
+  private attemptEpoch = 0;
 
   constructor(session: DirectedCallSession, options: DirectedCallSignalTransportOptions) {
     if ((options.callId !== undefined && !isUuid(options.callId)) || options.generation.length === 0) {
@@ -69,14 +70,21 @@ export class DirectedCallSignalTransport {
     if (!isUuid(signalId)) throw new Error("invalid directed-call signal");
     if (this.boundCallId === null) throw new Error("unbound directed-call signal transport");
     const generation = this.generation;
+    const attempt = this.attemptEpoch;
     const result = await this.session.sendSignal(this.boundCallId, signalId, kind, payload);
-    if (this.disposed || !this.isGenerationCurrent(generation)) throw new Error("stale directed-call signal");
+    if (this.disposed || !this.isGenerationCurrent(generation) || attempt !== this.attemptEpoch) throw new Error("stale directed-call signal");
     return result;
+  }
+
+  invalidate(): void {
+    if (this.disposed) return;
+    this.attemptEpoch += 1;
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.attemptEpoch += 1;
     this.unsubscribeSession();
     this.listeners.clear();
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DirectedCallWebRtcAdapter, DirectedCallWebRtcError } from "./directedCallWebRtcAdapter";
+import { DirectedCallWebRtcAdapter, DirectedCallWebRtcError, DirectedCallWebRtcStaleError } from "./directedCallWebRtcAdapter";
 
 function createHarness() {
   const track = { stop: vi.fn() };
@@ -104,5 +104,127 @@ describe("DirectedCallWebRtcAdapter", () => {
 
     expect(harness.track.stop).toHaveBeenCalledTimes(1);
     expect(harness.pc.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops media resolved after disposal without constructing a peer", async () => {
+    let resolveMedia!: (stream: any) => void;
+    const track = { stop: vi.fn() };
+    const stream = { getTracks: () => [track] };
+    const getUserMedia = vi.fn(() => new Promise<any>((resolve) => { resolveMedia = resolve; }));
+    const createPeerConnection = vi.fn();
+    const adapter = new DirectedCallWebRtcAdapter({ dependencies: { getUserMedia, createPeerConnection } });
+    const operation = adapter.prepareOffer();
+
+    adapter.dispose();
+    resolveMedia(stream);
+
+    await expect(operation).rejects.toBeInstanceOf(DirectedCallWebRtcStaleError);
+    expect(track.stop).toHaveBeenCalledTimes(1);
+    expect(createPeerConnection).not.toHaveBeenCalled();
+  });
+
+  it("cleans acquired media when peer construction fails", async () => {
+    const track = { stop: vi.fn() };
+    const stream = { getTracks: () => [track] };
+    const adapter = new DirectedCallWebRtcAdapter({ dependencies: {
+      getUserMedia: vi.fn().mockResolvedValue(stream),
+      createPeerConnection: vi.fn(() => { throw new Error("peer failed"); }),
+    } });
+
+    await expect(adapter.prepareOffer()).rejects.toMatchObject({ failureCode: "media_binding_failed" });
+    expect(track.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans acquired media and the partial peer when track binding fails", async () => {
+    const track = { stop: vi.fn() };
+    const stream = { getTracks: () => [track] };
+    const pc = { ...createHarness().pc, addTrack: vi.fn(() => { throw new Error("track failed"); }) };
+    const adapter = new DirectedCallWebRtcAdapter({ dependencies: {
+      getUserMedia: vi.fn().mockResolvedValue(stream),
+      createPeerConnection: vi.fn(() => pc),
+    } });
+
+    await expect(adapter.prepareOffer()).rejects.toMatchObject({ failureCode: "media_binding_failed" });
+    expect(track.stop).toHaveBeenCalledTimes(1);
+    expect(pc.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores late offer and local-description completions", async () => {
+    const harness = createHarness();
+    let resolveOffer!: (offer: RTCSessionDescriptionInit) => void;
+    harness.pc.createOffer.mockImplementationOnce(() => new Promise((resolve) => { resolveOffer = resolve; }));
+    const operation = harness.adapter.prepareOffer();
+    await vi.waitFor(() => expect(harness.pc.createOffer).toHaveBeenCalled());
+    harness.adapter.dispose();
+    resolveOffer({ type: "offer", sdp: "late-offer" });
+
+    await expect(operation).rejects.toBeInstanceOf(DirectedCallWebRtcStaleError);
+    expect(harness.pc.setLocalDescription).not.toHaveBeenCalled();
+
+    const second = createHarness();
+    let resolveLocal!: () => void;
+    second.pc.setLocalDescription.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveLocal = resolve; }));
+    const secondOperation = second.adapter.prepareOffer();
+    await vi.waitFor(() => expect(second.pc.setLocalDescription).toHaveBeenCalled());
+    second.adapter.dispose();
+    resolveLocal();
+
+    await expect(secondOperation).rejects.toBeInstanceOf(DirectedCallWebRtcStaleError);
+  });
+
+  it("ignores late remote-description and answer completions", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareAnswer();
+    let resolveRemote!: () => void;
+    harness.pc.setRemoteDescription.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveRemote = resolve; }));
+    const offerOperation = harness.adapter.acceptOffer({ type: "offer", sdp: "offer" });
+    await vi.waitFor(() => expect(harness.pc.setRemoteDescription).toHaveBeenCalled());
+    harness.adapter.dispose();
+    resolveRemote();
+    await expect(offerOperation).rejects.toBeInstanceOf(DirectedCallWebRtcStaleError);
+    expect(harness.pc.createAnswer).not.toHaveBeenCalled();
+
+    const answerer = createHarness();
+    await answerer.adapter.prepareOffer();
+    let resolveAnswerRemote!: () => void;
+    answerer.pc.setRemoteDescription.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveAnswerRemote = resolve; }));
+    const answerOperation = answerer.adapter.acceptAnswer({ type: "answer", sdp: "answer" });
+    await vi.waitFor(() => expect(answerer.pc.setRemoteDescription).toHaveBeenCalled());
+    answerer.adapter.dispose();
+    resolveAnswerRemote();
+    await expect(answerOperation).rejects.toBeInstanceOf(DirectedCallWebRtcStaleError);
+  });
+
+  it("detaches ICE and track callbacks and clears queued candidates on disposal", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareAnswer();
+    const candidate = { candidate: "candidate:queued", sdpMid: "0", sdpMLineIndex: 0 };
+    await harness.adapter.addRemoteIceCandidate(candidate);
+    harness.adapter.dispose();
+
+    expect(harness.pc.onicecandidate).toBeNull();
+    expect(harness.pc.ontrack).toBeNull();
+    expect(await harness.adapter.addRemoteIceCandidate(candidate)).toBe(false);
+    expect(harness.pc.addIceCandidate).not.toHaveBeenCalled();
+  });
+
+  it("does not emit end-of-candidates or remote tracks after disposal", async () => {
+    const onIceCandidate = vi.fn();
+    const onRemoteStream = vi.fn();
+    const harness = createHarness();
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: harness.getUserMedia, createPeerConnection: harness.createPeerConnection },
+      onIceCandidate,
+      onRemoteStream,
+    });
+    await adapter.prepareOffer();
+    const iceHandler = harness.pc.onicecandidate;
+    const trackHandler = harness.pc.ontrack;
+    adapter.dispose();
+    iceHandler?.({ candidate: null } as unknown as RTCPeerConnectionIceEvent);
+    trackHandler?.({ streams: [], track: {} } as unknown as RTCTrackEvent);
+
+    expect(onIceCandidate).not.toHaveBeenCalled();
+    expect(onRemoteStream).not.toHaveBeenCalled();
   });
 });

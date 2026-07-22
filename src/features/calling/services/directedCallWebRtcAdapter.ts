@@ -18,6 +18,13 @@ export class DirectedCallWebRtcError extends Error {
   }
 }
 
+export class DirectedCallWebRtcStaleError extends Error {
+  constructor() {
+    super("stale directed-call media attempt");
+    this.name = "DirectedCallWebRtcStaleError";
+  }
+}
+
 export interface DirectedCallMediaStreamTrack {
   stop(): void;
 }
@@ -95,6 +102,7 @@ export class DirectedCallWebRtcAdapter {
   private remoteStream: DirectedCallMediaStream | null = null;
   private disposed = false;
   private offerPrepared = false;
+  private epoch = 0;
 
   constructor(options: DirectedCallWebRtcAdapterOptions = {}) {
     const dependencies = defaultDependencies();
@@ -113,50 +121,69 @@ export class DirectedCallWebRtcAdapter {
   }
 
   async prepareOffer(): Promise<RTCSessionDescriptionInit> {
-    await this.ensureAudioPeer();
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
     if (this.offerPrepared && this.peerConnection?.localDescription) return this.peerConnection.localDescription;
     try {
       const offer = await this.peerConnection!.createOffer();
+      this.assertCurrent(epoch);
       await this.peerConnection!.setLocalDescription(offer);
+      this.assertCurrent(epoch);
       this.offerPrepared = true;
       return offer;
     } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
       throw new DirectedCallWebRtcError("sdp_failed");
     }
   }
 
   async prepareAnswer(): Promise<void> {
-    await this.ensureAudioPeer();
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
   }
 
   async acceptOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit | null> {
-    await this.ensureAudioPeer();
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
     if (this.peerConnection!.remoteDescription?.type === "offer") return null;
     try {
       await this.peerConnection!.setRemoteDescription(offer);
-      await this.flushQueuedCandidates();
+      this.assertCurrent(epoch);
+      await this.flushQueuedCandidates(epoch);
       const answer = await this.peerConnection!.createAnswer();
+      this.assertCurrent(epoch);
       await this.peerConnection!.setLocalDescription(answer);
+      this.assertCurrent(epoch);
       return answer;
     } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
       throw new DirectedCallWebRtcError("sdp_failed");
     }
   }
 
   async acceptAnswer(answer: RTCSessionDescriptionInit): Promise<boolean> {
-    await this.ensureAudioPeer();
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
     if (this.peerConnection!.remoteDescription?.type === "answer") return false;
     try {
       await this.peerConnection!.setRemoteDescription(answer);
-      await this.flushQueuedCandidates();
+      this.assertCurrent(epoch);
+      await this.flushQueuedCandidates(epoch);
+      this.assertCurrent(epoch);
       return true;
     } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
       throw new DirectedCallWebRtcError("sdp_failed");
     }
   }
 
   async addRemoteIceCandidate(candidate: RTCIceCandidateInit): Promise<boolean> {
-    if (this.disposed || this.seenCandidates.has(candidateKey(candidate))) return false;
+    const epoch = this.epoch;
+    if (!this.isCurrent(epoch) || this.seenCandidates.has(candidateKey(candidate))) return false;
     this.seenCandidates.add(candidateKey(candidate));
     if (!this.peerConnection || !this.peerConnection.remoteDescription) {
       this.queuedCandidates.push(candidate);
@@ -164,8 +191,10 @@ export class DirectedCallWebRtcAdapter {
     }
     try {
       await this.peerConnection.addIceCandidate(candidate);
+      this.assertCurrent(epoch);
       return true;
     } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
       throw new DirectedCallWebRtcError("ice_failed");
     }
   }
@@ -173,8 +202,14 @@ export class DirectedCallWebRtcAdapter {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.epoch += 1;
     this.queuedCandidates.length = 0;
     this.seenCandidates.clear();
+    if (this.peerConnection) {
+      this.peerConnection.onicecandidate = null;
+      this.peerConnection.onconnectionstatechange = null;
+      this.peerConnection.ontrack = null;
+    }
     this.peerConnection?.close();
     this.peerConnection = null;
     this.localStream?.getTracks().forEach((track) => track.stop());
@@ -184,18 +219,26 @@ export class DirectedCallWebRtcAdapter {
     this.offerPrepared = false;
   }
 
-  private async ensureAudioPeer(): Promise<void> {
-    if (this.disposed) throw new DirectedCallWebRtcError("peer_connection_failed");
+  private async ensureAudioPeer(epoch: number): Promise<void> {
+    this.assertCurrent(epoch);
     if (this.peerConnection && this.localStream) return;
+    let acquiredStream: DirectedCallMediaStream | null = null;
     try {
-      this.localStream = await this.dependencies.getUserMedia({ audio: true, video: false });
+      acquiredStream = await this.dependencies.getUserMedia({ audio: true, video: false });
+      this.assertCurrent(epoch);
     } catch (error) {
+      if (error instanceof DirectedCallWebRtcStaleError || !this.isCurrent(epoch)) {
+        acquiredStream?.getTracks().forEach((track) => track.stop());
+        throw new DirectedCallWebRtcStaleError();
+      }
       throw new DirectedCallWebRtcError(failureForMediaError(error));
     }
+    this.localStream = acquiredStream;
     try {
       this.peerConnection = this.dependencies.createPeerConnection();
+      this.assertCurrent(epoch);
       this.peerConnection.onicecandidate = (event) => {
-        if (event.candidate && !this.disposed) {
+        if (event.candidate && this.isCurrent(epoch)) {
           const candidate = typeof event.candidate.toJSON === "function"
             ? event.candidate.toJSON()
             : {
@@ -208,32 +251,51 @@ export class DirectedCallWebRtcAdapter {
         }
       };
       this.peerConnection.onconnectionstatechange = () => {
-        if (this.peerConnection?.connectionState) this.onPeerConnectionState?.(this.peerConnection.connectionState);
+        if (this.isCurrent(epoch) && this.peerConnection?.connectionState) this.onPeerConnectionState?.(this.peerConnection.connectionState);
       };
       this.peerConnection.ontrack = (event) => {
-        if (this.disposed) return;
+        if (!this.isCurrent(epoch)) return;
         this.remoteStream = event.streams[0] ?? this.remoteStream ?? this.dependencies.createRemoteStream?.() ?? null;
         if (!event.streams[0]) this.remoteStream?.addTrack?.(event.track);
         if (this.remoteStream) this.onRemoteStream?.(this.remoteStream);
       };
-      for (const track of this.localStream.getTracks()) this.peerConnection.addTrack(track, this.localStream);
+      for (const track of this.localStream.getTracks()) {
+        this.assertCurrent(epoch);
+        this.peerConnection.addTrack(track, this.localStream);
+      }
     } catch {
-      this.localStream.getTracks().forEach((track) => track.stop());
+      this.localStream?.getTracks().forEach((track) => track.stop());
       this.localStream = null;
+      if (this.peerConnection) {
+        this.peerConnection.onicecandidate = null;
+        this.peerConnection.onconnectionstatechange = null;
+        this.peerConnection.ontrack = null;
+      }
       this.peerConnection?.close();
       this.peerConnection = null;
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
       throw new DirectedCallWebRtcError("media_binding_failed");
     }
   }
 
-  private async flushQueuedCandidates(): Promise<void> {
+  private async flushQueuedCandidates(epoch: number): Promise<void> {
     const queued = this.queuedCandidates.splice(0);
     for (const candidate of queued) {
       try {
         await this.peerConnection!.addIceCandidate(candidate);
+        this.assertCurrent(epoch);
       } catch {
+        if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
         throw new DirectedCallWebRtcError("ice_failed");
       }
     }
+  }
+
+  private isCurrent(epoch: number): boolean {
+    return !this.disposed && epoch === this.epoch;
+  }
+
+  private assertCurrent(epoch: number): void {
+    if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
   }
 }
