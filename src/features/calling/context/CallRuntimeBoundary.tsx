@@ -47,6 +47,18 @@ export interface CallRuntimeBoundaryProps {
 type OwnershipFactory = (options: ConstructorParameters<typeof CallAuthorityOwnership>[0]) => CallAuthorityOwnership;
 const defaultOwnershipFactory: OwnershipFactory = (options) => new CallAuthorityOwnership(options);
 
+function describeStartupError(error: unknown): { errorType: string; errorMessage: string } {
+  const errorType = error instanceof Error && error.name ? error.name.slice(0, 64) : typeof error;
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const errorMessage = rawMessage
+    .replace(/https?:\/\/[^\s]+/gi, "<redacted-url>")
+    .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "<redacted-uuid>")
+    .replace(/\b(?:token|authorization|password|sdp|ice|payload|message|user|device)\b[^,;]*/gi, "<redacted-sensitive-field>")
+    .replace(/[A-Za-z0-9_-]{32,}/g, "<redacted-id>")
+    .slice(0, 160) || "unknown startup error";
+  return { errorType, errorMessage };
+}
+
 export function CallRuntimeBoundary({
   currentUser,
   socketManager,
@@ -183,11 +195,22 @@ export function CallRuntimeBoundary({
       localRuntime = runtime;
       persistentRuntimeRef.current = runtime;
       setPersistentRuntime(runtime);
+      let startupPhase: "session_start" | "runtime_start" = "session_start";
       try {
+        ownership.trace?.("runtime_start_requested", { reason: "session_start" });
         await session.start();
+        ownership.trace?.("session_start_succeeded", { reason: "session_start" });
+        startupPhase = "runtime_start";
         runtime.start();
+        ownership.trace?.("runtime_start_succeeded", { reason: "runtime_start" });
         recordDirectedCallRuntimeBranch("owner");
-      } catch {
+      } catch (error) {
+        const startupError = describeStartupError(error);
+        ownership.trace?.("runtime_start_failed", {
+          reason: "runtime_start_failed",
+          startupPhase,
+          ...startupError,
+        });
         recordDirectedCallRuntimeBranch("unavailable", "persistent_runtime_start_failed");
         runtime.dispose();
         localRuntime = null;

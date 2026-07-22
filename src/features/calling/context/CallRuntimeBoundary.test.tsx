@@ -6,8 +6,9 @@ import type { CallAuthorityOwnership } from "../services/callAuthorityOwnership"
 import type { User } from "@/shared/types";
 
 const mocks = vi.hoisted(() => ({
+  startupFailure: null as Error | null,
   CallProvider: vi.fn(({ children }: { children: ReactNode }) => <div data-testid="legacy-owner">{children}</div>),
-  Session: vi.fn(class { start = vi.fn().mockResolvedValue(true); dispose = vi.fn(); }),
+  Session: vi.fn(class { start = vi.fn(() => mocks.startupFailure ? Promise.reject(mocks.startupFailure) : Promise.resolve(true)); dispose = vi.fn(); }),
   Controller: vi.fn(class { dispose = vi.fn(); }),
   Incoming: vi.fn(class { dispose = vi.fn(); }),
   Presentation: vi.fn(class {
@@ -63,12 +64,18 @@ function makeOwnership(state: "owner" | "non_owner" | "unavailable") {
 }
 
 function makeTraceableOwnership(state: "owner" | "non_owner" | "unavailable") {
-  const events: Array<{ event: string; reason?: string | null }> = [];
+  const events: Array<{ event: string; reason?: string | null; startupPhase?: string; errorType?: string; errorMessage?: string }> = [];
   const ownership = makeOwnership(state) as unknown as CallAuthorityOwnership & {
-    trace: (event: string, details?: { reason?: string | null }) => void;
+    trace: (event: string, details?: { reason?: string | null; startupPhase?: string; errorType?: string; errorMessage?: string }) => void;
     capturedTraceEvents: typeof events;
   };
-  ownership.trace = (event, details) => events.push({ event, reason: details?.reason });
+  ownership.trace = (event, details) => events.push({
+    event,
+    reason: details?.reason,
+    startupPhase: details?.startupPhase,
+    errorType: details?.errorType,
+    errorMessage: details?.errorMessage,
+  });
   ownership.capturedTraceEvents = events;
   ownership.dispose = vi.fn(async (_disposeOwner, reason) => {
     ownership.trace("release_requested", { reason });
@@ -97,6 +104,7 @@ function renderBoundary(
 describe("CallRuntimeBoundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.startupFailure = null;
   });
 
   it("mounts exactly the legacy owner branch without persistent services", async () => {
@@ -187,6 +195,22 @@ describe("CallRuntimeBoundary", () => {
 
     await waitFor(() => expect(ownership.dispose).toHaveBeenCalledTimes(1));
     expect(ownership.capturedTraceEvents).toContainEqual({ event: "release_requested", reason: "runtime_prerequisite_unavailable" });
+  });
+
+  it("traces the safe rejected session-start error before rolling ownership back", async () => {
+    mocks.startupFailure = new Error("topic join failed for device 11111111-1111-4111-8111-111111111111");
+    const ownership = makeTraceableOwnership("owner");
+    renderBoundary("persistent", ownership);
+
+    await waitFor(() => expect(ownership.dispose).toHaveBeenCalledTimes(1));
+    expect(ownership.capturedTraceEvents).toContainEqual({ event: "runtime_start_requested", reason: "session_start", startupPhase: undefined, errorType: undefined, errorMessage: undefined });
+    expect(ownership.capturedTraceEvents).toContainEqual({
+      event: "runtime_start_failed",
+      reason: "runtime_start_failed",
+      startupPhase: "session_start",
+      errorType: "Error",
+      errorMessage: "topic join failed for <redacted-sensitive-field>",
+    });
   });
 
   it("releases only the old authority when the stable profile identity changes", async () => {

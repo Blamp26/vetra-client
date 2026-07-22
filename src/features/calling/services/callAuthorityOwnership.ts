@@ -10,7 +10,8 @@ export type CallAuthorityTraceEventName =
   | "frontend_owner_rejected_stale" | "release_scheduled" | "scheduled_release_cancelled"
   | "release_requested" | "rust_release_received" | "rust_release_accepted"
   | "rust_release_rejected" | "frontend_state_released" | "window_destroy_cleanup"
-  | "native_holder_snapshot";
+  | "native_holder_snapshot" | "runtime_start_requested" | "session_start_succeeded"
+  | "runtime_start_succeeded" | "runtime_start_failed";
 
 export type CallAuthorityDisposeReason =
   | "stale_generation"
@@ -32,6 +33,9 @@ export interface CallAuthorityTraceEvent {
   frontendState: CallAuthorityState;
   rustHolderPresent: boolean;
   outcome: "accepted" | "denied" | "stale" | "cancelled" | null;
+  startupPhase?: "session_start" | "runtime_start";
+  errorType?: string;
+  errorMessage?: string;
 }
 
 export interface NativeHolderSnapshot {
@@ -242,7 +246,7 @@ export class CallAuthorityOwnership {
     return () => this.traceListeners.delete(listener);
   }
 
-  trace(event: CallAuthorityTraceEventName, details: Partial<Pick<CallAuthorityTraceEvent, "reason" | "outcome" | "leaseSuffix" | "rustHolderPresent">> = {}): void {
+  trace(event: CallAuthorityTraceEventName, details: Partial<Pick<CallAuthorityTraceEvent, "reason" | "outcome" | "leaseSuffix" | "rustHolderPresent" | "startupPhase" | "errorType" | "errorMessage">> = {}): void {
     if (!import.meta.env.DEV) return;
     const traceEvent: CallAuthorityTraceEvent = {
       sequence: ++this.traceSequence,
@@ -256,6 +260,9 @@ export class CallAuthorityOwnership {
       frontendState: this.snapshot.state,
       rustHolderPresent: details.rustHolderPresent ?? this.traceRustHolderPresent,
       outcome: details.outcome ?? null,
+      startupPhase: details.startupPhase,
+      errorType: details.errorType,
+      errorMessage: details.errorMessage,
     };
     this.traceRustHolderPresent = traceEvent.rustHolderPresent;
     this.traceEvents.push(traceEvent);

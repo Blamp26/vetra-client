@@ -88,6 +88,9 @@ describe("PersistentCallDebugPanel", () => {
           ownershipKeyHash: "safe",
           leaseSuffix: null,
           reason: "runtime_start_failed",
+          startupPhase: "session_start",
+          errorType: "Error",
+          errorMessage: "join failed safely",
           frontendState: "owner",
           rustHolderPresent: true,
           outcome: null,
@@ -104,7 +107,7 @@ describe("PersistentCallDebugPanel", () => {
       </PersistentCallBoundaryDebugProvider>,
     );
 
-    expect(screen.getByTestId("persistent-call-debug-panel")).toHaveTextContent("15:release_requested(runtime_start_failed)");
+    expect(screen.getByTestId("persistent-call-debug-panel")).toHaveTextContent("15:release_requested(runtime_start_failed)[Error: join failed safely]");
   });
 
   it("lists only the failed gates for a hidden button without exposing identifiers", () => {
