@@ -165,7 +165,7 @@ describe("CallAuthorityOwnership", () => {
     await unavailable.dispose();
   });
 
-  it("uses the scoped native Tauri authority when Web Locks are unavailable", async () => {
+  it("requires both scoped native and Web Lock authority in Tauri", async () => {
     const owners = new Map<string, { window: string; leaseId: string }>();
     let nextLease = 0;
     const nativeAuthority = (window: string): NativeCallAuthorityLike => ({
@@ -182,8 +182,9 @@ describe("CallAuthorityOwnership", () => {
     });
     const firstNative = nativeAuthority("window-a");
     const secondNative = nativeAuthority("window-b");
-    const first = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority: firstNative, ownerId: "tauri-a" });
-    const second = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority: secondNative, ownerId: "tauri-b" });
+    const { locks } = createLocks();
+    const first = new CallAuthorityOwnership({ ...options(locks), nativeAuthority: firstNative, ownerId: "tauri-a" });
+    const second = new CallAuthorityOwnership({ ...options(locks), nativeAuthority: secondNative, ownerId: "tauri-b" });
 
     await expect(first.acquire()).resolves.toMatchObject({ state: "owner" });
     await expect(second.acquire()).resolves.toMatchObject({ state: "non_owner" });
@@ -194,6 +195,61 @@ describe("CallAuthorityOwnership", () => {
     await second.dispose();
   });
 
+  it("fails closed when native authority is present without Web Locks", async () => {
+    const nativeAuthority: NativeCallAuthorityLike = {
+      acquire: vi.fn(async () => "lease"),
+      release: vi.fn(async () => true),
+    };
+    const owner = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority });
+    await expect(owner.acquire()).resolves.toMatchObject({ state: "unavailable" });
+    expect(nativeAuthority.acquire).not.toHaveBeenCalled();
+    await owner.dispose();
+  });
+
+  it("releases a native lease when the Web Lock is unavailable", async () => {
+    const nativeAuthority: NativeCallAuthorityLike = {
+      acquire: vi.fn(async () => "native-lease"),
+      release: vi.fn(async () => true),
+    };
+    const locks: LockManagerLike = {
+      request: vi.fn(async (_name, _options, callback) => callback(null)),
+    };
+    const owner = new CallAuthorityOwnership({ ...options(locks), nativeAuthority });
+    await expect(owner.acquire()).resolves.toMatchObject({ state: "non_owner" });
+    expect(nativeAuthority.release).toHaveBeenCalledWith(owner.key, "native-lease");
+    await owner.dispose();
+  });
+
+  it("retries a native non-owner after the actual lock is released without BroadcastChannel", async () => {
+    vi.useFakeTimers();
+    try {
+      const { locks } = createLocks();
+      const owners = new Map<string, string>();
+      const nativeAuthority = (name: string): NativeCallAuthorityLike => ({
+        acquire: vi.fn(async (key) => {
+          if (owners.has(key)) return null;
+          const lease = `${name}-lease`;
+          owners.set(key, lease);
+          return lease;
+        }),
+        release: vi.fn(async (key, lease) => {
+          if (owners.get(key) === lease) owners.delete(key);
+          return true;
+        }),
+      });
+      const first = new CallAuthorityOwnership({ ...options(locks), nativeAuthority: nativeAuthority("first") });
+      const second = new CallAuthorityOwnership({ ...options(locks), nativeAuthority: nativeAuthority("second"), createBroadcastChannel: () => null });
+      await first.acquire();
+      await expect(second.acquire()).resolves.toMatchObject({ state: "non_owner" });
+      await first.dispose();
+      await vi.advanceTimersByTimeAsync(250);
+      expect(second.getSnapshot().state).toBe("owner");
+      await second.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("records a redacted native lifecycle timeline", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const nativeAuthority: NativeCallAuthorityLike = {
@@ -201,7 +257,8 @@ describe("CallAuthorityOwnership", () => {
       release: vi.fn(async () => true),
       snapshot: vi.fn(async () => ({ present: true, keyHash: "safe", leaseSuffix: "secret", windowLabel: "window-a" })),
     };
-    const owner = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority });
+    const { locks } = createLocks();
+    const owner = new CallAuthorityOwnership({ ...options(locks), nativeAuthority });
     owner.setTraceContext(7, "window-a");
     await owner.acquire();
     await owner.dispose();
@@ -217,7 +274,7 @@ describe("CallAuthorityOwnership", () => {
     expect(info).toHaveBeenCalledWith("[persistent-call-ownership-trace]", expect.any(Object));
   });
 
-  it("does not let a stale native release remove a newer same-window lease", async () => {
+  it("does not let a stale native release remove a newer lease", async () => {
     const owners = new Map<string, string>();
     let nextLease = 0;
     const nativeAuthority = (window: string): NativeCallAuthorityLike => ({
@@ -230,14 +287,16 @@ describe("CallAuthorityOwnership", () => {
         if (owners.get(key) === leaseId) owners.delete(key);
       }),
     });
-    const oldGeneration = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority: nativeAuthority("window-a") });
-    const liveGeneration = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority: nativeAuthority("window-a") });
-
-    await oldGeneration.acquire();
-    await liveGeneration.acquire();
-    await oldGeneration.dispose();
-    expect(owners.get(oldGeneration.key!)).toBe("window-a:2");
-    await liveGeneration.dispose();
+    const first = nativeAuthority("window-a");
+    const second = nativeAuthority("window-a");
+    const key = `vetra:call-authority:${USER_A}:${DEVICE_A}`;
+    const oldLease = await first.acquire(key);
+    const liveLease = await second.acquire(key);
+    expect(oldLease).toBe("window-a:1");
+    expect(liveLease).toBe("window-a:2");
+    await first.release(key, oldLease!);
+    expect(owners.get(key)).toBe("window-a:2");
+    await second.release(key, liveLease!);
   });
 
   it("releases a native lease that completes after its frontend generation was disposed", async () => {
@@ -251,7 +310,8 @@ describe("CallAuthorityOwnership", () => {
         releasedLease = leaseId;
       }),
     };
-    const stale = new CallAuthorityOwnership({ ...options(null), locks: null, nativeAuthority });
+    const { locks } = createLocks();
+    const stale = new CallAuthorityOwnership({ ...options(locks), nativeAuthority });
     const acquisition = stale.acquire();
     await stale.dispose();
     resolveAcquire("stale-lease");

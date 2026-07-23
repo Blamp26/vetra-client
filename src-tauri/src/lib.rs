@@ -1,17 +1,28 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::fs::{File, OpenOptions};
+use std::io::{ErrorKind, Result as IoResult};
+use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex,
+};
 
+use fs2::FileExt;
 use tauri::{Manager, WindowEvent};
+
+const AUTHORITY_PREFIX: &str = "vetra:call-authority:";
+const MAX_AUTHORITY_KEY_BYTES: usize = 512;
 
 struct NativeLease {
     window_label: String,
     lease_id: String,
+    file: File,
 }
 
 #[derive(Default)]
 struct CallAuthorityRegistry {
     owners: Mutex<HashMap<String, NativeLease>>,
-    next_lease_id: Mutex<u64>,
+    next_lease_id: AtomicU64,
 }
 
 #[derive(serde::Serialize)]
@@ -23,13 +34,44 @@ struct NativeHolderSnapshot {
     window_label: Option<String>,
 }
 
-fn key_hash(key: &str) -> String {
-    let mut hash: u32 = 2_166_136_261;
-    for byte in key.as_bytes() {
-        hash ^= u32::from(*byte);
-        hash = hash.wrapping_mul(16_777_619);
+fn validate_key(key: &str) -> Result<(), String> {
+    if key.is_empty() || key.len() > MAX_AUTHORITY_KEY_BYTES || !key.starts_with(AUTHORITY_PREFIX) {
+        return Err("invalid authority key".to_string());
     }
-    format!("{hash:08x}")
+    Ok(())
+}
+
+fn key_hash(key: &str) -> String {
+    let mut hash: u64 = 14_695_981_039_346_656_037;
+    for byte in key.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(1_099_511_628_211);
+    }
+    format!("{hash:016x}")
+}
+
+fn lock_path(key: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("vetra-call-authority-{}.lock", key_hash(key)))
+}
+
+fn open_lock_file(key: &str) -> IoResult<File> {
+    OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(lock_path(key))
+}
+
+fn is_lock_busy(error: &std::io::Error) -> bool {
+    error.kind() == ErrorKind::WouldBlock
+}
+
+fn next_lease_id(registry: &CallAuthorityRegistry, window_label: &str) -> String {
+    let number = registry
+        .next_lease_id
+        .fetch_add(1, Ordering::Relaxed)
+        .wrapping_add(1);
+    format!("{window_label}:{number}")
 }
 
 #[tauri::command]
@@ -37,28 +79,50 @@ fn acquire_call_authority(
     window: tauri::Window,
     registry: tauri::State<'_, CallAuthorityRegistry>,
     key: String,
-) -> Option<String> {
-    let Ok(mut owners) = registry.owners.lock() else {
-        return None;
-    };
-    let Ok(mut next_lease_id) = registry.next_lease_id.lock() else {
-        return None;
-    };
-    let owner = window.label().to_string();
-    match owners.get(&key) {
-        Some(current) if current.window_label != owner => None,
-        _ => {
-            *next_lease_id = next_lease_id.wrapping_add(1);
-            let lease_id = format!("{}:{}", owner, *next_lease_id);
+) -> Result<Option<String>, String> {
+    validate_key(&key)?;
+    let file = open_lock_file(&key).map_err(|_| "authority lock unavailable".to_string())?;
+    let window_label = window.label().to_string();
+    let mut owners = registry
+        .owners
+        .lock()
+        .map_err(|_| "authority lock unavailable".to_string())?;
+
+    if let Some(current) = owners.get(&key) {
+        if current.window_label != window_label {
+            return Ok(None);
+        }
+        let cloned = current
+            .file
+            .try_clone()
+            .map_err(|_| "authority lock unavailable".to_string())?;
+        let lease_id = next_lease_id(&registry, &window_label);
+        owners.insert(
+            key,
+            NativeLease {
+                window_label,
+                lease_id: lease_id.clone(),
+                file: cloned,
+            },
+        );
+        return Ok(Some(lease_id));
+    }
+
+    match file.try_lock_exclusive() {
+        Ok(()) => {
+            let lease_id = next_lease_id(&registry, &window_label);
             owners.insert(
                 key,
                 NativeLease {
-                    window_label: owner,
+                    window_label,
                     lease_id: lease_id.clone(),
+                    file,
                 },
             );
-            Some(lease_id)
+            Ok(Some(lease_id))
         }
+        Err(error) if is_lock_busy(&error) => Ok(None),
+        Err(_) => Err("authority lock unavailable".to_string()),
     }
 }
 
@@ -68,19 +132,25 @@ fn release_call_authority(
     registry: tauri::State<'_, CallAuthorityRegistry>,
     key: String,
     lease_id: String,
-) -> bool {
-    let Ok(mut owners) = registry.owners.lock() else {
-        return false;
-    };
+) -> Result<bool, String> {
+    validate_key(&key)?;
+    let mut owners = registry
+        .owners
+        .lock()
+        .map_err(|_| "authority lock unavailable".to_string())?;
     if owners
         .get(&key)
         .is_some_and(|owner| owner.window_label == window.label() && owner.lease_id == lease_id)
     {
-        owners.remove(&key);
-        true
-    } else {
-        false
+        if let Some(owner) = owners.remove(&key) {
+            owner
+                .file
+                .unlock()
+                .map_err(|_| "authority lock unavailable".to_string())?;
+        }
+        return Ok(true);
     }
+    Ok(false)
 }
 
 #[tauri::command]
@@ -88,17 +158,14 @@ fn get_call_authority_snapshot(
     window: tauri::Window,
     registry: tauri::State<'_, CallAuthorityRegistry>,
     key: String,
-) -> NativeHolderSnapshot {
-    let Ok(owners) = registry.owners.lock() else {
-        return NativeHolderSnapshot {
-            present: false,
-            key_hash: None,
-            lease_suffix: None,
-            window_label: Some(window.label().to_string()),
-        };
-    };
-    match owners.get(&key) {
-        Some(owner) => NativeHolderSnapshot {
+) -> Result<NativeHolderSnapshot, String> {
+    validate_key(&key)?;
+    let owners = registry
+        .owners
+        .lock()
+        .map_err(|_| "authority lock unavailable".to_string())?;
+    if let Some(owner) = owners.get(&key) {
+        return Ok(NativeHolderSnapshot {
             present: true,
             key_hash: Some(key_hash(&key)),
             lease_suffix: Some(
@@ -113,14 +180,25 @@ fn get_call_authority_snapshot(
                     .collect(),
             ),
             window_label: Some(owner.window_label.clone()),
-        },
-        None => NativeHolderSnapshot {
-            present: false,
-            key_hash: Some(key_hash(&key)),
-            lease_suffix: None,
-            window_label: Some(window.label().to_string()),
-        },
+        });
     }
+    drop(owners);
+
+    let file = open_lock_file(&key).map_err(|_| "authority lock unavailable".to_string())?;
+    let present = match file.try_lock_exclusive() {
+        Ok(()) => {
+            let _ = file.unlock();
+            false
+        }
+        Err(error) if is_lock_busy(&error) => true,
+        Err(_) => return Err("authority lock unavailable".to_string()),
+    };
+    Ok(NativeHolderSnapshot {
+        present,
+        key_hash: Some(key_hash(&key)),
+        lease_suffix: None,
+        window_label: Some(window.label().to_string()),
+    })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -130,7 +208,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             acquire_call_authority,
             release_call_authority,
-            get_call_authority_snapshot,
+            get_call_authority_snapshot
         ])
         .on_window_event(|window, event| {
             if !matches!(event, WindowEvent::Destroyed) {
@@ -149,4 +227,43 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
         .expect("error while running Tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_validation_is_private_and_bounded() {
+        assert!(validate_key("vetra:call-authority:scope:device").is_ok());
+        assert!(validate_key("").is_err());
+        assert!(validate_key("other:scope").is_err());
+        assert!(validate_key(&format!(
+            "{AUTHORITY_PREFIX}{}",
+            "x".repeat(MAX_AUTHORITY_KEY_BYTES)
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn lock_file_is_exclusive_and_release_allows_takeover() {
+        let key = format!("{AUTHORITY_PREFIX}test-exclusive");
+        let first = open_lock_file(&key).unwrap();
+        first.try_lock_exclusive().unwrap();
+        let second = open_lock_file(&key).unwrap();
+        assert!(is_lock_busy(&second.try_lock_exclusive().unwrap_err()));
+        first.unlock().unwrap();
+        second.try_lock_exclusive().unwrap();
+        second.unlock().unwrap();
+    }
+
+    #[test]
+    fn different_keys_do_not_conflict() {
+        let first = open_lock_file(&format!("{AUTHORITY_PREFIX}different-a")).unwrap();
+        let second = open_lock_file(&format!("{AUTHORITY_PREFIX}different-b")).unwrap();
+        first.try_lock_exclusive().unwrap();
+        second.try_lock_exclusive().unwrap();
+        first.unlock().unwrap();
+        second.unlock().unwrap();
+    }
 }

@@ -83,12 +83,18 @@ persistent runtime. The legacy mode remains the compatibility default.
 Call authority is scoped by authenticated profile and the stable directed-call
 `device_id`: `vetra:call-authority:<profile-scope>:<device-id>`. Persistent mode
 requires a valid public-user UUID. Legacy mode uses that UUID when available or
-a clearly prefixed numeric-user scope otherwise. Web Locks are the sole
-authority mechanism and are acquired exclusively with `ifAvailable`; an
-acquired lock is held until the owned runtime has disposed. BroadcastChannel,
-when available, is advisory only: it can announce release and prompt a bounded
-retry, but it can never grant ownership. There is no timestamp lease, timeout
-stealing, or automatic persistent-to-legacy fallback.
+a clearly prefixed numeric-user scope otherwise. In browsers and same-process
+webviews, Web Locks are acquired exclusively with `ifAvailable`; an acquired
+lock is held until the owned runtime has disposed. In Tauri, persistent
+authority requires both that frontend Web Lock and a native OS-backed exclusive
+lock held by the Rust process. The native lock identifier is hashed, its handle
+remains alive for the ownership lifetime, and the operating system releases it
+after process termination. Missing or failing native authority fails closed;
+Tauri never falls back to Web Locks alone. BroadcastChannel, when available,
+is advisory only: it can announce release and prompt a bounded retry, but it can
+never grant ownership. A non-owner retries only after attempting the real lock;
+there is no timestamp lease, timeout stealing, or automatic persistent-to-legacy
+fallback.
 
 The owner-only boundary mounts exactly one legacy `CallProvider` in legacy mode,
 or constructs the dormant pre-media persistent session, lifecycle controller,
@@ -126,10 +132,11 @@ pending work are cleaned up deterministically. Transient SDP/ICE is not
 recovered after reconnect; C3 owns hardened recovery, diagnostics, and UI
 activation.
 
-The current implementation is covered by browser-style injected ownership
-tests. Sharing of Web Locks between target Windows WebViews/Tauri windows, and
-manual multi-window verification there, remain later runtime verification
-items; no Windows or Tauri multi-WebView claim is made here.
+The implementation is covered by browser-style injected ownership tests and
+Rust native-lock tests. Browser Web Locks coordinate same-process webviews;
+the native lock coordinates separate Tauri processes. Manual Windows/Tauri
+verification of two real processes, takeover after owner exit, and crash
+release remains required before relying on the production boundary.
 
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has

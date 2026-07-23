@@ -311,7 +311,7 @@ export class CallAuthorityOwnership {
 
     this.trace("acquire_requested");
     this.setState("acquiring");
-    if (!this.key || (!this.locks && !this.nativeAuthority)) {
+    if (!this.key || (!this.locks && !this.nativeAuthority) || (this.nativeAuthority && !this.locks)) {
       this.setState("unavailable");
       return this.snapshot;
     }
@@ -334,6 +334,7 @@ export class CallAuthorityOwnership {
           this.trace("rust_acquire_denied", { outcome: "denied", reason: "holder_present", rustHolderPresent: true });
           this.setState("non_owner");
           settle();
+          queueMicrotask(() => this.scheduleRetry());
           return;
         }
         this.trace("rust_acquire_granted", { outcome: "accepted", leaseSuffix: typeof acquired === "string" ? leaseSuffix(acquired) : null, rustHolderPresent: true });
@@ -354,8 +355,37 @@ export class CallAuthorityOwnership {
         });
       };
 
+      let nativeLeasePendingWebLock: string | null = null;
       const request = this.nativeAuthority
-        ? (this.trace("rust_acquire_received"), this.nativeAuthority.acquire(this.key!).then((leaseId) => onAcquired(leaseId)))
+        ? (this.trace("rust_acquire_received"), this.nativeAuthority.acquire(this.key!).then(async (leaseId) => {
+            if (leaseId === null) {
+              await onAcquired(null);
+              return;
+            }
+            nativeLeasePendingWebLock = leaseId;
+            if (this.disposed) {
+              await onAcquired(leaseId);
+              return;
+            }
+            try {
+              await this.locks!.request(this.key!, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+                if (!lock) {
+                  await this.nativeAuthority!.release(this.key!, leaseId).catch(() => undefined);
+                  nativeLeasePendingWebLock = null;
+                  await onAcquired(null);
+                  return;
+                }
+                nativeLeasePendingWebLock = null;
+                await onAcquired(leaseId);
+              });
+            } catch (error) {
+              if (nativeLeasePendingWebLock === leaseId) {
+                nativeLeasePendingWebLock = null;
+                await this.nativeAuthority!.release(this.key!, leaseId).catch(() => undefined);
+              }
+              throw error;
+            }
+          }))
         : this.locks!.request(this.key!, { mode: "exclusive", ifAvailable: true }, async (lock) => {
             await onAcquired(Boolean(lock));
           });
@@ -421,7 +451,7 @@ export class CallAuthorityOwnership {
   private openChannel(): void {
     if (!this.key || this.channel || !this.createBroadcastChannel) return;
     try {
-      const channel = this.createBroadcastChannel(`vetra:call-authority:${this.key}`);
+      const channel = this.createBroadcastChannel(`vetra:call-authority:${hashCallAuthorityKey(this.key)}`);
       if (!channel) return;
       this.channel = channel;
       channel.onmessage = (event) => {
