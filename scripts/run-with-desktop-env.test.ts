@@ -66,4 +66,13 @@ describe("resolveDesktopEnv", () => {
     expect(env.VITE_API_URL).toBe("http://146.120.249.160/api/v1");
     expect(env.VITE_SOCKET_URL).toBe("ws://146.120.249.160/socket");
   });
+
+  it("does not inject the release runtime default into desktop development", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "vetra-desktop-env-"));
+    tempDirs.push(cwd);
+
+    const env = resolveDesktopEnv({}, cwd);
+
+    expect(env).not.toHaveProperty("VITE_CALL_RUNTIME_MODE");
+  });
 });

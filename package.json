@@ -8,7 +8,7 @@
     "dev:desktop-web": "node scripts/run-with-desktop-env.mjs vite",
     "test": "vitest",
     "test:call-stress": "vitest --run src/features/calling/services/webrtcService.stress.test.ts",
-    "build": "tsc && vite build",
+    "build": "node scripts/run-release-build.mjs",
     "build:desktop-web": "node scripts/run-with-desktop-env.mjs npm run build",
     "preview": "vite preview",
     "tauri": "tauri",
