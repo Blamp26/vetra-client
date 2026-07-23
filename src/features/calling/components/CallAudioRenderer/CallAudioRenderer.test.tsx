@@ -7,6 +7,7 @@ class MockMediaStream {}
 
 describe('CallAudioRenderer', () => {
   let setSinkIdMock: ReturnType<typeof vi.fn>;
+  let playMock: ReturnType<typeof vi.fn>;
   let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeAll(() => {
@@ -15,10 +16,16 @@ describe('CallAudioRenderer', () => {
 
   beforeEach(() => {
     setSinkIdMock = vi.fn().mockResolvedValue(undefined);
+    playMock = vi.fn().mockResolvedValue(undefined);
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     Object.defineProperty(HTMLMediaElement.prototype, 'setSinkId', {
       value: setSinkIdMock,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      value: playMock,
       configurable: true,
       writable: true,
     });
@@ -27,6 +34,7 @@ describe('CallAudioRenderer', () => {
   afterEach(() => {
     consoleWarnSpy.mockRestore();
     Reflect.deleteProperty(HTMLMediaElement.prototype, 'setSinkId');
+    Reflect.deleteProperty(HTMLMediaElement.prototype, 'play');
   });
 
   it('attaches the remote stream to the audio element', () => {
@@ -67,6 +75,36 @@ describe('CallAudioRenderer', () => {
 
     const audio = screen.getByTestId('call-audio-renderer') as HTMLAudioElement;
     expect(audio.srcObject).toBeNull();
+  });
+
+  it('starts playback when a new remote stream is attached', () => {
+    const remoteStream = new MediaStream();
+
+    render(
+      <CallAudioRenderer
+        remoteStream={remoteStream}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />,
+    );
+
+    expect(playMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles a rejected playback promise without an unhandled rejection', async () => {
+    playMock.mockRejectedValueOnce(new Error('autoplay blocked'));
+
+    expect(() => render(
+      <CallAudioRenderer
+        remoteStream={new MediaStream()}
+        selectedOutputDeviceId="default"
+        soundEnabled
+        outputVolume={1}
+      />,
+    )).not.toThrow();
+
+    await Promise.resolve();
   });
 
   it('clears srcObject on unmount', () => {

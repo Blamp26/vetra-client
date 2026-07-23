@@ -276,6 +276,93 @@ describe('WebRTCService', () => {
             expect(onCallId).toHaveBeenCalledWith('123:456');
         });
 
+        it('queues early local ICE and flushes it with the authoritative call id in order', async () => {
+            let acknowledgeOffer: ((payload: { call_id: string }) => void) | undefined;
+            const offerPush = {
+                receive(event: string, callback: (payload: { call_id: string }) => void) {
+                    if (event === 'ok') acknowledgeOffer = callback;
+                    return offerPush;
+                },
+            };
+            mockChannelPush.mockImplementationOnce(() => offerPush);
+
+            const startPromise = service.startCall();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            pc.onicecandidate?.({ candidate: { candidate: 'early-candidate', sdpMid: '0', sdpMLineIndex: 0 } } as any);
+            pc.onicecandidate?.({ candidate: { candidate: 'early-candidate-2', sdpMid: '0', sdpMLineIndex: 0 } } as any);
+            pc.onicecandidate?.({ candidate: { candidate: 'early-candidate', sdpMid: '0', sdpMLineIndex: 0 } } as any);
+
+            expect(mockChannelPush.mock.calls.filter(([event]) => event === 'ice_candidate')).toHaveLength(0);
+            acknowledgeOffer?.({ call_id: '214:1' });
+            await startPromise;
+            await Promise.resolve();
+
+            const icePushes = mockChannelPush.mock.calls.filter(([event]) => event === 'ice_candidate');
+            expect(icePushes.length).toBeGreaterThan(0);
+            expect(icePushes.every(([, payload]) => payload.call_id === '214:1')).toBe(true);
+            expect(icePushes.map(([, payload]) => payload.candidate.candidate)).toEqual([
+                'early-candidate',
+                'early-candidate-2',
+            ]);
+        });
+
+        it('sends local ICE immediately after the authoritative call id is known and deduplicates it', async () => {
+            await service.startCall();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            mockChannelPush.mockClear();
+
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            pc.onicecandidate?.({ candidate: { candidate: 'late-candidate', sdpMid: '0', sdpMLineIndex: 0 } } as any);
+            pc.onicecandidate?.({ candidate: { candidate: 'late-candidate', sdpMid: '0', sdpMLineIndex: 0 } } as any);
+
+            expect(mockChannelPush).toHaveBeenCalledTimes(1);
+            expect(mockChannelPush).toHaveBeenCalledWith('ice_candidate', {
+                candidate: { candidate: 'late-candidate', sdpMid: '0', sdpMLineIndex: 0 },
+                to_user_id: remoteUserId,
+                call_id: '123:456',
+            });
+        });
+
+        it('does not flush queued local ICE after disposal', async () => {
+            let acknowledgeOffer: ((payload: { call_id: string }) => void) | undefined;
+            const offerPush = {
+                receive(event: string, callback: (payload: { call_id: string }) => void) {
+                    if (event === 'ok') acknowledgeOffer = callback;
+                    return offerPush;
+                },
+            };
+            mockChannelPush.mockImplementationOnce(() => offerPush);
+            const startPromise = service.startCall();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            pc.onicecandidate?.({ candidate: { candidate: 'queued-1' } } as any);
+            pc.onicecandidate?.({ candidate: { candidate: 'queued-2' } } as any);
+
+            const originalPush = mockChannelPush.getMockImplementation();
+            mockChannelPush.mockImplementation((event, payload) => {
+                if (event === 'ice_candidate') service.dispose();
+                return originalPush?.(event, payload);
+            });
+            acknowledgeOffer?.({ call_id: '214:1' });
+            await startPromise;
+            await Promise.resolve();
+
+            expect((service as any).pendingLocalIceCandidates).toEqual([]);
+            expect(mockChannelPush.mock.calls.filter(([event]) => event === 'ice_candidate')).toHaveLength(1);
+            mockChannelPush.mockImplementation(() => {
+                const response = {
+                    receive(receiveEvent: string, callback: (responsePayload?: unknown) => void) {
+                        if (mockPushReply.mode === 'ok' && receiveEvent === 'ok') callback(mockPushReply.payload);
+                        if (mockPushReply.mode === 'error' && receiveEvent === 'error') callback(mockPushReply.payload);
+                        if (mockPushReply.mode === 'timeout' && receiveEvent === 'timeout') callback();
+                        return response;
+                    },
+                };
+                return response;
+            });
+        });
+
         it('rejects when the server rejects the initial offer', async () => {
             mockPushReply.mode = 'error';
             mockPushReply.payload = { reason: 'not_found' };
@@ -318,6 +405,10 @@ describe('WebRTCService', () => {
 
     describe('acceptCall', () => {
         const remoteSdp = 'mock-remote-offer';
+
+        beforeEach(() => {
+            service.setCallId('1:2');
+        });
 
         it('requests the microphone, sets remote description, creates an answer, and sends it', async () => {
             await service.acceptCall(remoteSdp);
@@ -420,6 +511,7 @@ describe('WebRTCService', () => {
         });
 
         it('applies a renegotiation offer and answers over the renegotiate event', async () => {
+            service.setCallId('1:2');
             await service.acceptCall('initial-offer-sdp');
             mockChannelPush.mockClear();
 

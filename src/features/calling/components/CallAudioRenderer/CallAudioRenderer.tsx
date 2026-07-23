@@ -66,6 +66,10 @@ export function CallAudioRenderer({
 
     audio.srcObject = remoteStream;
 
+    if (remoteStream && typeof audio.play === 'function') {
+      void audio.play().catch(() => undefined);
+    }
+
     return () => {
       audio.srcObject = null;
     };

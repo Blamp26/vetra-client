@@ -157,9 +157,13 @@ export class WebRTCService {
     }> = [];
     private pendingScreenShareOnEnded: (() => void) | null = null;
     private channel: Channel;
-    private localUserId: number;
     private remoteUserId: ResourceRef;
     private callId: string | null = null;
+    private pendingLocalIceCandidates: RTCIceCandidateInit[] = [];
+    private pendingLocalIceCandidateKeys = new Set<string>();
+    private sentLocalIceCandidateKeys = new Set<string>();
+    private localIceFlushPromise: Promise<void> | null = null;
+    private lifecycleGeneration = 0;
     private iceCandidateQueue: RTCIceCandidateInit[] = [];
     private queuedIceCandidateKeys = new Set<string>();
     private appliedIceCandidateKeys = new Set<string>();
@@ -180,17 +184,19 @@ export class WebRTCService {
     public onCallIdReceived: ((callId: string) => void) | null = null;
     public onDiagnosticsChange: ((diagnostics: WebRTCDiagnostics) => void) | null = null;
 
-    constructor(channel: Channel, localUserId: number, remoteUserId: ResourceRef) {
+    constructor(channel: Channel, _localUserId: number, remoteUserId: ResourceRef) {
         this.channel = channel;
-        this.localUserId = localUserId;
         this.remoteUserId = remoteUserId;
     }
 
     setCallId(callId: string | null): void {
         this.callId = callId;
+        if (callId) {
+            this.startLocalIceFlush();
+        }
     }
 
-    getSignalingCallId(): string {
+    getSignalingCallId(): string | null {
         return this.getCallId();
     }
 
@@ -634,6 +640,10 @@ export class WebRTCService {
         this.pendingScreenShareChange = false;
         this.pendingScreenShareChangeReason = null;
         this.rejectPendingScreenShareStarts(new Error('Screen share stopped because the peer was disposed'));
+        this.lifecycleGeneration += 1;
+        this.pendingLocalIceCandidates = [];
+        this.pendingLocalIceCandidateKeys.clear();
+        this.sentLocalIceCandidateKeys.clear();
         this.iceCandidateQueue = [];
         this.queuedIceCandidateKeys.clear();
         this.appliedIceCandidateKeys.clear();
@@ -659,6 +669,75 @@ export class WebRTCService {
 
     hangUp(): void {
         this.dispose();
+    }
+
+    private startLocalIceFlush(): void {
+        if (this.localIceFlushPromise || !this.callId) return;
+
+        const generation = this.lifecycleGeneration;
+        const promise = this.flushPendingLocalIceCandidates(generation);
+        this.localIceFlushPromise = promise;
+        void promise.finally(() => {
+            if (this.localIceFlushPromise === promise) {
+                this.localIceFlushPromise = null;
+            }
+        }).catch(() => undefined);
+    }
+
+    private async flushPendingLocalIceCandidates(generation: number): Promise<void> {
+        while (
+            generation === this.lifecycleGeneration &&
+            this.callId &&
+            this.pendingLocalIceCandidates.length > 0
+        ) {
+            const candidate = this.pendingLocalIceCandidates.shift();
+            if (!candidate) continue;
+            const key = candidateKey(candidate);
+            this.pendingLocalIceCandidateKeys.delete(key);
+            this.sendLocalIceCandidate(candidate, key, generation);
+            await Promise.resolve();
+        }
+    }
+
+    private sendLocalIceCandidate(candidate: RTCIceCandidateInit, key: string, generation: number): void {
+        const callId = this.callId;
+        if (generation !== this.lifecycleGeneration || !callId || this.sentLocalIceCandidateKeys.has(key)) {
+            return;
+        }
+
+        this.sentLocalIceCandidateKeys.add(key);
+        this.channel.push('ice_candidate', {
+            candidate,
+            to_user_id: this.remoteUserId,
+            call_id: callId,
+        });
+    }
+
+    private handleLocalIceCandidate(candidate: RTCIceCandidate): void {
+        const candidateInit = JSON.parse(JSON.stringify(
+            typeof candidate.toJSON === 'function'
+                ? candidate.toJSON()
+                : {
+                    candidate: candidate.candidate,
+                    sdpMid: candidate.sdpMid,
+                    sdpMLineIndex: candidate.sdpMLineIndex,
+                    usernameFragment: candidate.usernameFragment,
+                },
+        )) as RTCIceCandidateInit;
+        const key = candidateKey(candidateInit);
+
+        if (this.pendingLocalIceCandidateKeys.has(key) || this.sentLocalIceCandidateKeys.has(key)) {
+            return;
+        }
+
+        if (!this.callId || this.localIceFlushPromise) {
+            this.pendingLocalIceCandidateKeys.add(key);
+            this.pendingLocalIceCandidates.push(candidateInit);
+            if (this.callId) this.startLocalIceFlush();
+            return;
+        }
+
+        this.sendLocalIceCandidate(candidateInit, key, this.lifecycleGeneration);
     }
 
     private async flushIceCandidateQueue(): Promise<void> {
@@ -733,8 +812,8 @@ export class WebRTCService {
         }
     }
 
-    private getCallId(): string {
-        return this.callId ?? `${this.remoteUserId}:${this.localUserId}`;
+    private getCallId(): string | null {
+        return this.callId;
     }
 
     private pushWithReply<T = void>(event: string, payload: Record<string, unknown>): Promise<T> {
@@ -1307,11 +1386,7 @@ export class WebRTCService {
                 void this.refreshDiagnostics();
                 return;
             }
-            this.channel.push('ice_candidate', {
-                candidate: event.candidate,
-                to_user_id: this.remoteUserId,
-                call_id: this.getCallId(),
-            });
+            this.handleLocalIceCandidate(event.candidate);
         };
         this.peerConnection.ontrack = (event) => {
             const stream = event.streams[0];
