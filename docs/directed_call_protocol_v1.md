@@ -138,6 +138,12 @@ the native lock coordinates separate Tauri processes. Manual Windows/Tauri
 verification of two real processes, takeover after owner exit, and crash
 release remains required before relying on the production boundary.
 
+When an already-running non-owner later acquires both authority locks, the
+current boundary generation activates the persistent runtime at that point.
+The delayed activation is idempotent, is fenced by boundary disposal and
+ownership generation, and publishes call surfaces only after runtime startup
+succeeds.
+
 call:received means transport accepted and parsed an incoming call.
 call:presented means the visible in-application incoming-call surface has
 committed. An operating-system notification alone is not presented.

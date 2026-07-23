@@ -63,6 +63,28 @@ function makeOwnership(state: "owner" | "non_owner" | "unavailable") {
   } as unknown as CallAuthorityOwnership;
 }
 
+function makeControllableOwnership(initialState: "owner" | "non_owner" | "unavailable") {
+  type TestState = "owner" | "non_owner" | "unavailable";
+  let state: TestState = initialState;
+  const listeners = new Set<(snapshot: { state: TestState; key: string; ownerId: string }) => void>();
+  const snapshot = () => ({ state, key: "vetra:call-authority:test", ownerId: "owner-id" });
+  const ownership = {
+    getSnapshot: vi.fn(snapshot),
+    subscribe: vi.fn((listener: (next: ReturnType<typeof snapshot>) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }),
+    acquire: vi.fn(async () => snapshot()),
+    dispose: vi.fn(async () => undefined),
+    transition(next: TestState) {
+      state = next;
+      const nextSnapshot = snapshot();
+      listeners.forEach((listener) => listener(nextSnapshot));
+    },
+  } as unknown as CallAuthorityOwnership & { transition: (state: TestState) => void };
+  return ownership;
+}
+
 function makeTraceableOwnership(state: "owner" | "non_owner" | "unavailable") {
   const events: Array<{ event: string; reason?: string | null; startupPhase?: string; errorType?: string; errorMessage?: string }> = [];
   const ownership = makeOwnership(state) as unknown as CallAuthorityOwnership & {
@@ -123,6 +145,53 @@ describe("CallRuntimeBoundary", () => {
     expect(mocks.Presentation).toHaveBeenCalledTimes(1);
     expect(mocks.SignalTransport).toHaveBeenCalledTimes(1);
     expect(mocks.MediaCoordinator).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts the persistent runtime when a waiting non-owner later becomes owner", async () => {
+    const ownership = makeControllableOwnership("non_owner");
+    renderBoundary("persistent", ownership);
+    await waitFor(() => expect(ownership.acquire).toHaveBeenCalledTimes(1));
+    expect(mocks.Session).not.toHaveBeenCalled();
+
+    ownership.transition("owner");
+    await waitFor(() => expect(mocks.Session).toHaveBeenCalledTimes(1));
+    expect(mocks.Incoming).toHaveBeenCalledTimes(1);
+    expect(mocks.SignalTransport).toHaveBeenCalledTimes(1);
+    expect(mocks.MediaCoordinator).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts exactly once for duplicate owner notifications and an owner-acquire race", async () => {
+    const ownership = makeControllableOwnership("owner");
+    vi.mocked(ownership.acquire).mockImplementationOnce(async () => {
+      ownership.transition("owner");
+      ownership.transition("owner");
+      return ownership.getSnapshot();
+    });
+    renderBoundary("persistent", ownership);
+    await waitFor(() => expect(mocks.Session).toHaveBeenCalledTimes(1));
+    expect(mocks.Incoming).toHaveBeenCalledTimes(1);
+    expect(mocks.MediaCoordinator).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not activate after unmounting a waiting non-owner", async () => {
+    const ownership = makeControllableOwnership("non_owner");
+    const view = renderBoundary("persistent", ownership);
+    await waitFor(() => expect(ownership.acquire).toHaveBeenCalledTimes(1));
+    view.unmount();
+    ownership.transition("owner");
+    await Promise.resolve();
+    expect(mocks.Session).not.toHaveBeenCalled();
+  });
+
+  it("rolls back authority when delayed runtime startup fails", async () => {
+    mocks.startupFailure = new Error("join failed");
+    const ownership = makeControllableOwnership("non_owner");
+    renderBoundary("persistent", ownership);
+    await waitFor(() => expect(ownership.acquire).toHaveBeenCalledTimes(1));
+    ownership.transition("owner");
+    await waitFor(() => expect(ownership.dispose).toHaveBeenCalledTimes(1));
+    expect(mocks.Session).toHaveBeenCalledTimes(1);
+    expect(mocks.MediaCoordinator.mock.instances[0].dispose).toHaveBeenCalled();
   });
 
   it("waits for the persistent socket prerequisite without releasing a granted owner", async () => {

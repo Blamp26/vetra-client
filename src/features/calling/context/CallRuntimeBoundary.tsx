@@ -108,16 +108,123 @@ export function CallRuntimeBoundary({
     ownership.trace?.("boundary_mount");
     activeOwnershipRef.current = ownership;
     setAuthority(ownership.getSnapshot());
+    let cancelled = false;
+    let localRuntime: PersistentRuntime | null = null;
+    let runtimeStartPromise: Promise<void> | null = null;
+
+    const isCurrentOwner = () =>
+      !cancelled
+      && activeOwnershipRef.current === ownership
+      && mode === "persistent"
+      && ownership.getSnapshot().state === "owner";
+
+    const activateOwnerRuntime = (): void => {
+      if (!isCurrentOwner() || runtimeStartPromise || persistentRuntimeRef.current) return;
+      runtimeStartPromise = (async () => {
+        if (!scope || !socketManager || !publicUserRef || !persistentMediaAvailable) {
+          recordDirectedCallRuntimeBranch(
+            "unavailable",
+            !persistentMediaAvailable ? "media_api_unavailable" : "persistent_runtime_unavailable",
+          );
+          recordDirectedCallDiagnostic("failure", { failureKind: !persistentMediaAvailable ? "persistent_media_unavailable" : "persistent_runtime_unavailable" });
+          await ownership.dispose(undefined, "runtime_prerequisite_unavailable");
+          return;
+        }
+
+        const session = new DirectedCallSession({
+          socket: socketManager.socket,
+          publicUserRef,
+          deviceId,
+          enabled: true,
+          trace: (event, details) => ownership.trace?.(event, details),
+        });
+        const controller = new DirectedCallLifecycleController(session);
+        const incoming = new DirectedCallIncomingCoordinator(session, controller, { enabled: true });
+        const presentation = new DirectedCallPresentationModel(session, controller, incoming, { enabled: true });
+        const signalTransport = new DirectedCallSignalTransport(session, {
+          generation: `${effectGeneration}:${deviceId}`,
+          isGenerationCurrent: (generation) => generation.startsWith(`${effectGeneration}:`),
+        });
+        const mediaCoordinator = new DirectedCallMediaCoordinator(
+          session,
+          signalTransport,
+          controller,
+          `${effectGeneration}:${deviceId}`,
+          {
+            isGenerationCurrent: (generation) => generation.startsWith(`${effectGeneration}:`),
+          },
+        );
+        const runtime: PersistentRuntime = {
+          start: () => mediaCoordinator.start(),
+          services: { presentation, media: mediaCoordinator },
+          dispose: () => {
+            mediaCoordinator.dispose();
+            signalTransport.dispose();
+            presentation.dispose();
+            incoming.dispose();
+            controller.dispose();
+            session.dispose();
+          },
+        };
+
+        if (!isCurrentOwner()) {
+          runtime.dispose();
+          if (activeOwnershipRef.current !== ownership) await ownership.dispose(undefined, "runtime_generation_stale");
+          return;
+        }
+
+        localRuntime = runtime;
+        persistentRuntimeRef.current = runtime;
+        setPersistentRuntime(runtime);
+        let startupPhase: "session_start" | "runtime_start" = "session_start";
+        try {
+          ownership.trace?.("runtime_start_requested", { reason: "session_start" });
+          await session.start();
+          ownership.trace?.("session_start_succeeded", { reason: "session_start" });
+          if (!isCurrentOwner()) {
+            runtime.dispose();
+            if (persistentRuntimeRef.current === runtime) {
+              persistentRuntimeRef.current = null;
+              setPersistentRuntime(null);
+            }
+            localRuntime = null;
+            await ownership.dispose(undefined, "runtime_generation_stale");
+            return;
+          }
+          startupPhase = "runtime_start";
+          runtime.start();
+          ownership.trace?.("runtime_start_succeeded", { reason: "runtime_start" });
+          recordDirectedCallRuntimeBranch("owner");
+        } catch (error) {
+          const startupError = describeStartupError(error);
+          ownership.trace?.("runtime_start_failed", {
+            reason: "runtime_start_failed",
+            startupPhase,
+            ...startupError,
+          });
+          recordDirectedCallRuntimeBranch("unavailable", "persistent_runtime_start_failed");
+          runtime.dispose();
+          localRuntime = null;
+          if (persistentRuntimeRef.current === runtime) {
+            persistentRuntimeRef.current = null;
+            setPersistentRuntime(null);
+          }
+          await ownership.dispose(undefined, "runtime_start_failed");
+        }
+      })().finally(() => {
+        runtimeStartPromise = null;
+      });
+      void runtimeStartPromise;
+    };
+
     const onAuthority = (snapshot: CallAuthoritySnapshot) => {
       setAuthority(snapshot);
       recordDirectedCallDiagnostic("authority", { mode, authority: snapshot.state });
+      if (snapshot.state === "owner") activateOwnerRuntime();
     };
     const unsubscribe = ownership.subscribe(onAuthority);
     const onWindowDestroy = () => ownership.trace?.("window_destroy_cleanup", { reason: "beforeunload" });
     window.addEventListener("beforeunload", onWindowDestroy);
-    let cancelled = false;
-    let localRuntime: PersistentRuntime | null = null;
-
     void (async () => {
       // Let a dependency-change cleanup release an obsolete scope before the
       // replacement acquisition runs, while allowing StrictMode replay to
@@ -149,86 +256,7 @@ export function CallRuntimeBoundary({
         }
         return;
       }
-      if (!scope || !socketManager || !publicUserRef || !persistentMediaAvailable) {
-        recordDirectedCallRuntimeBranch(
-          "unavailable",
-          !persistentMediaAvailable ? "media_api_unavailable" : "persistent_runtime_unavailable",
-        );
-        recordDirectedCallDiagnostic("failure", { failureKind: !persistentMediaAvailable ? "persistent_media_unavailable" : "persistent_runtime_unavailable" });
-        await ownership.dispose(undefined, "runtime_prerequisite_unavailable");
-        return;
-      }
-
-      const session = new DirectedCallSession({
-        socket: socketManager.socket,
-        publicUserRef,
-        deviceId,
-        enabled: true,
-        trace: (event, details) => ownership.trace?.(event, details),
-      });
-      const controller = new DirectedCallLifecycleController(session);
-      const incoming = new DirectedCallIncomingCoordinator(session, controller, { enabled: true });
-      const presentation = new DirectedCallPresentationModel(session, controller, incoming, { enabled: true });
-      const signalTransport = new DirectedCallSignalTransport(session, {
-        generation: `${effectGeneration}:${deviceId}`,
-        isGenerationCurrent: (generation) => generation.startsWith(`${effectGeneration}:`),
-      });
-      const mediaCoordinator = new DirectedCallMediaCoordinator(
-        session,
-        signalTransport,
-        controller,
-        `${effectGeneration}:${deviceId}`,
-        {
-          isGenerationCurrent: (generation) => generation.startsWith(`${effectGeneration}:`),
-        },
-      );
-      const runtime: PersistentRuntime = {
-        start: () => mediaCoordinator.start(),
-        services: { presentation, media: mediaCoordinator },
-        dispose: () => {
-          mediaCoordinator.dispose();
-          signalTransport.dispose();
-          presentation.dispose();
-          incoming.dispose();
-          controller.dispose();
-          session.dispose();
-        },
-      };
-      if (persistentRuntimeRef.current) {
-        localRuntime = persistentRuntimeRef.current;
-        return;
-      }
-      if (cancelled || ownership.getSnapshot().state !== "owner") {
-        runtime.dispose();
-        await ownership.dispose(undefined, "runtime_generation_stale");
-        return;
-      }
-      localRuntime = runtime;
-      persistentRuntimeRef.current = runtime;
-      setPersistentRuntime(runtime);
-      let startupPhase: "session_start" | "runtime_start" = "session_start";
-      try {
-        ownership.trace?.("runtime_start_requested", { reason: "session_start" });
-        await session.start();
-        ownership.trace?.("session_start_succeeded", { reason: "session_start" });
-        startupPhase = "runtime_start";
-        runtime.start();
-        ownership.trace?.("runtime_start_succeeded", { reason: "runtime_start" });
-        recordDirectedCallRuntimeBranch("owner");
-      } catch (error) {
-        const startupError = describeStartupError(error);
-        ownership.trace?.("runtime_start_failed", {
-          reason: "runtime_start_failed",
-          startupPhase,
-          ...startupError,
-        });
-        recordDirectedCallRuntimeBranch("unavailable", "persistent_runtime_start_failed");
-        runtime.dispose();
-        localRuntime = null;
-        persistentRuntimeRef.current = null;
-        setPersistentRuntime(null);
-        await ownership.dispose(undefined, "runtime_start_failed");
-      }
+      activateOwnerRuntime();
     })();
 
     return () => {
