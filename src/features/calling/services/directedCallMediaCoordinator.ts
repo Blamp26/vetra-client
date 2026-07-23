@@ -107,7 +107,8 @@ export class DirectedCallMediaCoordinator {
   private readonly listeners = new Set<Listener>();
   private readonly generation: string;
   private readonly isGenerationCurrent: (generation: string) => boolean;
-  private readonly adapter: DirectedCallWebRtcAdapter;
+  private readonly adapterFactory: (options: DirectedCallWebRtcAdapterOptions) => DirectedCallWebRtcAdapter;
+  private adapter: DirectedCallWebRtcAdapter;
   private unsubscribeProjection: (() => void) | null = null;
   private unsubscribeSignal: (() => void) | null = null;
   private snapshot: DirectedCallMediaCoordinatorSnapshot;
@@ -134,6 +135,8 @@ export class DirectedCallMediaCoordinator {
   private localCandidateFlushInFlight = false;
   private flushedLocalCandidateCount = 0;
   private peerConnectionDiagnostics: DirectedCallPeerConnectionDiagnostics | null = null;
+  private lastTerminalCallId: string | null = null;
+  private adapterEpoch = 0;
 
   constructor(
     session: DirectedCallSession,
@@ -147,17 +150,25 @@ export class DirectedCallMediaCoordinator {
     this.lifecycle = lifecycle;
     this.generation = generation;
     this.isGenerationCurrent = options.isGenerationCurrent ?? ((current) => current === this.generation);
-    this.adapter = (options.adapterFactory ?? ((adapterOptions) => new DirectedCallWebRtcAdapter(adapterOptions)))({
-      onIceCandidate: (candidate) => this.queueLocalIceCandidate(candidate),
+    this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false };
+    this.adapterFactory = options.adapterFactory ?? ((adapterOptions) => new DirectedCallWebRtcAdapter(adapterOptions));
+    this.adapter = this.createAdapter();
+  }
+
+  private createAdapter(): DirectedCallWebRtcAdapter {
+    const adapterEpoch = ++this.adapterEpoch;
+    return this.adapterFactory({
+      onIceCandidate: (candidate) => {
+        if (this.adapterEpoch === adapterEpoch) this.queueLocalIceCandidate(candidate);
+      },
       onRemoteStream: (stream) => {
-        if (this.disposed) return;
+        if (this.disposed || this.adapterEpoch !== adapterEpoch) return;
         this.remoteAudioStream = stream;
         this.setSnapshot({ ...this.snapshot, remoteAudioStream: stream });
       },
-      onPeerConnectionState: (state) => this.handlePeerConnectionState(state),
-      onPeerConnectionDiagnostics: (diagnostics) => this.handlePeerConnectionDiagnostics(diagnostics),
+      onPeerConnectionState: (state) => this.handlePeerConnectionState(state, adapterEpoch),
+      onPeerConnectionDiagnostics: (diagnostics) => this.handlePeerConnectionDiagnostics(diagnostics, adapterEpoch),
     });
-    this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false };
   }
 
   start(): void {
@@ -199,6 +210,37 @@ export class DirectedCallMediaCoordinator {
     return this.signalTransport;
   }
 
+  private resetCallState(callId: string): void {
+    this.lastTerminalCallId = callId;
+    this.invalidateMediaAttempt();
+    this.signalTransport.unbindCall();
+    this.mediaStartInFlight = false;
+    this.mediaStarted = false;
+    this.beginConnectingSent = false;
+    this.beginConnectingInFlight = false;
+    this.offerSent = false;
+    this.mediaReadySent = false;
+    this.mediaReadyInFlight = false;
+    this.setupFailureSent = false;
+    this.localIssue = null;
+    this.remoteAudioStream = null;
+    this.peerConnectionState = null;
+    this.adapter = this.createAdapter();
+    recordDirectedCallDiagnostic("cleanup", { callId, reason: "call_terminal_reset" });
+    this.setSnapshot({
+      state: "idle",
+      callId: null,
+      participantRole: null,
+      projection: null,
+      generation: this.generation,
+      remoteAudioStream: null,
+      localIssue: null,
+      peerConnectionState: null,
+      isMuted: false,
+      canToggleMute: false,
+    });
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.invalidateMediaAttempt();
@@ -223,13 +265,25 @@ export class DirectedCallMediaCoordinator {
     if (this.snapshot.callId === null) {
       if (!isUsableProjection(projection)) return;
       this.signalTransport.bindCall(projection.call_id);
+      if (this.lastTerminalCallId) {
+        recordDirectedCallDiagnostic("cleanup", {
+          callId: projection.call_id,
+          previousCallId: this.lastTerminalCallId,
+          nextCallId: projection.call_id,
+          reason: "call_rollover",
+        });
+        this.lastTerminalCallId = null;
+      }
+      recordDirectedCallDiagnostic("media_phase", { callId: projection.call_id, reason: "fresh_media_session" });
     } else if (this.snapshot.callId !== projection.call_id) {
       return;
     }
 
     if (TERMINAL_STATES.has(projection.state)) {
-      this.setSnapshot({ ...this.snapshot, projection, state: "disposing" });
-      this.dispose();
+      if (this.snapshot.callId === projection.call_id) {
+        this.setSnapshot({ ...this.snapshot, projection, state: "disposing" });
+        this.resetCallState(projection.call_id);
+      }
       return;
     }
 
@@ -438,8 +492,8 @@ export class DirectedCallMediaCoordinator {
     }
   }
 
-  private handlePeerConnectionState(state: RTCPeerConnectionState): void {
-    if (this.disposed) return;
+  private handlePeerConnectionState(state: RTCPeerConnectionState, adapterEpoch = this.adapterEpoch): void {
+    if (this.disposed || adapterEpoch !== this.adapterEpoch) return;
     this.peerConnectionState = state;
     recordDirectedCallDiagnostic("peer_connection", { callId: this.snapshot.callId, peerConnection: state });
     if (["failed", "closed", "disconnected"].includes(state) && this.snapshot.projection?.state === "active") {
@@ -449,8 +503,8 @@ export class DirectedCallMediaCoordinator {
     this.setSnapshot({ ...this.snapshot, peerConnectionState: state });
   }
 
-  private handlePeerConnectionDiagnostics(diagnostics: DirectedCallPeerConnectionDiagnostics): void {
-    if (this.disposed) return;
+  private handlePeerConnectionDiagnostics(diagnostics: DirectedCallPeerConnectionDiagnostics, adapterEpoch = this.adapterEpoch): void {
+    if (this.disposed || adapterEpoch !== this.adapterEpoch) return;
     this.peerConnectionDiagnostics = diagnostics;
     this.recordPeerConnectionDiagnostics();
   }

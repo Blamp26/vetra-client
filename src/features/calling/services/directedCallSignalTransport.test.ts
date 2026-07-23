@@ -86,4 +86,34 @@ describe("DirectedCallSignalTransport", () => {
 
     await expect(operation).rejects.toThrow("stale directed-call signal");
   });
+
+  it("can safely unbind and rebind for a later call", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { callId, generation: "g1" });
+    const received = vi.fn();
+    transport.subscribe(received);
+    transport.unbindCall();
+    expect(transport.callId).toBeNull();
+    await expect(transport.send(signalId, "offer", { sdp: "v=0" })).rejects.toThrow("unbound directed-call signal transport");
+
+    transport.bindCall(otherCallId);
+    await transport.send(signalId, "offer", { sdp: "v=0" });
+    expect(session.sendSignal).toHaveBeenCalledWith(otherCallId, signalId, "offer", { sdp: "v=0" });
+    session.emit({ call_id: callId, signal_id: signalId, kind: "offer", payload: {} });
+    session.emit({ call_id: otherCallId, signal_id: signalId, kind: "offer", payload: {} });
+    expect(received).toHaveBeenCalledTimes(1);
+    expect(received).toHaveBeenCalledWith(expect.objectContaining({ call_id: otherCallId }));
+  });
+
+  it("fences an in-flight send when the call is unbound for rollover", async () => {
+    let resolveSend!: (value: unknown) => void;
+    const session = createSession();
+    (session.sendSignal as any).mockImplementationOnce(() => new Promise((resolve) => { resolveSend = resolve; }));
+    const transport = new DirectedCallSignalTransport(session, { callId, generation: "g1" });
+    const operation = transport.send(signalId, "offer", { sdp: "v=0" });
+    transport.unbindCall();
+    resolveSend({ ok: true });
+
+    await expect(operation).rejects.toThrow("stale directed-call signal");
+  });
 });

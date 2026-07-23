@@ -7,10 +7,10 @@ import type { DirectedCallSession } from "./directedCallSession";
 const callId = "33333333-3333-4333-8333-333333333333";
 const peerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-function projection(state: "accepted" | "connecting" | "active" | "ended") {
+function projection(state: "accepted" | "connecting" | "active" | "ended", currentCallId = callId) {
   return {
     protocol_version: 1 as const,
-    call_id: callId,
+    call_id: currentCallId,
     state,
     state_version: state === "ended" ? 4 : 1,
     media: "audio" as const,
@@ -211,12 +211,13 @@ describe("DirectedCallMediaCoordinator", () => {
     coordinator.toggleMute();
     session.emit(projection("ended"));
 
-    expect(coordinator.getSnapshot()).toMatchObject({ state: "disposed", isMuted: false, canToggleMute: false });
+    expect(coordinator.getSnapshot()).toMatchObject({ state: "idle", callId: null, isMuted: false, canToggleMute: false });
     track.readyState = "ended";
     track.emit("ended");
-    expect(coordinator.getSnapshot()).toMatchObject({ state: "disposed", isMuted: false, canToggleMute: false });
+    expect(coordinator.getSnapshot()).toMatchObject({ state: "idle", callId: null, isMuted: false, canToggleMute: false });
     coordinator.dispose();
-    expect(adapter.dispose).toHaveBeenCalledTimes(1);
+    expect(coordinator.getSnapshot().state).toBe("disposed");
+    expect(adapter.dispose).toHaveBeenCalledTimes(2);
   });
   it("observes authoritative accepted/connecting state without media actions", () => {
     const session = createSession();
@@ -341,9 +342,106 @@ describe("DirectedCallMediaCoordinator", () => {
     session.emit(projection("accepted"));
     session.emit(projection("ended"));
 
-    expect(coordinator.getSnapshot().state).toBe("disposed");
-    expect(transportDispose).toHaveBeenCalledTimes(1);
+    expect(coordinator.getSnapshot().state).toBe("idle");
+    expect(transportDispose).not.toHaveBeenCalled();
     expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("supports a second distinct call after terminal cleanup in the same runtime", async () => {
+    const secondCallId = "44444444-4444-4444-8444-444444444444";
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapters: DirectedCallWebRtcAdapter[] = [];
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: () => {
+        const adapter = createAdapter();
+        adapters.push(adapter);
+        return adapter;
+      },
+    });
+    coordinator.start();
+
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapters[0].prepareOffer).toHaveBeenCalled());
+    session.emit(projection("connecting"));
+    session.emit(projection("active"));
+    expect(coordinator.getSnapshot().callId).toBe(callId);
+
+    session.emit(projection("ended"));
+    expect(coordinator.getSnapshot()).toMatchObject({ state: "idle", callId: null, isMuted: false, canToggleMute: false });
+    expect(adapters[0].dispose).toHaveBeenCalledTimes(1);
+    expect(coordinator.getSignalTransport().callId).toBeNull();
+
+    session.emit(projection("accepted", secondCallId));
+    await vi.waitFor(() => expect(adapters[1]?.prepareOffer).toHaveBeenCalled());
+    expect(adapters).toHaveLength(2);
+    session.emit(projection("connecting", secondCallId));
+    session.emit(projection("active", secondCallId));
+    expect(coordinator.getSnapshot().callId).toBe(secondCallId);
+
+    session.emit(projection("ended"));
+    expect(coordinator.getSnapshot().callId).toBe(secondCallId);
+    expect(coordinator.getSnapshot().state).toBe("signaling_ready");
+  });
+
+  it("fences callbacks and local ICE from the disposed adapter after rollover", async () => {
+    const secondCallId = "44444444-4444-4444-8444-444444444444";
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapterOptions: DirectedCallWebRtcAdapterOptions[] = [];
+    const adapters: DirectedCallWebRtcAdapter[] = [];
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => {
+        adapterOptions.push(options);
+        const adapter = createAdapter();
+        adapters.push(adapter);
+        return adapter;
+      },
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapters[0].prepareOffer).toHaveBeenCalled());
+    session.emit(projection("ended"));
+    session.emit(projection("accepted", secondCallId));
+    await vi.waitFor(() => expect(adapters[1]?.prepareOffer).toHaveBeenCalled());
+
+    adapterOptions[0].onRemoteStream?.({ getTracks: () => [] });
+    adapterOptions[0].onIceCandidate?.({ candidate: "candidate:old", sdpMid: "0", sdpMLineIndex: 0 });
+    adapterOptions[0].onPeerConnectionState?.("failed");
+    adapterOptions[1].onIceCandidate?.({ candidate: "candidate:new", sdpMid: "0", sdpMLineIndex: 0 });
+    session.emit(projection("connecting", secondCallId));
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledWith(secondCallId, expect.any(String), "ice_candidate", expect.objectContaining({ candidate: "candidate:new" })));
+    await Promise.resolve();
+
+    expect(coordinator.getSnapshot().callId).toBe(secondCallId);
+    expect(coordinator.getSnapshot().remoteAudioStream).toBeNull();
+    expect(session.sendSignal).not.toHaveBeenCalledWith(secondCallId, expect.any(String), "ice_candidate", expect.objectContaining({ candidate: "candidate:old" }));
+  });
+
+  it("keeps runtime disposal final and idempotent after call reset", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const transportDispose = vi.spyOn(transport, "dispose");
+    const adapters: DirectedCallWebRtcAdapter[] = [];
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: () => {
+        const adapter = createAdapter();
+        adapters.push(adapter);
+        return adapter;
+      },
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapters[0].prepareOffer).toHaveBeenCalled());
+    session.emit(projection("ended"));
+    expect(adapters).toHaveLength(2);
+
+    coordinator.dispose();
+    coordinator.dispose();
+    expect(coordinator.getSnapshot().state).toBe("disposed");
+    expect(adapters[0].dispose).toHaveBeenCalledTimes(1);
+    expect(adapters[1].dispose).toHaveBeenCalledTimes(1);
+    expect(transportDispose).toHaveBeenCalledTimes(1);
   });
 
   it("disposes incomplete setup after sync without sending setup_failed", async () => {

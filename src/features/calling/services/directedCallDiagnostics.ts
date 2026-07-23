@@ -35,6 +35,8 @@ export function recordDirectedCallDiagnostic(
   event: DirectedCallDiagnosticEvent,
   details: {
     callId?: string | null;
+    previousCallId?: string | null;
+    nextCallId?: string | null;
     mode?: string;
     authority?: string;
     canonicalState?: string | null;
@@ -52,6 +54,8 @@ export function recordDirectedCallDiagnostic(
 ): void {
   debugCall(`[directed-call] ${event}`, {
     call_id: redactCallId(details.callId),
+    previous_call_id: redactCallId(details.previousCallId),
+    next_call_id: redactCallId(details.nextCallId),
     mode: details.mode,
     authority: details.authority,
     canonical_state: details.canonicalState,

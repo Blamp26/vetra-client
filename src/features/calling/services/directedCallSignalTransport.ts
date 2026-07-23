@@ -55,6 +55,12 @@ export class DirectedCallSignalTransport {
     this.boundCallId = callId.toLowerCase();
   }
 
+  unbindCall(): void {
+    if (this.disposed) return;
+    this.attemptEpoch += 1;
+    this.boundCallId = null;
+  }
+
   subscribe(listener: DirectedCallSignalListener): () => void {
     if (this.disposed) return () => undefined;
     this.listeners.add(listener);
