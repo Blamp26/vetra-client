@@ -15,6 +15,7 @@ import {
   type DirectedCallWebRtcAdapterOptions,
   type DirectedCallMediaStream,
   type DirectedCallMediaStreamTrack,
+  type DirectedCallPeerConnectionDiagnostics,
 } from "./directedCallWebRtcAdapter";
 import type { DirectedCallSession } from "./directedCallSession";
 import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
@@ -89,6 +90,15 @@ function toWireIceCandidate(candidate: RTCIceCandidateInit): IcePayload {
   };
 }
 
+function candidateKey(candidate: RTCIceCandidateInit): string {
+  return JSON.stringify([
+    candidate.candidate ?? "",
+    candidate.sdpMid ?? null,
+    candidate.sdpMLineIndex ?? null,
+    candidate.usernameFragment ?? null,
+  ]);
+}
+
 /** Owner-scoped, audio-only persistent media authority. */
 export class DirectedCallMediaCoordinator {
   private readonly session: DirectedCallSession;
@@ -119,6 +129,11 @@ export class DirectedCallMediaCoordinator {
   private localStream: DirectedCallMediaStream | null = null;
   private readonly localTrackCleanups = new Map<DirectedCallMediaStreamTrack, () => void>();
   private localStreamCleanup: (() => void) | null = null;
+  private readonly queuedLocalCandidates: Array<{ candidate: RTCIceCandidateInit; callId: string; attempt: number }> = [];
+  private readonly sentLocalCandidateKeys = new Set<string>();
+  private localCandidateFlushInFlight = false;
+  private flushedLocalCandidateCount = 0;
+  private peerConnectionDiagnostics: DirectedCallPeerConnectionDiagnostics | null = null;
 
   constructor(
     session: DirectedCallSession,
@@ -133,13 +148,14 @@ export class DirectedCallMediaCoordinator {
     this.generation = generation;
     this.isGenerationCurrent = options.isGenerationCurrent ?? ((current) => current === this.generation);
     this.adapter = (options.adapterFactory ?? ((adapterOptions) => new DirectedCallWebRtcAdapter(adapterOptions)))({
-      onIceCandidate: (candidate) => this.sendIceCandidate(candidate),
+      onIceCandidate: (candidate) => this.queueLocalIceCandidate(candidate),
       onRemoteStream: (stream) => {
         if (this.disposed) return;
         this.remoteAudioStream = stream;
         this.setSnapshot({ ...this.snapshot, remoteAudioStream: stream });
       },
       onPeerConnectionState: (state) => this.handlePeerConnectionState(state),
+      onPeerConnectionDiagnostics: (diagnostics) => this.handlePeerConnectionDiagnostics(diagnostics),
     });
     this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false };
   }
@@ -237,7 +253,11 @@ export class DirectedCallMediaCoordinator {
     this.setSnapshot({ state, callId: projection.call_id, participantRole: projection.participant_role, projection, generation: this.generation, remoteAudioStream: this.remoteAudioStream, localIssue: this.localIssue, peerConnectionState: this.peerConnectionState, isMuted: this.snapshot.isMuted, canToggleMute: this.snapshot.canToggleMute });
 
     if (projection.state === "accepted") void this.startMedia(projection);
-    if (projection.state === "connecting") void this.continueConnecting(projection);
+    if (projection.state === "connecting") {
+      void this.continueConnecting(projection);
+      void this.flushLocalCandidates(projection.call_id, this.mediaAttemptEpoch);
+    }
+    if (projection.state === "active") void this.flushLocalCandidates(projection.call_id, this.mediaAttemptEpoch);
   }
 
   private async startMedia(projection: StateProjection): Promise<void> {
@@ -339,16 +359,42 @@ export class DirectedCallMediaCoordinator {
     }
   }
 
-  private async sendIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-    const projection = this.snapshot.projection;
+  private queueLocalIceCandidate(candidate: RTCIceCandidateInit): void {
+    const callId = this.snapshot.callId;
     const attempt = this.mediaAttemptEpoch;
-    if (!projection || !this.isCurrentCall(projection.call_id, attempt) || !["connecting", "active"].includes(projection.state)) return;
+    if (!callId || !this.isCurrentCall(callId, attempt)) return;
+    const key = candidateKey(candidate);
+    if (this.sentLocalCandidateKeys.has(key) || this.queuedLocalCandidates.some((entry) => candidateKey(entry.candidate) === key)) return;
+    this.queuedLocalCandidates.push({ candidate, callId, attempt });
+    this.recordPeerConnectionDiagnostics();
+    void this.flushLocalCandidates(callId, attempt);
+  }
+
+  private async flushLocalCandidates(callId: string, attempt: number): Promise<void> {
+    if (this.localCandidateFlushInFlight || !this.isCurrentCall(callId, attempt)) return;
+    const projection = this.snapshot.projection;
+    if (!projection || !["connecting", "active"].includes(projection.state)) return;
+    this.localCandidateFlushInFlight = true;
     try {
-      await this.signalTransport.send(createDirectedCallUuid(), "ice_candidate", toWireIceCandidate(candidate));
-      if (!this.isCurrentCall(projection.call_id, attempt)) return;
-    } catch {
-      // Socket/relay failure is recoverable transport loss, not local setup failure.
-      this.retireForTransport(projection.call_id, attempt);
+      while (this.queuedLocalCandidates.length > 0) {
+        const entry = this.queuedLocalCandidates[0];
+        if (entry.callId !== callId || entry.attempt !== attempt || !this.isCurrentCall(callId, attempt)) return;
+        this.queuedLocalCandidates.shift();
+        const key = candidateKey(entry.candidate);
+        if (this.sentLocalCandidateKeys.has(key)) continue;
+        this.sentLocalCandidateKeys.add(key);
+        try {
+          await this.signalTransport.send(createDirectedCallUuid(), "ice_candidate", toWireIceCandidate(entry.candidate));
+          if (!this.isCurrentCall(callId, attempt)) return;
+          this.flushedLocalCandidateCount += 1;
+          this.recordPeerConnectionDiagnostics();
+        } catch {
+          this.retireForTransport(callId, attempt);
+          return;
+        }
+      }
+    } finally {
+      this.localCandidateFlushInFlight = false;
     }
   }
 
@@ -403,6 +449,26 @@ export class DirectedCallMediaCoordinator {
     this.setSnapshot({ ...this.snapshot, peerConnectionState: state });
   }
 
+  private handlePeerConnectionDiagnostics(diagnostics: DirectedCallPeerConnectionDiagnostics): void {
+    if (this.disposed) return;
+    this.peerConnectionDiagnostics = diagnostics;
+    this.recordPeerConnectionDiagnostics();
+  }
+
+  private recordPeerConnectionDiagnostics(): void {
+    const diagnostics = this.peerConnectionDiagnostics;
+    if (!diagnostics) return;
+    recordDirectedCallDiagnostic("peer_connection", {
+      callId: this.snapshot.callId,
+      peerConnection: diagnostics.connectionState,
+      iceConnectionState: diagnostics.iceConnectionState,
+      iceGatheringState: diagnostics.iceGatheringState,
+      signalingState: diagnostics.signalingState,
+      queuedLocalCandidateCount: this.queuedLocalCandidates.length,
+      flushedLocalCandidateCount: this.flushedLocalCandidateCount,
+    });
+  }
+
   private isCurrentCall(callId: string, attempt = this.mediaAttemptEpoch): boolean {
     return !this.disposed && this.mediaAttemptActive && attempt === this.mediaAttemptEpoch && isUuid(callId) && this.snapshot.callId === callId && this.isGenerationCurrent(this.generation);
   }
@@ -423,6 +489,11 @@ export class DirectedCallMediaCoordinator {
     this.beginConnectingSent = true;
     this.mediaReadySent = true;
     this.signalTransport.invalidate();
+    this.queuedLocalCandidates.length = 0;
+    this.sentLocalCandidateKeys.clear();
+    this.localCandidateFlushInFlight = false;
+    this.flushedLocalCandidateCount = 0;
+    this.peerConnectionDiagnostics = null;
     this.clearLocalMediaState();
     this.adapter.dispose();
   }

@@ -43,6 +43,31 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.pc.addTrack).toHaveBeenCalledTimes(1);
   });
 
+  it("passes the shared STUN configuration to the persistent peer", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    expect(harness.createPeerConnection).toHaveBeenCalledWith({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+  });
+
+  it("passes TURN only when the shared configuration has complete credentials", async () => {
+    vi.stubEnv("VITE_WEBRTC_STUN_URL", "stun:stun.example.test:3478");
+    vi.stubEnv("VITE_WEBRTC_TURN_URL", "turn:turn.example.test:3478");
+    vi.stubEnv("VITE_WEBRTC_TURN_USERNAME", "test-user");
+    vi.stubEnv("VITE_WEBRTC_TURN_CREDENTIAL", "test-secret");
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+
+    expect(harness.createPeerConnection).toHaveBeenCalledWith({
+      iceServers: [
+        { urls: "stun:stun.example.test:3478" },
+        { urls: "turn:turn.example.test:3478", username: "test-user", credential: "test-secret" },
+      ],
+    });
+    vi.unstubAllEnvs();
+  });
+
   it("queues and deduplicates ICE until the remote description exists", async () => {
     const harness = createHarness();
     await harness.adapter.prepareAnswer();

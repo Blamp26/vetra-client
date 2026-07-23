@@ -1,5 +1,6 @@
 import { Mic, MicOff, Phone, PhoneOff, RotateCw } from "lucide-react";
 import { type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/shared/components/Button";
 import { IncomingCallModal } from "../IncomingCallModal";
 import { PersistentRemoteAudioRenderer } from "./PersistentRemoteAudioRenderer";
@@ -9,8 +10,17 @@ import { isUuid } from "../../protocol/directedCallProtocol";
 
 export function PersistentCallSurface({ children }: { children: ReactNode }) {
   const call = usePersistentCall();
+  const [audioPlaybackRequest, setAudioPlaybackRequest] = useState(0);
+  const [audioPlaybackUnavailable, setAudioPlaybackUnavailable] = useState(false);
   const mediaStream = call.media.remoteAudioStream as MediaStream | null;
   const showAudio = Boolean(mediaStream);
+  const onAudioPlaybackStateChange = useCallback((state: "playing" | "autoplay_unavailable") => {
+    setAudioPlaybackUnavailable(state === "autoplay_unavailable");
+  }, []);
+  useEffect(() => {
+    setAudioPlaybackUnavailable(false);
+    setAudioPlaybackRequest(0);
+  }, [mediaStream]);
   const showIssue = call.presentation.callIssue ?? (call.media.localIssue ? {
     kind: "transport" as const,
     message: call.media.localIssue === "transport_recovery" ? "The call setup was interrupted. Try again." : "Call audio setup needs attention.",
@@ -24,7 +34,11 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
     <>
       {children}
       {showAudio && (
-        <PersistentRemoteAudioRenderer stream={mediaStream} />
+        <PersistentRemoteAudioRenderer
+          stream={mediaStream}
+          playbackRequest={audioPlaybackRequest}
+          onPlaybackStateChange={onAudioPlaybackStateChange}
+        />
       )}
       {call.presentation.incomingModal.visible && (
         <IncomingCallModal
@@ -44,6 +58,19 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
               <div className="text-xs text-muted-foreground">{call.presentation.statusLabel}</div>
               {showIssue && <div className="text-xs text-destructive">{showIssue.message}</div>}
             </div>
+            {audioPlaybackUnavailable && showAudio && (
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => {
+                  setAudioPlaybackUnavailable(false);
+                  setAudioPlaybackRequest((request) => request + 1);
+                }}
+                aria-label="Enable audio"
+              >
+                Enable audio
+              </Button>
+            )}
             {canRetry && (
               <Button variant="secondary" type="button" onClick={() => void call.retry()} aria-label="Retry call action">
                 <RotateCw className="h-4 w-4" />

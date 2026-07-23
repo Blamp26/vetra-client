@@ -3,8 +3,7 @@ import { getState } from '@/store';
 import type { ResourceRef } from '@/shared/types';
 import type { CallIceCandidatePayload, RenegotiationSignalPayload } from '../hooks/useCall.types';
 import { debugCall, isCallDebugEnabled } from '../utils/callDebug';
-
-const DEFAULT_STUN_URL = 'stun:stun.l.google.com:19302';
+import { buildIceServers } from './iceServerConfig';
 
 export type SelectedCandidateType = 'host' | 'srflx' | 'relay' | 'unknown';
 
@@ -47,11 +46,6 @@ const EMPTY_DIAGNOSTICS: WebRTCDiagnostics = {
     signalingState: 'unknown',
     selectedCandidatePair: null,
 };
-
-function readEnvValue(value?: string): string | null {
-    const trimmed = value?.trim();
-    return trimmed ? trimmed : null;
-}
 
 function cloneDiagnostics(diagnostics: WebRTCDiagnostics): WebRTCDiagnostics {
     return {
@@ -99,24 +93,7 @@ export function inspectSelectedCandidatePairFromStats(
     };
 }
 
-export function buildIceServers(): RTCIceServer[] {
-    const stunUrl = readEnvValue(import.meta.env.VITE_WEBRTC_STUN_URL) ?? DEFAULT_STUN_URL;
-    const turnUrl = readEnvValue(import.meta.env.VITE_WEBRTC_TURN_URL);
-    const turnUsername = readEnvValue(import.meta.env.VITE_WEBRTC_TURN_USERNAME);
-    const turnCredential = readEnvValue(import.meta.env.VITE_WEBRTC_TURN_CREDENTIAL);
-
-    const iceServers: RTCIceServer[] = [{ urls: stunUrl }];
-
-    if (turnUrl && turnUsername && turnCredential) {
-        iceServers.push({
-            urls: turnUrl,
-            username: turnUsername,
-            credential: turnCredential,
-        });
-    }
-
-    return iceServers;
-}
+export { buildIceServers } from './iceServerConfig';
 
 function remoteSdpHasSendingVideo(sdp: string): boolean {
     const videoSection = sdp

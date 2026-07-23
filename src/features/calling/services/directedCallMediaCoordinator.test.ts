@@ -260,6 +260,55 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(session.sendSignal).toHaveBeenCalledWith(callId, expect.any(String), "offer", { sdp: "offer" });
   });
 
+  it("queues accepted-phase local ICE and flushes it once in order when connecting", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let onIceCandidate!: (candidate: RTCIceCandidateInit) => void;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => {
+        onIceCandidate = options.onIceCandidate!;
+        return adapter;
+      },
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+
+    const first = { candidate: "candidate:one", sdpMid: "0", sdpMLineIndex: 0 };
+    const second = { candidate: "candidate:two", sdpMid: "0", sdpMLineIndex: 0 };
+    onIceCandidate(first);
+    onIceCandidate(second);
+    onIceCandidate(first);
+    expect(session.sendSignal).not.toHaveBeenCalledWith(callId, expect.any(String), "ice_candidate", expect.anything());
+
+    session.emit(projection("connecting"));
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledWith(callId, expect.any(String), "ice_candidate", expect.objectContaining({ candidate: "candidate:one" })));
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledWith(callId, expect.any(String), "ice_candidate", expect.objectContaining({ candidate: "candidate:two" })));
+
+    const candidates = (session.sendSignal as any).mock.calls
+      .filter((call: [string, string, string]) => call[2] === "ice_candidate")
+      .map(([, , , payload]: any[]) => payload.candidate);
+    expect(candidates).toEqual(["candidate:one", "candidate:two"]);
+  });
+
+  it("discards local ICE callbacks after terminal disposal", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let onIceCandidate!: (candidate: RTCIceCandidateInit) => void;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { onIceCandidate = options.onIceCandidate!; return adapter; },
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    session.emit(projection("ended"));
+    onIceCandidate({ candidate: "candidate:stale", sdpMid: "0", sdpMLineIndex: 0 });
+    await Promise.resolve();
+    expect(session.sendSignal).not.toHaveBeenCalledWith(callId, expect.any(String), "ice_candidate", expect.anything());
+  });
+
   it("runs the recipient answer flow only for a bound connecting call", async () => {
     const session = createSession();
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });

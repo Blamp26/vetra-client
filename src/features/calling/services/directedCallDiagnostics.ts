@@ -41,6 +41,11 @@ export function recordDirectedCallDiagnostic(
     mediaPhase?: string;
     socket?: "connected" | "disconnected";
     peerConnection?: string;
+    iceConnectionState?: string;
+    iceGatheringState?: string;
+    signalingState?: string;
+    queuedLocalCandidateCount?: number;
+    flushedLocalCandidateCount?: number;
     failureKind?: string;
     reason?: string;
   } = {},
@@ -53,6 +58,11 @@ export function recordDirectedCallDiagnostic(
     media_phase: details.mediaPhase,
     socket: details.socket,
     peer_connection: details.peerConnection,
+    ice_connection_state: details.iceConnectionState,
+    ice_gathering_state: details.iceGatheringState,
+    signaling_state: details.signalingState,
+    queued_local_candidate_count: details.queuedLocalCandidateCount,
+    flushed_local_candidate_count: details.flushedLocalCandidateCount,
     failure_kind: details.failureKind,
     reason: details.reason,
   });

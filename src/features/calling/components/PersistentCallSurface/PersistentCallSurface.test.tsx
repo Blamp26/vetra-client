@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
 import { PersistentCallProvider } from "../../context/PersistentCallContext";
@@ -52,5 +52,31 @@ describe("PersistentCallSurface mute control", () => {
     mute.click();
     expect(media.toggleMute).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Hang up call" })).toBeInTheDocument();
+  });
+});
+
+describe("PersistentCallSurface audio recovery", () => {
+  it("offers user playback recovery after autoplay rejection and hides it after success", async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play")
+      .mockRejectedValueOnce(new Error("autoplay blocked"))
+      .mockResolvedValue(undefined);
+    const remoteAudioStream = {} as MediaStream;
+    const media = {
+      getSnapshot: () => ({ state: "signaling_ready", remoteAudioStream, localIssue: null, isMuted: false, canToggleMute: true }),
+      subscribe: () => () => undefined,
+      toggleMute: vi.fn(),
+    } as any;
+    const presentation = {
+      getSnapshot: () => ({ phase: "active", callId: "33333333-3333-4333-8333-333333333333", peerUsername: "Alice", statusLabel: "Active", callIssue: null, recoverableError: null, canCancel: false, canHangup: true, incomingModal: { visible: false } }),
+      subscribe: () => () => undefined,
+      startCall: vi.fn(), accept: vi.fn(), decline: vi.fn(), cancelCall: vi.fn(), hangup: vi.fn(), retryPendingAction: vi.fn(),
+    } as any;
+    render(<PersistentCallProvider runtime={{ presentation, media }}><PersistentCallSurface>{null}</PersistentCallSurface></PersistentCallProvider>);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Enable audio" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Enable audio" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Enable audio" })).not.toBeInTheDocument());
+    expect(play).toHaveBeenCalledTimes(2);
+    play.mockRestore();
   });
 });

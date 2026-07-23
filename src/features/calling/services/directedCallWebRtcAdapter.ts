@@ -1,4 +1,5 @@
 import { createDirectedCallUuid } from "./directedCallDevice";
+import { buildIceServers } from "./iceServerConfig";
 
 export type DirectedCallWebRtcFailureCode =
   | "permission_denied"
@@ -43,7 +44,13 @@ export interface DirectedCallMediaStream {
 
 interface PeerConnectionLike {
   connectionState?: RTCPeerConnectionState;
+  iceConnectionState?: RTCIceConnectionState;
+  iceGatheringState?: RTCIceGatheringState;
+  signalingState?: RTCSignalingState;
   onconnectionstatechange: ((event: Event) => void) | null;
+  oniceconnectionstatechange?: ((event: Event) => void) | null;
+  onicegatheringstatechange?: ((event: Event) => void) | null;
+  onsignalingstatechange?: ((event: Event) => void) | null;
   localDescription: RTCSessionDescription | null;
   remoteDescription: RTCSessionDescription | null;
   onicecandidate: ((event: RTCPeerConnectionIceEvent) => void) | null;
@@ -59,7 +66,7 @@ interface PeerConnectionLike {
 
 export interface DirectedCallWebRtcAdapterDependencies {
   getUserMedia: (constraints: MediaStreamConstraints) => Promise<DirectedCallMediaStream>;
-  createPeerConnection: () => PeerConnectionLike;
+  createPeerConnection: (configuration?: RTCConfiguration) => PeerConnectionLike;
   createRemoteStream?: () => DirectedCallMediaStream;
   createSignalId?: () => string;
 }
@@ -69,12 +76,20 @@ export interface DirectedCallWebRtcAdapterOptions {
   onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
   onRemoteStream?: (stream: DirectedCallMediaStream) => void;
   onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
+  onPeerConnectionDiagnostics?: (diagnostics: DirectedCallPeerConnectionDiagnostics) => void;
+}
+
+export interface DirectedCallPeerConnectionDiagnostics {
+  connectionState: RTCPeerConnectionState | "unknown";
+  iceConnectionState: RTCIceConnectionState | "unknown";
+  iceGatheringState: RTCIceGatheringState | "unknown";
+  signalingState: RTCSignalingState | "unknown";
 }
 
 function defaultDependencies(): DirectedCallWebRtcAdapterDependencies {
   return {
     getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
-    createPeerConnection: () => new RTCPeerConnection(),
+    createPeerConnection: (configuration) => new RTCPeerConnection(configuration),
     createRemoteStream: () => new MediaStream(),
     createSignalId: createDirectedCallUuid,
   };
@@ -102,6 +117,7 @@ export class DirectedCallWebRtcAdapter {
   private readonly onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
   private readonly onRemoteStream?: (stream: DirectedCallMediaStream) => void;
   private readonly onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
+  private readonly onPeerConnectionDiagnostics?: (diagnostics: DirectedCallPeerConnectionDiagnostics) => void;
   private readonly queuedCandidates: RTCIceCandidateInit[] = [];
   private readonly seenCandidates = new Set<string>();
   private peerConnection: PeerConnectionLike | null = null;
@@ -118,6 +134,7 @@ export class DirectedCallWebRtcAdapter {
     this.onIceCandidate = options.onIceCandidate;
     this.onRemoteStream = options.onRemoteStream;
     this.onPeerConnectionState = options.onPeerConnectionState;
+    this.onPeerConnectionDiagnostics = options.onPeerConnectionDiagnostics;
   }
 
   get localMediaStream(): DirectedCallMediaStream | null {
@@ -230,6 +247,9 @@ export class DirectedCallWebRtcAdapter {
     if (this.peerConnection) {
       this.peerConnection.onicecandidate = null;
       this.peerConnection.onconnectionstatechange = null;
+      this.peerConnection.oniceconnectionstatechange = null;
+      this.peerConnection.onicegatheringstatechange = null;
+      this.peerConnection.onsignalingstatechange = null;
       this.peerConnection.ontrack = null;
     }
     this.peerConnection?.close();
@@ -263,7 +283,7 @@ export class DirectedCallWebRtcAdapter {
       }
     });
     try {
-      this.peerConnection = this.dependencies.createPeerConnection();
+      this.peerConnection = this.dependencies.createPeerConnection({ iceServers: buildIceServers() });
       this.assertCurrent(epoch);
       this.peerConnection.onicecandidate = (event) => {
         if (event.candidate && this.isCurrent(epoch)) {
@@ -279,8 +299,17 @@ export class DirectedCallWebRtcAdapter {
         }
       };
       this.peerConnection.onconnectionstatechange = () => {
-        if (this.isCurrent(epoch) && this.peerConnection?.connectionState) this.onPeerConnectionState?.(this.peerConnection.connectionState);
+        if (this.isCurrent(epoch) && this.peerConnection?.connectionState) {
+          this.onPeerConnectionState?.(this.peerConnection.connectionState);
+          this.emitPeerConnectionDiagnostics();
+        }
       };
+      const onPeerStateChange = () => {
+        if (this.isCurrent(epoch)) this.emitPeerConnectionDiagnostics();
+      };
+      this.peerConnection.oniceconnectionstatechange = onPeerStateChange;
+      this.peerConnection.onicegatheringstatechange = onPeerStateChange;
+      this.peerConnection.onsignalingstatechange = onPeerStateChange;
       this.peerConnection.ontrack = (event) => {
         if (!this.isCurrent(epoch)) return;
         this.remoteStream = event.streams[0] ?? this.remoteStream ?? this.dependencies.createRemoteStream?.() ?? null;
@@ -297,6 +326,9 @@ export class DirectedCallWebRtcAdapter {
       if (this.peerConnection) {
         this.peerConnection.onicecandidate = null;
         this.peerConnection.onconnectionstatechange = null;
+        this.peerConnection.oniceconnectionstatechange = null;
+        this.peerConnection.onicegatheringstatechange = null;
+        this.peerConnection.onsignalingstatechange = null;
         this.peerConnection.ontrack = null;
       }
       this.peerConnection?.close();
@@ -321,6 +353,17 @@ export class DirectedCallWebRtcAdapter {
 
   private isCurrent(epoch: number): boolean {
     return !this.disposed && epoch === this.epoch;
+  }
+
+  private emitPeerConnectionDiagnostics(): void {
+    const peer = this.peerConnection;
+    if (!peer) return;
+    this.onPeerConnectionDiagnostics?.({
+      connectionState: peer.connectionState ?? "unknown",
+      iceConnectionState: peer.iceConnectionState ?? "unknown",
+      iceGatheringState: peer.iceGatheringState ?? "unknown",
+      signalingState: peer.signalingState ?? "unknown",
+    });
   }
 
   private assertCurrent(epoch: number): void {
