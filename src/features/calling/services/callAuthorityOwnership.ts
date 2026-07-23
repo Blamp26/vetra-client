@@ -6,7 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 export type CallAuthorityTraceEventName =
   | "boundary_mount" | "boundary_cleanup" | "ownership_generation_created"
   | "acquire_requested" | "rust_acquire_received" | "rust_acquire_granted"
-  | "rust_acquire_denied" | "acquire_promise_resolved" | "frontend_owner_applied"
+  | "rust_acquire_denied" | "rust_acquire_failed" | "acquire_promise_resolved" | "frontend_owner_applied"
   | "frontend_owner_rejected_stale" | "release_scheduled" | "scheduled_release_cancelled"
   | "release_requested" | "rust_release_received" | "rust_release_accepted"
   | "rust_release_rejected" | "frontend_state_released" | "window_destroy_cleanup"
@@ -390,6 +390,10 @@ export class CallAuthorityOwnership {
           });
       this.lockRequestPromise = request;
       request.catch(() => {
+        this.trace("rust_acquire_failed", {
+          reason: this.nativeAuthority ? "native_authority_unavailable" : "frontend_lock_unavailable",
+          errorType: this.nativeAuthority ? "native_error" : "frontend_lock_error",
+        });
         if (!this.disposed) this.setState("unavailable");
         settle();
       });

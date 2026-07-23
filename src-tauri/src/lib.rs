@@ -12,6 +12,8 @@ use tauri::{Manager, WindowEvent};
 
 const AUTHORITY_PREFIX: &str = "vetra:call-authority:";
 const MAX_AUTHORITY_KEY_BYTES: usize = 512;
+const ERROR_SHARING_VIOLATION: i32 = 32;
+const ERROR_LOCK_VIOLATION: i32 = 33;
 
 struct NativeLease {
     window_label: String,
@@ -64,6 +66,7 @@ fn open_lock_file(key: &str) -> IoResult<File> {
 
 fn is_lock_busy(error: &std::io::Error) -> bool {
     error.kind() == ErrorKind::WouldBlock
+        || matches!(error.raw_os_error(), Some(code) if code == ERROR_LOCK_VIOLATION || code == ERROR_SHARING_VIOLATION)
 }
 
 fn next_lease_id(registry: &CallAuthorityRegistry, window_label: &str) -> String {
@@ -81,7 +84,11 @@ fn acquire_call_authority(
     key: String,
 ) -> Result<Option<String>, String> {
     validate_key(&key)?;
-    let file = open_lock_file(&key).map_err(|_| "authority lock unavailable".to_string())?;
+    let file = match open_lock_file(&key) {
+        Ok(file) => file,
+        Err(error) if is_lock_busy(&error) => return Ok(None),
+        Err(_) => return Err("authority lock unavailable".to_string()),
+    };
     let window_label = window.label().to_string();
     let mut owners = registry
         .owners
@@ -184,7 +191,18 @@ fn get_call_authority_snapshot(
     }
     drop(owners);
 
-    let file = open_lock_file(&key).map_err(|_| "authority lock unavailable".to_string())?;
+    let file = match open_lock_file(&key) {
+        Ok(file) => file,
+        Err(error) if is_lock_busy(&error) => {
+            return Ok(NativeHolderSnapshot {
+                present: true,
+                key_hash: Some(key_hash(&key)),
+                lease_suffix: None,
+                window_label: Some(window.label().to_string()),
+            });
+        }
+        Err(_) => return Err("authority lock unavailable".to_string()),
+    };
     let present = match file.try_lock_exclusive() {
         Ok(()) => {
             let _ = file.unlock();
@@ -243,6 +261,21 @@ mod tests {
             "x".repeat(MAX_AUTHORITY_KEY_BYTES)
         ))
         .is_err());
+    }
+
+    #[test]
+    fn lock_contention_is_distinguished_from_unavailable_errors() {
+        assert!(is_lock_busy(&std::io::Error::from(ErrorKind::WouldBlock)));
+        assert!(is_lock_busy(&std::io::Error::from_raw_os_error(
+            ERROR_LOCK_VIOLATION
+        )));
+        assert!(is_lock_busy(&std::io::Error::from_raw_os_error(
+            ERROR_SHARING_VIOLATION
+        )));
+        assert!(!is_lock_busy(&std::io::Error::from(
+            ErrorKind::PermissionDenied
+        )));
+        assert!(!is_lock_busy(&std::io::Error::from(ErrorKind::NotFound)));
     }
 
     #[test]
