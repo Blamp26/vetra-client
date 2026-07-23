@@ -250,6 +250,52 @@ describe("CallAuthorityOwnership", () => {
     }
   });
 
+  it("schedules the retry only after a denied acquisition has fully settled", async () => {
+    vi.useFakeTimers();
+    try {
+      const { locks } = createLocks();
+      let resolveFirst!: (lease: string | null) => void;
+      let attempts = 0;
+      const nativeAuthority: NativeCallAuthorityLike = {
+        acquire: vi.fn(() => {
+          attempts += 1;
+          return attempts === 1
+            ? new Promise<string | null>((resolve) => { resolveFirst = resolve; })
+            : Promise.resolve(null);
+        }),
+        release: vi.fn(async () => true),
+      };
+      const owner = new CallAuthorityOwnership({ ...options(locks), nativeAuthority, createBroadcastChannel: () => null });
+      const acquisition = owner.acquire();
+      resolveFirst(null);
+      await expect(acquisition).resolves.toMatchObject({ state: "non_owner" });
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(250);
+      expect(nativeAuthority.acquire).toHaveBeenCalledTimes(2);
+      await owner.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry after a native acquisition error", async () => {
+    vi.useFakeTimers();
+    try {
+      const { locks } = createLocks();
+      const nativeAuthority: NativeCallAuthorityLike = {
+        acquire: vi.fn(async () => { throw new Error("native unavailable"); }),
+        release: vi.fn(async () => true),
+      };
+      const owner = new CallAuthorityOwnership({ ...options(locks), nativeAuthority, createBroadcastChannel: () => null });
+      await expect(owner.acquire()).resolves.toMatchObject({ state: "unavailable" });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(nativeAuthority.acquire).toHaveBeenCalledTimes(1);
+      await owner.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("records a redacted native lifecycle timeline", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const nativeAuthority: NativeCallAuthorityLike = {

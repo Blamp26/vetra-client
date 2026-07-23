@@ -334,7 +334,6 @@ export class CallAuthorityOwnership {
           this.trace("rust_acquire_denied", { outcome: "denied", reason: "holder_present", rustHolderPresent: true });
           this.setState("non_owner");
           settle();
-          queueMicrotask(() => this.scheduleRetry());
           return;
         }
         this.trace("rust_acquire_granted", { outcome: "accepted", leaseSuffix: typeof acquired === "string" ? leaseSuffix(acquired) : null, rustHolderPresent: true });
@@ -396,6 +395,9 @@ export class CallAuthorityOwnership {
       });
     }).finally(() => {
       this.acquisitionPromise = null;
+      if (this.snapshot.state === "non_owner" && !this.disposed) {
+        this.scheduleRetry();
+      }
     });
 
     return this.acquisitionPromise.then((result) => {
