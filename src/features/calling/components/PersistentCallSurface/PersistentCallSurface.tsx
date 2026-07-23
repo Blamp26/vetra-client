@@ -29,6 +29,9 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
   const canRetry = Boolean(call.presentation.recoverableError);
   const mutePhaseAvailable = call.presentation.phase === "connecting" || call.presentation.phase === "active";
   const showMute = mutePhaseAvailable;
+  const displayStatusLabel = call.presentation.phase === "terminal" && call.presentation.terminalLabel
+    ? call.presentation.terminalLabel
+    : call.presentation.statusLabel;
 
   return (
     <>
@@ -55,7 +58,7 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
           <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg">
             <div className="min-w-0">
               <div className="text-sm font-medium text-foreground">{call.presentation.peerUsername ?? "Directed call"}</div>
-              <div className="text-xs text-muted-foreground">{call.presentation.statusLabel}</div>
+              <div className="text-xs text-muted-foreground">{displayStatusLabel}</div>
               {showIssue && <div className="text-xs text-destructive">{showIssue.message}</div>}
             </div>
             {audioPlaybackUnavailable && showAudio && (

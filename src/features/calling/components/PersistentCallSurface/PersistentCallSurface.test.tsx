@@ -80,3 +80,55 @@ describe("PersistentCallSurface audio recovery", () => {
     play.mockRestore();
   });
 });
+
+describe("PersistentCallSurface terminal results", () => {
+  function renderTerminal(terminalLabel: string | null, statusLabel = "Call finished") {
+    const media = {
+      getSnapshot: () => ({ state: "idle", remoteAudioStream: null, localIssue: null, isMuted: false, canToggleMute: false }),
+      subscribe: () => () => undefined,
+      toggleMute: vi.fn(),
+    } as any;
+    const presentation = {
+      getSnapshot: () => ({
+        phase: "terminal",
+        callId: "33333333-3333-4333-8333-333333333333",
+        peerUsername: "Alice",
+        statusLabel,
+        terminalLabel,
+        callIssue: null,
+        recoverableError: null,
+        canCancel: false,
+        canHangup: false,
+        incomingModal: { visible: false },
+      }),
+      subscribe: () => () => undefined,
+      startCall: vi.fn(), accept: vi.fn(), decline: vi.fn(), cancelCall: vi.fn(), hangup: vi.fn(), retryPendingAction: vi.fn(),
+    } as any;
+    render(<PersistentCallProvider runtime={{ presentation, media }}><PersistentCallSurface>{null}</PersistentCallSurface></PersistentCallProvider>);
+  }
+
+  it.each([
+    ["unavailable", "Call unavailable"],
+    ["undelivered", "Call not delivered"],
+    ["busy", "User unavailable"],
+    ["declined", "Call declined"],
+    ["cancelled", "Call cancelled"],
+    ["no_answer", "No answer"],
+    ["connection_failed", "Connection failed"],
+    ["ended", "Call ended"],
+  ] as const)("renders the canonical %s result", (_state, terminalLabel) => {
+    renderTerminal(terminalLabel);
+    expect(screen.getByText(terminalLabel)).toBeInTheDocument();
+    expect(screen.queryByText("Call finished")).not.toBeInTheDocument();
+  });
+
+  it("keeps status labels for non-terminal phases", () => {
+    renderSurface("active", true);
+    expect(screen.getByText("Active")).toBeInTheDocument();
+  });
+
+  it("falls back safely to statusLabel when a terminal label is absent", () => {
+    renderTerminal(null);
+    expect(screen.getByText("Call finished")).toBeInTheDocument();
+  });
+});
