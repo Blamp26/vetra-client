@@ -39,6 +39,9 @@ export interface PersistentCallRuntimeValue {
   cancel: () => Promise<PresentationActionResult>;
   hangup: () => Promise<PresentationActionResult>;
   retry: () => Promise<PresentationActionResult>;
+  isMuted: boolean;
+  canToggleMute: boolean;
+  toggleMute: () => boolean;
 }
 
 const PersistentCallContext = createContext<PersistentCallRuntimeValue | null>(null);
@@ -67,6 +70,9 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
     cancel: () => runtime.presentation.cancelCall(),
     hangup: () => runtime.presentation.hangup(),
     retry: () => runtime.presentation.retryPendingAction(),
+    isMuted: media.isMuted,
+    canToggleMute: media.canToggleMute,
+    toggleMute: () => runtime.media.toggleMute(),
   }), [media, presentation, runtime]);
 
   return <PersistentCallContext.Provider value={value}>{children}</PersistentCallContext.Provider>;

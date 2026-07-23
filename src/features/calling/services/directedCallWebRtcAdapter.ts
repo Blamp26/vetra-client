@@ -27,11 +27,18 @@ export class DirectedCallWebRtcStaleError extends Error {
 
 export interface DirectedCallMediaStreamTrack {
   stop(): void;
+  kind?: string;
+  enabled?: boolean;
+  readyState?: string;
+  addEventListener?(type: string, listener: EventListener): void;
+  removeEventListener?(type: string, listener: EventListener): void;
 }
 
 export interface DirectedCallMediaStream {
   getTracks(): DirectedCallMediaStreamTrack[];
   addTrack?(track: DirectedCallMediaStreamTrack): void;
+  addEventListener?(type: string, listener: EventListener): void;
+  removeEventListener?(type: string, listener: EventListener): void;
 }
 
 interface PeerConnectionLike {
@@ -103,6 +110,7 @@ export class DirectedCallWebRtcAdapter {
   private disposed = false;
   private offerPrepared = false;
   private epoch = 0;
+  private localAudioMuted = false;
 
   constructor(options: DirectedCallWebRtcAdapterOptions = {}) {
     const dependencies = defaultDependencies();
@@ -118,6 +126,20 @@ export class DirectedCallWebRtcAdapter {
 
   get remoteMediaStream(): DirectedCallMediaStream | null {
     return this.remoteStream;
+  }
+
+  get isLocalAudioMuted(): boolean {
+    return this.localAudioMuted;
+  }
+
+  setLocalAudioMuted(muted: boolean): boolean {
+    const tracks = this.localStream?.getTracks().filter((track) =>
+      (track.kind === undefined || track.kind === "audio") && track.readyState !== "ended",
+    ) ?? [];
+    if (tracks.length === 0) return false;
+    this.localAudioMuted = muted;
+    tracks.forEach((track) => { track.enabled = !muted; });
+    return true;
   }
 
   async prepareOffer(): Promise<RTCSessionDescriptionInit> {
@@ -217,6 +239,7 @@ export class DirectedCallWebRtcAdapter {
     this.localStream = null;
     this.remoteStream = null;
     this.offerPrepared = false;
+    this.localAudioMuted = false;
   }
 
   private async ensureAudioPeer(epoch: number): Promise<void> {
@@ -234,6 +257,11 @@ export class DirectedCallWebRtcAdapter {
       throw new DirectedCallWebRtcError(failureForMediaError(error));
     }
     this.localStream = acquiredStream;
+    this.localStream.getTracks().forEach((track) => {
+      if ((track.kind === undefined || track.kind === "audio") && track.readyState !== "ended") {
+        track.enabled = !this.localAudioMuted;
+      }
+    });
     try {
       this.peerConnection = this.dependencies.createPeerConnection();
       this.assertCurrent(epoch);

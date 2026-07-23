@@ -80,6 +80,52 @@ function createAdapter() {
   } as unknown as DirectedCallWebRtcAdapter;
 }
 
+function createTrack(kind: "audio" | "video" = "audio") {
+  const listeners = new Map<string, Set<EventListener>>();
+  const track = {
+    kind,
+    enabled: true,
+    readyState: "live",
+    stop: vi.fn(),
+    addEventListener(type: string, listener: EventListener) {
+      const entries = listeners.get(type) ?? new Set<EventListener>();
+      entries.add(listener);
+      listeners.set(type, entries);
+    },
+    removeEventListener(type: string, listener: EventListener) {
+      listeners.get(type)?.delete(listener);
+    },
+    emit(type: string) {
+      listeners.get(type)?.forEach((listener) => listener(new Event(type)));
+    },
+  };
+  return track;
+}
+
+function createStream(tracks: ReturnType<typeof createTrack>[]) {
+  const listeners = new Map<string, Set<EventListener>>();
+  return {
+    getTracks: () => tracks,
+    addEventListener(type: string, listener: EventListener) {
+      const entries = listeners.get(type) ?? new Set<EventListener>();
+      entries.add(listener);
+      listeners.set(type, entries);
+    },
+    removeEventListener(type: string, listener: EventListener) {
+      listeners.get(type)?.delete(listener);
+    },
+    addTrack(track: ReturnType<typeof createTrack>) {
+      tracks.push(track);
+      listeners.get("addtrack")?.forEach((listener) => listener(new Event("addtrack")));
+    },
+    removeTrack(track: ReturnType<typeof createTrack>) {
+      const index = tracks.indexOf(track);
+      if (index >= 0) tracks.splice(index, 1);
+      listeners.get("removetrack")?.forEach((listener) => listener(new Event("removetrack")));
+    },
+  };
+}
+
 function createCoordinator(session: ReturnType<typeof createSession>, transport: DirectedCallSignalTransport) {
   return new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
     adapterFactory: () => createAdapter(),
@@ -87,6 +133,91 @@ function createCoordinator(session: ReturnType<typeof createSession>, transport:
 }
 
 describe("DirectedCallMediaCoordinator", () => {
+  it("toggles only live local audio tracks and inherits mute for newly added tracks", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const audioOne = createTrack();
+    const audioTwo = createTrack();
+    const video = createTrack("video");
+    const stream = createStream([audioOne, audioTwo, video]);
+    let muted = false;
+    const adapter = {
+      prepareOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "offer" }),
+      localMediaStream: stream,
+      get isLocalAudioMuted() { return muted; },
+      setLocalAudioMuted: vi.fn((next: boolean) => {
+        const liveAudio = stream.getTracks().filter((track) => track.kind === "audio" && track.readyState !== "ended");
+        if (liveAudio.length === 0) return false;
+        muted = next;
+        liveAudio.forEach((track) => { track.enabled = !next; });
+        return true;
+      }),
+      dispose: vi.fn(),
+    } as unknown as DirectedCallWebRtcAdapter;
+    const lifecycle = createLifecycle();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      adapterFactory: () => adapter,
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(coordinator.getSnapshot().canToggleMute).toBe(true));
+
+    expect(coordinator.getSnapshot()).toMatchObject({ isMuted: false, canToggleMute: true });
+    expect(coordinator.toggleMute()).toBe(true);
+    expect(audioOne.enabled).toBe(false);
+    expect(audioTwo.enabled).toBe(false);
+    expect(video.enabled).toBe(true);
+    expect(coordinator.getSnapshot().isMuted).toBe(true);
+    expect(session.sendSignal).not.toHaveBeenCalled();
+
+    const replacement = createTrack();
+    stream.addTrack(replacement);
+    expect(replacement.enabled).toBe(false);
+    expect(coordinator.getSnapshot().canToggleMute).toBe(true);
+
+    expect(coordinator.toggleMute()).toBe(true);
+    expect(audioOne.enabled).toBe(true);
+    expect(audioTwo.enabled).toBe(true);
+    expect(replacement.enabled).toBe(true);
+    expect(video.enabled).toBe(true);
+    expect(coordinator.getSnapshot().isMuted).toBe(false);
+
+    audioOne.readyState = "ended";
+    audioOne.emit("ended");
+    stream.removeTrack(audioTwo);
+    stream.removeTrack(replacement);
+    expect(coordinator.getSnapshot().canToggleMute).toBe(false);
+    expect(coordinator.toggleMute()).toBe(false);
+    expect(coordinator.getSnapshot().isMuted).toBe(false);
+  });
+
+  it("clears mute state and track listeners on terminalization and disposal", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const track = createTrack();
+    const stream = createStream([track]);
+    let muted = false;
+    const adapter = {
+      prepareOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "offer" }),
+      localMediaStream: stream,
+      get isLocalAudioMuted() { return muted; },
+      setLocalAudioMuted: vi.fn((next: boolean) => { muted = next; track.enabled = !next; return true; }),
+      dispose: vi.fn(),
+    } as unknown as DirectedCallWebRtcAdapter;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", { adapterFactory: () => adapter });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(coordinator.getSnapshot().canToggleMute).toBe(true));
+    coordinator.toggleMute();
+    session.emit(projection("ended"));
+
+    expect(coordinator.getSnapshot()).toMatchObject({ state: "disposed", isMuted: false, canToggleMute: false });
+    track.readyState = "ended";
+    track.emit("ended");
+    expect(coordinator.getSnapshot()).toMatchObject({ state: "disposed", isMuted: false, canToggleMute: false });
+    coordinator.dispose();
+    expect(adapter.dispose).toHaveBeenCalledTimes(1);
+  });
   it("observes authoritative accepted/connecting state without media actions", () => {
     const session = createSession();
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });

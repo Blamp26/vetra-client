@@ -1,4 +1,4 @@
-import { Phone, PhoneOff, RotateCw } from "lucide-react";
+import { Mic, MicOff, Phone, PhoneOff, RotateCw } from "lucide-react";
 import { type ReactNode } from "react";
 import { Button } from "@/shared/components/Button";
 import { IncomingCallModal } from "../IncomingCallModal";
@@ -17,6 +17,8 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
     callId: call.presentation.callId,
   } : null);
   const canRetry = Boolean(call.presentation.recoverableError);
+  const mutePhaseAvailable = call.presentation.phase === "connecting" || call.presentation.phase === "active";
+  const showMute = mutePhaseAvailable;
 
   return (
     <>
@@ -58,6 +60,19 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
               <Button variant="danger" type="button" onClick={() => void call.hangup()} aria-label="Hang up call">
                 <PhoneOff className="h-4 w-4" />
                 <span>Hang up</span>
+              </Button>
+            )}
+            {showMute && (
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => { call.toggleMute(); }}
+                disabled={!call.canToggleMute}
+                aria-label={call.isMuted ? "Unmute microphone" : "Mute microphone"}
+                title={call.isMuted ? "Unmute microphone" : "Mute microphone"}
+              >
+                {call.isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                <span>{call.isMuted ? "Unmute" : "Mute"}</span>
               </Button>
             )}
           </div>

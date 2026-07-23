@@ -14,6 +14,7 @@ import {
   DirectedCallWebRtcStaleError,
   type DirectedCallWebRtcAdapterOptions,
   type DirectedCallMediaStream,
+  type DirectedCallMediaStreamTrack,
 } from "./directedCallWebRtcAdapter";
 import type { DirectedCallSession } from "./directedCallSession";
 import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
@@ -36,6 +37,8 @@ export interface DirectedCallMediaCoordinatorSnapshot {
   remoteAudioStream: DirectedCallMediaStream | null;
   localIssue: "transport_recovery" | DirectedCallWebRtcError["failureCode"] | null;
   peerConnectionState: RTCPeerConnectionState | null;
+  isMuted: boolean;
+  canToggleMute: boolean;
 }
 
 export interface DirectedCallMediaLifecyclePort {
@@ -113,6 +116,9 @@ export class DirectedCallMediaCoordinator {
   private setupFailureSent = false;
   private beginConnectingInFlight = false;
   private mediaReadyInFlight = false;
+  private localStream: DirectedCallMediaStream | null = null;
+  private readonly localTrackCleanups = new Map<DirectedCallMediaStreamTrack, () => void>();
+  private localStreamCleanup: (() => void) | null = null;
 
   constructor(
     session: DirectedCallSession,
@@ -135,7 +141,7 @@ export class DirectedCallMediaCoordinator {
       },
       onPeerConnectionState: (state) => this.handlePeerConnectionState(state),
     });
-    this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null };
+    this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false };
   }
 
   start(): void {
@@ -186,13 +192,13 @@ export class DirectedCallMediaCoordinator {
     this.unsubscribeSignal?.();
     this.unsubscribeProjection = null;
     this.unsubscribeSignal = null;
-    this.adapter.dispose();
+    this.clearLocalMediaState();
     recordDirectedCallDiagnostic("cleanup", { callId: this.snapshot.callId, reason: "coordinator_disposed" });
     this.signalTransport.dispose();
     this.offer = null;
     this.remoteAudioStream = null;
     this.localIssue = null;
-    this.setSnapshot({ state: "disposed", callId: null, participantRole: null, projection: null, generation: this.generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null });
+    this.setSnapshot({ state: "disposed", callId: null, participantRole: null, projection: null, generation: this.generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false });
     this.listeners.clear();
   }
 
@@ -228,7 +234,7 @@ export class DirectedCallMediaCoordinator {
         : "waiting_for_connecting";
     this.localIssue = null;
     recordDirectedCallDiagnostic("call_projection", { callId: projection.call_id, canonicalState: projection.state });
-    this.setSnapshot({ state, callId: projection.call_id, participantRole: projection.participant_role, projection, generation: this.generation, remoteAudioStream: this.remoteAudioStream, localIssue: this.localIssue, peerConnectionState: this.peerConnectionState });
+    this.setSnapshot({ state, callId: projection.call_id, participantRole: projection.participant_role, projection, generation: this.generation, remoteAudioStream: this.remoteAudioStream, localIssue: this.localIssue, peerConnectionState: this.peerConnectionState, isMuted: this.snapshot.isMuted, canToggleMute: this.snapshot.canToggleMute });
 
     if (projection.state === "accepted") void this.startMedia(projection);
     if (projection.state === "connecting") void this.continueConnecting(projection);
@@ -249,6 +255,7 @@ export class DirectedCallMediaCoordinator {
       if (projection.participant_role === "initiator") {
         try {
           this.offer = await this.adapter.prepareOffer();
+          this.syncLocalMediaState(projection.call_id, attempt);
         } catch (error) {
           if (!(error instanceof DirectedCallWebRtcStaleError)) await this.reportSetupFailure(projection.call_id, error, attempt);
           return;
@@ -273,6 +280,7 @@ export class DirectedCallMediaCoordinator {
       } else {
         try {
           await this.adapter.prepareAnswer();
+          this.syncLocalMediaState(projection.call_id, attempt);
           if (!this.isCurrentCall(projection.call_id, attempt)) return;
         } catch (error) {
           if (!(error instanceof DirectedCallWebRtcStaleError)) await this.reportSetupFailure(projection.call_id, error, attempt);
@@ -415,7 +423,74 @@ export class DirectedCallMediaCoordinator {
     this.beginConnectingSent = true;
     this.mediaReadySent = true;
     this.signalTransport.invalidate();
+    this.clearLocalMediaState();
     this.adapter.dispose();
+  }
+
+  toggleMute(): boolean {
+    if (this.disposed || !["accepted", "connecting", "active"].includes(this.snapshot.projection?.state ?? "")) return false;
+    const muted = !this.adapter.isLocalAudioMuted;
+    if (!this.adapter.setLocalAudioMuted(muted)) {
+      this.syncLocalMediaState(this.snapshot.callId, this.mediaAttemptEpoch);
+      return false;
+    }
+    this.setSnapshot({ ...this.snapshot, isMuted: muted, canToggleMute: true });
+    return true;
+  }
+
+  private syncLocalMediaState(callId: string | null, attempt: number): void {
+    if (!callId || !this.isCurrentCall(callId, attempt)) return;
+    const stream = this.adapter.localMediaStream;
+    if (stream !== this.localStream) {
+      this.localStreamCleanup?.();
+      this.localTrackCleanups.forEach((cleanup) => cleanup());
+      this.localTrackCleanups.clear();
+      this.localStream = stream;
+      if (stream?.addEventListener) {
+        const onStreamChange = () => this.syncLocalMediaState(callId, attempt);
+        stream.addEventListener("addtrack", onStreamChange as EventListener);
+        stream.addEventListener("removetrack", onStreamChange as EventListener);
+        this.localStreamCleanup = () => {
+          stream.removeEventListener?.("addtrack", onStreamChange as EventListener);
+          stream.removeEventListener?.("removetrack", onStreamChange as EventListener);
+        };
+      } else {
+        this.localStreamCleanup = null;
+      }
+    }
+
+    const liveAudioTracks = stream?.getTracks().filter((track) =>
+      (track.kind === undefined || track.kind === "audio") && track.readyState !== "ended",
+    ) ?? [];
+    if (this.adapter.isLocalAudioMuted && liveAudioTracks.length > 0) {
+      this.adapter.setLocalAudioMuted(true);
+    }
+    this.localTrackCleanups.forEach((cleanup, track) => {
+      if (!liveAudioTracks.includes(track)) {
+        cleanup();
+        this.localTrackCleanups.delete(track);
+      }
+    });
+    liveAudioTracks.forEach((track) => {
+      if (this.localTrackCleanups.has(track) || !track.addEventListener) return;
+      const onEnded = () => this.syncLocalMediaState(callId, attempt);
+      track.addEventListener("ended", onEnded as EventListener);
+      this.localTrackCleanups.set(track, () => track.removeEventListener?.("ended", onEnded as EventListener));
+    });
+
+    const nextCanToggleMute = liveAudioTracks.length > 0;
+    const nextIsMuted = nextCanToggleMute ? this.adapter.isLocalAudioMuted : false;
+    if (this.snapshot.canToggleMute !== nextCanToggleMute || this.snapshot.isMuted !== nextIsMuted) {
+      this.setSnapshot({ ...this.snapshot, canToggleMute: nextCanToggleMute, isMuted: nextIsMuted });
+    }
+  }
+
+  private clearLocalMediaState(): void {
+    this.localStreamCleanup?.();
+    this.localStreamCleanup = null;
+    this.localTrackCleanups.forEach((cleanup) => cleanup());
+    this.localTrackCleanups.clear();
+    this.localStream = null;
   }
 
   private setSnapshot(snapshot: DirectedCallMediaCoordinatorSnapshot): void {
