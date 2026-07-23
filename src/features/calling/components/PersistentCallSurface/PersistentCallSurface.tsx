@@ -23,7 +23,11 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
   }, [mediaStream]);
   const showIssue = call.presentation.callIssue ?? (call.media.localIssue ? {
     kind: "transport" as const,
-    message: call.media.localIssue === "transport_recovery" ? "The call setup was interrupted. Try again." : "Call audio setup needs attention.",
+    message: call.media.localIssue === "transport_recovery"
+      ? "The call setup was interrupted. Try again."
+      : call.media.localIssue === "audio_input_switch_failed"
+        ? "Couldn’t switch microphone. The previous microphone is still active."
+        : "Call audio setup needs attention.",
     callId: call.presentation.callId,
   } : null);
   const canRetry = Boolean(call.presentation.recoverableError);

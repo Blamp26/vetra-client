@@ -76,6 +76,7 @@ function createAdapter() {
     acceptOffer: vi.fn().mockResolvedValue({ type: "answer", sdp: "answer" }),
     acceptAnswer: vi.fn().mockResolvedValue(true),
     addRemoteIceCandidate: vi.fn().mockResolvedValue(true),
+    switchAudioInput: vi.fn().mockResolvedValue(true),
     dispose: vi.fn(),
   } as unknown as DirectedCallWebRtcAdapter;
 }
@@ -229,6 +230,36 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(coordinator.getSnapshot()).toMatchObject({ state: "accepted", callId });
     expect(session.sendSignal).not.toHaveBeenCalled();
     expect(vi.isMockFunction(globalThis.navigator?.mediaDevices?.getUserMedia)).toBe(false);
+  });
+
+  it("forwards active-call microphone preference changes to the adapter", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: () => adapter,
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+
+    const constraints = { audio: { deviceId: { exact: "new-microphone" } }, video: false };
+    await expect(coordinator.switchAudioInput(constraints)).resolves.toBe(true);
+
+    expect(adapter.switchAudioInput).toHaveBeenCalledWith(constraints);
+  });
+
+  it("does not acquire a replacement microphone while idle", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: () => adapter,
+    });
+    coordinator.start();
+
+    await expect(coordinator.switchAudioInput({ audio: true, video: false })).resolves.toBe(false);
+    expect(adapter.switchAudioInput).not.toHaveBeenCalled();
   });
 
   it("becomes signaling-ready only from authoritative connecting/active state", () => {

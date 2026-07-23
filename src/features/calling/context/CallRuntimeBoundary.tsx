@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { User } from "@/shared/types";
-import { getState } from "@/store";
+import { getState, useAppStore, type RootState } from "@/store";
 import { buildMicrophoneConstraints } from "@/shared/utils/audioConstraints";
 import type { SocketManager } from "@/services/socket";
 import { CallProvider } from "./CallProvider";
@@ -98,10 +98,24 @@ export function CallRuntimeBoundary({
   const [authority, setAuthority] = useState<CallAuthoritySnapshot>(() => ownership.getSnapshot());
   const ownershipTrace = ownership.getTraceSnapshot?.() ?? { events: [], lastEvent: null, nativeHolderPresent: false };
   const [persistentRuntime, setPersistentRuntime] = useState<PersistentRuntime | null>(null);
+  const selectedInputDeviceId = useAppStore((state: RootState) => state.selectedInputDeviceId);
+  const noiseSuppression = useAppStore((state: RootState) => state.noiseSuppression);
+  const echoCancellation = useAppStore((state: RootState) => state.echoCancellation);
+  const autoGainControl = useAppStore((state: RootState) => state.autoGainControl);
   const persistentRuntimeRef = useRef<PersistentRuntime | null>(null);
   const activeOwnershipRef = useRef<CallAuthorityOwnership | null>(null);
   const acquiredOwnershipsRef = useRef(new Set<CallAuthorityOwnership>());
   const effectGenerationRef = useRef(0);
+
+  useEffect(() => {
+    if (!persistentRuntime) return;
+    void persistentRuntime.services.media.switchAudioInput(buildMicrophoneConstraints({
+      selectedInputDeviceId,
+      noiseSuppression,
+      echoCancellation,
+      autoGainControl,
+    }));
+  }, [autoGainControl, echoCancellation, noiseSuppression, persistentRuntime, selectedInputDeviceId]);
 
   useEffect(() => {
     const effectGeneration = ++effectGenerationRef.current;

@@ -222,13 +222,13 @@ describe("SettingsPage audio settings", () => {
     expect(screen.getByLabelText("Echo cancellation")).toBeChecked();
     expect(screen.getByLabelText("Auto gain control")).toBeChecked();
     expect(
-      screen.getByText(/these options apply to the next call/i),
+      screen.getByText(/these options apply to new calls and update the active call immediately/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/only the system default speakers/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/changes apply to the next call/i),
+      screen.getByText(/changes apply to new calls and update the active call immediately/i),
     ).toBeInTheDocument();
     const processingGroup = screen.getByRole("group", { name: "Microphone processing" });
     expect(processingGroup).toBeInTheDocument();

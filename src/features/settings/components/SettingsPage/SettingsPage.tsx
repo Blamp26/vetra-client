@@ -226,7 +226,7 @@ function VoiceAudioSettings() {
             ))}
           </select>
           <p className="text-xs text-muted-foreground">
-            Changes apply to the next call.
+            Changes apply to new calls and update the active call immediately.
           </p>
           {isMicTestActive && <div>
             <div className="mb-1 text-xs text-muted-foreground">Input Level: {Math.round((micLevel / 128) * 100)}%</div>
@@ -295,7 +295,7 @@ function VoiceAudioSettings() {
           <summary className="cursor-pointer text-sm font-medium">Advanced microphone settings</summary>
           <fieldset className="mt-3 space-y-2 rounded-lg border border-border p-4">
             <legend className="sr-only">Microphone processing</legend>
-            <p className="text-xs text-muted-foreground">These options apply to the next call.</p>
+            <p className="text-xs text-muted-foreground">These options apply to new calls and update the active call immediately.</p>
             <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-noise-suppression">
               <span>Noise suppression</span>
               <input id="settings-noise-suppression" type="checkbox" checked={noiseSuppression} onChange={(e) => setNoiseSuppression(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />

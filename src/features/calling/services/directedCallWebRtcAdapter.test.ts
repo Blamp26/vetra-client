@@ -4,6 +4,10 @@ import { DirectedCallWebRtcAdapter, DirectedCallWebRtcError, DirectedCallWebRtcS
 function createHarness() {
   const track = { stop: vi.fn() };
   const stream = { getTracks: () => [track] };
+  const sender = {
+    track,
+    replaceTrack: vi.fn().mockResolvedValue(undefined),
+  };
   const pc = {
     localDescription: null as RTCSessionDescription | null,
     remoteDescription: null as RTCSessionDescription | null,
@@ -12,6 +16,7 @@ function createHarness() {
     ontrack: null as ((event: RTCTrackEvent) => void) | null,
     onconnectionstatechange: null as (() => void) | null,
     addTrack: vi.fn(),
+    getSenders: vi.fn(() => [sender]),
     createOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "offer" }),
     createAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "answer" }),
     setLocalDescription: vi.fn(async (description: RTCSessionDescriptionInit) => {
@@ -26,7 +31,7 @@ function createHarness() {
   const getUserMedia = vi.fn().mockResolvedValue(stream);
   const createPeerConnection = vi.fn(() => pc);
   const adapter = new DirectedCallWebRtcAdapter({ dependencies: { getUserMedia, createPeerConnection } });
-  return { adapter, pc, track, stream, getUserMedia, createPeerConnection };
+  return { adapter, pc, sender, track, stream, getUserMedia, createPeerConnection };
 }
 
 describe("DirectedCallWebRtcAdapter", () => {
@@ -113,6 +118,69 @@ describe("DirectedCallWebRtcAdapter", () => {
       video: false,
     });
     expect(createPeerConnection).not.toHaveBeenCalled();
+  });
+
+  it("replaces the existing sender track without recreating the peer connection", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    const replacement = { kind: "audio", readyState: "live", enabled: true, stop: vi.fn() };
+    const replacementStream = { getTracks: () => [replacement] };
+    harness.getUserMedia.mockResolvedValueOnce(replacementStream);
+    harness.sender.replaceTrack.mockImplementation(async (track) => {
+      expect(harness.track.stop).not.toHaveBeenCalled();
+      expect(track).toBe(replacement);
+    });
+
+    await expect(harness.adapter.switchAudioInput({ audio: { deviceId: { exact: "new-mic" } }, video: false })).resolves.toBe(true);
+
+    expect(harness.getUserMedia).toHaveBeenLastCalledWith({ audio: { deviceId: { exact: "new-mic" } }, video: false });
+    expect(harness.sender.replaceTrack).toHaveBeenCalledWith(replacement);
+    expect(harness.createPeerConnection).toHaveBeenCalledTimes(1);
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+    expect(harness.adapter.localMediaStream).toBe(replacementStream);
+  });
+
+  it("keeps the old track when replacement fails and stops the new stream", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    const replacement = { kind: "audio", readyState: "live", enabled: true, stop: vi.fn() };
+    const replacementStream = { getTracks: () => [replacement] };
+    harness.getUserMedia.mockResolvedValueOnce(replacementStream);
+    harness.sender.replaceTrack.mockRejectedValueOnce(new Error("replace failed"));
+
+    await expect(harness.adapter.switchAudioInput({ audio: true, video: false })).resolves.toBe(false);
+
+    expect(harness.track.stop).not.toHaveBeenCalled();
+    expect(replacement.stop).toHaveBeenCalledOnce();
+    expect(harness.adapter.localMediaStream).toBe(harness.stream);
+  });
+
+  it("preserves mute state on a replacement and later unmutes it", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    expect(harness.adapter.setLocalAudioMuted(true)).toBe(true);
+    const replacement = { kind: "audio", readyState: "live", enabled: true, stop: vi.fn() };
+    harness.getUserMedia.mockResolvedValueOnce({ getTracks: () => [replacement] });
+
+    await expect(harness.adapter.switchAudioInput({ audio: true, video: false })).resolves.toBe(true);
+    expect(replacement.enabled).toBe(false);
+    expect(harness.adapter.setLocalAudioMuted(false)).toBe(true);
+    expect(replacement.enabled).toBe(true);
+  });
+
+  it("stops an acquired replacement when the adapter is disposed during acquisition", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    let resolveMedia!: (stream: any) => void;
+    harness.getUserMedia.mockReturnValueOnce(new Promise((resolve) => { resolveMedia = resolve; }));
+    const switching = harness.adapter.switchAudioInput({ audio: true, video: false });
+    await vi.waitFor(() => expect(harness.getUserMedia).toHaveBeenCalledTimes(2));
+    harness.adapter.dispose();
+    const replacement = { kind: "audio", readyState: "live", enabled: true, stop: vi.fn() };
+    resolveMedia({ getTracks: () => [replacement] });
+
+    await expect(switching).resolves.toBe(false);
+    expect(replacement.stop).toHaveBeenCalledOnce();
   });
 
   it("queues and deduplicates ICE until the remote description exists", async () => {

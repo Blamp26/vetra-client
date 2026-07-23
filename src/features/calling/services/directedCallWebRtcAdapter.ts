@@ -57,6 +57,10 @@ interface PeerConnectionLike {
   onicecandidate: ((event: RTCPeerConnectionIceEvent) => void) | null;
   ontrack: ((event: RTCTrackEvent) => void) | null;
   addTrack(track: DirectedCallMediaStreamTrack, stream: DirectedCallMediaStream): unknown;
+  getSenders?(): Array<{
+    track: DirectedCallMediaStreamTrack | null;
+    replaceTrack(track: DirectedCallMediaStreamTrack | null): Promise<void>;
+  }>;
   createOffer(): Promise<RTCSessionDescriptionInit>;
   createAnswer(): Promise<RTCSessionDescriptionInit>;
   setLocalDescription(description: RTCSessionDescriptionInit): Promise<void>;
@@ -130,6 +134,8 @@ export class DirectedCallWebRtcAdapter {
   private offerPrepared = false;
   private epoch = 0;
   private localAudioMuted = false;
+  private audioSwitchEpoch = 0;
+  private audioReplacementTail: Promise<void> = Promise.resolve();
 
   constructor(options: DirectedCallWebRtcAdapterOptions = {}) {
     const dependencies = defaultDependencies();
@@ -162,6 +168,55 @@ export class DirectedCallWebRtcAdapter {
     this.localAudioMuted = muted;
     tracks.forEach((track) => { track.enabled = !muted; });
     return true;
+  }
+
+  async switchAudioInput(constraints: MediaStreamConstraints): Promise<boolean> {
+    const epoch = this.epoch;
+    const switchEpoch = ++this.audioSwitchEpoch;
+    if (!this.isCurrent(epoch) || !this.peerConnection || !this.localStream) return false;
+
+    const switchPromise = this.audioReplacementTail.then(async () => {
+      if (!this.isCurrent(epoch) || switchEpoch !== this.audioSwitchEpoch || !this.peerConnection || !this.localStream) return false;
+      const sender = this.peerConnection.getSenders?.().find((candidate) =>
+        candidate.track && (candidate.track.kind === undefined || candidate.track.kind === "audio"),
+      );
+      if (!sender) return false;
+
+      let newStream: DirectedCallMediaStream | null = null;
+      try {
+        newStream = await this.dependencies.getUserMedia(constraints);
+        if (!this.isCurrent(epoch) || switchEpoch !== this.audioSwitchEpoch) {
+          newStream.getTracks().forEach((track) => track.stop());
+          return false;
+        }
+        const newAudioTrack = newStream.getTracks().find((track) =>
+          (track.kind === undefined || track.kind === "audio") && track.readyState !== "ended",
+        );
+        if (!newAudioTrack) {
+          newStream.getTracks().forEach((track) => track.stop());
+          return false;
+        }
+        newAudioTrack.enabled = !this.localAudioMuted;
+        await sender.replaceTrack(newAudioTrack);
+        if (!this.isCurrent(epoch) || switchEpoch !== this.audioSwitchEpoch) {
+          newStream.getTracks().forEach((track) => track.stop());
+          return false;
+        }
+
+        const oldStream = this.localStream;
+        this.localStream = newStream;
+        oldStream.getTracks().forEach((track) => track.stop());
+        newStream.getTracks().forEach((track) => {
+          if (track !== newAudioTrack) track.stop();
+        });
+        return true;
+      } catch {
+        newStream?.getTracks().forEach((track) => track.stop());
+        return false;
+      }
+    });
+    this.audioReplacementTail = switchPromise.then(() => undefined, () => undefined);
+    return switchPromise;
   }
 
   async prepareOffer(): Promise<RTCSessionDescriptionInit> {
@@ -247,6 +302,7 @@ export class DirectedCallWebRtcAdapter {
     if (this.disposed) return;
     this.disposed = true;
     this.epoch += 1;
+    this.audioSwitchEpoch += 1;
     this.queuedCandidates.length = 0;
     this.seenCandidates.clear();
     if (this.peerConnection) {

@@ -36,7 +36,7 @@ export interface DirectedCallMediaCoordinatorSnapshot {
   projection: StateProjection | null;
   generation: string;
   remoteAudioStream: DirectedCallMediaStream | null;
-  localIssue: "transport_recovery" | DirectedCallWebRtcError["failureCode"] | null;
+  localIssue: "transport_recovery" | "audio_input_switch_failed" | DirectedCallWebRtcError["failureCode"] | null;
   peerConnectionState: RTCPeerConnectionState | null;
   isMuted: boolean;
   canToggleMute: boolean;
@@ -564,6 +564,23 @@ export class DirectedCallMediaCoordinator {
       return false;
     }
     this.setSnapshot({ ...this.snapshot, isMuted: muted, canToggleMute: true });
+    return true;
+  }
+
+  async switchAudioInput(constraints: MediaStreamConstraints): Promise<boolean> {
+    if (this.disposed || !this.mediaAttemptActive || !["accepted", "connecting", "active"].includes(this.snapshot.projection?.state ?? "")) {
+      return false;
+    }
+    const switched = await this.adapter.switchAudioInput(constraints);
+    if (this.disposed || !this.mediaAttemptActive) return false;
+    if (!switched) {
+      this.localIssue = "audio_input_switch_failed";
+      this.setSnapshot({ ...this.snapshot, localIssue: this.localIssue });
+      return false;
+    }
+    this.localIssue = null;
+    this.syncLocalMediaState(this.snapshot.callId, this.mediaAttemptEpoch);
+    this.setSnapshot({ ...this.snapshot, localIssue: null });
     return true;
   }
 

@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   MediaCoordinator: vi.fn(class {
     start = vi.fn();
     dispose = vi.fn();
+    switchAudioInput = vi.fn(() => Promise.resolve(false));
     getSnapshot = vi.fn(() => ({ state: "idle", callId: null, participantRole: null, projection: null, generation: "test", remoteAudioStream: null, localIssue: null }));
     subscribe = vi.fn(() => () => undefined);
   }),
