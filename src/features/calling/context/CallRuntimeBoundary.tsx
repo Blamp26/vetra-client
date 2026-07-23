@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { User } from "@/shared/types";
+import { getState } from "@/store";
+import { buildMicrophoneConstraints } from "@/shared/utils/audioConstraints";
 import type { SocketManager } from "@/services/socket";
 import { CallProvider } from "./CallProvider";
 import { DirectedCallSession } from "../services/directedCallSession";
@@ -151,6 +153,7 @@ export function CallRuntimeBoundary({
           controller,
           `${effectGeneration}:${deviceId}`,
           {
+            audioConstraints: () => buildMicrophoneConstraints(getState()),
             isGenerationCurrent: (generation) => generation.startsWith(`${effectGeneration}:`),
           },
         );

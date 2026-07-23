@@ -1,5 +1,6 @@
 import { createDirectedCallUuid } from "./directedCallDevice";
 import { buildIceServers } from "./iceServerConfig";
+import { buildMicrophoneConstraints, DEFAULT_AUDIO_PREFERENCES } from "@/shared/utils/audioConstraints";
 
 export type DirectedCallWebRtcFailureCode =
   | "permission_denied"
@@ -73,6 +74,7 @@ export interface DirectedCallWebRtcAdapterDependencies {
 
 export interface DirectedCallWebRtcAdapterOptions {
   dependencies?: DirectedCallWebRtcAdapterDependencies;
+  getAudioConstraints?: () => MediaStreamConstraints;
   onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
   onRemoteStream?: (stream: DirectedCallMediaStream) => void;
   onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
@@ -118,6 +120,7 @@ export class DirectedCallWebRtcAdapter {
   private readonly onRemoteStream?: (stream: DirectedCallMediaStream) => void;
   private readonly onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
   private readonly onPeerConnectionDiagnostics?: (diagnostics: DirectedCallPeerConnectionDiagnostics) => void;
+  private readonly getAudioConstraints: () => MediaStreamConstraints;
   private readonly queuedCandidates: RTCIceCandidateInit[] = [];
   private readonly seenCandidates = new Set<string>();
   private peerConnection: PeerConnectionLike | null = null;
@@ -135,6 +138,8 @@ export class DirectedCallWebRtcAdapter {
     this.onRemoteStream = options.onRemoteStream;
     this.onPeerConnectionState = options.onPeerConnectionState;
     this.onPeerConnectionDiagnostics = options.onPeerConnectionDiagnostics;
+    this.getAudioConstraints = options.getAudioConstraints
+      ?? (() => buildMicrophoneConstraints(DEFAULT_AUDIO_PREFERENCES));
   }
 
   get localMediaStream(): DirectedCallMediaStream | null {
@@ -267,7 +272,7 @@ export class DirectedCallWebRtcAdapter {
     if (this.peerConnection && this.localStream) return;
     let acquiredStream: DirectedCallMediaStream | null = null;
     try {
-      acquiredStream = await this.dependencies.getUserMedia({ audio: true, video: false });
+      acquiredStream = await this.dependencies.getUserMedia(this.getAudioConstraints());
       this.assertCurrent(epoch);
     } catch (error) {
       if (error instanceof DirectedCallWebRtcStaleError || !this.isCurrent(epoch)) {

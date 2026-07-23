@@ -204,31 +204,31 @@ describe("SettingsPage audio settings", () => {
     fireEvent.keyDown(account, { key: "ArrowDown" });
     expect(screen.getByRole("tab", { name: "Appearance" })).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(screen.getByRole("tab", { name: "Appearance" }), { key: "End" });
-    expect(screen.getByRole("tab", { name: "Audio & Video" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("heading", { name: "Audio & Video" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Voice & Audio" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "Voice & Audio" })).toBeInTheDocument();
 
     await waitFor(() => expect(storeState.refreshDevices).toHaveBeenCalledTimes(1));
-    fireEvent.keyDown(screen.getByRole("tab", { name: "Audio & Video" }), { key: "ArrowUp" });
-    expect(screen.queryByRole("heading", { name: "Audio & Video" })).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Voice & Audio" }), { key: "ArrowUp" });
+    expect(screen.queryByRole("heading", { name: "Voice & Audio" })).not.toBeInTheDocument();
     expect(storeState.refreshDevices).toHaveBeenCalledTimes(1);
   });
 
   it("renders microphone processing toggles and helper text", () => {
     render(<SettingsPage onClose={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
 
     expect(screen.getByLabelText("Noise suppression")).toBeChecked();
     expect(screen.getByLabelText("Echo cancellation")).toBeChecked();
     expect(screen.getByLabelText("Auto gain control")).toBeChecked();
     expect(
-      screen.getByText(/actual support and behavior can vary by browser and device/i),
+      screen.getByText(/these options apply to the next call/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/speaker routing depends on browser support/i),
+      screen.getByText(/only the system default speakers/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/input device changes apply to the next call/i),
+      screen.getByText(/changes apply to the next call/i),
     ).toBeInTheDocument();
     const processingGroup = screen.getByRole("group", { name: "Microphone processing" });
     expect(processingGroup).toBeInTheDocument();
@@ -238,25 +238,17 @@ describe("SettingsPage audio settings", () => {
 
   it("keeps audio actions accessible and wired to their existing handlers", async () => {
     render(<SettingsPage onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
 
-    expect(screen.getByRole("button", { name: "Allow microphone" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Test microphone" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Refresh devices" })).toBeInTheDocument();
-    expect(screen.getByRole("progressbar", { name: "Input level" })).toHaveAttribute("aria-valuenow", "0");
-
-    fireEvent.click(screen.getByRole("button", { name: "Allow microphone" }));
-    fireEvent.click(screen.getByRole("button", { name: "Refresh devices" }));
-
-    await waitFor(() => {
-      expect(storeState.refreshDevices).toHaveBeenCalledWith({ requestPermission: true });
-      expect(storeState.refreshDevices).toHaveBeenCalledWith();
-    });
+    expect(screen.queryByRole("button", { name: "Allow microphone" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh devices" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("progressbar", { name: "Input level" })).not.toBeInTheDocument();
   });
 
   it("switches the microphone test action label while the test is active", async () => {
     render(<SettingsPage onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
     fireEvent.click(screen.getByRole("button", { name: "Test microphone" }));
 
     expect(await screen.findByRole("button", { name: "Stop microphone test" })).toBeInTheDocument();
@@ -268,7 +260,7 @@ describe("SettingsPage audio settings", () => {
   it("does not request microphone access just by opening audio settings", async () => {
     render(<SettingsPage onClose={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
 
     await waitFor(() => {
       expect(storeState.refreshDevices).toHaveBeenCalledWith();
@@ -285,11 +277,11 @@ describe("SettingsPage audio settings", () => {
     });
 
     render(<SettingsPage onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
 
     const feedback = await screen.findByTestId("settings-audio-feedback");
     expect(feedback).toHaveTextContent(
-      /device names may stay hidden until you explicitly allow microphone access/i,
+      /device names may stay hidden until you use test microphone/i,
     );
     expect(feedback).toHaveRole("status");
   });
@@ -303,8 +295,11 @@ describe("SettingsPage audio settings", () => {
     });
 
     render(<SettingsPage onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
-    fireEvent.click(screen.getByRole("button", { name: "Allow microphone" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockRejectedValueOnce(
+      new DOMException("denied", "NotAllowedError"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Test microphone" }));
 
     const feedback = await screen.findByTestId("settings-audio-feedback");
     expect(feedback).toHaveTextContent(
@@ -316,7 +311,7 @@ describe("SettingsPage audio settings", () => {
   it("calls store setters when microphone processing toggles change", () => {
     render(<SettingsPage onClose={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Audio & Video" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
 
     fireEvent.click(screen.getByLabelText("Noise suppression"));
     fireEvent.click(screen.getByLabelText("Echo cancellation"));

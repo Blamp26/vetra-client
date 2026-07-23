@@ -36,6 +36,8 @@ export interface AudioSlice {
     labelsAvailable: boolean;
     inputCount: number;
     outputCount: number;
+    inputDeviceFallback: boolean;
+    outputDeviceFallback: boolean;
   }>;
 }
 
@@ -151,6 +153,8 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
         labelsAvailable: false,
         inputCount: 0,
         outputCount: 0,
+        inputDeviceFallback: false,
+        outputDeviceFallback: false,
       };
     }
 
@@ -167,10 +171,17 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
       const inputs = devices.filter((device) => device.kind === "audioinput");
       const outputs = devices.filter((device) => device.kind === "audiooutput");
       const labelsAvailable = devices.some((device) => device.label.trim().length > 0);
+      const { selectedInputDeviceId, selectedOutputDeviceId } = get();
+      const inputDeviceFallback = selectedInputDeviceId !== "default"
+        && !inputs.some((device) => device.deviceId === selectedInputDeviceId);
+      const outputDeviceFallback = selectedOutputDeviceId !== "default"
+        && !outputs.some((device) => device.deviceId === selectedOutputDeviceId);
 
       set({
         availableInputDevices: inputs,
         availableOutputDevices: outputs,
+        ...(inputDeviceFallback ? { selectedInputDeviceId: "default" } : {}),
+        ...(outputDeviceFallback ? { selectedOutputDeviceId: "default" } : {}),
       });
 
       return {
@@ -178,6 +189,8 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
         labelsAvailable,
         inputCount: inputs.length,
         outputCount: outputs.length,
+        inputDeviceFallback,
+        outputDeviceFallback,
       };
     } catch (err) {
       console.error("Failed to enumerate audio devices:", err);
@@ -200,6 +213,8 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
         labelsAvailable: false,
         inputCount: 0,
         outputCount: 0,
+        inputDeviceFallback: false,
+        outputDeviceFallback: false,
       };
     }
   },

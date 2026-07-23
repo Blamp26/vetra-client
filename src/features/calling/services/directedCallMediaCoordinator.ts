@@ -50,6 +50,7 @@ export interface DirectedCallMediaLifecyclePort {
 
 export interface DirectedCallMediaCoordinatorOptions {
   adapterFactory?: (options: DirectedCallWebRtcAdapterOptions) => DirectedCallWebRtcAdapter;
+  audioConstraints?: () => MediaStreamConstraints;
   isGenerationCurrent?: (generation: string) => boolean;
 }
 
@@ -108,6 +109,7 @@ export class DirectedCallMediaCoordinator {
   private readonly generation: string;
   private readonly isGenerationCurrent: (generation: string) => boolean;
   private readonly adapterFactory: (options: DirectedCallWebRtcAdapterOptions) => DirectedCallWebRtcAdapter;
+  private readonly audioConstraints?: () => MediaStreamConstraints;
   private adapter: DirectedCallWebRtcAdapter;
   private unsubscribeProjection: (() => void) | null = null;
   private unsubscribeSignal: (() => void) | null = null;
@@ -152,12 +154,14 @@ export class DirectedCallMediaCoordinator {
     this.isGenerationCurrent = options.isGenerationCurrent ?? ((current) => current === this.generation);
     this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false };
     this.adapterFactory = options.adapterFactory ?? ((adapterOptions) => new DirectedCallWebRtcAdapter(adapterOptions));
+    this.audioConstraints = options.audioConstraints;
     this.adapter = this.createAdapter();
   }
 
   private createAdapter(): DirectedCallWebRtcAdapter {
     const adapterEpoch = ++this.adapterEpoch;
     return this.adapterFactory({
+      getAudioConstraints: this.audioConstraints,
       onIceCandidate: (candidate) => {
         if (this.adapterEpoch === adapterEpoch) this.queueLocalIceCandidate(candidate);
       },

@@ -36,7 +36,14 @@ describe("DirectedCallWebRtcAdapter", () => {
     const first = await harness.adapter.prepareOffer();
     const second = await harness.adapter.prepareOffer();
 
-    expect(harness.getUserMedia).toHaveBeenCalledWith({ audio: true, video: false });
+    expect(harness.getUserMedia).toHaveBeenCalledWith({
+      audio: {
+        noiseSuppression: true,
+        echoCancellation: true,
+        autoGainControl: true,
+      },
+      video: false,
+    });
     expect(harness.createPeerConnection).toHaveBeenCalledTimes(1);
     expect(harness.pc.createOffer).toHaveBeenCalledTimes(1);
     expect(first).toEqual(second);
@@ -66,6 +73,46 @@ describe("DirectedCallWebRtcAdapter", () => {
       ],
     });
     vi.unstubAllEnvs();
+  });
+
+  it("uses the injected exact microphone and processing preferences", async () => {
+    const harness = createHarness();
+    const getAudioConstraints = () => ({
+      audio: {
+        deviceId: { exact: "fifine-input" },
+        noiseSuppression: false,
+        echoCancellation: true,
+        autoGainControl: false,
+      },
+      video: false,
+    });
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: harness.getUserMedia, createPeerConnection: harness.createPeerConnection },
+      getAudioConstraints,
+    });
+
+    await adapter.prepareOffer();
+
+    expect(harness.getUserMedia).toHaveBeenCalledWith(getAudioConstraints());
+  });
+
+  it("does not fall back when an explicitly selected microphone is unavailable", async () => {
+    const getUserMedia = vi.fn().mockRejectedValue(new DOMException("not found", "NotFoundError"));
+    const createPeerConnection = vi.fn();
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia, createPeerConnection },
+      getAudioConstraints: () => ({
+        audio: { deviceId: { exact: "missing-input" } },
+        video: false,
+      }),
+    });
+
+    await expect(adapter.prepareOffer()).rejects.toMatchObject({ failureCode: "microphone_unavailable" });
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: { deviceId: { exact: "missing-input" } },
+      video: false,
+    });
+    expect(createPeerConnection).not.toHaveBeenCalled();
   });
 
   it("queues and deduplicates ICE until the remote description exists", async () => {

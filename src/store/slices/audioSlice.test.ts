@@ -40,4 +40,29 @@ describe("createAudioSlice", () => {
     slice.setAutoGainControl(false);
     expect(state.autoGainControl).toBe(false);
   });
+
+  it("falls back missing saved devices to the system defaults after enumeration", async () => {
+    let state: any = {
+      selectedInputDeviceId: "missing-input",
+      selectedOutputDeviceId: "missing-output",
+    };
+    const set = vi.fn((updater: any) => {
+      state = typeof updater === "function" ? { ...state, ...updater(state) } : { ...state, ...updater };
+    });
+    const mediaDevices = {
+      enumerateDevices: vi.fn().mockResolvedValue([
+        { kind: "audioinput", deviceId: "default", label: "Default microphone" },
+        { kind: "audiooutput", deviceId: "default", label: "Default speakers" },
+      ]),
+    };
+    Object.defineProperty(global.navigator, "mediaDevices", { value: mediaDevices, configurable: true });
+    const slice = createAudioSlice(set as any, () => state as any, {} as any);
+
+    await expect(slice.refreshDevices()).resolves.toMatchObject({
+      inputDeviceFallback: true,
+      outputDeviceFallback: true,
+    });
+    expect(state.selectedInputDeviceId).toBe("default");
+    expect(state.selectedOutputDeviceId).toBe("default");
+  });
 });

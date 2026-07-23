@@ -11,13 +11,14 @@ import { IconButton } from '@/shared/components/IconButton';
 import { Avatar } from '@/shared/components/Avatar';
 import { X } from 'lucide-react';
 import { themeLabels, type Theme } from "@/themes";
+import { buildMicrophoneConstraints } from "@/shared/utils/audioConstraints";
 import {
   getNotificationPermissionStatus,
   requestNotificationPermission,
   type NotificationPermissionStatus,
 } from '@/services/notifications';
 
-function AudioVideoSettings() {
+function VoiceAudioSettings() {
   const { 
     availableInputDevices, 
     availableOutputDevices, 
@@ -57,6 +58,8 @@ function AudioVideoSettings() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const outputRoutingSupported = typeof HTMLMediaElement !== "undefined"
+    && typeof (HTMLMediaElement.prototype as HTMLMediaElement & { setSinkId?: unknown }).setSinkId === "function";
 
   const stopMicTest = useCallback(() => {
     if (animationFrameRef.current !== null) {
@@ -90,10 +93,18 @@ function AudioVideoSettings() {
       return;
     }
 
+    if (result.inputDeviceFallback || result.outputDeviceFallback) {
+      setAudioFeedback({
+        tone: "default",
+        message: "A saved audio device is no longer available. The system default is now selected.",
+      });
+      return;
+    }
+
     if (!result.labelsAvailable) {
       setAudioFeedback({
         tone: "default",
-        message: "Device names may stay hidden until you explicitly allow microphone access. Use Allow microphone or Test microphone to unlock labels when supported.",
+        message: "Device names may stay hidden until you use Test microphone to allow access when supported.",
       });
       return;
     }
@@ -102,15 +113,21 @@ function AudioVideoSettings() {
   }, [refreshDevices]);
 
   useEffect(() => {
-    void refreshDevices().then(applyDeviceRefreshFeedback);
+    let disposed = false;
+    const refresh = () => {
+      void refreshDevices().then((result) => {
+        if (!disposed) applyDeviceRefreshFeedback(result);
+      });
+    };
+    refresh();
+    navigator.mediaDevices?.addEventListener?.("devicechange", refresh);
+    return () => {
+      disposed = true;
+      navigator.mediaDevices?.removeEventListener?.("devicechange", refresh);
+    };
   }, [applyDeviceRefreshFeedback, refreshDevices]);
 
   useEffect(() => stopMicTest, [stopMicTest]);
-
-  const handleAllowMicrophone = useCallback(async () => {
-    const result = await refreshDevices({ requestPermission: true });
-    applyDeviceRefreshFeedback(result);
-  }, [applyDeviceRefreshFeedback, refreshDevices]);
 
   const handleMicTestToggle = useCallback(async () => {
     if (isMicTestActive) {
@@ -119,14 +136,12 @@ function AudioVideoSettings() {
     }
 
     try {
-      const constraints = {
-        audio: {
-          deviceId: selectedInputDeviceId !== 'default' ? { exact: selectedInputDeviceId } : undefined,
-          noiseSuppression,
-          echoCancellation,
-          autoGainControl,
-        }
-      };
+      const constraints = buildMicrophoneConstraints({
+        selectedInputDeviceId,
+        noiseSuppression,
+        echoCancellation,
+        autoGainControl,
+      });
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const audioContext = new (window.AudioContext || (window as Window & typeof globalThis & {
         webkitAudioContext?: typeof AudioContext;
@@ -152,7 +167,7 @@ function AudioVideoSettings() {
       };
       updateLevel();
 
-      const result = await refreshDevices({ requestPermission: true });
+      const result = await refreshDevices();
       applyDeviceRefreshFeedback(result);
       setAudioFeedback(null);
     } catch (err) {
@@ -191,24 +206,29 @@ function AudioVideoSettings() {
 
   return (
     <div className="max-w-xl">
-      <h3 className="mb-4 text-xl font-semibold tracking-tight">Audio & Video</h3>
+      <h3 className="mb-4 text-xl font-semibold tracking-tight">Voice & Audio</h3>
       <div className="space-y-4">
-        <div className="space-y-1">
-          <label className="vt-label" htmlFor="settings-audio-input">Input Device</label>
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <div>
+            <h4 className="text-sm font-semibold">Microphone</h4>
+            <p className="text-xs text-muted-foreground">Used for new persistent calls and microphone tests.</p>
+          </div>
           <select 
             id="settings-audio-input"
             value={selectedInputDeviceId}
+            aria-label="Microphone"
             onChange={(e) => setInputDevice(e.target.value)}
             className="vt-select"
           >
-            {availableInputDevices.map(device => (
-              <option key={device.deviceId} value={device.deviceId}>{device.label || `Mic (${device.deviceId.slice(0, 5)})`}</option>
+            <option value="default">System default microphone</option>
+            {availableInputDevices.filter((device) => device.deviceId !== "default").map(device => (
+              <option key={device.deviceId} value={device.deviceId}>{device.label || "Microphone"}</option>
             ))}
           </select>
           <p className="text-xs text-muted-foreground">
-            Input device changes apply to the next call. Live microphone switching is not enabled in the current direct-call demo.
+            Changes apply to the next call.
           </p>
-          <div className="mt-2">
+          {isMicTestActive && <div>
             <div className="mb-1 text-xs text-muted-foreground">Input Level: {Math.round((micLevel / 128) * 100)}%</div>
             <div className="h-1 w-full bg-muted">
               <div
@@ -221,15 +241,8 @@ function AudioVideoSettings() {
                 style={{ width: `${(micLevel / 128) * 100}%` }}
               />
             </div>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button
-              size="compact"
-              variant="secondary"
-              onClick={() => { void handleAllowMicrophone(); }}
-            >
-              Allow microphone
-            </Button>
+          </div>}
+          <div className="flex flex-wrap gap-2">
             <Button
               size="compact"
               variant="secondary"
@@ -254,65 +267,49 @@ function AudioVideoSettings() {
             </div>
           )}
         </div>
-        <div className="space-y-1">
-          <label className="vt-label" htmlFor="settings-audio-output">Output Device</label>
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <div>
+            <h4 className="text-sm font-semibold">Speakers</h4>
+            <p className="text-xs text-muted-foreground">Used for remote call audio when supported.</p>
+          </div>
           <select 
             id="settings-audio-output"
-            value={selectedOutputDeviceId}
+            aria-label="Speakers"
+            value={outputRoutingSupported ? selectedOutputDeviceId : "default"}
             onChange={(e) => setOutputDevice(e.target.value)}
+            disabled={!outputRoutingSupported}
             className="vt-select"
           >
-            {availableOutputDevices.map(device => (
-              <option key={device.deviceId} value={device.deviceId}>{device.label || `Speaker (${device.deviceId.slice(0, 5)})`}</option>
+            <option value="default">System default speakers</option>
+            {outputRoutingSupported && availableOutputDevices.filter((device) => device.deviceId !== "default").map(device => (
+              <option key={device.deviceId} value={device.deviceId}>{device.label || "Speaker"}</option>
             ))}
           </select>
           <p className="text-xs text-muted-foreground">
-            Speaker routing depends on browser support and may fall back to the system default output device.
+            {outputRoutingSupported
+              ? "Changes apply to current and future persistent calls."
+              : "This environment supports only the system default speakers."}
           </p>
         </div>
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Microphone processing</legend>
-          <p className="text-xs text-muted-foreground">
-              These are browser-requested audio improvements. Actual support and behavior can vary by browser and device.
-          </p>
-          <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-noise-suppression">
-            <span>Noise suppression</span>
-            <input
-              id="settings-noise-suppression"
-              type="checkbox"
-              checked={noiseSuppression}
-              onChange={(e) => setNoiseSuppression(e.target.checked)}
-              className="h-4 w-4 accent-[var(--primary)]"
-            />
-          </label>
-          <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-echo-cancellation">
-            <span>Echo cancellation</span>
-            <input
-              id="settings-echo-cancellation"
-              type="checkbox"
-              checked={echoCancellation}
-              onChange={(e) => setEchoCancellation(e.target.checked)}
-              className="h-4 w-4 accent-[var(--primary)]"
-            />
-          </label>
-          <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-auto-gain-control">
-            <span>Auto gain control</span>
-            <input
-              id="settings-auto-gain-control"
-              type="checkbox"
-              checked={autoGainControl}
-              onChange={(e) => setAutoGainControl(e.target.checked)}
-              className="h-4 w-4 accent-[var(--primary)]"
-            />
-          </label>
-        </fieldset>
-        <Button
-          size="compact"
-          variant="secondary"
-          onClick={() => { void refreshDevices().then(applyDeviceRefreshFeedback); }}
-        >
-          Refresh devices
-        </Button>
+        <details>
+          <summary className="cursor-pointer text-sm font-medium">Advanced microphone settings</summary>
+          <fieldset className="mt-3 space-y-2 rounded-lg border border-border p-4">
+            <legend className="sr-only">Microphone processing</legend>
+            <p className="text-xs text-muted-foreground">These options apply to the next call.</p>
+            <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-noise-suppression">
+              <span>Noise suppression</span>
+              <input id="settings-noise-suppression" type="checkbox" checked={noiseSuppression} onChange={(e) => setNoiseSuppression(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-echo-cancellation">
+              <span>Echo cancellation</span>
+              <input id="settings-echo-cancellation" type="checkbox" checked={echoCancellation} onChange={(e) => setEchoCancellation(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm" htmlFor="settings-auto-gain-control">
+              <span>Auto gain control</span>
+              <input id="settings-auto-gain-control" type="checkbox" checked={autoGainControl} onChange={(e) => setAutoGainControl(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
+            </label>
+          </fieldset>
+        </details>
       </div>
     </div>
   );
@@ -353,7 +350,7 @@ export function SettingsPage({ onClose }: Props) {
     { id: 'account', label: 'Account' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'notifications', label: 'Notifications' },
-    { id: 'audioVideo', label: 'Audio & Video' },
+    { id: 'audioVideo', label: 'Voice & Audio' },
   ];
 
   return (
@@ -450,7 +447,7 @@ export function SettingsPage({ onClose }: Props) {
             </div>
           </TabPanel>
           <TabPanel value="audioVideo">
-            <AudioVideoSettings />
+            <VoiceAudioSettings />
           </TabPanel>
         </div>
         </Tabs>
