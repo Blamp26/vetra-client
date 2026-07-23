@@ -736,6 +736,137 @@ describe('useCall', () => {
         });
     });
 
+    describe('incoming ICE before acceptance', () => {
+        function getCallHandlers() {
+            const callChannel = mockSocketManager.socket.channel.mock.results[0].value;
+            return {
+                incomingHandler: mockUserChannel.on.mock.calls.find((c: any[]) => c[0] === 'incoming_call')?.[1],
+                offerHandler: callChannel.on.mock.calls.find((c: any[]) => c[0] === 'offer')?.[1],
+                iceHandler: callChannel.on.mock.calls.find((c: any[]) => c[0] === 'ice_candidate')?.[1],
+            };
+        }
+
+        function incomingCandidate(candidate: string, callId = 'call-123', fromUserId = 2) {
+            return {
+                candidate: { candidate, sdpMid: '0', sdpMLineIndex: 0 },
+                call_id: callId,
+                from_user_id: fromUserId,
+            };
+        }
+
+        it('queues ICE received while ringing and delivers it after acceptance in arrival order', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            const { incomingHandler, offerHandler, iceHandler } = getCallHandlers();
+
+            act(() => {
+                incomingHandler({ from_user_id: 2, call_id: 'call-123' });
+                iceHandler(incomingCandidate('first'));
+                iceHandler(incomingCandidate('second'));
+            });
+            expect(MockWebRTCService).not.toHaveBeenCalled();
+
+            act(() => {
+                offerHandler({ sdp: 'incoming-offer', from_user_id: 2 });
+            });
+            await act(async () => {
+                result.current.acceptCall();
+                await Promise.resolve();
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            expect(service.setCallId).toHaveBeenCalledWith('call-123');
+            expect(service.addIceCandidate.mock.calls.map(([payload]: any[]) => payload.candidate)).toEqual([
+                'first',
+                'second',
+            ]);
+        });
+
+        it('delivers ICE immediately once a WebRTCService exists', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => result.current.startCall(2));
+            const service = MockWebRTCService.mock.results[0]?.value;
+            const { iceHandler } = getCallHandlers();
+
+            act(() => {
+                service.onCallIdReceived?.('call-123');
+                iceHandler(incomingCandidate('immediate'));
+            });
+
+            expect(service.addIceCandidate).toHaveBeenCalledWith(
+                expect.objectContaining({ candidate: 'immediate', sdpMid: '0', sdpMLineIndex: 0 }),
+            );
+        });
+
+        it('ignores candidates for another call or remote user', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            const { incomingHandler, offerHandler, iceHandler } = getCallHandlers();
+            act(() => {
+                incomingHandler({ from_user_id: 2, call_id: 'call-123' });
+                iceHandler(incomingCandidate('wrong-call', 'call-other', 2));
+                iceHandler(incomingCandidate('wrong-user', 'call-123', 9));
+                offerHandler({ sdp: 'incoming-offer', from_user_id: 2 });
+            });
+            await act(async () => {
+                result.current.acceptCall();
+                await Promise.resolve();
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            expect(service.addIceCandidate).not.toHaveBeenCalled();
+        });
+
+        it('clears queued ICE across reject and repeated calls', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            let handlers = getCallHandlers();
+            act(() => {
+                handlers.incomingHandler({ from_user_id: 2, call_id: 'first-call' });
+                handlers.iceHandler(incomingCandidate('stale', 'first-call'));
+                result.current.rejectCall();
+            });
+
+            act(() => {
+                handlers = getCallHandlers();
+                handlers.incomingHandler({ from_user_id: 2, call_id: 'second-call' });
+                handlers.offerHandler({ sdp: 'second-offer', from_user_id: 2 });
+            });
+            await act(async () => {
+                result.current.acceptCall();
+                await Promise.resolve();
+            });
+
+            const service = MockWebRTCService.mock.results[0]?.value;
+            expect(service.addIceCandidate).not.toHaveBeenCalled();
+        });
+
+        it('does not lose or duplicate a candidate arriving while the queue is flushing', async () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            const handlers = getCallHandlers();
+            act(() => {
+                handlers.incomingHandler({ from_user_id: 2, call_id: 'call-123' });
+                handlers.iceHandler(incomingCandidate('first'));
+                handlers.offerHandler({ sdp: 'incoming-offer', from_user_id: 2 });
+            });
+
+            const originalAddIceCandidate = vi.fn((payload: any) => {
+                if (payload.candidate === 'first') {
+                    handlers.iceHandler(incomingCandidate('concurrent'));
+                }
+            });
+            await act(async () => {
+                result.current.acceptCall();
+                const service = MockWebRTCService.mock.results[0]?.value;
+                service.addIceCandidate.mockImplementation(originalAddIceCandidate);
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+
+            expect(originalAddIceCandidate.mock.calls.map(([payload]) => payload.candidate)).toEqual([
+                'first',
+                'concurrent',
+            ]);
+        });
+    });
+
     describe('answer', () => {
         it('вызывает handleAnswer и переводит статус в active', async () => {
             const { result } = renderHook(() => useCall(currentUserId));

@@ -4,7 +4,14 @@ import { useAppStore } from '@/store';
 import type { ResourceRef } from '@/shared/types';
 import { WebRTCService, type WebRTCDiagnostics } from '../services/webrtcService';
 import { callSignalingService, type OfferPayload } from '../services/callSignalingService';
-import type { CallDiagnostics, CallIssue, CallServiceStatus, CallStatus, UseCallReturn } from './useCall.types';
+import type {
+    CallDiagnostics,
+    CallIceCandidatePayload,
+    CallIssue,
+    CallServiceStatus,
+    CallStatus,
+    UseCallReturn,
+} from './useCall.types';
 import { debugCall } from '../utils/callDebug';
 
 const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
@@ -37,6 +44,16 @@ function sameResourceRef(a: ResourceRef | null | undefined, b: ResourceRef | nul
 function canonicalCallUserId(currentRef: ResourceRef | null | undefined, nextUserId: ResourceRef): ResourceRef {
     if (typeof nextUserId === 'number') return nextUserId;
     return currentRef ?? nextUserId;
+}
+
+type PendingIncomingIceCandidate = {
+    candidate: CallIceCandidatePayload;
+    callId: string | null;
+    fromUserId: ResourceRef | null;
+};
+
+function incomingIceCandidateKey(candidate: CallIceCandidatePayload): string {
+    return JSON.stringify(candidate);
 }
 
 function isExpectedScreenShareCancellation(error: unknown): boolean {
@@ -222,6 +239,10 @@ export function useCall(currentUserId: number): UseCallReturn {
     const screenTrackRef = useRef<MediaStreamTrack | null>(null);
     const screenTrackEndedHandlerRef = useRef<(() => void) | null>(null);
     const incomingActionPendingRef = useRef(false);
+    const pendingIncomingIceRef = useRef<PendingIncomingIceCandidate[]>([]);
+    const pendingIncomingIceKeysRef = useRef(new Set<string>());
+    const deliveredIncomingIceKeysRef = useRef(new Set<string>());
+    const incomingIceDeliveryPausedRef = useRef(false);
 
     const cleanupScreenShare = useCallback((options?: { stopTracks?: boolean }) => {
         const shouldStopTracks = options?.stopTracks ?? true;
@@ -284,6 +305,73 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
     }, []);
 
+    const clearPendingIncomingIce = useCallback(() => {
+        pendingIncomingIceRef.current = [];
+        pendingIncomingIceKeysRef.current.clear();
+        deliveredIncomingIceKeysRef.current.clear();
+        incomingIceDeliveryPausedRef.current = false;
+    }, []);
+
+    const matchesIncomingIceContext = useCallback((
+        callId: string | null,
+        fromUserId: ResourceRef | null,
+    ): boolean => {
+        const activeCallId = callIdRef.current;
+        const activeRemoteUserId = remoteUserIdRef.current;
+        if (callId && activeCallId && callId !== activeCallId) return false;
+        if (fromUserId !== null && activeRemoteUserId !== null && !sameResourceRef(fromUserId, activeRemoteUserId)) {
+            return false;
+        }
+        return true;
+    }, []);
+
+    const queueIncomingIce = useCallback((payload: {
+        candidate: CallIceCandidatePayload;
+        call_id?: string;
+        from_user_id?: ResourceRef;
+    }) => {
+        const callId = typeof payload.call_id === 'string' ? payload.call_id : null;
+        const fromUserId = payload.from_user_id ?? null;
+        if (!matchesIncomingIceContext(callId, fromUserId)) return;
+
+        const key = incomingIceCandidateKey(payload.candidate);
+        if (
+            pendingIncomingIceKeysRef.current.has(key) ||
+            deliveredIncomingIceKeysRef.current.has(key)
+        ) {
+            return;
+        }
+
+        pendingIncomingIceKeysRef.current.add(key);
+        pendingIncomingIceRef.current.push({ candidate: payload.candidate, callId, fromUserId });
+    }, [matchesIncomingIceContext]);
+
+    const flushPendingIncomingIce = useCallback(async (
+        service: WebRTCService,
+        expectedCallId: string | null,
+        expectedRemoteUserId: ResourceRef,
+    ) => {
+        while (pendingIncomingIceRef.current.length > 0) {
+            if (
+                webrtcRef.current !== service ||
+                (expectedCallId && callIdRef.current !== expectedCallId) ||
+                !sameResourceRef(remoteUserIdRef.current, expectedRemoteUserId)
+            ) {
+                return;
+            }
+
+            const pending = pendingIncomingIceRef.current.shift();
+            if (!pending) continue;
+            const key = incomingIceCandidateKey(pending.candidate);
+            pendingIncomingIceKeysRef.current.delete(key);
+            if (deliveredIncomingIceKeysRef.current.has(key)) continue;
+            if (!matchesIncomingIceContext(pending.callId, pending.fromUserId)) continue;
+
+            deliveredIncomingIceKeysRef.current.add(key);
+            await Promise.resolve(service.addIceCandidate(pending.candidate));
+        }
+    }, [matchesIncomingIceContext]);
+
     const teardownCall = useCallback((options?: { resetState?: boolean; unsubscribe?: boolean }) => {
         const resetState = options?.resetState ?? true;
         const unsubscribe = options?.unsubscribe ?? true;
@@ -298,6 +386,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         cleanupScreenShare({ stopTracks: !webrtcRef.current });
         webrtcRef.current?.dispose();
         webrtcRef.current = null;
+        clearPendingIncomingIce();
         callChannelRef.current = null;
         offerSdpRef.current = null;
         incomingActionPendingRef.current = false;
@@ -321,7 +410,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             setCallIssue(null);
             setIsIncomingActionPending(false);
         }
-    }, [cleanupScreenShare, clearCallTimeout]);
+    }, [cleanupScreenShare, clearCallTimeout, clearPendingIncomingIce]);
 
     const cleanupLocalCall = useCallback((reason: string, options?: { issue?: CallIssue | null }) => {
         debugCall('[useCall] cleanup local call', {
@@ -337,6 +426,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         cleanupScreenShare({ stopTracks: !webrtcRef.current });
         webrtcRef.current?.dispose();
         webrtcRef.current = null;
+        clearPendingIncomingIce();
         offerSdpRef.current = null;
         incomingActionPendingRef.current = false;
 
@@ -358,9 +448,10 @@ export function useCall(currentUserId: number): UseCallReturn {
         setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
         setCallIssue(options?.issue ?? null);
         setIsIncomingActionPending(false);
-    }, [cleanupScreenShare, clearCallTimeout]);
+    }, [cleanupScreenShare, clearCallTimeout, clearPendingIncomingIce]);
 
     const resetAfterDelay = useCallback((options?: { status?: 'ended' | 'failed'; issue?: CallIssue | null }) => {
+        clearPendingIncomingIce();
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
         const nextStatus = options?.status ?? 'ended';
         statusRef.current = nextStatus;
@@ -369,7 +460,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         endedTimerRef.current = setTimeout(() => {
             teardownCall();
         }, 2000);
-    }, [teardownCall]);
+    }, [clearPendingIncomingIce, teardownCall]);
 
     const handleOffer = useCallback((payload: OfferPayload) => {
         debugCall('[useCall] receive offer', {
@@ -383,6 +474,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         setCallIssue(null);
         setIsIncomingActionPending(false);
         incomingActionPendingRef.current = false;
+        remoteUserIdRef.current = canonicalCallUserId(remoteUserIdRef.current, payload.from_user_id);
+        if (payload.call_id) callIdRef.current = payload.call_id;
         setRemoteUserId((prev) => canonicalCallUserId(prev, payload.from_user_id));
         setRemoteUsername((prev) => prev ?? payload.from_username);
         setCallId((prev) => prev ?? payload.call_id ?? null);
@@ -526,7 +619,32 @@ export function useCall(currentUserId: number): UseCallReturn {
                     active_call_id: callIdRef.current,
                     signalingState: webrtcRef.current?.getDiagnosticsSnapshot().signalingState,
                 });
-                webrtcRef.current?.addIceCandidate(payload.candidate);
+                const service = webrtcRef.current;
+                const hasPendingIncomingCall = statusRef.current === 'ringing' || offerSdpRef.current !== null;
+                const callId = typeof payload.call_id === 'string' ? payload.call_id : null;
+                const fromUserId = payload.from_user_id ?? null;
+                if (!matchesIncomingIceContext(callId, fromUserId)) {
+                    debugCall('[useCall] ICE skipped', {
+                        reason: 'remote_or_call_mismatch',
+                        call_id: payload.call_id,
+                        active_call_id: callIdRef.current,
+                        from_user_id: payload.from_user_id,
+                        active_remote_user_id: remoteUserIdRef.current,
+                    });
+                    return;
+                }
+                if (!service || hasPendingIncomingCall || incomingIceDeliveryPausedRef.current) {
+                    if (hasPendingIncomingCall || incomingIceDeliveryPausedRef.current) {
+                        queueIncomingIce(payload);
+                    }
+                    return;
+                }
+                const key = incomingIceCandidateKey(payload.candidate);
+                if (deliveredIncomingIceKeysRef.current.has(key)) return;
+                deliveredIncomingIceKeysRef.current.add(key);
+                void Promise.resolve(service.addIceCandidate(payload.candidate)).catch((error) => {
+                    console.error('[useCall] incoming ICE failed', error);
+                });
             }),
             callSignalingService.onRenegotiation((payload) => {
                 debugCall('[useCall] receive renegotiation', {
@@ -611,6 +729,8 @@ export function useCall(currentUserId: number): UseCallReturn {
                 setCallIssue(null);
                 setIsIncomingActionPending(false);
                 incomingActionPendingRef.current = false;
+                remoteUserIdRef.current = payload.from_user_id;
+                callIdRef.current = payload.call_id;
                 setRemoteUserId(payload.from_user_id);
                 setRemoteUsername(payload.from_username);
                 setCallId(payload.call_id);
@@ -640,7 +760,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 signalingUnsubsRef.current = [];
             }
         };
-    }, [cleanupLocalCall, cleanupScreenShare, clearCallTimeout, socketManager, currentUserId, handleOffer, resetAfterDelay, teardownCall]);
+    }, [cleanupLocalCall, cleanupScreenShare, clearCallTimeout, socketManager, currentUserId, handleOffer, matchesIncomingIceContext, queueIncomingIce, resetAfterDelay, teardownCall]);
 
     const startCall = useCallback((targetUserId: ResourceRef, targetUsername?: string) => {
         const channel = callChannelRef.current;
@@ -684,11 +804,14 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
 
         statusRef.current = 'calling';
+        clearPendingIncomingIce();
         hangUpSentRef.current = false;
         setStatus('calling');
         setCallIssue(null);
         setRemoteUserId(targetUserId);
         setRemoteUsername(targetUsername ?? null);
+        remoteUserIdRef.current = targetUserId;
+        callIdRef.current = null;
 
         const service = new WebRTCService(channel, currentUserId, targetUserId);
         service.onRemoteStream = (stream) => setRemoteStream(stream);
@@ -729,11 +852,11 @@ export function useCall(currentUserId: number): UseCallReturn {
                 console.error('[useCall] startCall failed', err);
                 cleanupLocalCall('start_call_failed', { issue });
             });
-    }, [cleanupLocalCall, currentUserId]);
+    }, [cleanupLocalCall, clearPendingIncomingIce, currentUserId]);
 
     const acceptCall = useCallback(() => {
         const channel = callChannelRef.current;
-        const remote = remoteUserId;
+        const remote = remoteUserIdRef.current ?? remoteUserId;
         if (!channel || !remote || statusRef.current !== 'ringing' || incomingActionPendingRef.current) return;
 
         const sdp = offerSdpRef.current;
@@ -743,12 +866,14 @@ export function useCall(currentUserId: number): UseCallReturn {
         }
 
         incomingActionPendingRef.current = true;
+        incomingIceDeliveryPausedRef.current = true;
         hangUpSentRef.current = false;
         setIsIncomingActionPending(true);
         setCallIssue(null);
 
         const service = new WebRTCService(channel, currentUserId, remote);
-        service.setCallId(callId);
+        const authoritativeCallId = callIdRef.current ?? callId;
+        service.setCallId(authoritativeCallId);
         service.onRemoteStream = (stream) => {
             setRemoteStream(stream);
         };
@@ -768,15 +893,18 @@ export function useCall(currentUserId: number): UseCallReturn {
         offerSdpRef.current = null;
         setDiagnostics(mapDiagnostics(service.getDiagnosticsSnapshot()));
 
-        service.acceptCall(sdp).then(() => {
+        service.acceptCall(sdp).then(async () => {
+            await flushPendingIncomingIce(service, authoritativeCallId, remote);
+            incomingIceDeliveryPausedRef.current = false;
             setIsIncomingActionPending(false);
             incomingActionPendingRef.current = false;
             setCallIssue(null);
         }).catch((err) => {
+            incomingIceDeliveryPausedRef.current = false;
             console.error('[useCall] acceptCall failed', err);
             cleanupLocalCall('accept_call_failed', { issue: mapAcceptCallIssue(err) });
         });
-    }, [callId, clearCallTimeout, status, remoteUserId, currentUserId, cleanupLocalCall]);
+    }, [callId, clearCallTimeout, cleanupLocalCall, currentUserId, flushPendingIncomingIce, remoteUserId, status]);
 
     const rejectCall = useCallback(() => {
         const channel = callChannelRef.current;
