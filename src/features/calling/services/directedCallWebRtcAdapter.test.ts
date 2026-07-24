@@ -31,6 +31,28 @@ function createHarness() {
     track,
     replaceTrack: vi.fn().mockResolvedValue(undefined),
   };
+  const screenTrackListeners = new Map<string, Set<EventListener>>();
+  const screenTrack = {
+    kind: "video",
+    readyState: "live",
+    stop: vi.fn(),
+    addEventListener(type: string, listener: EventListener) {
+      const listeners = screenTrackListeners.get(type) ?? new Set<EventListener>();
+      listeners.add(listener);
+      screenTrackListeners.set(type, listeners);
+    },
+    removeEventListener(type: string, listener: EventListener) {
+      screenTrackListeners.get(type)?.delete(listener);
+    },
+    emit(type: string) {
+      screenTrackListeners.get(type)?.forEach((listener) => listener(new Event(type)));
+    },
+  };
+  const screenSender = {
+    track: null as typeof screenTrack | null,
+    replaceTrack: vi.fn(async (nextTrack: typeof screenTrack | null) => { screenSender.track = nextTrack; }),
+  };
+  const screenTransceiver = { sender: screenSender, stop: vi.fn() };
   const pc = {
     localDescription: null as RTCSessionDescription | null,
     remoteDescription: null as RTCSessionDescription | null,
@@ -44,6 +66,7 @@ function createHarness() {
     onicegatheringstatechange: null as (() => void) | null,
     onsignalingstatechange: null as (() => void) | null,
     addTrack: vi.fn(),
+    addTransceiver: vi.fn(() => screenTransceiver),
     getSenders: vi.fn(() => [sender]),
     createOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "offer" }),
     createAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "answer" }),
@@ -57,9 +80,19 @@ function createHarness() {
     close: vi.fn(),
   };
   const getUserMedia = vi.fn().mockResolvedValue(stream);
+  const getDisplayMedia = vi.fn();
   const createPeerConnection = vi.fn(() => pc);
-  const adapter = new DirectedCallWebRtcAdapter({ dependencies: { getUserMedia, createPeerConnection } });
-  return { adapter, pc, sender, track, stream, getUserMedia, createPeerConnection };
+  const adapter = new DirectedCallWebRtcAdapter({ dependencies: { getUserMedia, getDisplayMedia, createPeerConnection } });
+  return { adapter, pc, sender, track, stream, screenTrack, screenSender, screenTransceiver, getUserMedia, getDisplayMedia, createPeerConnection };
+}
+
+function displayStream(...tracks: any[]) {
+  return { getTracks: () => tracks };
+}
+
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 function createRemoteTrack(kind: "audio" | "video" = "audio") {
@@ -704,5 +737,227 @@ describe("DirectedCallWebRtcAdapter", () => {
 
     expect(onIceCandidate).not.toHaveBeenCalled();
     expect(onRemoteStream).not.toHaveBeenCalled();
+  });
+
+  it("starts display capture with video-only intent and attaches one video track", async () => {
+    const harness = createHarness();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+
+    await expect(harness.adapter.startScreenShare()).resolves.toBe(true);
+
+    expect(harness.getDisplayMedia).toHaveBeenCalledWith({ video: true, audio: false });
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+    expect(harness.pc.addTransceiver).toHaveBeenCalledWith("video", { direction: "sendonly" });
+    expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(harness.screenTrack);
+    expect(harness.adapter.getLocalScreenShareStream()?.getTracks()).toEqual([harness.screenTrack]);
+    expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves microphone ownership throughout screen-share operations", async () => {
+    const harness = createHarness();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    const onIceCandidate = vi.fn();
+    const onPeerConnectionState = vi.fn();
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: harness.getUserMedia, getDisplayMedia: harness.getDisplayMedia, createPeerConnection: harness.createPeerConnection },
+      onIceCandidate,
+      onPeerConnectionState,
+    });
+
+    await adapter.prepareOffer();
+    await adapter.startScreenShare();
+    adapter.stopScreenShare();
+
+    expect(harness.track.stop).not.toHaveBeenCalled();
+    expect(harness.sender.track).toBe(harness.track);
+    expect(harness.pc.addTrack).toHaveBeenCalledWith(harness.track, harness.stream);
+    expect(harness.pc.addTrack).toHaveBeenCalledTimes(1);
+    expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(onIceCandidate).not.toHaveBeenCalled();
+    expect(onPeerConnectionState).not.toHaveBeenCalled();
+  });
+
+  it("coalesces concurrent starts into one display capture operation", async () => {
+    const harness = createHarness();
+    let resolveDisplay!: (stream: any) => void;
+    harness.getDisplayMedia.mockReturnValue(new Promise((resolve) => { resolveDisplay = resolve; }));
+    const first = harness.adapter.startScreenShare();
+    const second = harness.adapter.startScreenShare();
+    await flushMicrotasks();
+    expect(harness.getDisplayMedia).toHaveBeenCalledTimes(1);
+    resolveDisplay(displayStream(harness.screenTrack));
+
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(true);
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+    expect(harness.screenSender.replaceTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves reusable state after display capture cancellation", async () => {
+    const harness = createHarness();
+    harness.getDisplayMedia.mockRejectedValueOnce(new DOMException("cancelled", "NotAllowedError"));
+    await expect(harness.adapter.startScreenShare()).resolves.toBe(false);
+    expect(harness.adapter.getLocalScreenShareStream()).toBeNull();
+    expect(harness.pc.addTransceiver).not.toHaveBeenCalled();
+    harness.getDisplayMedia.mockResolvedValueOnce(displayStream(harness.screenTrack));
+    await expect(harness.adapter.startScreenShare()).resolves.toBe(true);
+  });
+
+  it("stops every returned track when display capture has no usable video", async () => {
+    const harness = createHarness();
+    const audioTrack = { kind: "audio", readyState: "live", stop: vi.fn() };
+    harness.getDisplayMedia.mockResolvedValue(displayStream(audioTrack));
+
+    await expect(harness.adapter.startScreenShare()).resolves.toBe(false);
+    expect(audioTrack.stop).toHaveBeenCalledOnce();
+    expect(harness.pc.addTransceiver).not.toHaveBeenCalled();
+    expect(harness.screenSender.replaceTrack).not.toHaveBeenCalled();
+    expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
+  it("explicitly stops screen media and is idempotent", async () => {
+    const harness = createHarness();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    await harness.adapter.startScreenShare();
+    harness.adapter.stopScreenShare();
+    harness.adapter.stopScreenShare();
+
+    expect(harness.screenSender.replaceTrack).toHaveBeenCalledTimes(2);
+    expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(null);
+    expect(harness.screenTrack.stop).toHaveBeenCalledOnce();
+    expect(harness.adapter.getLocalScreenShareStream()).toBeNull();
+    expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
+  it("cleans browser-ended screen media and notifies exactly once", async () => {
+    const harness = createHarness();
+    const onEnded = vi.fn();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    harness.adapter.onLocalScreenShareEnded(onEnded);
+    await harness.adapter.startScreenShare();
+    harness.screenTrack.readyState = "ended";
+    harness.screenTrack.emit("ended");
+    harness.screenTrack.emit("ended");
+
+    expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(null);
+    expect(harness.screenTrack.stop).toHaveBeenCalledOnce();
+    expect(onEnded).toHaveBeenCalledOnce();
+    expect(harness.adapter.getLocalScreenShareStream()).toBeNull();
+    expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
+  it("does not notify when explicit stop causes an ended event", async () => {
+    const harness = createHarness();
+    const onEnded = vi.fn();
+    harness.screenTrack.stop.mockImplementation(() => harness.screenTrack.emit("ended"));
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    harness.adapter.onLocalScreenShareEnded(onEnded);
+    await harness.adapter.startScreenShare();
+    harness.adapter.stopScreenShare();
+
+    expect(onEnded).not.toHaveBeenCalled();
+    expect(harness.screenSender.replaceTrack).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a late display capture after stop without attaching stale media", async () => {
+    const harness = createHarness();
+    let resolveDisplay!: (stream: any) => void;
+    harness.getDisplayMedia.mockReturnValue(new Promise((resolve) => { resolveDisplay = resolve; }));
+    const operation = harness.adapter.startScreenShare();
+    await flushMicrotasks();
+    harness.adapter.stopScreenShare();
+    const lateTrack = { ...harness.screenTrack, stop: vi.fn() };
+    resolveDisplay(displayStream(lateTrack));
+
+    await expect(operation).resolves.toBe(false);
+    expect(lateTrack.stop).toHaveBeenCalledOnce();
+    expect(harness.screenSender.replaceTrack).not.toHaveBeenCalled();
+    expect(harness.adapter.getLocalScreenShareStream()).toBeNull();
+  });
+
+  it("stops a late display capture after disposal without creating screen state", async () => {
+    const harness = createHarness();
+    let resolveDisplay!: (stream: any) => void;
+    harness.getDisplayMedia.mockReturnValue(new Promise((resolve) => { resolveDisplay = resolve; }));
+    const onEnded = vi.fn();
+    harness.adapter.onLocalScreenShareEnded(onEnded);
+    const operation = harness.adapter.startScreenShare();
+    await flushMicrotasks();
+    harness.adapter.dispose();
+    const lateTrack = { ...harness.screenTrack, stop: vi.fn() };
+    resolveDisplay(displayStream(lateTrack));
+
+    await expect(operation).resolves.toBe(false);
+    expect(lateTrack.stop).toHaveBeenCalledOnce();
+    expect(harness.pc.addTransceiver).not.toHaveBeenCalled();
+    expect(onEnded).not.toHaveBeenCalled();
+  });
+
+  it("reuses one screen transceiver across explicit restart cycles", async () => {
+    const harness = createHarness();
+    const trackA = harness.screenTrack;
+    const trackB = { ...harness.screenTrack, stop: vi.fn() };
+    harness.getDisplayMedia.mockResolvedValueOnce(displayStream(trackA)).mockResolvedValueOnce(displayStream(trackB));
+
+    await harness.adapter.startScreenShare();
+    harness.adapter.stopScreenShare();
+    await harness.adapter.startScreenShare();
+
+    expect(trackA.stop).toHaveBeenCalledOnce();
+    expect(trackB.stop).not.toHaveBeenCalled();
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+    expect(harness.screenSender.replaceTrack).toHaveBeenNthCalledWith(1, trackA);
+    expect(harness.screenSender.replaceTrack).toHaveBeenNthCalledWith(2, null);
+    expect(harness.screenSender.replaceTrack).toHaveBeenNthCalledWith(3, trackB);
+    expect(harness.sender.track).toBe(harness.track);
+  });
+
+  it("restarts after browser-ended cleanup with the same transceiver", async () => {
+    const harness = createHarness();
+    const trackB = { ...harness.screenTrack, stop: vi.fn() };
+    harness.getDisplayMedia.mockResolvedValueOnce(displayStream(harness.screenTrack)).mockResolvedValueOnce(displayStream(trackB));
+    const onEnded = vi.fn();
+    harness.adapter.onLocalScreenShareEnded(onEnded);
+
+    await harness.adapter.startScreenShare();
+    harness.screenTrack.emit("ended");
+    await expect(harness.adapter.startScreenShare()).resolves.toBe(true);
+
+    expect(onEnded).toHaveBeenCalledOnce();
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+    expect(harness.screenSender.track).toBe(trackB);
+  });
+
+  it("isolates disposed generation screen state from a fresh adapter", async () => {
+    const first = createHarness();
+    first.getDisplayMedia.mockResolvedValue(displayStream(first.screenTrack));
+    const firstEnded = vi.fn();
+    first.adapter.onLocalScreenShareEnded(firstEnded);
+    await first.adapter.startScreenShare();
+    first.adapter.dispose();
+
+    const second = createHarness();
+    second.getDisplayMedia.mockResolvedValue(displayStream(second.screenTrack));
+    const secondEnded = vi.fn();
+    second.adapter.onLocalScreenShareEnded(secondEnded);
+    await second.adapter.startScreenShare();
+    first.screenTrack.emit("ended");
+
+    expect(first.screenTrack.stop).toHaveBeenCalledOnce();
+    expect(firstEnded).not.toHaveBeenCalled();
+    expect(second.adapter.getLocalScreenShareStream()).not.toBeNull();
+    expect(secondEnded).not.toHaveBeenCalled();
+  });
+
+  it("stops active display media during full adapter disposal", async () => {
+    const harness = createHarness();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    await harness.adapter.startScreenShare();
+    harness.adapter.dispose();
+
+    expect(harness.screenTrack.stop).toHaveBeenCalledOnce();
+    expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(null);
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+    expect(harness.pc.close).toHaveBeenCalledOnce();
   });
 });

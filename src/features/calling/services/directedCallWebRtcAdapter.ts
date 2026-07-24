@@ -57,6 +57,13 @@ interface PeerConnectionLike {
   onicecandidate: ((event: RTCPeerConnectionIceEvent) => void) | null;
   ontrack: ((event: RTCTrackEvent) => void) | null;
   addTrack(track: DirectedCallMediaStreamTrack, stream: DirectedCallMediaStream): unknown;
+  addTransceiver?(trackOrKind: string, init?: { direction?: RTCRtpTransceiverDirection }): {
+    sender: {
+      track: DirectedCallMediaStreamTrack | null;
+      replaceTrack(track: DirectedCallMediaStreamTrack | null): Promise<void>;
+    };
+    stop?(): void;
+  };
   getSenders?(): Array<{
     track: DirectedCallMediaStreamTrack | null;
     replaceTrack(track: DirectedCallMediaStreamTrack | null): Promise<void>;
@@ -71,6 +78,7 @@ interface PeerConnectionLike {
 
 export interface DirectedCallWebRtcAdapterDependencies {
   getUserMedia: (constraints: MediaStreamConstraints) => Promise<DirectedCallMediaStream>;
+  getDisplayMedia?: (constraints: MediaStreamConstraints) => Promise<DirectedCallMediaStream>;
   createPeerConnection: (configuration?: RTCConfiguration) => PeerConnectionLike;
   createRemoteStream?: () => DirectedCallMediaStream;
   createSignalId?: () => string;
@@ -85,6 +93,8 @@ export interface DirectedCallWebRtcAdapterOptions {
   onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
   onPeerConnectionDiagnostics?: (diagnostics: DirectedCallPeerConnectionDiagnostics) => void;
 }
+
+export type DirectedCallLocalScreenShareEndedHandler = () => void;
 
 export interface DirectedCallInitialMediaReadiness {
   readonly transportConnected: boolean;
@@ -104,6 +114,7 @@ export interface DirectedCallPeerConnectionDiagnostics {
 function defaultDependencies(): DirectedCallWebRtcAdapterDependencies {
   return {
     getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
+    getDisplayMedia: (constraints) => navigator.mediaDevices.getDisplayMedia(constraints),
     createPeerConnection: (configuration) => new RTCPeerConnection(configuration),
     createRemoteStream: () => new MediaStream(),
     createSignalId: createDirectedCallUuid,
@@ -166,6 +177,13 @@ export class DirectedCallWebRtcAdapter {
   private localAudioMuted = false;
   private audioSwitchEpoch = 0;
   private audioReplacementTail: Promise<void> = Promise.resolve();
+  private screenShareTransceiver: ReturnType<NonNullable<PeerConnectionLike["addTransceiver"]>> | null = null;
+  private localScreenShareStream: DirectedCallMediaStream | null = null;
+  private localScreenShareTrack: DirectedCallMediaStreamTrack | null = null;
+  private localScreenShareTrackEndedListener: EventListener | null = null;
+  private localScreenShareEndedHandler: DirectedCallLocalScreenShareEndedHandler | null = null;
+  private pendingScreenShare: Promise<boolean> | null = null;
+  private screenShareEpoch = 0;
 
   constructor(options: DirectedCallWebRtcAdapterOptions = {}) {
     const dependencies = defaultDependencies();
@@ -193,6 +211,39 @@ export class DirectedCallWebRtcAdapter {
 
   get isLocalAudioMuted(): boolean {
     return this.localAudioMuted;
+  }
+
+  /** The adapter owns this stream until explicit stop, browser end, or disposal. */
+  getLocalScreenShareStream(): DirectedCallMediaStream | null {
+    return this.localScreenShareStream;
+  }
+
+  onLocalScreenShareEnded(handler: DirectedCallLocalScreenShareEndedHandler): () => void {
+    this.localScreenShareEndedHandler = handler;
+    return () => {
+      if (this.localScreenShareEndedHandler === handler) this.localScreenShareEndedHandler = null;
+    };
+  }
+
+  startScreenShare(): Promise<boolean> {
+    if (this.localScreenShareTrack) return Promise.resolve(true);
+    if (this.pendingScreenShare) return this.pendingScreenShare;
+
+    const epoch = this.epoch;
+    const screenShareEpoch = ++this.screenShareEpoch;
+    const operation = this.startScreenShareOperation(epoch, screenShareEpoch);
+    this.pendingScreenShare = operation;
+    void operation.then(() => {
+      if (this.pendingScreenShare === operation) this.pendingScreenShare = null;
+    }, () => {
+      if (this.pendingScreenShare === operation) this.pendingScreenShare = null;
+    });
+    return operation;
+  }
+
+  stopScreenShare(): void {
+    this.screenShareEpoch += 1;
+    this.clearLocalScreenShare(false);
   }
 
   setLocalAudioMuted(muted: boolean): boolean {
@@ -402,6 +453,8 @@ export class DirectedCallWebRtcAdapter {
     this.disposed = true;
     this.epoch += 1;
     this.audioSwitchEpoch += 1;
+    this.screenShareEpoch += 1;
+    this.clearLocalScreenShare(false);
     this.queuedCandidates.length = 0;
     this.seenCandidates.clear();
     this.clearReadinessTrackListeners();
@@ -429,6 +482,71 @@ export class DirectedCallWebRtcAdapter {
       remoteAudioTrackReady: false,
       remoteAudioStreamBound: false,
     }));
+  }
+
+  private async startScreenShareOperation(epoch: number, screenShareEpoch: number): Promise<boolean> {
+    let stream: DirectedCallMediaStream | null = null;
+    try {
+      await this.ensureAudioPeer(epoch);
+      if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) return false;
+
+      stream = await this.dependencies.getDisplayMedia!({ video: true, audio: false });
+      if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) {
+        stream.getTracks().forEach((track) => track.stop());
+        return false;
+      }
+      const track = stream.getTracks().find((candidate) =>
+        (candidate.kind === undefined || candidate.kind === "video") && candidate.readyState !== "ended",
+      );
+      if (!track || !this.peerConnection?.addTransceiver) {
+        stream.getTracks().forEach((candidate) => candidate.stop());
+        return false;
+      }
+
+      if (!this.screenShareTransceiver) {
+        this.screenShareTransceiver = this.peerConnection.addTransceiver("video", { direction: "sendonly" });
+      }
+      if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch || !this.screenShareTransceiver) {
+        stream.getTracks().forEach((candidate) => candidate.stop());
+        return false;
+      }
+      await this.screenShareTransceiver.sender.replaceTrack(track);
+      if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) {
+        await this.screenShareTransceiver.sender.replaceTrack(null);
+        stream.getTracks().forEach((candidate) => candidate.stop());
+        return false;
+      }
+      this.localScreenShareStream = stream;
+      this.localScreenShareTrack = track;
+      const endedHandler = () => {
+        if (this.localScreenShareTrack !== track) return;
+        this.clearLocalScreenShare(true);
+      };
+      this.localScreenShareTrackEndedListener = endedHandler as EventListener;
+      track.addEventListener?.("ended", this.localScreenShareTrackEndedListener);
+      return true;
+    } catch (error) {
+      stream?.getTracks().forEach((candidate) => candidate.stop());
+      if (error instanceof DirectedCallWebRtcStaleError || !this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) return false;
+      return false;
+    }
+  }
+
+  private clearLocalScreenShare(notify: boolean): void {
+    const track = this.localScreenShareTrack;
+    const stream = this.localScreenShareStream;
+    this.localScreenShareTrack = null;
+    this.localScreenShareStream = null;
+    if (track) {
+      // Remove the listener before stop: browser and test implementations may emit ended from stop().
+      if (this.localScreenShareTrackEndedListener) {
+        track.removeEventListener?.("ended", this.localScreenShareTrackEndedListener);
+        this.localScreenShareTrackEndedListener = null;
+      }
+    }
+    if (track && this.screenShareTransceiver?.sender) void this.screenShareTransceiver.sender.replaceTrack(null);
+    stream?.getTracks().forEach((ownedTrack) => ownedTrack.stop());
+    if (notify) this.localScreenShareEndedHandler?.();
   }
 
   private async ensureAudioPeer(epoch: number): Promise<void> {
