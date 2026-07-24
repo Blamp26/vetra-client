@@ -59,7 +59,7 @@ export interface DirectedCallMediaCoordinatorOptions {
 }
 
 type Listener = (snapshot: DirectedCallMediaCoordinatorSnapshot) => void;
-type RenegotiationTransaction = { callId: string; generation: string; id: string; phase: "requested" | "offered" | "answering" };
+type RenegotiationTransaction = { callId: string; generation: string; id: string; phase: "requested" | "offered" | "answering" | "applying_answer" };
 const MAX_COMPLETED_RENEGOTIATIONS = 32;
 
 type SetupFailureReport = {
@@ -531,6 +531,7 @@ export class DirectedCallMediaCoordinator {
     const id = payload.renegotiation_id;
     if (projection.participant_role !== "initiator" || this.completedRenegotiations.includes(id)) return;
     if (!this.renegotiation || this.renegotiation.id !== id || this.renegotiation.phase !== "offered") return;
+    this.renegotiation.phase = "applying_answer";
     try {
       await this.adapter.applyRenegotiationAnswer({ type: "answer", sdp: payload.sdp });
       this.completeRenegotiation(id);

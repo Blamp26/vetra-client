@@ -19,14 +19,18 @@ const readySnapshot: DirectedCallInitialMediaReadiness = Object.freeze({
   ready: true,
 });
 
-function projection(state: "accepted" | "connecting" | "active" | "connection_failed" | "declined" | "ended", currentCallId = callId) {
+function projection(
+  state: "accepted" | "connecting" | "active" | "connection_failed" | "declined" | "ended",
+  currentCallId = callId,
+  participantRole: "initiator" | "recipient" = "initiator",
+) {
   return {
     protocol_version: 1 as const,
     call_id: currentCallId,
     state,
     state_version: ["connection_failed", "declined", "ended"].includes(state) ? 4 : 1,
     media: "audio" as const,
-    participant_role: "initiator" as const,
+    participant_role: participantRole,
     peer: { user_id: peerId, username: "alice" },
     created_at: "2026-01-02T03:04:05.123456Z",
     presented_at: null,
@@ -91,6 +95,10 @@ type TestAdapter = DirectedCallWebRtcAdapter & {
   configure(options: DirectedCallWebRtcAdapterOptions): void;
   setReadiness(readiness: DirectedCallInitialMediaReadiness): void;
 };
+
+function mockedMethod(method: (...args: any[]) => any): ReturnType<typeof vi.fn> {
+  return method as unknown as ReturnType<typeof vi.fn>;
+}
 
 function createAdapter(options: DirectedCallWebRtcAdapterOptions = {}): TestAdapter {
   let readiness: DirectedCallInitialMediaReadiness = Object.freeze({
@@ -180,6 +188,36 @@ function createCoordinator(session: ReturnType<typeof createSession>, transport:
   return new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
     adapterFactory: (options) => createAdapter(options),
   });
+}
+
+function startActive(
+  coordinator: DirectedCallMediaCoordinator,
+  session: ReturnType<typeof createSession>,
+  participantRole: "initiator" | "recipient" = "initiator",
+) {
+  coordinator.start();
+  session.emit(projection("accepted", callId, participantRole));
+  session.emit(projection("connecting", callId, participantRole));
+  session.emit(projection("active", callId, participantRole));
+}
+
+function renegotiationAnswer(id: string, screenShare = false) {
+  return {
+    call_id: callId,
+    signal_id: `${id.slice(0, 8)}-3333-4333-8333-333333333333`,
+    kind: "renegotiate_answer" as const,
+    payload: { renegotiation_id: id, screen_share: screenShare, sdp: "remote-renegotiation-answer" },
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
 }
 
 describe("DirectedCallMediaCoordinator", () => {
@@ -1043,5 +1081,98 @@ describe("DirectedCallMediaCoordinator", () => {
     await Promise.resolve();
     expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1);
     coordinator.dispose();
+  });
+
+  it("does not apply a duplicate answer while the matching answer is in flight", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const applyAnswer = deferred<void>();
+    mockedMethod(adapter.applyRenegotiationAnswer).mockReturnValueOnce(applyAnswer.promise);
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    const id = await coordinator.requestRenegotiation();
+    const answer = renegotiationAnswer(id!);
+    session.emitSignal(answer);
+    session.emitSignal(answer);
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+
+    applyAnswer.resolve();
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("releases a failed answer application so a later transaction can succeed", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    mockedMethod(adapter.applyRenegotiationAnswer).mockRejectedValueOnce(new Error("answer failed"));
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    const failedId = await coordinator.requestRenegotiation();
+    session.emitSignal(renegotiationAnswer(failedId!));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const retryId = await coordinator.requestRenegotiation();
+    expect(retryId).not.toBe(failedId);
+    session.emitSignal(renegotiationAnswer(retryId!));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(2));
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("ignores a stale answer completion after disposal and generation rollover", async () => {
+    const session = createSession();
+    const oldTransport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const oldLifecycle = createLifecycle();
+    const oldAdapter = createAdapter();
+    const applyAnswer = deferred<void>();
+    mockedMethod(oldAdapter.applyRenegotiationAnswer).mockReturnValueOnce(applyAnswer.promise);
+    const oldCoordinator = new DirectedCallMediaCoordinator(session, oldTransport, oldLifecycle, "g1", {
+      adapterFactory: (options) => bindAdapter(options, oldAdapter),
+    });
+
+    startActive(oldCoordinator, session);
+    await vi.waitFor(() => expect(oldAdapter.prepareOffer).toHaveBeenCalled());
+    const oldId = await oldCoordinator.requestRenegotiation();
+    session.emitSignal(renegotiationAnswer(oldId!));
+    await vi.waitFor(() => expect(oldAdapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+
+    oldCoordinator.dispose();
+    const newTransport = new DirectedCallSignalTransport(session, { generation: "g2" });
+    const newLifecycle = createLifecycle();
+    const newAdapter = createAdapter();
+    const newCoordinator = new DirectedCallMediaCoordinator(session, newTransport, newLifecycle, "g2", {
+      adapterFactory: (options) => bindAdapter(options, newAdapter),
+    });
+    startActive(newCoordinator, session);
+    await vi.waitFor(() => expect(newAdapter.prepareOffer).toHaveBeenCalled());
+
+    applyAnswer.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(newLifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(newLifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(newAdapter.applyRenegotiationAnswer).not.toHaveBeenCalled();
+    expect(newAdapter.dispose).not.toHaveBeenCalled();
+    expect(oldAdapter.dispose).toHaveBeenCalledTimes(1);
+    newCoordinator.dispose();
   });
 });
