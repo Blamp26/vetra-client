@@ -114,6 +114,10 @@ function createAdapter(options: DirectedCallWebRtcAdapterOptions = {}): TestAdap
     prepareAnswer: vi.fn().mockResolvedValue(undefined),
     acceptOffer: vi.fn().mockResolvedValue({ type: "answer", sdp: "answer" }),
     acceptAnswer: vi.fn().mockResolvedValue(true),
+    createRenegotiationOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "renegotiation-offer" }),
+    applyRenegotiationOffer: vi.fn().mockResolvedValue(undefined),
+    createRenegotiationAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "renegotiation-answer" }),
+    applyRenegotiationAnswer: vi.fn().mockResolvedValue(undefined),
     addRemoteIceCandidate: vi.fn().mockResolvedValue(true),
     switchAudioInput: vi.fn().mockResolvedValue(true),
     dispose: vi.fn(),
@@ -1014,5 +1018,30 @@ describe("DirectedCallMediaCoordinator", () => {
     session.emit(projection("accepted"));
 
     expect(factory).toHaveBeenCalledTimes(1);
+  });
+
+  it("fences an active renegotiation transaction without lifecycle side effects", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    session.emit(projection("connecting"));
+    session.emit(projection("active"));
+    const id = await coordinator.requestRenegotiation(true);
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(session.sendSignal).toHaveBeenCalledWith(callId, expect.any(String), "renegotiate_request", { renegotiation_id: id, screen_share: true });
+    expect(session.sendSignal).toHaveBeenCalledWith(callId, expect.any(String), "renegotiate_offer", { renegotiation_id: id, screen_share: true, sdp: "renegotiation-offer" });
+    session.emitSignal({ call_id: callId, signal_id: "99999999-9999-4999-8999-999999999999", kind: "renegotiate_answer", payload: { renegotiation_id: id, screen_share: true, sdp: "answer" } });
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    session.emitSignal({ call_id: callId, signal_id: "88888888-8888-4888-8888-888888888888", kind: "renegotiate_answer", payload: { renegotiation_id: id, screen_share: true, sdp: "answer" } });
+    await Promise.resolve();
+    expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1);
+    coordinator.dispose();
   });
 });

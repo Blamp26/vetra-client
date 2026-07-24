@@ -318,6 +318,67 @@ export class DirectedCallWebRtcAdapter {
     }
   }
 
+  /** Post-active SDP operations are separate from the initial establishment guards. */
+  async createRenegotiationOffer(): Promise<RTCSessionDescriptionInit> {
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      const offer = await this.peerConnection!.createOffer();
+      this.assertCurrent(epoch);
+      await this.peerConnection!.setLocalDescription(offer);
+      this.assertCurrent(epoch);
+      return offer;
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
+  async applyRenegotiationOffer(offer: RTCSessionDescriptionInit): Promise<void> {
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      await this.peerConnection!.setRemoteDescription(offer);
+      this.assertCurrent(epoch);
+      await this.flushQueuedCandidates(epoch);
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
+  async createRenegotiationAnswer(): Promise<RTCSessionDescriptionInit> {
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      const answer = await this.peerConnection!.createAnswer();
+      this.assertCurrent(epoch);
+      await this.peerConnection!.setLocalDescription(answer);
+      this.assertCurrent(epoch);
+      return answer;
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
+  async applyRenegotiationAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      await this.peerConnection!.setRemoteDescription(answer);
+      this.assertCurrent(epoch);
+      await this.flushQueuedCandidates(epoch);
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
   async addRemoteIceCandidate(candidate: RTCIceCandidateInit): Promise<boolean> {
     const epoch = this.epoch;
     if (!this.isCurrent(epoch) || this.seenCandidates.has(candidateKey(candidate))) return false;

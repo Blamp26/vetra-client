@@ -103,6 +103,20 @@ describe("directed call V1 protocol", () => {
     }
   });
 
+  it("strictly validates active renegotiation shapes and tagged ICE", () => {
+    const id = "77777777-7777-4777-8777-777777777777";
+    for (const [kind, payload] of [
+      ["renegotiate_request", { renegotiation_id: id, screen_share: true }],
+      ["renegotiate_offer", { renegotiation_id: id, screen_share: true, sdp: "v=0" }],
+      ["renegotiate_answer", { renegotiation_id: id, screen_share: false, sdp: "v=0" }],
+    ] as const) {
+      expect(buildSignal(call, command, device, kind, payload).payload).toEqual(payload);
+    }
+    expect(buildSignal(call, command, device, "ice_candidate", { candidate: "candidate:1", sdp_mid: null, sdp_mline_index: 0, username_fragment: null, renegotiation_id: id }).payload).toHaveProperty("renegotiation_id", id);
+    expect(() => buildSignal(call, command, device, "renegotiate_request", { renegotiation_id: id, screen_share: true, sdp: "v=0" } as never)).toThrow();
+    expect(() => buildSignal(call, command, device, "renegotiate_offer", { renegotiation_id: id, screen_share: true } as never)).toThrow();
+  });
+
   it("keeps the wire state enum free of local and viewer-projection states", () => {
     expect(CANONICAL_STATES).not.toContain("preparing");
     expect(CANONICAL_STATES).not.toContain("resolving");

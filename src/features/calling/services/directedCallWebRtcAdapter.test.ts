@@ -639,6 +639,18 @@ describe("DirectedCallWebRtcAdapter", () => {
     await expect(answerOperation).rejects.toBeInstanceOf(DirectedCallWebRtcStaleError);
   });
 
+  it("keeps post-active SDP operations separate from initial establishment", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    const offer = await harness.adapter.createRenegotiationOffer();
+    expect(offer.sdp).toBe("offer");
+    await harness.adapter.applyRenegotiationOffer({ type: "offer", sdp: "remote-offer" });
+    const answer = await harness.adapter.createRenegotiationAnswer();
+    expect(answer.sdp).toBe("answer");
+    await harness.adapter.applyRenegotiationAnswer({ type: "answer", sdp: "remote-answer" });
+    expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
   it("detaches ICE and track callbacks and clears queued candidates on disposal", async () => {
     const harness = createHarness();
     await harness.adapter.prepareAnswer();

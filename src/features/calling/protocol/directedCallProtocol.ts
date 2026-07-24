@@ -26,8 +26,8 @@ export const FAILURE_CODES = [
   "ice_failed",
   "media_binding_failed",
 ] as const;
-/** Signal kinds supported by the persistent initial-negotiation boundary. */
-export const SIGNAL_KINDS = ["offer", "answer", "ice_candidate"] as const;
+/** Signal kinds supported by the persistent transient signaling boundary. */
+export const SIGNAL_KINDS = ["offer", "answer", "ice_candidate", "renegotiate_request", "renegotiate_offer", "renegotiate_answer"] as const;
 export const CANONICAL_STATES = ["dispatching", "delivered", "presented", "accepted", "connecting", "active", "unavailable", "undelivered", "busy", "declined", "cancelled", "no_answer", "connection_failed", "ended"] as const;
 export const PARTICIPANT_ROLES = ["initiator", "recipient"] as const;
 
@@ -56,8 +56,11 @@ export type CommandResultCode = "applied" | "no_op" | "duplicate" | "rejected";
 export interface CommandResult { call_id: UUID; state: CanonicalState; state_version: number; result_code: CommandResultCode }
 export interface CommandReply { protocol_version: 1; status: "ok"; result: CommandResult }
 export interface SyncResponse { protocol_version: 1; status: "ok"; request_id: UUID; calls: StateProjection[] }
-export interface SignalPayload { sdp: string; screen_share?: boolean }
-export interface IcePayload { candidate: string; sdp_mid: string | null; sdp_mline_index: number | null; username_fragment: string | null }
+export interface RenegotiationRequestPayload { renegotiation_id: UUID; screen_share: boolean }
+export interface RenegotiationSdpPayload extends RenegotiationRequestPayload { sdp: string }
+export interface InitialSdpPayload { sdp: string }
+export interface IcePayload { candidate: string; sdp_mid: string | null; sdp_mline_index: number | null; username_fragment: string | null; renegotiation_id?: UUID }
+export type SignalPayload = InitialSdpPayload | RenegotiationRequestPayload | RenegotiationSdpPayload | IcePayload;
 export interface SignalEnvelope { protocol_version: 1; call_id: UUID; signal_id: UUID; kind: SignalKind; payload: SignalPayload | IcePayload }
 export interface OutboundSignalEnvelope extends SignalEnvelope { device_id: UUID }
 
@@ -147,6 +150,11 @@ function isRecord(value: unknown): value is Record<string, any> { return typeof 
 function hasOnlyKeys(value: Record<string, any>, keys: string[]): boolean { return Object.keys(value).every((key) => keys.includes(key)); }
 function validSignalPayload(kind: SignalKind, value: unknown): boolean {
   if (!isRecord(value)) return false;
-  if (kind === "ice_candidate") return hasOnlyKeys(value, ["candidate", "sdp_mid", "sdp_mline_index", "username_fragment"]) && typeof value.candidate === "string" && value.candidate.length > 0 && value.candidate.length <= 8192 && (value.sdp_mid === null || (typeof value.sdp_mid === "string" && value.sdp_mid.length <= 256)) && (value.sdp_mline_index === null || isSafeInteger(value.sdp_mline_index)) && (value.username_fragment === null || (typeof value.username_fragment === "string" && value.username_fragment.length <= 256));
+  if (kind === "ice_candidate") {
+    const keys = value.renegotiation_id === undefined ? ["candidate", "sdp_mid", "sdp_mline_index", "username_fragment"] : ["candidate", "sdp_mid", "sdp_mline_index", "username_fragment", "renegotiation_id"];
+    return hasOnlyKeys(value, keys) && typeof value.candidate === "string" && value.candidate.length > 0 && value.candidate.length <= 8192 && (value.sdp_mid === null || (typeof value.sdp_mid === "string" && value.sdp_mid.length <= 256)) && (value.sdp_mline_index === null || isSafeInteger(value.sdp_mline_index)) && (value.username_fragment === null || (typeof value.username_fragment === "string" && value.username_fragment.length <= 256)) && (value.renegotiation_id === undefined || isUuid(value.renegotiation_id));
+  }
+  if (kind === "renegotiate_request") return hasOnlyKeys(value, ["renegotiation_id", "screen_share"]) && isUuid(value.renegotiation_id) && typeof value.screen_share === "boolean";
+  if (kind === "renegotiate_offer" || kind === "renegotiate_answer") return hasOnlyKeys(value, ["renegotiation_id", "screen_share", "sdp"]) && isUuid(value.renegotiation_id) && typeof value.screen_share === "boolean" && typeof value.sdp === "string" && value.sdp.length > 0 && value.sdp.length <= 262144;
   return hasOnlyKeys(value, ["sdp"]) && typeof value.sdp === "string" && value.sdp.length > 0 && value.sdp.length <= 262144;
 }
