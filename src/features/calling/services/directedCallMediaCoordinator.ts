@@ -18,6 +18,7 @@ import {
   type DirectedCallPeerConnectionDiagnostics,
 } from "./directedCallWebRtcAdapter";
 import type { DirectedCallSession } from "./directedCallSession";
+import type { LifecycleCommandOutcome } from "./directedCallLifecycleController";
 import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
 
 export type DirectedCallMediaCoordinatorState =
@@ -44,7 +45,7 @@ export interface DirectedCallMediaCoordinatorSnapshot {
 
 export interface DirectedCallMediaLifecyclePort {
   beginConnecting(callId: string): Promise<unknown>;
-  mediaReady(callId: string): Promise<unknown>;
+  mediaReady(callId: string): Promise<LifecycleCommandOutcome>;
   setupFailed(callId: string, failureCode: DirectedCallWebRtcError["failureCode"]): Promise<unknown>;
 }
 
@@ -169,6 +170,9 @@ export class DirectedCallMediaCoordinator {
         if (this.disposed || this.adapterEpoch !== adapterEpoch) return;
         this.remoteAudioStream = stream;
         this.setSnapshot({ ...this.snapshot, remoteAudioStream: stream });
+      },
+      onInitialMediaReadinessChange: () => {
+        this.maybeSendMediaReady(this.snapshot.callId, this.mediaAttemptEpoch, adapterEpoch);
       },
       onPeerConnectionState: (state) => this.handlePeerConnectionState(state, adapterEpoch),
       onPeerConnectionDiagnostics: (diagnostics) => this.handlePeerConnectionDiagnostics(diagnostics, adapterEpoch),
@@ -314,6 +318,7 @@ export class DirectedCallMediaCoordinator {
     if (projection.state === "connecting") {
       void this.continueConnecting(projection);
       void this.flushLocalCandidates(projection.call_id, this.mediaAttemptEpoch);
+      this.maybeSendMediaReady(projection.call_id, this.mediaAttemptEpoch, this.adapterEpoch);
     }
     if (projection.state === "active") void this.flushLocalCandidates(projection.call_id, this.mediaAttemptEpoch);
   }
@@ -382,7 +387,7 @@ export class DirectedCallMediaCoordinator {
         await this.signalTransport.send(createDirectedCallUuid(), "offer", { sdp: this.offer.sdp });
         if (!this.isCurrentCall(projection.call_id, attempt)) return;
         this.offerSent = true;
-        await this.sendMediaReady(projection.call_id, attempt);
+        this.maybeSendMediaReady(projection.call_id, attempt, this.adapterEpoch);
       } catch {
         // A transient relay failure is not a confirmed local setup failure.
         this.retireForTransport(projection.call_id, attempt);
@@ -398,14 +403,14 @@ export class DirectedCallMediaCoordinator {
       if (projection.participant_role === "initiator" && signal.kind === "answer" && isSdpPayload(signal)) {
         if (await this.adapter.acceptAnswer({ type: "answer", sdp: signal.payload.sdp })) {
           if (!this.isCurrentCall(projection.call_id, attempt)) return;
-          await this.sendMediaReady(projection.call_id, attempt);
+          this.maybeSendMediaReady(projection.call_id, attempt, this.adapterEpoch);
         }
       } else if (projection.participant_role === "recipient" && signal.kind === "offer" && isSdpPayload(signal)) {
         const answer = await this.adapter.acceptOffer({ type: "offer", sdp: signal.payload.sdp });
         if (answer?.sdp && this.isCurrentCall(projection.call_id, attempt)) {
           await this.signalTransport.send(createDirectedCallUuid(), "answer", { sdp: answer.sdp });
           if (!this.isCurrentCall(projection.call_id, attempt)) return;
-          await this.sendMediaReady(projection.call_id, attempt);
+          this.maybeSendMediaReady(projection.call_id, attempt, this.adapterEpoch);
         }
       } else if (isIcePayload(signal)) {
         await this.adapter.addRemoteIceCandidate(toRtcIceCandidate(signal.payload));
@@ -456,16 +461,27 @@ export class DirectedCallMediaCoordinator {
     }
   }
 
-  private async sendMediaReady(callId: string, attempt = this.mediaAttemptEpoch): Promise<void> {
-    if (this.mediaReadySent || this.mediaReadyInFlight || !this.isCurrentCall(callId, attempt) || this.snapshot.projection?.state !== "connecting") return;
+  private maybeSendMediaReady(callId: string | null, attempt: number, adapterEpoch: number): void {
+    if (this.disposed || adapterEpoch !== this.adapterEpoch || !callId || !this.isGenerationCurrent(this.generation)) return;
+    if (!this.isCurrentCall(callId, attempt) || this.snapshot.projection?.state !== "connecting") return;
+    if (!this.adapter.initialMediaReadinessSnapshot.ready || this.mediaReadySent || this.mediaReadyInFlight) return;
     this.mediaReadyInFlight = true;
-    try {
-      await this.lifecycle.mediaReady(callId);
-      if (!this.isCurrentCall(callId, attempt)) return;
-      this.mediaReadySent = true;
-    } finally {
-      if (this.mediaAttemptEpoch === attempt) this.mediaReadyInFlight = false;
-    }
+    void this.lifecycle.mediaReady(callId)
+      .then((outcome) => {
+        if (outcome.status === "acknowledged" && this.isCurrentReadyAttempt(callId, attempt, adapterEpoch)) {
+          this.mediaReadySent = true;
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.mediaAttemptEpoch === attempt && this.adapterEpoch === adapterEpoch) this.mediaReadyInFlight = false;
+      });
+  }
+
+  private isCurrentReadyAttempt(callId: string, attempt: number, adapterEpoch: number): boolean {
+    return adapterEpoch === this.adapterEpoch
+      && this.isCurrentCall(callId, attempt)
+      && this.snapshot.projection?.state === "connecting";
   }
 
   private handleSync(): void {
@@ -545,7 +561,8 @@ export class DirectedCallMediaCoordinator {
     this.offer = null;
     this.offerSent = true;
     this.beginConnectingSent = true;
-    this.mediaReadySent = true;
+    this.mediaReadySent = false;
+    this.mediaReadyInFlight = false;
     this.signalTransport.invalidate();
     this.queuedLocalCandidates.length = 0;
     this.sentLocalCandidateKeys.clear();
