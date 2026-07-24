@@ -228,6 +228,21 @@ function renegotiationRequest(id: string, screenShare = false) {
   };
 }
 
+function iceCandidate(renegotiationId?: string, candidate = "candidate:one") {
+  return {
+    call_id: callId,
+    signal_id: `${candidate.replace(/[^a-z0-9]/gi, "").slice(-8).padStart(8, "0")}-6666-4666-8666-666666666666`,
+    kind: "ice_candidate" as const,
+    payload: {
+      candidate,
+      sdp_mid: "0",
+      sdp_mline_index: 0,
+      username_fragment: "ufrag-one",
+      ...(renegotiationId ? { renegotiation_id: renegotiationId } : {}),
+    },
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -1985,5 +2000,170 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(lifecycle.setupFailed).not.toHaveBeenCalled();
     expect(adapter.dispose).not.toHaveBeenCalled();
     coordinator.dispose();
+  });
+
+  it("accepts matching tagged ICE on an offerer-side transaction without lifecycle effects", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    const id = await coordinator.requestRenegotiation();
+    const candidate = iceCandidate(id!, "candidate:offerer");
+    session.emitSignal(candidate);
+    session.emitSignal(candidate);
+    await vi.waitFor(() => expect(adapter.addRemoteIceCandidate).toHaveBeenCalledTimes(2));
+
+    expect(adapter.addRemoteIceCandidate).toHaveBeenCalledWith({
+      candidate: "candidate:offerer",
+      sdpMid: "0",
+      sdpMLineIndex: 0,
+      usernameFragment: "ufrag-one",
+    });
+    expect(adapter.addRemoteIceCandidate).toHaveBeenNthCalledWith(2, {
+      candidate: "candidate:offerer",
+      sdpMid: "0",
+      sdpMLineIndex: 0,
+      usernameFragment: "ufrag-one",
+    });
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("accepts matching tagged ICE on an answerer-side transaction without changing its phase", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const createAnswer = deferred<RTCSessionDescriptionInit>();
+    mockedMethod(adapter.createRenegotiationAnswer).mockReturnValueOnce(createAnswer.promise);
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+
+    startActive(coordinator, session, "recipient");
+    const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    session.emitSignal(renegotiationOffer(id));
+    await vi.waitFor(() => expect(adapter.createRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    session.emitSignal(iceCandidate(id, "candidate:answerer"));
+    await vi.waitFor(() => expect(adapter.addRemoteIceCandidate).toHaveBeenCalledTimes(1));
+    expect(adapter.addRemoteIceCandidate).toHaveBeenCalledWith(expect.objectContaining({ candidate: "candidate:answerer" }));
+    expect(session.sendSignal).not.toHaveBeenCalled();
+
+    createAnswer.resolve({ type: "answer", sdp: "renegotiation-answer" });
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("ignores competing and completed tagged ICE while preserving the active transaction", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    const idA = await coordinator.requestRenegotiation();
+    const idB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    session.emitSignal(iceCandidate(idB, "candidate:competing"));
+    session.emitSignal(iceCandidate(idA!, "candidate:matching"));
+    await vi.waitFor(() => expect(adapter.addRemoteIceCandidate).toHaveBeenCalledTimes(1));
+    expect(adapter.addRemoteIceCandidate).toHaveBeenCalledWith(expect.objectContaining({ candidate: "candidate:matching" }));
+
+    session.emitSignal(renegotiationAnswer(idA!));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    session.emitSignal(iceCandidate(idA!, "candidate:completed"));
+    await Promise.resolve();
+    expect(adapter.addRemoteIceCandidate).toHaveBeenCalledTimes(1);
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("ignores tagged ICE when no renegotiation is active and preserves untagged ICE compatibility", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    session.emitSignal(iceCandidate("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "candidate:tagged-without-transaction"));
+    session.emitSignal(iceCandidate(undefined, "candidate:untagged-active"));
+    await vi.waitFor(() => expect(adapter.addRemoteIceCandidate).toHaveBeenCalledTimes(1));
+    expect(adapter.addRemoteIceCandidate).toHaveBeenCalledWith(expect.objectContaining({ candidate: "candidate:untagged-active" }));
+
+    const id = await coordinator.requestRenegotiation();
+    session.emitSignal(iceCandidate(undefined, "candidate:untagged-renegotiation"));
+    session.emitSignal(iceCandidate(id!, "candidate:tagged-renegotiation"));
+    await vi.waitFor(() => expect(adapter.addRemoteIceCandidate).toHaveBeenCalledTimes(3));
+    expect(adapter.addRemoteIceCandidate).toHaveBeenCalledWith(expect.objectContaining({ candidate: "candidate:untagged-renegotiation" }));
+    expect(adapter.addRemoteIceCandidate).toHaveBeenCalledWith(expect.objectContaining({ candidate: "candidate:tagged-renegotiation" }));
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("accepts untagged ICE during initial connecting establishment", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    session.emit(projection("connecting"));
+    session.emitSignal(iceCandidate(undefined, "candidate:initial-connecting"));
+    await vi.waitFor(() => expect(adapter.addRemoteIceCandidate).toHaveBeenCalledTimes(1));
+    expect(adapter.addRemoteIceCandidate).toHaveBeenCalledWith(expect.objectContaining({ candidate: "candidate:initial-connecting" }));
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("ignores tagged ICE delivered through an old generation callback", async () => {
+    const session = createSession();
+    const oldTransport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const oldLifecycle = createLifecycle();
+    const oldAdapter = createAdapter();
+    const oldCoordinator = new DirectedCallMediaCoordinator(session, oldTransport, oldLifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, oldAdapter) });
+    const oldSignalCallback = (session.subscribeToSignals as ReturnType<typeof vi.fn>).mock.calls[0][0] as (signal: any) => void;
+
+    startActive(oldCoordinator, session);
+    await vi.waitFor(() => expect(oldAdapter.prepareOffer).toHaveBeenCalled());
+    const oldId = await oldCoordinator.requestRenegotiation();
+    oldCoordinator.dispose();
+
+    const newTransport = new DirectedCallSignalTransport(session, { generation: "g2" });
+    const newLifecycle = createLifecycle();
+    const newAdapter = createAdapter();
+    const newCoordinator = new DirectedCallMediaCoordinator(session, newTransport, newLifecycle, "g2", { adapterFactory: (options) => bindAdapter(options, newAdapter) });
+    startActive(newCoordinator, session);
+    await vi.waitFor(() => expect(newAdapter.prepareOffer).toHaveBeenCalled());
+    oldSignalCallback(iceCandidate(oldId!, "candidate:old-generation"));
+    await Promise.resolve();
+
+    expect(oldAdapter.addRemoteIceCandidate).not.toHaveBeenCalled();
+    expect(newAdapter.addRemoteIceCandidate).not.toHaveBeenCalled();
+    expect(newLifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(newLifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(newAdapter.dispose).not.toHaveBeenCalled();
+    expect(oldAdapter.dispose).toHaveBeenCalledTimes(1);
+    newCoordinator.dispose();
   });
 });

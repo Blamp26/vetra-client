@@ -500,6 +500,28 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.pc.addIceCandidate).toHaveBeenCalledTimes(1);
   });
 
+  it("forwards distinct ICE candidates once and does not carry deduplication across generations", async () => {
+    const first = createHarness();
+    await first.adapter.prepareAnswer();
+    await first.adapter.acceptOffer({ type: "offer", sdp: "offer" });
+    const candidateOne = { candidate: "candidate:one", sdpMid: "0", sdpMLineIndex: 0, usernameFragment: "ufrag" };
+    const candidateTwo = { candidate: "candidate:two", sdpMid: "0", sdpMLineIndex: 0, usernameFragment: "ufrag" };
+
+    expect(await first.adapter.addRemoteIceCandidate(candidateOne)).toBe(true);
+    expect(await first.adapter.addRemoteIceCandidate(candidateTwo)).toBe(true);
+    expect(first.pc.addIceCandidate).toHaveBeenCalledTimes(2);
+    expect(first.pc.addIceCandidate).toHaveBeenNthCalledWith(1, candidateOne);
+    expect(first.pc.addIceCandidate).toHaveBeenNthCalledWith(2, candidateTwo);
+
+    first.adapter.dispose();
+    const second = createHarness();
+    await second.adapter.prepareAnswer();
+    await second.adapter.acceptOffer({ type: "offer", sdp: "offer" });
+    expect(await second.adapter.addRemoteIceCandidate(candidateOne)).toBe(true);
+    expect(second.pc.addIceCandidate).toHaveBeenCalledTimes(1);
+    expect(second.pc.addIceCandidate).toHaveBeenCalledWith(candidateOne);
+  });
+
   it("does not create a second peer connection for duplicate offer or answer", async () => {
     const harness = createHarness();
     await harness.adapter.prepareAnswer();
