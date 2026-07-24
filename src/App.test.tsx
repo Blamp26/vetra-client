@@ -49,6 +49,75 @@ vi.mock("@/store", () => ({
     useAppStoreMock(selector),
 }));
 
+vi.mock("./features/calling/context/CallRuntimeBoundary", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  const { PersistentCallProvider } = await vi.importActual<typeof import("./features/calling/context/PersistentCallContext")>("./features/calling/context/PersistentCallContext");
+  const presentationListeners = new Set<(snapshot: any) => void>();
+  const mediaListeners = new Set<(snapshot: any) => void>();
+  const runtime: any = {
+    presentation: {
+      getSnapshot: () => {
+        const call = useCallMock(1);
+        const phase = call.status === "active" ? "active" : call.status === "ringing" ? "ringing" : call.status === "idle" ? "idle" : "calling";
+        return {
+          disposed: false,
+          phase,
+          callId: call.callId ?? "test-call",
+          participantRole: null,
+          peerPublicId: call.remoteUserId === null || call.remoteUserId === undefined ? null : String(call.remoteUserId),
+          peerUsername: call.remoteUsername,
+          canonicalState: null,
+          stateVersion: null,
+          timestamps: null,
+          terminalState: null,
+          pendingAction: call.isIncomingActionPending ? "accepting" : null,
+          recoverableError: null,
+          statusLabel: phase === "active" ? "Active" : "Ready",
+          terminalLabel: null,
+          callIssue: null,
+          canCancel: false,
+          canHangup: call.status === "active",
+          mediaControlsAvailable: false,
+          incomingModal: { visible: false },
+        };
+      },
+      subscribe: (listener: () => void) => { presentationListeners.add(listener); return () => presentationListeners.delete(listener); },
+      startCall: vi.fn(), accept: vi.fn(), decline: vi.fn(), cancelCall: vi.fn(), hangup: vi.fn(), retryPendingAction: vi.fn(),
+    },
+    media: {
+      getSnapshot: () => ({ state: "active", remoteAudioStream: useCallMock(1).remoteStream, localIssue: null, isMuted: false, canToggleMute: true }),
+      subscribe: (listener: () => void) => { mediaListeners.add(listener); return () => mediaListeners.delete(listener); },
+      toggleMute: vi.fn(),
+    },
+  };
+  return {
+    CallRuntimeBoundary: ({ persistentContent }: { persistentContent: (affordance: { state: "owner" }) => React.ReactNode }) => {
+      const call = useCallMock(1);
+      React.useEffect(() => {
+        presentationListeners.forEach((listener) => listener(runtime.presentation.getSnapshot()));
+        mediaListeners.forEach((listener) => listener(runtime.media.getSnapshot()));
+      }, [call.status, call.remoteUserId, call.remoteStream]);
+      return React.createElement(
+        PersistentCallProvider,
+        { runtime, children: persistentContent({ state: "owner" }) },
+      );
+    },
+  };
+});
+
+vi.mock("./features/calling/components/PersistentCallSurface/PersistentRemoteAudioRenderer", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  return {
+    PersistentRemoteAudioRenderer: () => {
+      React.useEffect(() => {
+        audioMounts.current += 1;
+        return () => { audioUnmounts.current += 1; };
+      }, []);
+      return <div data-testid="call-audio-renderer">audio-active</div>;
+    },
+  };
+});
+
 vi.mock("@/shared/hooks/useAuthHydration", () => ({
   useAuthHydration: vi.fn(),
 }));
@@ -84,25 +153,31 @@ vi.mock("@/features/messaging/components/Sidebar/SidebarFooter", () => ({
   ),
 }));
 
-vi.mock("@/features/messaging/components/ChatWindow/ChatWindow", () => ({
+vi.mock("@/features/messaging/components/ChatWindow/ChatWindow", async () => {
+  const { useOptionalPersistentCall } = await vi.importActual<typeof import("@/features/calling/context/PersistentCallContext")>("@/features/calling/context/PersistentCallContext");
+  return {
   ChatWindow: ({
     activeChat,
     call,
   }: {
     activeChat: { type: string; partnerId?: number; partnerRef?: string | number };
     call: { status: string; remoteUserId: number | string | null } | null;
-  }) => (
-    <div>
+  }) => {
+    const persistentCall = useOptionalPersistentCall();
+    const remoteUserId = call?.remoteUserId ?? persistentCall?.presentation.peerPublicId;
+    const isActive = call?.status === "active" || persistentCall?.presentation.phase === "active";
+    return <div>
       chat
-      {call?.status === "active" &&
+      {isActive &&
         activeChat.type === "direct" &&
-        (String(activeChat.partnerId) === String(call.remoteUserId) ||
-          String(activeChat.partnerRef) === String(call.remoteUserId)) && (
+        (String(activeChat.partnerId) === String(remoteUserId) ||
+          String(activeChat.partnerRef) === String(remoteUserId)) && (
           <div data-testid="active-call-dock" />
         )}
-    </div>
-  ),
-}));
+    </div>;
+  },
+  };
+});
 
 vi.mock("@/features/messaging/components/ChannelPanel/ChannelPanel", () => ({
   ChannelPanel: () => <div>channels</div>,
@@ -153,6 +228,10 @@ describe("App hash sync", () => {
   beforeEach(() => {
     useAppStoreMock.mockReset();
     setActiveChatMock.mockReset();
+    useCallMock.mockReset();
+    useCallMock.mockReturnValue(makeCallState());
+    audioMounts.current = 0;
+    audioUnmounts.current = 0;
     window.location.hash = "#";
     window.localStorage.clear();
     Object.defineProperty(navigator, "locks", {
@@ -497,7 +576,7 @@ describe("App hash sync", () => {
     expect(screen.getByText("settings")).toBeTruthy();
   });
 
-  it.skip("legacy provider-owned active call state is no longer application wiring", async () => {
+  it("keeps persistent active-call state and audio mounted while opening Settings", async () => {
     const remoteStream = { id: "remote-stream-1" } as MediaStream;
     const startCall = vi.fn();
     const state = makeState();
@@ -526,25 +605,22 @@ describe("App hash sync", () => {
 
     await waitFor(() => expect(screen.getByTestId("call-audio-renderer")).toBeInTheDocument());
     expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
-    expect(screen.getByTestId("active-call-dock")).toBeTruthy();
+    expect(screen.getByTestId("persistent-call-surface")).toBeTruthy();
     await waitFor(() => expect(audioMounts.current).toBe(1));
-    expect(useCallMock).toHaveBeenCalledTimes(1);
-    expect(useCallMock).toHaveBeenCalledWith(1);
 
     fireEvent.click(screen.getByRole("button", { name: "open settings" }));
 
     await waitFor(() => expect(window.location.hash).toBe("#/settings"));
     expect(screen.getByText("settings")).toBeTruthy();
-    expect(screen.queryByTestId("active-call-dock")).toBeNull();
+    expect(screen.getByTestId("persistent-call-surface")).toBeInTheDocument();
     expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
     await waitFor(() => expect(audioMounts.current).toBe(1));
     expect(audioUnmounts.current).toBe(0);
-    expect(useCallMock).toHaveBeenCalledTimes(1);
     expect(startCall).not.toHaveBeenCalled();
     expect(setActiveChatMock).not.toHaveBeenCalled();
   });
 
-  it.skip("legacy sidebar return-to-call behavior is no longer application wiring", async () => {
+  it("returns from Settings to the persistent active call direct chat", async () => {
     const remoteStream = { id: "remote-stream-1" } as MediaStream;
     const state = makeState();
     state.activeChat = {
@@ -588,13 +664,12 @@ describe("App hash sync", () => {
     state.activeChat = { type: "direct", partnerId: 2, partnerRef: "2" };
     view.rerender(<App />);
 
-    expect(screen.getByTestId("active-call-dock")).toBeTruthy();
+    expect(screen.getByTestId("persistent-call-surface")).toBeTruthy();
     expect(audioMounts.current).toBe(1);
     expect(audioUnmounts.current).toBe(0);
-    expect(useCallMock).toHaveBeenCalledWith(1);
   });
 
-  it.skip("legacy direct-chat return-to-call behavior is no longer application wiring", async () => {
+  it("returns from another direct chat to the persistent active call direct chat", async () => {
     const state = makeState();
     state.activeChat = {
       type: "direct",
@@ -631,7 +706,7 @@ describe("App hash sync", () => {
     );
   });
 
-  it.skip("legacy remembered-call routing is no longer application wiring", async () => {
+  it("returns a persistent call with a public remote ID to the remembered direct chat", async () => {
     const state = makeState();
     const callState = makeCallState({
       status: "calling",
@@ -679,7 +754,7 @@ describe("App hash sync", () => {
     });
   });
 
-  it.skip("legacy active-call routing is no longer application wiring", async () => {
+  it("does not replace the route when the persistent active-call chat is already open", async () => {
     const replaceStateSpy = vi.spyOn(window.history, "replaceState");
     const state = makeState();
     state.activeChat = {
@@ -702,8 +777,8 @@ describe("App hash sync", () => {
 
     render(<App />);
 
-    await waitFor(() => expect(screen.getByTestId("active-call-dock")).toBeInTheDocument());
-    expect(screen.getByTestId("active-call-dock")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("persistent-call-surface")).toBeInTheDocument());
+    expect(screen.getByTestId("persistent-call-surface")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "return to call" }));
 

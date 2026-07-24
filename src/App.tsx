@@ -21,6 +21,7 @@ import { Button } from "@/shared/components/Button";
 import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
 import { CallRuntimeBoundary, type PersistentCallAffordance } from "@/features/calling/context/CallRuntimeBoundary";
 import { PersistentCallSurface } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
+import { useOptionalPersistentCall } from "@/features/calling/context/PersistentCallContext";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
 import type { ActiveChat } from "@/shared/types";
@@ -97,24 +98,44 @@ function PersistentCallApplication({ affordance }: { affordance: PersistentCallA
   return affordance.state === "owner" ? <PersistentCallSurface>{appShell}</PersistentCallSurface> : appShell;
 }
 
-interface AppShellProps {
+export interface AppShellProps {
   call: UseCallReturn | null;
   persistentCallAffordance?: PersistentCallAffordance;
 }
 
-function AppShell({ call, persistentCallAffordance }: AppShellProps) {
+export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
+  const persistentCall = useOptionalPersistentCall();
+  const persistentPhase = persistentCall?.presentation.phase;
+  const persistentStatus = persistentPhase === "active"
+    ? "active"
+    : persistentPhase === "ringing" || persistentPhase === "incoming"
+      ? "ringing"
+      : persistentPhase && persistentPhase !== "idle" && persistentPhase !== "terminal"
+        ? "calling"
+        : persistentPhase === "terminal"
+          ? "ended"
+          : "idle";
+  const persistentCallIssue = persistentCall?.presentation.callIssue
+    ? { tone: "error" as const, message: persistentCall.presentation.callIssue.message }
+    : null;
   const currentUser = useAppStore((s) => s.currentUser);
   const {
-    status = "idle",
-    remoteUsername = null,
-    remoteUserId = null,
-    isMuted = false,
+    status = persistentStatus,
+    remoteUsername = persistentCall?.presentation.peerUsername ?? null,
+    remoteUserId = persistentCall?.presentation.peerPublicId ?? null,
+    isMuted = persistentCall?.isMuted ?? false,
     isScreenSharing = false,
     isScreenShareUpdating = false,
     seconds = 0,
-    callIssue = null,
-    isIncomingActionPending = false,
+    callIssue = persistentCallIssue,
+    isIncomingActionPending = Boolean(persistentCall?.presentation.pendingAction),
   } = call ?? {};
+  const resolvedStatus = call?.status ?? status;
+  const resolvedRemoteUsername = call?.remoteUsername ?? remoteUsername;
+  const resolvedRemoteUserId = call?.remoteUserId ?? remoteUserId;
+  const resolvedIsMuted = call?.isMuted ?? isMuted;
+  const resolvedCallIssue = call?.callIssue ?? callIssue;
+  const resolvedIncomingActionPending = call?.isIncomingActionPending ?? isIncomingActionPending;
   const activeChat = useAppStore((s) => s.activeChat);
   const conversationPreviews = useAppStore((s) => s.conversationPreviews);
   const roomPreviews = useAppStore((s) => s.roomPreviews);
@@ -302,27 +323,27 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
 
   const activeDirectChatMatchesRemote = useCallback(
     (chat: Extract<ActiveChat, { type: "direct" }>) => {
-      if (remoteUserId === null || remoteUserId === undefined) return false;
+      if (resolvedRemoteUserId === null || resolvedRemoteUserId === undefined) return false;
 
-      const remoteRef = String(remoteUserId);
+      const remoteRef = String(resolvedRemoteUserId);
       return (
         remoteRef === String(chat.partnerId) ||
         (chat.partnerRef !== undefined && remoteRef === String(chat.partnerRef)) ||
         remoteRef === String(conversationPreviews[chat.partnerId]?.partner_public_id ?? "")
       );
     },
-    [conversationPreviews, remoteUserId],
+    [conversationPreviews, resolvedRemoteUserId],
   );
 
   useEffect(() => {
-    if (status === "idle" || status === "ended" || status === "failed") {
+    if (resolvedStatus === "idle" || resolvedStatus === "ended" || resolvedStatus === "failed") {
       activeCallDirectChatRef.current = null;
       return;
     }
 
     if (activeChat?.type !== "direct") return;
 
-    if (status === "calling" && !activeCallDirectChatRef.current) {
+    if (resolvedStatus === "calling" && !activeCallDirectChatRef.current) {
       activeCallDirectChatRef.current = activeChat;
       return;
     }
@@ -330,10 +351,10 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     if (activeDirectChatMatchesRemote(activeChat)) {
       activeCallDirectChatRef.current = activeChat;
     }
-  }, [activeChat, activeDirectChatMatchesRemote, status]);
+  }, [activeChat, activeDirectChatMatchesRemote, resolvedStatus]);
 
   const activeCallChatTarget = useMemo((): Extract<ActiveChat, { type: "direct" }> | null => {
-    if (status !== "active" || remoteUserId === null || remoteUserId === undefined) {
+    if (resolvedStatus !== "active" || resolvedRemoteUserId === null || resolvedRemoteUserId === undefined) {
       return null;
     }
 
@@ -341,11 +362,12 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
       return activeCallDirectChatRef.current;
     }
 
-    if (typeof remoteUserId === "number") {
-      return { type: "direct", partnerId: remoteUserId, partnerRef: remoteUserId };
+    if (typeof resolvedRemoteUserId === "number" || /^\d+$/.test(String(resolvedRemoteUserId))) {
+      const numericRemoteId = Number(resolvedRemoteUserId);
+      return { type: "direct", partnerId: numericRemoteId, partnerRef: numericRemoteId };
     }
 
-    const resolved = resolveHashToActiveChat(`#/${remoteUserId}`, routeLookup);
+    const resolved = resolveHashToActiveChat(`#/${resolvedRemoteUserId}`, routeLookup);
     if (resolved?.type === "direct") {
       return resolved;
     }
@@ -358,9 +380,9 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   }, [
     activeChat,
     activeDirectChatMatchesRemote,
-    remoteUserId,
+    resolvedRemoteUserId,
     routeLookup,
-    status,
+    resolvedStatus,
   ]);
 
   const activeCallChatHash = useMemo(
@@ -369,10 +391,10 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   );
 
   const handleReturnToActiveCall = useCallback(() => {
-    if (status !== "active") return;
+    if (resolvedStatus !== "active") return;
 
     debugCall("[AppShell] return to call requested", {
-      remoteUserId,
+      remoteUserId: resolvedRemoteUserId,
       activeCallChatTarget,
       activeCallChatHash,
       routeHash,
@@ -382,7 +404,7 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     if (!activeCallChatHash) {
       debugCall("[AppShell] return to call skipped", {
         reason: "missing_active_call_route",
-        remoteUserId,
+        remoteUserId: resolvedRemoteUserId,
       });
       return;
     }
@@ -390,7 +412,7 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     if (activeCallChatTarget && activeChatKey(activeCallChatTarget) === currentActiveChatKeyRef.current) {
       debugCall("[AppShell] return to call skipped", {
         reason: "already_on_call_chat",
-        remoteUserId,
+        remoteUserId: resolvedRemoteUserId,
         activeCallChatHash,
       });
       navigateToHash(activeCallChatHash);
@@ -405,10 +427,10 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     activeCallChatHash,
     activeCallChatTarget,
     navigateToHash,
-    remoteUserId,
+    resolvedRemoteUserId,
     routeHash,
     setActiveChat,
-    status,
+    resolvedStatus,
   ]);
 
   useEffect(() => {
@@ -446,7 +468,7 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     if (!activeChat) return;
     if (isSettingsRoute) return;
     if (
-      status === "active" &&
+      resolvedStatus === "active" &&
       activeCallChatHash &&
       routeHash === activeCallChatHash &&
       routeTarget &&
@@ -472,7 +494,7 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     routeHash,
     routeTarget,
     routeTargetKey,
-    status,
+    resolvedStatus,
   ]);
 
   useEffect(() => {
@@ -587,16 +609,16 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
           </div>
 
           <SidebarFooter
-            callStatus={status}
-            remoteUsername={remoteUsername}
+            callStatus={resolvedStatus}
+            remoteUsername={resolvedRemoteUsername}
             callSeconds={seconds}
-            isMuted={isMuted}
+            isMuted={resolvedIsMuted}
             isScreenSharing={isScreenSharing}
             isScreenShareUpdating={isScreenShareUpdating}
-            callIssue={callIssue}
-            isIncomingActionPending={isIncomingActionPending}
-            onMuteToggle={call?.toggleMute}
-            onHangUp={call?.hangUp}
+            callIssue={resolvedCallIssue}
+            isIncomingActionPending={resolvedIncomingActionPending}
+            onMuteToggle={call?.toggleMute ?? (() => { persistentCall?.toggleMute(); })}
+            onHangUp={call?.hangUp ?? (() => { void persistentCall?.hangup(); })}
             onAcceptCall={call?.acceptCall}
             onRejectCall={call?.rejectCall}
             onOpenSettings={() => navigateToHash("#/settings")}
@@ -650,10 +672,10 @@ function AppShell({ call, persistentCallAffordance }: AppShellProps) {
         )}
       </div>
 
-      {call && status === "ringing" && (
+      {call && resolvedStatus === "ringing" && (
         <IncomingCallModal
-          callerName={remoteUsername ?? `User #${remoteUserId}`}
-          isPending={isIncomingActionPending}
+          callerName={resolvedRemoteUsername ?? `User #${resolvedRemoteUserId}`}
+          isPending={resolvedIncomingActionPending}
           onAccept={call.acceptCall}
           onReject={call.rejectCall}
         />
