@@ -81,8 +81,17 @@ export interface DirectedCallWebRtcAdapterOptions {
   getAudioConstraints?: () => MediaStreamConstraints;
   onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
   onRemoteStream?: (stream: DirectedCallMediaStream) => void;
+  onInitialMediaReadinessChange?: (readiness: DirectedCallInitialMediaReadiness) => void;
   onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
   onPeerConnectionDiagnostics?: (diagnostics: DirectedCallPeerConnectionDiagnostics) => void;
+}
+
+export interface DirectedCallInitialMediaReadiness {
+  readonly transportConnected: boolean;
+  readonly localAudioSenderReady: boolean;
+  readonly remoteAudioTrackReady: boolean;
+  readonly remoteAudioStreamBound: boolean;
+  readonly ready: boolean;
 }
 
 export interface DirectedCallPeerConnectionDiagnostics {
@@ -117,11 +126,22 @@ function candidateKey(candidate: RTCIceCandidateInit): string {
   ]);
 }
 
+function initialMediaReadiness(values: Omit<DirectedCallInitialMediaReadiness, "ready">): DirectedCallInitialMediaReadiness {
+  return Object.freeze({
+    ...values,
+    ready: values.transportConnected
+      && values.localAudioSenderReady
+      && values.remoteAudioTrackReady
+      && values.remoteAudioStreamBound,
+  });
+}
+
 /** Isolated audio-only WebRTC primitive for persistent calls. */
 export class DirectedCallWebRtcAdapter {
   private readonly dependencies: DirectedCallWebRtcAdapterDependencies;
   private readonly onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
   private readonly onRemoteStream?: (stream: DirectedCallMediaStream) => void;
+  private readonly onInitialMediaReadinessChange?: (readiness: DirectedCallInitialMediaReadiness) => void;
   private readonly onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
   private readonly onPeerConnectionDiagnostics?: (diagnostics: DirectedCallPeerConnectionDiagnostics) => void;
   private readonly getAudioConstraints: () => MediaStreamConstraints;
@@ -130,6 +150,16 @@ export class DirectedCallWebRtcAdapter {
   private peerConnection: PeerConnectionLike | null = null;
   private localStream: DirectedCallMediaStream | null = null;
   private remoteStream: DirectedCallMediaStream | null = null;
+  private remoteAudioTrack: DirectedCallMediaStreamTrack | null = null;
+  private remoteAudioStreamBound = false;
+  private readonly readinessTrackCleanups = new Map<DirectedCallMediaStreamTrack, () => void>();
+  private readonly localReadinessTracks = new Set<DirectedCallMediaStreamTrack>();
+  private initialMediaReadiness = initialMediaReadiness({
+    transportConnected: false,
+    localAudioSenderReady: false,
+    remoteAudioTrackReady: false,
+    remoteAudioStreamBound: false,
+  });
   private disposed = false;
   private offerPrepared = false;
   private epoch = 0;
@@ -142,6 +172,7 @@ export class DirectedCallWebRtcAdapter {
     this.dependencies = { ...dependencies, ...options.dependencies };
     this.onIceCandidate = options.onIceCandidate;
     this.onRemoteStream = options.onRemoteStream;
+    this.onInitialMediaReadinessChange = options.onInitialMediaReadinessChange;
     this.onPeerConnectionState = options.onPeerConnectionState;
     this.onPeerConnectionDiagnostics = options.onPeerConnectionDiagnostics;
     this.getAudioConstraints = options.getAudioConstraints
@@ -154,6 +185,10 @@ export class DirectedCallWebRtcAdapter {
 
   get remoteMediaStream(): DirectedCallMediaStream | null {
     return this.remoteStream;
+  }
+
+  get initialMediaReadinessSnapshot(): DirectedCallInitialMediaReadiness {
+    return this.initialMediaReadiness;
   }
 
   get isLocalAudioMuted(): boolean {
@@ -205,10 +240,13 @@ export class DirectedCallWebRtcAdapter {
 
         const oldStream = this.localStream;
         this.localStream = newStream;
+        this.clearLocalReadinessTrackListeners();
+        newStream.getTracks().forEach((track) => this.bindReadinessTrack(track, epoch, "local"));
         oldStream.getTracks().forEach((track) => track.stop());
         newStream.getTracks().forEach((track) => {
           if (track !== newAudioTrack) track.stop();
         });
+        this.recomputeInitialMediaReadiness(epoch);
         return true;
       } catch {
         newStream?.getTracks().forEach((track) => track.stop());
@@ -305,6 +343,7 @@ export class DirectedCallWebRtcAdapter {
     this.audioSwitchEpoch += 1;
     this.queuedCandidates.length = 0;
     this.seenCandidates.clear();
+    this.clearReadinessTrackListeners();
     if (this.peerConnection) {
       this.peerConnection.onicecandidate = null;
       this.peerConnection.onconnectionstatechange = null;
@@ -319,8 +358,16 @@ export class DirectedCallWebRtcAdapter {
     this.remoteStream?.getTracks().forEach((track) => track.stop());
     this.localStream = null;
     this.remoteStream = null;
+    this.remoteAudioTrack = null;
+    this.remoteAudioStreamBound = false;
     this.offerPrepared = false;
     this.localAudioMuted = false;
+    this.emitInitialMediaReadiness(initialMediaReadiness({
+      transportConnected: false,
+      localAudioSenderReady: false,
+      remoteAudioTrackReady: false,
+      remoteAudioStreamBound: false,
+    }));
   }
 
   private async ensureAudioPeer(epoch: number): Promise<void> {
@@ -342,10 +389,12 @@ export class DirectedCallWebRtcAdapter {
       if ((track.kind === undefined || track.kind === "audio") && track.readyState !== "ended") {
         track.enabled = !this.localAudioMuted;
       }
+      this.bindReadinessTrack(track, epoch, "local");
     });
     try {
       this.peerConnection = this.dependencies.createPeerConnection({ iceServers: buildIceServers() });
       this.assertCurrent(epoch);
+      this.recomputeInitialMediaReadiness(epoch);
       this.peerConnection.onicecandidate = (event) => {
         if (event.candidate && this.isCurrent(epoch)) {
           const candidate = typeof event.candidate.toJSON === "function"
@@ -360,26 +409,37 @@ export class DirectedCallWebRtcAdapter {
         }
       };
       this.peerConnection.onconnectionstatechange = () => {
-        if (this.isCurrent(epoch) && this.peerConnection?.connectionState) {
-          this.onPeerConnectionState?.(this.peerConnection.connectionState);
-          this.emitPeerConnectionDiagnostics();
-        }
+        if (!this.isCurrent(epoch)) return;
+        if (this.peerConnection?.connectionState) this.onPeerConnectionState?.(this.peerConnection.connectionState);
+        this.emitPeerConnectionDiagnostics();
+        this.recomputeInitialMediaReadiness(epoch);
       };
       const onPeerStateChange = () => {
-        if (this.isCurrent(epoch)) this.emitPeerConnectionDiagnostics();
+        if (this.isCurrent(epoch)) {
+          this.emitPeerConnectionDiagnostics();
+          this.recomputeInitialMediaReadiness(epoch);
+        }
       };
       this.peerConnection.oniceconnectionstatechange = onPeerStateChange;
       this.peerConnection.onicegatheringstatechange = onPeerStateChange;
       this.peerConnection.onsignalingstatechange = onPeerStateChange;
       this.peerConnection.ontrack = (event) => {
         if (!this.isCurrent(epoch)) return;
+        if (event.track.kind !== "audio" || event.track.readyState === "ended") return;
+        this.remoteAudioTrack = event.track;
+        this.bindReadinessTrack(event.track, epoch, "remote");
         this.remoteStream = event.streams[0] ?? this.remoteStream ?? this.dependencies.createRemoteStream?.() ?? null;
-        if (!event.streams[0]) this.remoteStream?.addTrack?.(event.track);
-        if (this.remoteStream) this.onRemoteStream?.(this.remoteStream);
+        if (this.remoteStream && !this.remoteStream.getTracks().includes(event.track)) this.remoteStream.addTrack?.(event.track);
+        if (this.remoteStream) {
+          this.onRemoteStream?.(this.remoteStream);
+          if (this.isCurrent(epoch) && this.remoteStream.getTracks().includes(event.track)) this.remoteAudioStreamBound = true;
+        }
+        this.recomputeInitialMediaReadiness(epoch);
       };
       for (const track of this.localStream.getTracks()) {
         this.assertCurrent(epoch);
         this.peerConnection.addTrack(track, this.localStream);
+        this.recomputeInitialMediaReadiness(epoch);
       }
     } catch {
       this.localStream?.getTracks().forEach((track) => track.stop());
@@ -394,6 +454,7 @@ export class DirectedCallWebRtcAdapter {
       }
       this.peerConnection?.close();
       this.peerConnection = null;
+      this.recomputeInitialMediaReadiness(epoch);
       if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
       throw new DirectedCallWebRtcError("media_binding_failed");
     }
@@ -414,6 +475,65 @@ export class DirectedCallWebRtcAdapter {
 
   private isCurrent(epoch: number): boolean {
     return !this.disposed && epoch === this.epoch;
+  }
+
+  private bindReadinessTrack(track: DirectedCallMediaStreamTrack, epoch: number, scope: "local" | "remote"): void {
+    if (this.readinessTrackCleanups.has(track) || !track.addEventListener) return;
+    const listener = () => {
+      if (this.isCurrent(epoch)) this.recomputeInitialMediaReadiness(epoch);
+    };
+    track.addEventListener("ended", listener);
+    this.readinessTrackCleanups.set(track, () => track.removeEventListener?.("ended", listener));
+    if (scope === "local") this.localReadinessTracks.add(track);
+  }
+
+  private clearLocalReadinessTrackListeners(): void {
+    this.localReadinessTracks.forEach((track) => {
+      this.readinessTrackCleanups.get(track)?.();
+      this.readinessTrackCleanups.delete(track);
+    });
+    this.localReadinessTracks.clear();
+  }
+
+  private clearReadinessTrackListeners(): void {
+    this.readinessTrackCleanups.forEach((cleanup) => cleanup());
+    this.readinessTrackCleanups.clear();
+    this.localReadinessTracks.clear();
+  }
+
+  private recomputeInitialMediaReadiness(epoch: number): void {
+    if (!this.isCurrent(epoch)) return;
+    const peer = this.peerConnection;
+    const connectionState = peer?.connectionState;
+    const transportConnected = connectionState === "connected"
+      || (connectionState === undefined && (peer?.iceConnectionState === "connected" || peer?.iceConnectionState === "completed"));
+    const localAudioSenderReady = Boolean(peer?.getSenders?.().some((sender) =>
+      sender.track
+      && (sender.track.kind === undefined || sender.track.kind === "audio")
+      && sender.track.readyState !== "ended",
+    ));
+    const remoteAudioTrackReady = Boolean(
+      this.remoteAudioTrack
+      && this.remoteAudioTrack.readyState !== "ended"
+      && this.remoteAudioTrack.kind === "audio",
+    );
+    this.emitInitialMediaReadiness(initialMediaReadiness({
+      transportConnected,
+      localAudioSenderReady,
+      remoteAudioTrackReady,
+      remoteAudioStreamBound: this.remoteAudioStreamBound,
+    }));
+  }
+
+  private emitInitialMediaReadiness(next: DirectedCallInitialMediaReadiness): void {
+    const previous = this.initialMediaReadiness;
+    if (previous.transportConnected === next.transportConnected
+      && previous.localAudioSenderReady === next.localAudioSenderReady
+      && previous.remoteAudioTrackReady === next.remoteAudioTrackReady
+      && previous.remoteAudioStreamBound === next.remoteAudioStreamBound
+      && previous.ready === next.ready) return;
+    this.initialMediaReadiness = next;
+    this.onInitialMediaReadinessChange?.(next);
   }
 
   private emitPeerConnectionDiagnostics(): void {

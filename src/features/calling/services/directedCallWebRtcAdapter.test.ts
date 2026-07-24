@@ -1,8 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
-import { DirectedCallWebRtcAdapter, DirectedCallWebRtcError, DirectedCallWebRtcStaleError } from "./directedCallWebRtcAdapter";
+import {
+  DirectedCallWebRtcAdapter,
+  DirectedCallWebRtcError,
+  DirectedCallWebRtcStaleError,
+  type DirectedCallInitialMediaReadiness,
+  type DirectedCallWebRtcAdapterOptions,
+} from "./directedCallWebRtcAdapter";
 
 function createHarness() {
-  const track = { stop: vi.fn() };
+  const trackListeners = new Map<string, Set<EventListener>>();
+  const track = {
+    kind: "audio",
+    readyState: "live",
+    enabled: true,
+    stop: vi.fn(),
+    addEventListener(type: string, listener: EventListener) {
+      const listeners = trackListeners.get(type) ?? new Set<EventListener>();
+      listeners.add(listener);
+      trackListeners.set(type, listeners);
+    },
+    removeEventListener(type: string, listener: EventListener) {
+      trackListeners.get(type)?.delete(listener);
+    },
+    emit(type: string) {
+      trackListeners.get(type)?.forEach((listener) => listener(new Event(type)));
+    },
+  };
   const stream = { getTracks: () => [track] };
   const sender = {
     track,
@@ -12,9 +35,14 @@ function createHarness() {
     localDescription: null as RTCSessionDescription | null,
     remoteDescription: null as RTCSessionDescription | null,
     connectionState: "new" as RTCPeerConnectionState,
+    iceConnectionState: "new" as RTCIceConnectionState,
+    iceGatheringState: "new" as RTCIceGatheringState,
     onicecandidate: null as ((event: RTCPeerConnectionIceEvent) => void) | null,
     ontrack: null as ((event: RTCTrackEvent) => void) | null,
     onconnectionstatechange: null as (() => void) | null,
+    oniceconnectionstatechange: null as (() => void) | null,
+    onicegatheringstatechange: null as (() => void) | null,
+    onsignalingstatechange: null as (() => void) | null,
     addTrack: vi.fn(),
     getSenders: vi.fn(() => [sender]),
     createOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "offer" }),
@@ -34,7 +62,283 @@ function createHarness() {
   return { adapter, pc, sender, track, stream, getUserMedia, createPeerConnection };
 }
 
+function createRemoteTrack(kind: "audio" | "video" = "audio") {
+  const listeners = new Map<string, Set<EventListener>>();
+  return {
+    kind,
+    readyState: "live",
+    stop: vi.fn(),
+    addEventListener(type: string, listener: EventListener) {
+      const entries = listeners.get(type) ?? new Set<EventListener>();
+      entries.add(listener);
+      listeners.set(type, entries);
+    },
+    removeEventListener(type: string, listener: EventListener) {
+      listeners.get(type)?.delete(listener);
+    },
+    emit(type: string) {
+      listeners.get(type)?.forEach((listener) => listener(new Event(type)));
+    },
+  };
+}
+
+function createRemoteStream(track: ReturnType<typeof createRemoteTrack>) {
+  const tracks = [track];
+  return {
+    getTracks: () => tracks,
+    addTrack: (nextTrack: typeof track) => tracks.push(nextTrack),
+  };
+}
+
+function readinessHarness() {
+  const readiness: DirectedCallInitialMediaReadiness[] = [];
+  const onRemoteStream = vi.fn();
+  const harness = createHarness();
+  const adapter = new DirectedCallWebRtcAdapter({
+    dependencies: {
+      getUserMedia: harness.getUserMedia,
+      createPeerConnection: harness.createPeerConnection,
+      createRemoteStream: () => {
+        const tracks: any[] = [];
+        return { getTracks: () => tracks, addTrack: (track: any) => tracks.push(track) };
+      },
+    },
+    onRemoteStream,
+    onInitialMediaReadinessChange: (snapshot) => readiness.push(snapshot),
+  } satisfies DirectedCallWebRtcAdapterOptions);
+  return { ...harness, adapter, readiness, onRemoteStream };
+}
+
 describe("DirectedCallWebRtcAdapter", () => {
+  it("starts with a fully false initial media readiness snapshot", () => {
+    const harness = readinessHarness();
+
+    expect(harness.adapter.initialMediaReadinessSnapshot).toEqual({
+      transportConnected: false,
+      localAudioSenderReady: false,
+      remoteAudioTrackReady: false,
+      remoteAudioStreamBound: false,
+      ready: false,
+    });
+  });
+
+  it("requires the full readiness conjunction", async () => {
+    const harness = readinessHarness();
+    await harness.adapter.prepareOffer();
+
+    expect(harness.adapter.initialMediaReadinessSnapshot).toMatchObject({
+      transportConnected: false,
+      localAudioSenderReady: true,
+      remoteAudioTrackReady: false,
+      remoteAudioStreamBound: false,
+      ready: false,
+    });
+
+    harness.pc.connectionState = "connected";
+    harness.pc.onconnectionstatechange?.();
+    expect(harness.adapter.initialMediaReadinessSnapshot.ready).toBe(false);
+
+    const remoteTrack = createRemoteTrack();
+    const remoteStream = createRemoteStream(remoteTrack);
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [remoteStream] } as unknown as RTCTrackEvent);
+    expect(harness.adapter.initialMediaReadinessSnapshot).toMatchObject({
+      transportConnected: true,
+      localAudioSenderReady: true,
+      remoteAudioTrackReady: true,
+      remoteAudioStreamBound: true,
+      ready: true,
+    });
+    expect(Object.isFrozen(harness.readiness[harness.readiness.length - 1])).toBe(true);
+    expect(harness.readiness.filter((snapshot) => snapshot.ready)).toHaveLength(1);
+  });
+
+  it("delivers onRemoteStream before readiness becomes true", async () => {
+    const harness = readinessHarness();
+    const ordering: string[] = [];
+    harness.onRemoteStream.mockImplementation(() => ordering.push("remote-stream"));
+    harness.adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: harness.getUserMedia, createPeerConnection: harness.createPeerConnection },
+      onRemoteStream: harness.onRemoteStream,
+      onInitialMediaReadinessChange: (snapshot) => {
+        if (snapshot.ready) ordering.push("ready");
+      },
+    });
+    await harness.adapter.prepareOffer();
+    harness.pc.connectionState = "connected";
+    harness.pc.onconnectionstatechange?.();
+    const remoteTrack = createRemoteTrack();
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [createRemoteStream(remoteTrack)] } as unknown as RTCTrackEvent);
+
+    expect(ordering).toEqual(["remote-stream", "ready"]);
+  });
+
+  it("keeps muted local audio ready and reacts to ended local and remote tracks", async () => {
+    const harness = readinessHarness();
+    await harness.adapter.prepareOffer();
+    expect(harness.adapter.setLocalAudioMuted(true)).toBe(true);
+    harness.pc.connectionState = "connected";
+    harness.pc.onconnectionstatechange?.();
+    const remoteTrack = createRemoteTrack();
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [createRemoteStream(remoteTrack)] } as unknown as RTCTrackEvent);
+    expect(harness.adapter.initialMediaReadinessSnapshot.ready).toBe(true);
+
+    harness.track.readyState = "ended";
+    harness.track.emit("ended");
+    expect(harness.adapter.initialMediaReadinessSnapshot.localAudioSenderReady).toBe(false);
+    expect(harness.adapter.initialMediaReadinessSnapshot.ready).toBe(false);
+
+    harness.track.readyState = "live";
+    harness.sender.track = harness.track;
+    harness.track.emit("ended");
+    remoteTrack.readyState = "ended";
+    remoteTrack.emit("ended");
+    expect(harness.adapter.initialMediaReadinessSnapshot.remoteAudioTrackReady).toBe(false);
+    expect(harness.adapter.initialMediaReadinessSnapshot.ready).toBe(false);
+  });
+
+  it("does not treat video-only tracks or ICE gathering as audio readiness", async () => {
+    const harness = readinessHarness();
+    await harness.adapter.prepareOffer();
+    harness.pc.iceGatheringState = "complete";
+    harness.pc.onicegatheringstatechange?.();
+    expect(harness.adapter.initialMediaReadinessSnapshot.transportConnected).toBe(false);
+
+    const videoTrack = createRemoteTrack("video");
+    harness.pc.ontrack?.({ track: videoTrack, streams: [createRemoteStream(videoTrack)] } as unknown as RTCTrackEvent);
+    expect(harness.adapter.initialMediaReadinessSnapshot.remoteAudioTrackReady).toBe(false);
+    expect(harness.onRemoteStream).not.toHaveBeenCalled();
+  });
+
+  it("supports streamless audio ontrack and binds the created stream", async () => {
+    const harness = readinessHarness();
+    await harness.adapter.prepareOffer();
+    const remoteTrack = createRemoteTrack();
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [] } as unknown as RTCTrackEvent);
+
+    expect(harness.onRemoteStream).toHaveBeenCalledTimes(1);
+    expect(harness.adapter.remoteMediaStream?.getTracks()).toContain(remoteTrack);
+    expect(harness.adapter.initialMediaReadinessSnapshot.remoteAudioStreamBound).toBe(true);
+  });
+
+  it("does not become ready when remote audio arrives before transport", async () => {
+    const harness = readinessHarness();
+    await harness.adapter.prepareOffer();
+    const remoteTrack = createRemoteTrack();
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [createRemoteStream(remoteTrack)] } as unknown as RTCTrackEvent);
+
+    expect(harness.adapter.initialMediaReadinessSnapshot).toMatchObject({
+      transportConnected: false,
+      localAudioSenderReady: true,
+      remoteAudioTrackReady: true,
+      remoteAudioStreamBound: true,
+      ready: false,
+    });
+  });
+
+  it("emits only semantic readiness changes and keeps failed transport states false", async () => {
+    const harness = readinessHarness();
+    await harness.adapter.prepareOffer();
+    const remoteTrack = createRemoteTrack();
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [createRemoteStream(remoteTrack)] } as unknown as RTCTrackEvent);
+    for (const state of ["connecting", "disconnected", "failed", "closed"] as RTCPeerConnectionState[]) {
+      harness.pc.connectionState = state;
+      harness.pc.onconnectionstatechange?.();
+      expect(harness.adapter.initialMediaReadinessSnapshot.ready).toBe(false);
+    }
+    expect(harness.readiness.filter((snapshot) => snapshot.ready)).toHaveLength(0);
+    const before = harness.readiness.length;
+    harness.pc.onconnectionstatechange?.();
+    harness.pc.onconnectionstatechange?.();
+    expect(harness.readiness.length).toBe(before);
+  });
+
+  it("uses ICE connected/completed only when connectionState is unavailable", async () => {
+    const harness = readinessHarness();
+    await harness.adapter.prepareOffer();
+    harness.pc.connectionState = undefined as unknown as RTCPeerConnectionState;
+    harness.pc.iceConnectionState = "connected";
+    harness.pc.oniceconnectionstatechange?.();
+    expect(harness.adapter.initialMediaReadinessSnapshot.transportConnected).toBe(true);
+
+    harness.pc.connectionState = "failed";
+    harness.pc.iceConnectionState = "completed";
+    harness.pc.onconnectionstatechange?.();
+    expect(harness.adapter.initialMediaReadinessSnapshot.transportConnected).toBe(false);
+  });
+
+  it("recomputes readiness for successful and failed audio input replacement", async () => {
+    const harness = readinessHarness();
+    await harness.adapter.prepareOffer();
+    const remoteTrack = createRemoteTrack();
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [createRemoteStream(remoteTrack)] } as unknown as RTCTrackEvent);
+    harness.pc.connectionState = "connected";
+    harness.pc.onconnectionstatechange?.();
+    expect(harness.adapter.initialMediaReadinessSnapshot.ready).toBe(true);
+
+    const replacement = { ...createRemoteTrack(), kind: "audio" as const };
+    const replacementStream = { getTracks: () => [replacement] };
+    harness.getUserMedia.mockResolvedValueOnce(replacementStream);
+    harness.sender.replaceTrack.mockImplementationOnce(async (track) => { harness.sender.track = track; });
+    await expect(harness.adapter.switchAudioInput({ audio: true, video: false })).resolves.toBe(true);
+    expect(harness.adapter.initialMediaReadinessSnapshot.ready).toBe(true);
+    expect(harness.pc.createOffer).toHaveBeenCalledTimes(1);
+
+    harness.sender.replaceTrack.mockRejectedValueOnce(new Error("replace failed"));
+    const failedReplacement = { ...createRemoteTrack(), kind: "audio" as const };
+    harness.getUserMedia.mockResolvedValueOnce({ getTracks: () => [failedReplacement] });
+    await expect(harness.adapter.switchAudioInput({ audio: true, video: false })).resolves.toBe(false);
+    expect(harness.sender.track).toBe(replacement);
+    expect(harness.adapter.initialMediaReadinessSnapshot.ready).toBe(true);
+  });
+
+  it("resets readiness on dispose and ignores stale events and sensitive values", async () => {
+    const harness = readinessHarness();
+    await harness.adapter.prepareOffer();
+    const oldConnection = harness.pc.onconnectionstatechange;
+    const oldTrack = harness.pc.ontrack;
+    const remoteTrack = createRemoteTrack();
+    oldTrack?.({ track: remoteTrack, streams: [createRemoteStream(remoteTrack)] } as unknown as RTCTrackEvent);
+    harness.pc.connectionState = "connected";
+    oldConnection?.();
+    expect(harness.adapter.initialMediaReadinessSnapshot.ready).toBe(true);
+    harness.adapter.dispose();
+    expect(harness.adapter.initialMediaReadinessSnapshot).toEqual({
+      transportConnected: false,
+      localAudioSenderReady: false,
+      remoteAudioTrackReady: false,
+      remoteAudioStreamBound: false,
+      ready: false,
+    });
+    const countAfterDispose = harness.readiness.length;
+    oldConnection?.();
+    oldTrack?.({ track: remoteTrack, streams: [createRemoteStream(remoteTrack)] } as unknown as RTCTrackEvent);
+    expect(harness.readiness.length).toBe(countAfterDispose);
+    expect(JSON.stringify(harness.readiness)).not.toMatch(/secret-sdp|candidate:|credential|device-id/);
+  });
+
+  it("keeps old adapter events isolated from a newly created adapter", async () => {
+    const oldHarness = readinessHarness();
+    await oldHarness.adapter.prepareOffer();
+    const oldConnection = oldHarness.pc.onconnectionstatechange;
+    const oldTrack = oldHarness.pc.ontrack;
+    oldHarness.adapter.dispose();
+
+    const newHarness = readinessHarness();
+    await newHarness.adapter.prepareOffer();
+    oldHarness.pc.connectionState = "connected";
+    oldConnection?.();
+    oldTrack?.({ track: createRemoteTrack(), streams: [] } as unknown as RTCTrackEvent);
+
+    expect(newHarness.adapter.initialMediaReadinessSnapshot).toEqual({
+      transportConnected: false,
+      localAudioSenderReady: true,
+      remoteAudioTrackReady: false,
+      remoteAudioStreamBound: false,
+      ready: false,
+    });
+    expect(newHarness.readiness.filter((snapshot) => snapshot.ready)).toHaveLength(0);
+  });
+
   it("acquires audio-only media and creates one offerer peer", async () => {
     const harness = createHarness();
 
