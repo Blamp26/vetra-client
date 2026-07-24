@@ -22,6 +22,7 @@ import {
 } from "@/shared/utils/presence";
 import { debugCall } from "@/features/calling/utils/callDebug";
 import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
+import type { PersistentCallDirection } from "@/features/calling/components/PersistentCallSurface/PersistentCallViewModel";
 
 interface SidebarFooterProps {
   callStatus: CallStatus;
@@ -34,8 +35,12 @@ interface SidebarFooterProps {
   isIncomingActionPending: boolean;
   onMuteToggle?: () => void;
   onHangUp?: () => void;
+  onCancelCall?: () => void;
   onAcceptCall?: () => void;
   onRejectCall?: () => void;
+  callDirection?: PersistentCallDirection;
+  canCancelCall?: boolean;
+  canHangUpCall?: boolean;
   onOpenSettings: () => void;
   onReturnToCall?: () => void;
   isCollapsed?: boolean;
@@ -52,8 +57,12 @@ export function SidebarFooter({
   isIncomingActionPending,
   onMuteToggle,
   onHangUp,
+  onCancelCall,
   onAcceptCall,
   onRejectCall,
+  callDirection,
+  canCancelCall,
+  canHangUpCall,
   onOpenSettings,
   onReturnToCall,
   isCollapsed = false,
@@ -93,6 +102,11 @@ export function SidebarFooter({
 
   const isMicMuted = callStatus === "active" ? isMuted : !micEnabled;
   const displayIssue = normalizeCallIssue(callIssue);
+  const isIncomingCall = callStatus === "ringing" && (callDirection === "incoming" || callDirection === undefined);
+  const isOutgoingCall = callDirection === "outgoing" && (callStatus === "calling" || callStatus === "ringing");
+  const showLegacyCallingHangup = callDirection === undefined && callStatus === "calling";
+  const showCancel = isOutgoingCall && canCancelCall === true;
+  const showHangup = canHangUpCall ?? (callStatus === "active" || showLegacyCallingHangup);
   const callPanel = useMemo(() => {
     switch (callStatus) {
       case "calling":
@@ -102,6 +116,13 @@ export function SidebarFooter({
           tone: "default" as const,
         };
       case "ringing":
+        if (!isIncomingCall) {
+          return {
+            title: getCallStatusLabel({ status: "calling" }),
+            subtitle: remoteUsername ? `Ringing ${remoteUsername}` : "Trying to reach the other user",
+            tone: "default" as const,
+          };
+        }
         return {
           title: getCallStatusLabel({ status: callStatus, isIncomingActionPending }),
           subtitle: remoteUsername ? `${remoteUsername} is calling` : "Someone is calling you",
@@ -143,6 +164,7 @@ export function SidebarFooter({
     callSeconds,
     callStatus,
     displayIssue,
+    isIncomingCall,
     isIncomingActionPending,
     isScreenShareUpdating,
     isScreenSharing,
@@ -226,7 +248,7 @@ export function SidebarFooter({
               </div>
             )}
             <div className="flex items-center gap-1">
-              {callStatus === "ringing" && (
+              {isIncomingCall && onAcceptCall && onRejectCall && (
                 <>
                   <button
                   onClick={(event) => {
@@ -254,16 +276,14 @@ export function SidebarFooter({
                   </button>
                 </>
               )}
-              {(callStatus === "active" || callStatus === "calling") && (
+              {(showCancel || showHangup) && (
                 <button
                   onClick={(event) => {
                     event.stopPropagation();
-                    callStatus === "calling"
-                      ? onHangUp?.()
-                      : setConfirmHangUp(true);
+                    showCancel ? onCancelCall?.() : setConfirmHangUp(true);
                   }}
-                  title="Hang up"
-                  aria-label="Hang up"
+                  title={showCancel ? "Cancel call" : "Hang up"}
+                  aria-label={showCancel ? "Cancel call" : "Hang up"}
                   className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-destructive text-destructive-foreground"
                 >
                   <PhoneOff className="h-4 w-4" />

@@ -20,6 +20,7 @@ import { normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import { useOptionalPersistentCall } from "@/features/calling/context/PersistentCallContext";
 import type { PersistentCallAffordance } from "@/features/calling/context/CallRuntimeBoundary";
 import { PersistentCallButton } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
+import { PersistentActiveCallDock } from "@/features/calling/components/PersistentCallSurface/PersistentActiveCallDock";
 import { PersistentCallDebugPanel, type PersistentPeerUuidSource } from "@/features/calling/components/PersistentCallDebugPanel";
 import { isUuid } from "@/features/calling/protocol/directedCallProtocol";
 import { cn } from "@/shared/utils/cn";
@@ -291,6 +292,17 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
   if (!currentUser) return null;
 
   const shouldShowActiveCallDock = isActiveCallForChat(activeChat, call, conversationPreviews);
+  const persistentCallPeerPublicId = persistentCall?.presentation.peerPublicId;
+  const shouldShowPersistentActiveCallDock = Boolean(
+    persistentCall?.presentation.phase === "active" &&
+    activeChat.type === "direct" &&
+    persistentCallPeerPublicId &&
+    (
+      partner?.public_id === persistentCallPeerPublicId ||
+      String(activeChat.partnerRef ?? "") === persistentCallPeerPublicId ||
+      String(conversationPreviews[activeChat.partnerId]?.partner_public_id ?? "") === persistentCallPeerPublicId
+    ),
+  );
   const displayCallIssue = normalizeCallIssue(call?.callIssue ?? null);
 
   const renderHeader = () => {
@@ -462,6 +474,9 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
           onWatchRemoteScreen={call!.watchRemoteScreen}
           onHangUp={call!.hangUp}
         />
+      )}
+      {shouldShowPersistentActiveCallDock && (
+        <PersistentActiveCallDock currentUser={currentUser} remoteUser={partner} />
       )}
 
       <div

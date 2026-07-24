@@ -22,6 +22,7 @@ import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitl
 import { CallRuntimeBoundary, type PersistentCallAffordance } from "@/features/calling/context/CallRuntimeBoundary";
 import { PersistentCallSurface } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
 import { useOptionalPersistentCall } from "@/features/calling/context/PersistentCallContext";
+import { persistentCallSidebarModel, usePersistentCallElapsedSeconds } from "@/features/calling/components/PersistentCallSurface/PersistentCallViewModel";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
 import type { ActiveChat } from "@/shared/types";
@@ -105,30 +106,24 @@ export interface AppShellProps {
 
 export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const persistentCall = useOptionalPersistentCall();
-  const persistentPhase = persistentCall?.presentation.phase;
-  const persistentStatus = persistentPhase === "active"
-    ? "active"
-    : persistentPhase === "ringing" || persistentPhase === "incoming"
-      ? "ringing"
-      : persistentPhase && persistentPhase !== "idle" && persistentPhase !== "terminal"
-        ? "calling"
-        : persistentPhase === "terminal"
-          ? "ended"
-          : "idle";
+  const persistentSeconds = usePersistentCallElapsedSeconds(persistentCall?.presentation ?? null);
+  const persistentSidebar = persistentCall
+    ? persistentCallSidebarModel(persistentCall, persistentSeconds)
+    : null;
   const persistentCallIssue = persistentCall?.presentation.callIssue
     ? { tone: "error" as const, message: persistentCall.presentation.callIssue.message }
     : null;
   const currentUser = useAppStore((s) => s.currentUser);
   const {
-    status = persistentStatus,
-    remoteUsername = persistentCall?.presentation.peerUsername ?? null,
+    status = persistentSidebar?.status ?? "idle",
+    remoteUsername = persistentSidebar?.remoteUsername ?? null,
     remoteUserId = persistentCall?.presentation.peerPublicId ?? null,
     isMuted = persistentCall?.isMuted ?? false,
     isScreenSharing = false,
     isScreenShareUpdating = false,
-    seconds = 0,
-    callIssue = persistentCallIssue,
-    isIncomingActionPending = Boolean(persistentCall?.presentation.pendingAction),
+    seconds = persistentSidebar?.seconds ?? 0,
+    callIssue = persistentSidebar?.callIssue ?? persistentCallIssue,
+    isIncomingActionPending = persistentSidebar?.isIncomingActionPending ?? false,
   } = call ?? {};
   const resolvedStatus = call?.status ?? status;
   const resolvedRemoteUsername = call?.remoteUsername ?? remoteUsername;
@@ -619,8 +614,12 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
             isIncomingActionPending={resolvedIncomingActionPending}
             onMuteToggle={call?.toggleMute ?? (() => { persistentCall?.toggleMute(); })}
             onHangUp={call?.hangUp ?? (() => { void persistentCall?.hangup(); })}
-            onAcceptCall={call?.acceptCall}
-            onRejectCall={call?.rejectCall}
+            onCancelCall={call ? undefined : persistentSidebar?.canCancel ? () => { void persistentCall?.cancel(); } : undefined}
+            onAcceptCall={call?.acceptCall ?? (persistentSidebar?.direction === "incoming" ? () => { void persistentCall?.accept(); } : undefined)}
+            onRejectCall={call?.rejectCall ?? (persistentSidebar?.direction === "incoming" ? () => { void persistentCall?.decline(); } : undefined)}
+            callDirection={call ? undefined : persistentSidebar?.direction}
+            canCancelCall={call ? undefined : persistentSidebar?.canCancel}
+            canHangUpCall={call ? undefined : persistentSidebar?.canHangup}
             onOpenSettings={() => navigateToHash("#/settings")}
             onReturnToCall={handleReturnToActiveCall}
           />

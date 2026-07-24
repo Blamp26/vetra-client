@@ -51,6 +51,7 @@ interface ActiveCallDockProps {
   remoteScreenStream: MediaStream | null;
   localScreenStream: MediaStream | null;
   diagnostics: CallDiagnostics;
+  screenShareAvailable?: boolean;
   onMuteToggle: () => void;
   onStartScreenShare: () => Promise<void>;
   onStopScreenShare: () => void;
@@ -112,6 +113,7 @@ export function ActiveCallDock({
   remoteScreenStream,
   localScreenStream,
   diagnostics,
+  screenShareAvailable = true,
   onMuteToggle,
   onStartScreenShare,
   onStopScreenShare,
@@ -138,7 +140,7 @@ export function ActiveCallDock({
   const [isRemoteWatchPending, setIsRemoteWatchPending] = useState(false);
   const [fullscreenRoot, setFullscreenRoot] = useState<HTMLDivElement | null>(null);
   const displayIssue = normalizeCallIssue(callIssue);
-  const hasScreenShare = isRemoteScreenAvailable || Boolean(localScreenStream) || isScreenSharing;
+  const hasScreenShare = screenShareAvailable && (isRemoteScreenAvailable || Boolean(localScreenStream) || isScreenSharing);
   const statusLabel = getCallStatusLabel({
     status: callStatus,
     diagnostics,
@@ -464,6 +466,7 @@ export function ActiveCallDock({
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
             onToggleFullscreen={toggleFullscreen}
+            screenShareAvailable={screenShareAvailable}
           />
         </div>
       </section>
@@ -556,6 +559,7 @@ export function ActiveCallDock({
               onStopScreenShare={onStopScreenShare}
               onHangUp={onHangUp}
               onToggleFullscreen={toggleFullscreen}
+              screenShareAvailable={screenShareAvailable}
             />
           </div>
         </div>
@@ -641,6 +645,7 @@ export function ActiveCallDock({
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
             onToggleFullscreen={toggleFullscreen}
+            screenShareAvailable={screenShareAvailable}
           />
         </div>
       </div>
@@ -651,14 +656,14 @@ export function ActiveCallDock({
 
 function CallControls({
   className,
-  isMuted, isScreenSharing, isScreenShareUpdating, isFullscreen, onMuteToggle, onStartScreenShare, onStopScreenShare, onHangUp, onToggleFullscreen, onMouseEnter, onMouseLeave,
+  isMuted, isScreenSharing, isScreenShareUpdating, isFullscreen, onMuteToggle, onStartScreenShare, onStopScreenShare, onHangUp, onToggleFullscreen, screenShareAvailable = true, onMouseEnter, onMouseLeave,
 }: {
-  className?: string;
+  className?: string; screenShareAvailable?: boolean;
   isMuted: boolean; isScreenSharing: boolean; isScreenShareUpdating: boolean; isFullscreen: boolean; onMuteToggle: () => void; onStartScreenShare: () => Promise<void>; onStopScreenShare: () => void; onHangUp: () => void; onToggleFullscreen?: () => Promise<void>; onMouseEnter?: () => void; onMouseLeave?: () => void;
 }) {
   return <div className={cn("call-controls flex items-center justify-center gap-2 rounded-lg bg-black/60 p-2 text-white", className)} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
     <button className={cn("vt-call-control h-10 w-10 p-0", isMuted && "bg-destructive/20 text-destructive")} onClick={onMuteToggle} aria-label={isMuted ? "Unmute" : "Mute"}>{isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
-    <button className="vt-call-control h-10 w-10 p-0" onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }} aria-label={isScreenShareUpdating ? "Updating screen share" : isScreenSharing ? "Stop sharing" : "Share screen"} disabled={isScreenShareUpdating}>{isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}</button>
+    {screenShareAvailable && <button className="vt-call-control h-10 w-10 p-0" onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }} aria-label={isScreenShareUpdating ? "Updating screen share" : isScreenSharing ? "Stop sharing" : "Share screen"} disabled={isScreenShareUpdating}>{isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}</button>}
     {onToggleFullscreen && <button className="vt-call-control h-10 w-10 p-0" onClick={() => { void onToggleFullscreen(); }} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>{isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button>}
     <button className="vt-call-control vt-call-control--danger h-10 w-10 p-0" onClick={onHangUp} aria-label="Hang Up"><PhoneOff className="h-4 w-4" /></button>
   </div>;

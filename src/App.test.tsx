@@ -605,14 +605,14 @@ describe("App hash sync", () => {
 
     await waitFor(() => expect(screen.getByTestId("call-audio-renderer")).toBeInTheDocument());
     expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
-    expect(screen.getByTestId("persistent-call-surface")).toBeTruthy();
+    expect(screen.queryByTestId("persistent-call-surface")).not.toBeInTheDocument();
     await waitFor(() => expect(audioMounts.current).toBe(1));
 
     fireEvent.click(screen.getByRole("button", { name: "open settings" }));
 
     await waitFor(() => expect(window.location.hash).toBe("#/settings"));
     expect(screen.getByText("settings")).toBeTruthy();
-    expect(screen.getByTestId("persistent-call-surface")).toBeInTheDocument();
+    expect(screen.queryByTestId("persistent-call-surface")).not.toBeInTheDocument();
     expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
     await waitFor(() => expect(audioMounts.current).toBe(1));
     expect(audioUnmounts.current).toBe(0);
@@ -664,7 +664,7 @@ describe("App hash sync", () => {
     state.activeChat = { type: "direct", partnerId: 2, partnerRef: "2" };
     view.rerender(<App />);
 
-    expect(screen.getByTestId("persistent-call-surface")).toBeTruthy();
+    expect(screen.queryByTestId("persistent-call-surface")).not.toBeInTheDocument();
     expect(audioMounts.current).toBe(1);
     expect(audioUnmounts.current).toBe(0);
   });
@@ -777,8 +777,7 @@ describe("App hash sync", () => {
 
     render(<App />);
 
-    await waitFor(() => expect(screen.getByTestId("persistent-call-surface")).toBeInTheDocument());
-    expect(screen.getByTestId("persistent-call-surface")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId("persistent-call-surface")).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "return to call" }));
 

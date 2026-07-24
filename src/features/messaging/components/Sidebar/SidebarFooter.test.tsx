@@ -50,7 +50,11 @@ function renderFooter({
   onAcceptCall = vi.fn(),
   onRejectCall = vi.fn(),
   onHangUp = vi.fn(),
+  onCancelCall = vi.fn(),
   onMuteToggle = vi.fn(),
+  callDirection,
+  canCancelCall,
+  canHangUpCall,
   onReturnToCall = vi.fn(),
   onOpenSettings = vi.fn(),
   isCollapsed = false,
@@ -65,7 +69,11 @@ function renderFooter({
   onAcceptCall?: () => void;
   onRejectCall?: () => void;
   onHangUp?: () => void;
+  onCancelCall?: () => void;
   onMuteToggle?: () => void;
+  callDirection?: "incoming" | "outgoing" | null;
+  canCancelCall?: boolean;
+  canHangUpCall?: boolean;
   onReturnToCall?: () => void;
   onOpenSettings?: () => void;
   isCollapsed?: boolean;
@@ -83,8 +91,12 @@ function renderFooter({
       isIncomingActionPending={isIncomingActionPending}
       onMuteToggle={onMuteToggle}
       onHangUp={onHangUp}
+      onCancelCall={onCancelCall}
       onAcceptCall={onAcceptCall}
       onRejectCall={onRejectCall}
+      callDirection={callDirection}
+      canCancelCall={canCancelCall}
+      canHangUpCall={canHangUpCall}
       onOpenSettings={onOpenSettings}
       onReturnToCall={onReturnToCall}
       isCollapsed={isCollapsed}
@@ -113,6 +125,32 @@ describe("SidebarFooter call UX", () => {
     renderFooter({ callStatus: "calling" });
 
     expect(screen.getByText("Calling...")).toBeInTheDocument();
+  });
+
+  it("keeps outgoing ringing directional and uses cancel", () => {
+    const onCancelCall = vi.fn();
+    renderFooter({ callStatus: "calling", callDirection: "outgoing", canCancelCall: true, onCancelCall });
+
+    expect(screen.getByText("Calling...")).toBeInTheDocument();
+    expect(screen.getByText("Ringing Alice")).toBeInTheDocument();
+    expect(screen.queryByText("INCOMING CALL")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Accept call")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Decline call")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Cancel call"));
+    expect(onCancelCall).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders incoming actions only with incoming direction and callbacks", () => {
+    const onAcceptCall = vi.fn();
+    const onRejectCall = vi.fn();
+    renderFooter({ callStatus: "ringing", callDirection: "incoming", onAcceptCall, onRejectCall });
+
+    expect(screen.getByText("Incoming call")).toBeInTheDocument();
+    expect(screen.getByText("Alice is calling")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Accept call"));
+    fireEvent.click(screen.getByTitle("Decline call"));
+    expect(onAcceptCall).toHaveBeenCalledTimes(1);
+    expect(onRejectCall).toHaveBeenCalledTimes(1);
   });
 
   it("shows Connected during an active call", () => {
