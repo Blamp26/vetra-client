@@ -7,12 +7,16 @@ import { PersistentRemoteAudioRenderer } from "./PersistentRemoteAudioRenderer";
 import { useOptionalPersistentCall, usePersistentCall } from "../../context/PersistentCallContext";
 import type { PersistentCallAffordance } from "../../context/CallRuntimeBoundary";
 import { isUuid } from "../../protocol/directedCallProtocol";
+import { serializeResourceRef } from "@/shared/utils/resourceRef";
 
 export function PersistentCallSurface({ children }: { children: ReactNode }) {
   const call = usePersistentCall();
   const [audioPlaybackRequest, setAudioPlaybackRequest] = useState(0);
   const [audioPlaybackUnavailable, setAudioPlaybackUnavailable] = useState(false);
   const mediaStream = call.media.remoteAudioStream as MediaStream | null;
+  const peerAudioPreferenceKey = call.presentation.peerPublicId
+    ? serializeResourceRef(call.presentation.peerPublicId)
+    : undefined;
   const showAudio = Boolean(mediaStream);
   const onAudioPlaybackStateChange = useCallback((state: "playing" | "autoplay_unavailable") => {
     setAudioPlaybackUnavailable(state === "autoplay_unavailable");
@@ -27,6 +31,7 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
       {showAudio && (
         <PersistentRemoteAudioRenderer
           stream={mediaStream}
+          peerAudioPreferenceKey={peerAudioPreferenceKey}
           playbackRequest={audioPlaybackRequest}
           onPlaybackStateChange={onAudioPlaybackStateChange}
         />
