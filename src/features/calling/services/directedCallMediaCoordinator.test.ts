@@ -1175,4 +1175,141 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(oldAdapter.dispose).toHaveBeenCalledTimes(1);
     newCoordinator.dispose();
   });
+
+  it("does not create a duplicate offer while the matching request is in flight", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const createOffer = deferred<RTCSessionDescriptionInit>();
+    mockedMethod(adapter.createRenegotiationOffer).mockReturnValueOnce(createOffer.promise);
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const request = {
+      call_id: callId,
+      signal_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      kind: "renegotiate_request" as const,
+      payload: { renegotiation_id: id, screen_share: false },
+    };
+    session.emitSignal(request);
+    session.emitSignal(request);
+    await vi.waitFor(() => expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(1));
+    expect(session.sendSignal).not.toHaveBeenCalledWith(
+      callId,
+      expect.any(String),
+      "renegotiate_offer",
+      expect.anything(),
+    );
+
+    createOffer.resolve({ type: "offer", sdp: "renegotiation-offer" });
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledWith(
+      callId,
+      expect.any(String),
+      "renegotiate_offer",
+      { renegotiation_id: id, screen_share: false, sdp: "renegotiation-offer" },
+    ));
+    session.emitSignal(request);
+    await Promise.resolve();
+    expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(1);
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("releases a failed offer creation so a later transaction can succeed", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    mockedMethod(adapter.createRenegotiationOffer).mockRejectedValueOnce(new Error("offer failed"));
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    const failedId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    session.emitSignal({
+      call_id: callId,
+      signal_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      kind: "renegotiate_request" as const,
+      payload: { renegotiation_id: failedId, screen_share: false },
+    });
+    await vi.waitFor(() => expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const retryId = await coordinator.requestRenegotiation();
+    expect(retryId).not.toBe(failedId);
+    await vi.waitFor(() => expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(2));
+    expect(session.sendSignal).toHaveBeenCalledWith(
+      callId,
+      expect.any(String),
+      "renegotiate_offer",
+      { renegotiation_id: retryId, screen_share: false, sdp: "renegotiation-offer" },
+    );
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("ignores stale offer creation after disposal and generation rollover", async () => {
+    const session = createSession();
+    const oldTransport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const oldLifecycle = createLifecycle();
+    const oldAdapter = createAdapter();
+    const createOffer = deferred<RTCSessionDescriptionInit>();
+    mockedMethod(oldAdapter.createRenegotiationOffer).mockReturnValueOnce(createOffer.promise);
+    const oldCoordinator = new DirectedCallMediaCoordinator(session, oldTransport, oldLifecycle, "g1", {
+      adapterFactory: (options) => bindAdapter(options, oldAdapter),
+    });
+    const oldSignalCallback = (session.subscribeToSignals as ReturnType<typeof vi.fn>).mock.calls[0][0] as (signal: any) => void;
+
+    startActive(oldCoordinator, session);
+    await vi.waitFor(() => expect(oldAdapter.prepareOffer).toHaveBeenCalled());
+    const oldId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const oldRequest = {
+      call_id: callId,
+      signal_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      kind: "renegotiate_request" as const,
+      payload: { renegotiation_id: oldId, screen_share: false },
+    };
+    session.emitSignal(oldRequest);
+    await vi.waitFor(() => expect(oldAdapter.createRenegotiationOffer).toHaveBeenCalledTimes(1));
+
+    oldCoordinator.dispose();
+    oldSignalCallback(oldRequest);
+    const newTransport = new DirectedCallSignalTransport(session, { generation: "g2" });
+    const newLifecycle = createLifecycle();
+    const newAdapter = createAdapter();
+    const newCoordinator = new DirectedCallMediaCoordinator(session, newTransport, newLifecycle, "g2", {
+      adapterFactory: (options) => bindAdapter(options, newAdapter),
+    });
+    startActive(newCoordinator, session);
+    await vi.waitFor(() => expect(newAdapter.prepareOffer).toHaveBeenCalled());
+
+    createOffer.resolve({ type: "offer", sdp: "stale-offer" });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(session.sendSignal).not.toHaveBeenCalledWith(
+      callId,
+      expect.any(String),
+      "renegotiate_offer",
+      expect.objectContaining({ renegotiation_id: oldId }),
+    );
+    expect(newAdapter.createRenegotiationOffer).not.toHaveBeenCalled();
+    expect(newLifecycle.mediaReady).not.toHaveBeenCalled();
+    expect(newLifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(newAdapter.dispose).not.toHaveBeenCalled();
+    expect(oldAdapter.dispose).toHaveBeenCalledTimes(1);
+    newCoordinator.dispose();
+  });
 });
