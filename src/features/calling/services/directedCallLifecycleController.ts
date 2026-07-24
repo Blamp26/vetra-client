@@ -336,6 +336,9 @@ export class DirectedCallLifecycleController {
     if (this.inFlightCommand?.event === "call:setup_failed" && this.inFlightCommand.callId === callId) {
       return this.inFlightCommand.promise;
     }
+    if (this.pendingCommand?.event === "call:setup_failed" && this.pendingCommand.callId === callId) {
+      return this.retryPendingCommand();
+    }
 
     let commandId: string;
     let payload: unknown;
@@ -405,6 +408,13 @@ export class DirectedCallLifecycleController {
   }
 
   private selectFromProjection(projection: StateProjection): void {
+    if (this.pendingCommand?.event === "call:setup_failed" &&
+        this.pendingCommand.callId === projection.call_id &&
+        (projection.state === "active" || TERMINAL_STATES.has(projection.state))) {
+      this.authoritativelyAdvancedCommands.add(this.pendingCommand.commandId);
+      this.pendingCommand = null;
+      this.lastCommandError = null;
+    }
     if (this.pendingCommand && confirmsCommand(this.pendingCommand, projection)) {
       this.authoritativelyAdvancedCommands.add(this.pendingCommand.commandId);
       this.pendingCommand = null;

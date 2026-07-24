@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DirectedCallSignalTransport } from "./directedCallSignalTransport";
 import { DirectedCallMediaCoordinator } from "./directedCallMediaCoordinator";
+import { DirectedCallWebRtcError, DirectedCallWebRtcStaleError } from "./directedCallWebRtcAdapter";
 import type {
   DirectedCallInitialMediaReadiness,
   DirectedCallWebRtcAdapter,
@@ -18,12 +19,12 @@ const readySnapshot: DirectedCallInitialMediaReadiness = Object.freeze({
   ready: true,
 });
 
-function projection(state: "accepted" | "connecting" | "active" | "ended", currentCallId = callId) {
+function projection(state: "accepted" | "connecting" | "active" | "connection_failed" | "declined" | "ended", currentCallId = callId) {
   return {
     protocol_version: 1 as const,
     call_id: currentCallId,
     state,
-    state_version: state === "ended" ? 4 : 1,
+    state_version: ["connection_failed", "declined", "ended"].includes(state) ? 4 : 1,
     media: "audio" as const,
     participant_role: "initiator" as const,
     peer: { user_id: peerId, username: "alice" },
@@ -73,10 +74,16 @@ function createSession() {
 }
 
 function createLifecycle() {
+  const acknowledgedSetupFailure = {
+    status: "acknowledged" as const,
+    event: "call:setup_failed" as const,
+    commandId: "55555555-5555-4555-8555-555555555555",
+    result: { call_id: callId, state: "connection_failed" as const, state_version: 2, result_code: "applied" as const },
+  };
   return {
     beginConnecting: vi.fn().mockResolvedValue({ status: "acknowledged" }),
     mediaReady: vi.fn().mockResolvedValue({ status: "acknowledged" }),
-    setupFailed: vi.fn().mockResolvedValue({ status: "acknowledged" }),
+    setupFailed: vi.fn().mockResolvedValue(acknowledgedSetupFailure),
   };
 }
 
@@ -810,6 +817,188 @@ describe("DirectedCallMediaCoordinator", () => {
 
     expect(lifecycle.setupFailed).toHaveBeenCalledWith(callId, "peer_connection_failed");
     expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves every safe setup failure code", async () => {
+    const failureCodes = ["permission_denied", "microphone_unavailable", "peer_connection_failed", "sdp_failed", "ice_failed", "media_binding_failed"] as const;
+    for (const failureCode of failureCodes) {
+      const session = createSession();
+      const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+      const lifecycle = createLifecycle();
+      const adapter = createAdapter();
+      adapter.prepareOffer = vi.fn().mockRejectedValue(new DirectedCallWebRtcError(failureCode)) as typeof adapter.prepareOffer;
+      const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+      coordinator.start();
+      session.emit(projection("accepted"));
+      await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledWith(callId, failureCode));
+    }
+  });
+
+  it("reports connecting-phase failures and maps unknown errors safely", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    adapter.acceptAnswer = vi.fn().mockRejectedValue(new DirectedCallWebRtcError("ice_failed")) as typeof adapter.acceptAnswer;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    session.emit(projection("connecting"));
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledWith(callId, expect.any(String), "offer", { sdp: "offer" }));
+    session.emitSignal({ call_id: callId, signal_id: "88888888-8888-4888-8888-888888888888", kind: "answer", payload: { sdp: "answer" } });
+    await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledWith(callId, "ice_failed"));
+
+    const unknownSession = createSession();
+    const unknownTransport = new DirectedCallSignalTransport(unknownSession, { generation: "g1" });
+    const unknownLifecycle = createLifecycle();
+    const unknownAdapter = createAdapter();
+    unknownAdapter.prepareOffer = vi.fn().mockRejectedValue(new Error("secret browser detail")) as typeof unknownAdapter.prepareOffer;
+    const unknownCoordinator = new DirectedCallMediaCoordinator(unknownSession, unknownTransport, unknownLifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, unknownAdapter) });
+    unknownCoordinator.start();
+    unknownSession.emit(projection("accepted"));
+    await vi.waitFor(() => expect(unknownLifecycle.setupFailed).toHaveBeenCalledWith(callId, "peer_connection_failed"));
+    expect(JSON.stringify(unknownLifecycle.setupFailed.mock.calls)).not.toContain("secret browser detail");
+  });
+
+  it("ignores stale failures and performs first-failure cleanup once", async () => {
+    const staleSession = createSession();
+    const staleTransport = new DirectedCallSignalTransport(staleSession, { generation: "g1" });
+    const staleLifecycle = createLifecycle();
+    const staleAdapter = createAdapter();
+    staleAdapter.prepareOffer = vi.fn().mockRejectedValue(new DirectedCallWebRtcStaleError()) as typeof staleAdapter.prepareOffer;
+    const staleCoordinator = new DirectedCallMediaCoordinator(staleSession, staleTransport, staleLifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, staleAdapter) });
+    staleCoordinator.start();
+    staleSession.emit(projection("accepted"));
+    await Promise.resolve();
+    expect(staleLifecycle.setupFailed).not.toHaveBeenCalled();
+
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    let resolveReport!: (outcome: unknown) => void;
+    lifecycle.setupFailed = vi.fn(() => new Promise((resolve) => { resolveReport = resolve; })) as typeof lifecycle.setupFailed;
+    const adapter = createAdapter();
+    adapter.prepareOffer = vi.fn().mockRejectedValue(new DirectedCallWebRtcError("sdp_failed")) as typeof adapter.prepareOffer;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1));
+    session.emit(projection("connecting"));
+    expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1);
+    expect(adapter.dispose).toHaveBeenCalledTimes(1);
+    resolveReport({ status: "failed", event: "call:setup_failed", commandId: "55555555-5555-4555-8555-555555555555", error: { kind: "transport_timeout" } });
+  });
+
+  it("keeps a transport-failed report retryable without recursive retry or media restart", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    lifecycle.setupFailed = vi.fn()
+      .mockResolvedValueOnce({ status: "failed", event: "call:setup_failed", commandId: "55555555-5555-4555-8555-555555555555", error: { kind: "transport_timeout" } })
+      .mockResolvedValueOnce({ status: "acknowledged", event: "call:setup_failed", commandId: "55555555-5555-4555-8555-555555555555", result: { call_id: callId, state: "connection_failed", state_version: 2, result_code: "applied" } }) as typeof lifecycle.setupFailed;
+    const adapter = createAdapter();
+    adapter.prepareOffer = vi.fn().mockRejectedValue(new DirectedCallWebRtcError("microphone_unavailable")) as typeof adapter.prepareOffer;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1);
+    session.emit(projection("connecting"));
+    await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledTimes(2));
+    expect(lifecycle.setupFailed).toHaveBeenNthCalledWith(1, callId, "microphone_unavailable");
+    expect(lifecycle.setupFailed).toHaveBeenNthCalledWith(2, callId, "microphone_unavailable");
+    expect(adapter.prepareOffer).toHaveBeenCalledTimes(1);
+  });
+
+  it("retires non-retryable reports and never rewrites authoritative active or terminal state", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    lifecycle.setupFailed = vi.fn().mockResolvedValue({ status: "failed", event: "call:setup_failed", commandId: "55555555-5555-4555-8555-555555555555", error: { kind: "protocol_validation" } }) as typeof lifecycle.setupFailed;
+    const adapter = createAdapter();
+    adapter.prepareOffer = vi.fn().mockRejectedValue(new DirectedCallWebRtcError("sdp_failed")) as typeof adapter.prepareOffer;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1));
+    session.emit(projection("connecting"));
+    await Promise.resolve();
+    expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1);
+    session.emit(projection("active"));
+    expect(coordinator.getSnapshot().projection?.state).toBe("active");
+    expect(coordinator.getSnapshot().state).not.toBe("failed");
+    session.emit(projection("ended"));
+    expect(coordinator.getSnapshot().projection).toBeNull();
+    expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts canonical connection_failed confirmation before command completion", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    let resolveReport!: (outcome: unknown) => void;
+    lifecycle.setupFailed = vi.fn(() => new Promise((resolve) => { resolveReport = resolve; })) as typeof lifecycle.setupFailed;
+    const adapter = createAdapter();
+    adapter.prepareOffer = vi.fn().mockRejectedValue(new DirectedCallWebRtcError("sdp_failed")) as typeof adapter.prepareOffer;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1));
+    session.emit(projection("connection_failed"));
+    expect(coordinator.getSnapshot().callId).toBeNull();
+    resolveReport({ status: "acknowledged", event: "call:setup_failed", commandId: "55555555-5555-4555-8555-555555555555", result: { call_id: callId, state: "connection_failed", state_version: 2, result_code: "applied" } });
+    await Promise.resolve();
+    expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores setup-failure completion after disposal and call rollover", async () => {
+    const secondCallId = "44444444-4444-4444-8444-444444444444";
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const resolvers: Array<(outcome: unknown) => void> = [];
+    lifecycle.setupFailed = vi.fn(() => new Promise((resolve) => { resolvers.push(resolve); })) as typeof lifecycle.setupFailed;
+    const adapters: TestAdapter[] = [];
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      adapterFactory: (options) => {
+        const adapter = createAdapter(options);
+        adapters.push(adapter);
+        if (adapters.length === 1) adapter.prepareOffer = vi.fn().mockRejectedValue(new DirectedCallWebRtcError("sdp_failed")) as typeof adapter.prepareOffer;
+        if (adapters.length === 2) adapter.prepareOffer = vi.fn().mockRejectedValue(new DirectedCallWebRtcError("microphone_unavailable")) as typeof adapter.prepareOffer;
+        return adapter;
+      },
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1));
+    session.emit(projection("ended"));
+    session.emit(projection("accepted", secondCallId));
+    await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledTimes(2));
+    resolvers[0]({ status: "acknowledged", event: "call:setup_failed", commandId: "55555555-5555-4555-8555-555555555555", result: { call_id: callId, state: "connection_failed", state_version: 2, result_code: "applied" } });
+    await Promise.resolve();
+    expect(lifecycle.setupFailed).toHaveBeenNthCalledWith(2, secondCallId, "microphone_unavailable");
+    coordinator.dispose();
+    resolvers[1]({ status: "acknowledged", event: "call:setup_failed", commandId: "66666666-6666-4666-8666-666666666666", result: { call_id: secondCallId, state: "connection_failed", state_version: 2, result_code: "applied" } });
+    expect(lifecycle.setupFailed).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not create a setup-failure report from a stale media-attempt error", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    let rejectOffer!: (error: unknown) => void;
+    const adapter = createAdapter();
+    adapter.prepareOffer = vi.fn(() => new Promise<RTCSessionDescriptionInit>((_, reject) => { rejectOffer = reject; })) as typeof adapter.prepareOffer;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    session.emitSync();
+    rejectOffer(new DirectedCallWebRtcError("sdp_failed"));
+    await Promise.resolve();
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
   });
 
   it("never creates a replacement adapter after media retirement", async () => {

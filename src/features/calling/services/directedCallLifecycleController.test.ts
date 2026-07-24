@@ -256,6 +256,43 @@ describe("DirectedCallLifecycleController", () => {
     expect(session.pushes[session.pushes.length - 1]?.payload).toMatchObject({ failure_code: "sdp_failed" });
   });
 
+  it("coalesces setup_failed in flight and retries a retained transport command with its original ID", async () => {
+    const session = createSession([new DirectedCallSessionCommandError({ kind: "transport_timeout" }), commandReply("connection_failed")]);
+    const controller = new DirectedCallLifecycleController(session);
+    const first = await controller.setupFailed(callId, "microphone_unavailable");
+    const firstPayload = { ...session.pushes[0].payload };
+    const retry = controller.setupFailed(callId, "sdp_failed");
+    expect(session.pushes).toHaveLength(2);
+    expect(session.pushes[1]).toMatchObject({ event: "call:setup_failed", payload: firstPayload });
+    expect(session.pushes[1].payload.failure_code).toBe("microphone_unavailable");
+    expect(await retry).toMatchObject({ status: "acknowledged", event: "call:setup_failed", commandId: firstPayload.command_id });
+    expect(first).toMatchObject({ status: "failed", error: { kind: "transport_timeout" } });
+  });
+
+  it("does not reuse an unrelated pending lifecycle command for setup_failed", async () => {
+    const session = createSession([new DirectedCallSessionCommandError({ kind: "transport_timeout" }), commandReply("connection_failed")]);
+    const controller = new DirectedCallLifecycleController(session);
+    await controller.accept(callId);
+    const setup = await controller.setupFailed(callId, "sdp_failed");
+    expect(session.pushes.map(({ event }) => event)).toEqual(["call:accept", "call:setup_failed"]);
+    expect(session.pushes[1].payload.command_id).not.toBe(session.pushes[0].payload.command_id);
+    expect(setup).toMatchObject({ status: "acknowledged", event: "call:setup_failed" });
+  });
+
+  it("retires a pending setup_failed command when canonical state advances", async () => {
+    let rejectPush!: (error: unknown) => void;
+    const session = createSession();
+    session.pushCommand = vi.fn(() => new Promise((_, reject) => { rejectPush = reject; }));
+    const controller = new DirectedCallLifecycleController(session);
+    const pending = controller.setupFailed(callId, "sdp_failed");
+    expect(controller.getSnapshot().pendingCommand?.event).toBe("call:setup_failed");
+    session.emit(state("active", 3));
+    expect(controller.getSnapshot().pendingCommand).toBeNull();
+    rejectPush(new DirectedCallSessionCommandError({ kind: "transport_timeout" }));
+    await pending;
+    await expect(controller.retryPendingCommand()).resolves.toMatchObject({ error: { kind: "retry_exhausted" } });
+  });
+
   it("never sends received or presented automatically", async () => {
     const session = createSession();
     const controller = new DirectedCallLifecycleController(session);

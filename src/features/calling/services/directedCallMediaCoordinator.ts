@@ -1,6 +1,7 @@
 import {
   CANONICAL_STATES,
   isUuid,
+  type FailureCode,
   type IcePayload,
   type ParticipantRole,
   type SignalEnvelope,
@@ -46,7 +47,7 @@ export interface DirectedCallMediaCoordinatorSnapshot {
 export interface DirectedCallMediaLifecyclePort {
   beginConnecting(callId: string): Promise<unknown>;
   mediaReady(callId: string): Promise<LifecycleCommandOutcome>;
-  setupFailed(callId: string, failureCode: DirectedCallWebRtcError["failureCode"]): Promise<unknown>;
+  setupFailed(callId: string, failureCode: DirectedCallWebRtcError["failureCode"]): Promise<LifecycleCommandOutcome>;
 }
 
 export interface DirectedCallMediaCoordinatorOptions {
@@ -56,6 +57,16 @@ export interface DirectedCallMediaCoordinatorOptions {
 }
 
 type Listener = (snapshot: DirectedCallMediaCoordinatorSnapshot) => void;
+
+type SetupFailureReport = {
+  callId: string;
+  failureCode: FailureCode;
+  epoch: number;
+  generation: string;
+  inFlight: boolean;
+  acknowledged: boolean;
+  retryable: boolean;
+};
 
 const TERMINAL_STATES = new Set<string>([
   "unavailable", "undelivered", "busy", "declined", "cancelled", "no_answer", "connection_failed", "ended",
@@ -127,7 +138,8 @@ export class DirectedCallMediaCoordinator {
   private peerConnectionState: RTCPeerConnectionState | null = null;
   private mediaAttemptEpoch = 0;
   private mediaAttemptActive = false;
-  private setupFailureSent = false;
+  private setupFailureReport: SetupFailureReport | null = null;
+  private setupFailureReportEpoch = 0;
   private beginConnectingInFlight = false;
   private mediaReadyInFlight = false;
   private localStream: DirectedCallMediaStream | null = null;
@@ -220,6 +232,7 @@ export class DirectedCallMediaCoordinator {
 
   private resetCallState(callId: string): void {
     this.lastTerminalCallId = callId;
+    this.retireSetupFailureReport();
     this.invalidateMediaAttempt();
     this.signalTransport.unbindCall();
     this.mediaStartInFlight = false;
@@ -229,7 +242,6 @@ export class DirectedCallMediaCoordinator {
     this.offerSent = false;
     this.mediaReadySent = false;
     this.mediaReadyInFlight = false;
-    this.setupFailureSent = false;
     this.localIssue = null;
     this.remoteAudioStream = null;
     this.peerConnectionState = null;
@@ -251,6 +263,7 @@ export class DirectedCallMediaCoordinator {
 
   dispose(): void {
     if (this.disposed) return;
+    this.retireSetupFailureReport();
     this.invalidateMediaAttempt();
     this.disposed = true;
     this.setSnapshot({ ...this.snapshot, state: "disposing" });
@@ -289,13 +302,30 @@ export class DirectedCallMediaCoordinator {
 
     if (TERMINAL_STATES.has(projection.state)) {
       if (this.snapshot.callId === projection.call_id) {
+        if (projection.state === "connection_failed") this.acknowledgeSetupFailureFromProjection(projection.call_id);
+        else this.retireSetupFailureReport();
         this.setSnapshot({ ...this.snapshot, projection, state: "disposing" });
         this.resetCallState(projection.call_id);
       }
       return;
     }
 
-    if (this.mediaStarted && !this.mediaAttemptActive) {
+    if (this.setupFailureReport?.callId === projection.call_id && ["accepted", "connecting"].includes(projection.state)) {
+      this.setSnapshot({
+        ...this.snapshot,
+        projection,
+        state: "failed",
+        localIssue: this.setupFailureReport.failureCode,
+      });
+      this.maybeSendSetupFailure(projection.call_id, this.setupFailureReport.epoch);
+      return;
+    }
+
+    if (projection.state === "active" && this.setupFailureReport?.callId === projection.call_id) {
+      this.retireSetupFailureReport();
+    }
+
+    if (this.mediaStarted && !this.mediaAttemptActive && projection.state !== "active") {
       this.setSnapshot({
         ...this.snapshot,
         projection,
@@ -328,7 +358,6 @@ export class DirectedCallMediaCoordinator {
     if (!this.mediaAttemptActive) {
       this.mediaAttemptEpoch += 1;
       this.mediaAttemptActive = true;
-      this.setupFailureSent = false;
     }
     const attempt = this.mediaAttemptEpoch;
     this.mediaStartInFlight = true;
@@ -492,24 +521,113 @@ export class DirectedCallMediaCoordinator {
       this.applyProjection(projection);
       return;
     }
+    if (this.setupFailureReport?.callId === projection.call_id && ["accepted", "connecting"].includes(projection.state)) {
+      this.maybeSendSetupFailure(projection.call_id, this.setupFailureReport.epoch);
+      return;
+    }
     if (["accepted", "connecting"].includes(projection.state) && this.mediaStarted && this.snapshot.state !== "idle") {
       this.retireForTransport(projection.call_id, this.mediaAttemptEpoch);
     }
   }
 
-  private async reportSetupFailure(callId: string, error: unknown, attempt = this.mediaAttemptEpoch): Promise<void> {
-    if (this.setupFailureSent || !this.isCurrentCall(callId, attempt) || !["accepted", "connecting"].includes(this.snapshot.projection?.state ?? "")) return;
-    this.setupFailureSent = true;
-    const failureCode = error instanceof DirectedCallWebRtcError ? error.failureCode : "peer_connection_failed";
+  private reportSetupFailure(callId: string, error: unknown, attempt = this.mediaAttemptEpoch): void {
+    if (error instanceof DirectedCallWebRtcStaleError) return;
+    if (this.setupFailureReport || !this.isCurrentCall(callId, attempt) || !["accepted", "connecting"].includes(this.snapshot.projection?.state ?? "")) return;
+
+    const failureCode = this.toSafeSetupFailureCode(error);
+    const report: SetupFailureReport = {
+      callId,
+      failureCode,
+      epoch: ++this.setupFailureReportEpoch,
+      generation: this.generation,
+      inFlight: false,
+      acknowledged: false,
+      retryable: true,
+    };
+    this.setupFailureReport = report;
     this.localIssue = failureCode;
     recordDirectedCallDiagnostic("failure", { callId, failureKind: failureCode });
-    this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: this.localIssue });
+    this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: failureCode });
+
+    // Cleanup is deliberately complete before any server-report Promise is created.
     this.invalidateMediaAttempt();
-    try {
-      await this.lifecycle.setupFailed(callId, failureCode);
-    } catch {
-      // The canonical projection and command result remain authoritative.
+    this.maybeSendSetupFailure(callId, report.epoch);
+  }
+
+  private toSafeSetupFailureCode(error: unknown): FailureCode {
+    if (error instanceof DirectedCallWebRtcError) {
+      const safeCodes = new Set<FailureCode>([
+        "permission_denied",
+        "microphone_unavailable",
+        "peer_connection_failed",
+        "sdp_failed",
+        "ice_failed",
+        "media_binding_failed",
+      ]);
+      return safeCodes.has(error.failureCode) ? error.failureCode : "peer_connection_failed";
     }
+    return "peer_connection_failed";
+  }
+
+  private maybeSendSetupFailure(callId: string, epoch: number): void {
+    const report = this.setupFailureReport;
+    if (!report || report.epoch !== epoch || report.callId !== callId || report.generation !== this.generation) return;
+    if (this.disposed || !this.isGenerationCurrent(this.generation) || this.snapshot.callId !== callId) return;
+    if (!["accepted", "connecting"].includes(this.snapshot.projection?.state ?? "")) return;
+    if (report.acknowledged || report.inFlight || !report.retryable) return;
+
+    report.inFlight = true;
+    void this.lifecycle.setupFailed(callId, report.failureCode)
+      .then((outcome) => this.handleSetupFailureOutcome(report, outcome))
+      .catch(() => {
+        if (this.isCurrentSetupFailureReport(report)) report.retryable = true;
+      })
+      .finally(() => {
+        if (this.isCurrentSetupFailureReport(report)) report.inFlight = false;
+      });
+  }
+
+  private handleSetupFailureOutcome(report: SetupFailureReport, outcome: LifecycleCommandOutcome): void {
+    if (!this.isCurrentSetupFailureReport(report)) return;
+    const resultCode = outcome.status === "acknowledged" && "result_code" in outcome.result
+      ? outcome.result.result_code
+      : null;
+    if (
+      outcome.status === "acknowledged" &&
+      outcome.event === "call:setup_failed" &&
+      outcome.result.call_id === report.callId &&
+      outcome.result.state === "connection_failed" &&
+      typeof resultCode === "string" && ["applied", "no_op", "duplicate"].includes(resultCode)
+    ) {
+      report.acknowledged = true;
+      report.retryable = false;
+      return;
+    }
+
+    if (outcome.status === "failed" && ["transport_timeout", "transport_error"].includes(outcome.error.kind)) {
+      report.retryable = true;
+      return;
+    }
+
+    report.retryable = false;
+    recordDirectedCallDiagnostic("failure", { callId: report.callId, failureKind: "setup_failure_report_rejected" });
+  }
+
+  private isCurrentSetupFailureReport(report: SetupFailureReport): boolean {
+    return !this.disposed && this.setupFailureReport === report && report.epoch === this.setupFailureReportEpoch && report.generation === this.generation;
+  }
+
+  private acknowledgeSetupFailureFromProjection(callId: string): void {
+    const report = this.setupFailureReport;
+    if (!report || report.callId !== callId) return;
+    report.acknowledged = true;
+    report.retryable = false;
+    report.inFlight = false;
+  }
+
+  private retireSetupFailureReport(): void {
+    this.setupFailureReportEpoch += 1;
+    this.setupFailureReport = null;
   }
 
   private handlePeerConnectionState(state: RTCPeerConnectionState, adapterEpoch = this.adapterEpoch): void {
