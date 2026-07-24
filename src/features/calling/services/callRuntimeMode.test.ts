@@ -3,10 +3,10 @@ import { parseCallRuntimeMode } from "./callRuntimeMode";
 
 describe("call runtime mode", () => {
   it.each([
-    [undefined, "legacy"],
-    [null, "legacy"],
-    ["", "legacy"],
-    ["legacy", "legacy"],
+    [undefined, "persistent"],
+    [null, "persistent"],
+    ["", "persistent"],
+    ["legacy", "disabled"],
     ["persistent", "persistent"],
     ["PERSISTENT", "disabled"],
     ["true", "disabled"],
@@ -17,7 +17,7 @@ describe("call runtime mode", () => {
 
   it("does not read the retired boolean gate", async () => {
     const module = await import("./callRuntimeMode");
-    expect(module.parseCallRuntimeMode(undefined)).toBe("legacy");
+    expect(module.parseCallRuntimeMode(undefined)).toBe("persistent");
     expect((import.meta.env as Record<string, unknown>).VITE_ENABLE_DIRECTED_CALL_SESSION).toBeUndefined();
   });
 

@@ -10,13 +10,11 @@ describe("release call runtime", () => {
     ["", "persistent"],
     ["   ", "persistent"],
     ["persistent", "persistent"],
-    ["legacy", "legacy"],
-    ["disabled", "disabled"],
   ])("resolves %s to %s", (value, expected) => {
     expect(resolveReleaseCallRuntimeMode(value)).toBe(expected);
   });
 
-  it.each(["PERSISTENT", "Legacy", "true", "future-mode"])("rejects invalid release mode %s", (value) => {
+  it.each(["legacy", "disabled", "PERSISTENT", "Legacy", "true", "future-mode"])("rejects invalid release mode %s", (value) => {
     expect(() => resolveReleaseCallRuntimeMode(value)).toThrow(`Invalid VITE_CALL_RUNTIME_MODE for release build: ${JSON.stringify(value)}`);
   });
 
@@ -30,8 +28,6 @@ describe("release call runtime", () => {
 
   it.each([
     [undefined, "persistent"],
-    ["legacy", "legacy"],
-    ["disabled", "disabled"],
   ])("passes %s through the browser/Tauri release build child plan", async (value, expected) => {
     const calls: Array<{ command: string; args: string[]; env: Record<string, string | undefined> }> = [];
     const run = vi.fn(async (command: string, args: string[], options: { env: Record<string, string | undefined> }) => {
@@ -47,6 +43,12 @@ describe("release call runtime", () => {
     expect(calls.every(({ env }) => env.VITE_CALL_RUNTIME_MODE === expected)).toBe(true);
     expect(calls[0].env).toMatchObject({ VITE_API_URL: "https://api.example", VITE_SOCKET_URL: "wss://socket.example" });
     expect(calls.map(({ args }) => args)).toEqual([["exec", "--", "tsc"], ["exec", "--", "vite", "build"]]);
+  });
+
+  it.each(["legacy", "disabled"])("rejects %s before spawning either release child", async (value) => {
+    const run = vi.fn();
+    await expect(runReleaseBuild({ baseEnv: { VITE_CALL_RUNTIME_MODE: value }, run })).rejects.toThrow("Invalid VITE_CALL_RUNTIME_MODE");
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid mode before spawning either build child", async () => {

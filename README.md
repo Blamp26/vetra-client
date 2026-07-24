@@ -217,21 +217,21 @@ Directed-call release runtime:
 npm run build
 npm run tauri:build
 
-# Optional rollback/disable override (PowerShell syntax)
-$env:VITE_CALL_RUNTIME_MODE = "legacy"   # or "disabled"
+# Explicit persistent mode (PowerShell syntax; missing configuration has the same result)
+$env:VITE_CALL_RUNTIME_MODE = "persistent"
 npm run tauri:build
 Remove-Item Env:VITE_CALL_RUNTIME_MODE -ErrorAction SilentlyContinue
 
-# Development opt-in (development is otherwise legacy)
+# Development
 $env:VITE_CALL_RUNTIME_MODE = "persistent"
 npm run tauri:dev
 Remove-Item Env:VITE_CALL_RUNTIME_MODE -ErrorAction SilentlyContinue
 ```
 
-Release builds print the resolved mode. Development commands keep the
-application default (`missing` or empty means `legacy`); opt into persistent
-development explicitly with `VITE_CALL_RUNTIME_MODE=persistent` (for example,
-`VITE_CALL_RUNTIME_MODE=persistent npm run dev` in a POSIX shell).
+Release builds print the resolved mode. Missing or empty configuration resolves
+to `persistent` in every environment. `persistent` is the only accepted
+runtime value; legacy and other explicit values fail closed in development and
+are rejected by release builds.
 
 The release wrappers reuse `VETRA_SMOKE_API_URL` and `VETRA_SMOKE_SOCKET_URL` as `VITE_API_URL` and `VITE_SOCKET_URL` when those build variables are not already set.
 

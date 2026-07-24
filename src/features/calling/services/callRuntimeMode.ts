@@ -1,10 +1,9 @@
-export type CallRuntimeMode = "legacy" | "persistent" | "disabled";
+export type CallRuntimeMode = "persistent" | "disabled";
 
 const invalidModeWarnings = new Set<string>();
 
 export function parseCallRuntimeMode(value: unknown = import.meta.env.VITE_CALL_RUNTIME_MODE): CallRuntimeMode {
-  if (value === undefined || value === null || value === "") return "legacy";
-  if (value === "legacy") return "legacy";
+  if (value === undefined || value === null || value === "") return "persistent";
   if (value === "persistent") return "persistent";
 
   const diagnostic = String(value);

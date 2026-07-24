@@ -19,7 +19,6 @@ import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 import { EmptyPane } from "@/shared/components/EmptyPane";
 import { Button } from "@/shared/components/Button";
 import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
-import { useCallContext } from "@/features/calling/context";
 import { CallRuntimeBoundary, type PersistentCallAffordance } from "@/features/calling/context/CallRuntimeBoundary";
 import { PersistentCallSurface } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
@@ -87,7 +86,6 @@ function App() {
     <CallRuntimeBoundary
       currentUser={currentUser}
       socketManager={socketManager}
-      legacyContent={<LegacyCallApplication />}
       nonCallContent={<AppShell call={null} />}
       persistentContent={(affordance) => <PersistentCallApplication affordance={affordance} />}
     />
@@ -97,11 +95,6 @@ function App() {
 function PersistentCallApplication({ affordance }: { affordance: PersistentCallAffordance }) {
   const appShell = <AppShell call={null} persistentCallAffordance={affordance} />;
   return affordance.state === "owner" ? <PersistentCallSurface>{appShell}</PersistentCallSurface> : appShell;
-}
-
-function LegacyCallApplication() {
-  const call = useCallContext();
-  return <AppShell call={call} />;
 }
 
 interface AppShellProps {

@@ -67,9 +67,7 @@ describe("CallAuthorityOwnership", () => {
       key: `vetra:call-authority:public:${USER_A}:${DEVICE_A}`,
     });
     expect(resolveCallAuthorityScope(options({ request: vi.fn() }, DEVICE_A, "numeric-user"))).toBeNull();
-    expect(resolveCallAuthorityScope({ ...options({ request: vi.fn() }), mode: "legacy", publicUserRef: null })).toMatchObject({
-      profileScope: "numeric:1",
-    });
+    expect(resolveCallAuthorityScope({ ...options({ request: vi.fn() }), mode: "disabled", publicUserRef: USER_A })).toBeNull();
   });
 
   it("allows only one owner for a scope", async () => {

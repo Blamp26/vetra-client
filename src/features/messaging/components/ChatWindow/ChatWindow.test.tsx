@@ -22,7 +22,7 @@ vi.mock("@/api/auth", () => ({
 vi.mock("@/features/calling/context/PersistentCallContext", () => ({
   useOptionalPersistentCall: () => persistentCallMock.current,
   usePersistentCallBoundaryDebug: () => ({
-    mode: "legacy",
+    mode: "persistent",
     tauriDetected: false,
     ownershipBackend: "unavailable",
     ownershipState: "unavailable",

@@ -9,9 +9,8 @@ persisted across application restarts; it is not a secret or hardware identity.
 Each logical command owns a UUID command_id and exact retries reuse it.
 Every signaling message has a fresh signal_id; sync uses a separate request_id.
 
-The client now contains a dormant persistent session foundation. Its feature
-gate is disabled by default, so legacy calling remains the sole active call
-authority. The foundation joins the directed-call topic, stores durable state,
+The client now contains the persistent session foundation as its sole call
+authority. It joins the directed-call topic, stores durable state,
 recovers projections through sync after reconnect, and observes transient
 signals without passing them to WebRTC. It does not yet integrate with UI,
 lifecycle commands, media, or WebRTC. Reconnect does not recover transient
@@ -22,10 +21,7 @@ events call:initiate, call:received, call:presented, call:accept, call:cancel,
 call:decline, call:hangup, and call:begin_connecting. It owns in-memory command
 IDs and bounded explicit retries, while canonical controller state comes only
 from accepted projections. It does not send received or presented
-automatically, does not switch lifecycle or UI authority, and does not protect
-against multiple-window controller ownership yet. Persistent calling is not
-production-ready; legacy calling remains the sole active runtime and all
-feature gates remain disabled by default.
+automatically, and does not switch lifecycle or UI authority.
 
 The dormant incoming presentation coordinator now handles recipient projections
 through the dispatching-to-delivered-to-presented sequence. It sends
@@ -75,10 +71,11 @@ to the old call. After the third transport attempt, the retained action is
 original call and action until authoritative advancement makes it obsolete.
 
 B4 introduces one exclusive client runtime mode, resolved from
-`VITE_CALL_RUNTIME_MODE`: missing, empty, or `legacy` means legacy; `persistent`
-is opt-in; and any other explicit value fails closed as `disabled`. The retired
+`VITE_CALL_RUNTIME_MODE`: missing or empty means `persistent`, and `persistent`
+is the only accepted value. Legacy and other explicit values fail closed as
+`disabled` during development and are rejected by release builds. The retired
 `VITE_ENABLE_DIRECTED_CALL_SESSION` boolean is not read and cannot enable a
-persistent runtime. The legacy mode remains the compatibility default.
+persistent runtime.
 
 Call authority is scoped by authenticated profile and the stable directed-call
 `device_id`: `vetra:call-authority:<profile-scope>:<device-id>`. Persistent mode
@@ -96,8 +93,7 @@ never grant ownership. A non-owner retries only after attempting the real lock;
 there is no timestamp lease, timeout stealing, or automatic persistent-to-legacy
 fallback.
 
-The owner-only boundary mounts exactly one legacy `CallProvider` in legacy mode,
-or constructs the dormant pre-media persistent session, lifecycle controller,
+The owner-only boundary constructs exactly one persistent session, lifecycle controller,
 incoming coordinator, presentation model, transient signal transport, and
 media-coordinator skeleton in persistent mode. A non-owner,
 disabled mode, invalid persistent identity, or unavailable Web Locks renders
@@ -181,9 +177,9 @@ C3 diagnostics use the existing opt-in call diagnostics setting and record only
 redacted call IDs, runtime/ownership state, canonical state, local media phase,
 socket and peer-connection state, typed failure kinds, and cleanup reasons.
 SDP, ICE candidates, IP addresses, media contents, tokens, and private user
-data are never logged. Persistent mode remains explicit through
-`VITE_CALL_RUNTIME_MODE=persistent`; missing configuration remains legacy and
-unavailable browser media APIs fail closed without fallback. Peer signals are
+data are never logged. Persistent mode is selected by
+`VITE_CALL_RUNTIME_MODE=persistent` or missing configuration, and unavailable
+browser media APIs fail closed without fallback. Peer signals are
 still transient and currently fan out to all peer devices. Owner crash cannot
 resume the previous WebRTC session, no TURN-specific rollout is included, and
 Windows/Tauri runtime verification remains unclaimed. C3 leaves hardened

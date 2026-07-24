@@ -7,7 +7,7 @@ import type { DirectedCallPresentationModel, PersistentPresentationSnapshot, Pre
 import type { CallAuthorityBackend, CallAuthorityState, CallAuthorityTraceEvent } from "../services/callAuthorityOwnership";
 
 export interface PersistentCallBoundaryDebugSnapshot {
-  mode: "legacy" | "persistent" | "disabled";
+  mode: "persistent" | "disabled";
   tauriDetected: boolean;
   ownershipBackend: CallAuthorityBackend;
   ownershipState: CallAuthorityState;

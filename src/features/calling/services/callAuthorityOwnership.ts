@@ -177,14 +177,7 @@ export function resolveCallAuthorityScope(options: {
     };
   }
 
-  if (options.mode !== "legacy") return null;
-  const profileScope = options.publicUserRef && isUuid(options.publicUserRef)
-    ? `public:${options.publicUserRef.toLowerCase()}`
-    : `numeric:${options.numericUserId}`;
-  return {
-    profileScope,
-    key: `vetra:call-authority:${profileScope}:${options.deviceId.toLowerCase()}`,
-  };
+  return null;
 }
 
 export class CallAuthorityOwnership {

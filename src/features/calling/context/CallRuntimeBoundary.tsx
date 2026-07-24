@@ -3,7 +3,6 @@ import type { User } from "@/shared/types";
 import { getState, useAppStore, type RootState } from "@/store";
 import { buildMicrophoneConstraints } from "@/shared/utils/audioConstraints";
 import type { SocketManager } from "@/services/socket";
-import { CallProvider } from "./CallProvider";
 import { DirectedCallSession } from "../services/directedCallSession";
 import { DirectedCallLifecycleController } from "../services/directedCallLifecycleController";
 import { DirectedCallIncomingCoordinator } from "../services/directedCallIncomingCoordinator";
@@ -38,7 +37,6 @@ interface PersistentRuntime {
 export interface CallRuntimeBoundaryProps {
   currentUser: User;
   socketManager: SocketManager | null;
-  legacyContent: ReactNode;
   nonCallContent: ReactNode;
   persistentContent?: ReactNode | ((affordance: PersistentCallAffordance) => ReactNode);
   mode?: CallRuntimeMode;
@@ -74,7 +72,6 @@ function describeStartupError(error: unknown): { errorType: string; errorMessage
 export function CallRuntimeBoundary({
   currentUser,
   socketManager,
-  legacyContent,
   nonCallContent,
   persistentContent,
   mode = parseCallRuntimeMode(),
@@ -337,9 +334,7 @@ export function CallRuntimeBoundary({
     : persistentContent;
 
   let content: ReactNode = nonCallContent;
-  if (mode === "legacy" && authority.state === "owner") {
-    content = <CallProvider currentUserId={currentUser.id}>{legacyContent}</CallProvider>;
-  } else if (mode === "persistent" && authority.state === "owner" && persistentRuntime && persistentContent !== undefined) {
+  if (mode === "persistent" && authority.state === "owner" && persistentRuntime && persistentContent !== undefined) {
     content = <PersistentCallProvider runtime={persistentRuntime.services}>{renderedPersistentContent}</PersistentCallProvider>;
   } else if (mode === "persistent" && renderedPersistentContent !== undefined) {
     content = renderedPersistentContent;

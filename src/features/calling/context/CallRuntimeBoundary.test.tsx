@@ -107,7 +107,7 @@ function makeTraceableOwnership(state: "owner" | "non_owner" | "unavailable") {
 }
 
 function renderBoundary(
-  mode: "legacy" | "persistent" | "disabled",
+  mode: "persistent" | "disabled",
   ownership: CallAuthorityOwnership,
   user = USER_A,
 ) {
@@ -118,7 +118,6 @@ function renderBoundary(
       mode={mode}
       persistentMediaAvailable
       ownershipFactory={() => ownership}
-      legacyContent={<div data-testid="legacy-content">legacy</div>}
       nonCallContent={<div data-testid="non-call-content">messaging</div>}
     />,
   );
@@ -130,11 +129,11 @@ describe("CallRuntimeBoundary", () => {
     mocks.startupFailure = null;
   });
 
-  it("mounts exactly the legacy owner branch without persistent services", async () => {
-    renderBoundary("legacy", makeOwnership("owner"));
-    expect(await screen.findByTestId("legacy-owner")).toBeInTheDocument();
+  it("fails closed for a disabled runtime without persistent or legacy services", async () => {
+    renderBoundary("disabled", makeOwnership("owner"));
+    expect(await screen.findByTestId("non-call-content")).toBeInTheDocument();
     expect(mocks.Session).not.toHaveBeenCalled();
-    expect(screen.getByTestId("legacy-content")).toBeInTheDocument();
+    expect(mocks.CallProvider).not.toHaveBeenCalled();
   });
 
   it("constructs one dormant persistent runtime without mounting CallProvider", async () => {
@@ -204,7 +203,6 @@ describe("CallRuntimeBoundary", () => {
         mode="persistent"
         persistentMediaAvailable
         ownershipFactory={() => ownership}
-        legacyContent={<div>legacy</div>}
         nonCallContent={<div data-testid="non-call-content">messaging</div>}
         persistentContent={<div data-testid="persistent-content">persistent</div>}
       />,
@@ -221,7 +219,6 @@ describe("CallRuntimeBoundary", () => {
         mode="persistent"
         persistentMediaAvailable
         ownershipFactory={() => ownership}
-        legacyContent={<div>legacy</div>}
         nonCallContent={<div data-testid="non-call-content">messaging</div>}
         persistentContent={<div data-testid="persistent-content">persistent</div>}
       />,
@@ -236,7 +233,6 @@ describe("CallRuntimeBoundary", () => {
         mode="persistent"
         persistentMediaAvailable
         ownershipFactory={() => ownership}
-        legacyContent={<div>legacy</div>}
         nonCallContent={<div data-testid="non-call-content">messaging</div>}
         persistentContent={<div data-testid="persistent-content">persistent</div>}
       />,
@@ -257,7 +253,6 @@ describe("CallRuntimeBoundary", () => {
         mode="persistent"
         persistentMediaAvailable={false}
         ownershipFactory={() => ownership}
-        legacyContent={<div>legacy</div>}
         nonCallContent={<div data-testid="non-call-content">messaging</div>}
         persistentContent={<div data-testid="persistent-content">persistent</div>}
       />,
@@ -277,7 +272,6 @@ describe("CallRuntimeBoundary", () => {
         mode="persistent"
         persistentMediaAvailable
         ownershipFactory={() => ownership}
-        legacyContent={<div>legacy</div>}
         nonCallContent={<div>non-call</div>}
         persistentContent={(affordance) => <div data-testid={`affordance-${affordance.state}`}>{affordance.state}</div>}
       />,
@@ -308,7 +302,6 @@ describe("CallRuntimeBoundary", () => {
         mode="persistent"
         persistentMediaAvailable
         ownershipFactory={() => second}
-        legacyContent={<div>legacy</div>}
         nonCallContent={<div data-testid="non-call-content">messaging</div>}
         persistentContent={<div data-testid="persistent-content">persistent</div>}
       />,
@@ -319,7 +312,7 @@ describe("CallRuntimeBoundary", () => {
   });
 
   it("fails closed for non-owners, unavailable ownership, and invalid persistent identity", async () => {
-    renderBoundary("legacy", makeOwnership("non_owner"));
+    renderBoundary("disabled", makeOwnership("non_owner"));
     expect(await screen.findByTestId("non-call-content")).toBeInTheDocument();
     expect(mocks.CallProvider).not.toHaveBeenCalled();
 
@@ -340,7 +333,6 @@ describe("CallRuntimeBoundary", () => {
         mode="persistent"
         persistentMediaAvailable
         ownershipFactory={() => ownership}
-        legacyContent={<div data-testid="legacy-content">legacy</div>}
         nonCallContent={<div>non-call</div>}
         persistentContent={(affordance) => <div data-testid={`affordance-${affordance.state}`}>{affordance.state}</div>}
       />,
@@ -365,7 +357,6 @@ describe("CallRuntimeBoundary", () => {
         mode="persistent"
         persistentMediaAvailable={false}
         ownershipFactory={() => makeOwnership("owner")}
-        legacyContent={<div>legacy</div>}
         nonCallContent={<div data-testid="non-call-content">messaging</div>}
         persistentContent={<div data-testid="persistent-content">persistent</div>}
       />,
@@ -384,7 +375,6 @@ describe("CallRuntimeBoundary", () => {
           mode="persistent"
           persistentMediaAvailable
           ownershipFactory={() => ownership}
-          legacyContent={<div>legacy</div>}
           nonCallContent={<div data-testid="non-call-content">messaging</div>}
           persistentContent={<div data-testid="persistent-content">persistent</div>}
         />
