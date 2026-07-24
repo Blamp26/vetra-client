@@ -516,14 +516,17 @@ export class DirectedCallMediaCoordinator {
     if (this.renegotiation.phase === "requested") this.renegotiation.phase = "offered";
     if (this.renegotiation.phase !== "offered") return;
     this.renegotiation.phase = "answering";
+    const transaction = this.renegotiation;
     try {
       await this.adapter.applyRenegotiationOffer({ type: "offer", sdp: payload.sdp });
+      if (!this.ownsRenegotiation(transaction, id, projection.call_id, "answering")) return;
       const answer = await this.adapter.createRenegotiationAnswer();
-      if (!answer.sdp || !this.acceptsRenegotiationId(id, projection.call_id)) return;
+      if (!answer.sdp || !this.ownsRenegotiation(transaction, id, projection.call_id, "answering")) return;
       await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_answer", { renegotiation_id: id, screen_share: payload.screen_share, sdp: answer.sdp });
+      if (!this.ownsRenegotiation(transaction, id, projection.call_id, "answering")) return;
       this.completeRenegotiation(id);
     } catch {
-      this.clearRenegotiation(id);
+      if (this.ownsRenegotiation(transaction, id, projection.call_id, "answering")) this.clearRenegotiation(id);
     }
   }
 
@@ -543,6 +546,10 @@ export class DirectedCallMediaCoordinator {
 
   private acceptsRenegotiationId(id: string, callId: string): boolean {
     return !this.disposed && this.isGenerationCurrent(this.generation) && this.snapshot.callId === callId && this.renegotiation?.id === id && this.renegotiation.generation === this.generation;
+  }
+
+  private ownsRenegotiation(transaction: RenegotiationTransaction, id: string, callId: string, phase: RenegotiationTransaction["phase"]): boolean {
+    return this.acceptsRenegotiationId(id, callId) && this.renegotiation === transaction && this.renegotiation.phase === phase;
   }
 
   private completeRenegotiation(id: string): void {
