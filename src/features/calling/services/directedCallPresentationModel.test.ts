@@ -150,6 +150,13 @@ function createHarness() {
     controllerListener?.(state);
     incomingListener?.(incomingState);
   };
+  const emitProjectionOnly = (next: StateProjection) => {
+    state.callId = next.call_id;
+    state.projection = next;
+    state.preparing = false;
+    projectionListener?.(next, "accepted");
+    controllerListener?.(state);
+  };
   return {
     model,
     lifecycle,
@@ -159,6 +166,7 @@ function createHarness() {
     incomingState,
     pushes,
     emit,
+    emitProjectionOnly,
     emitSync: () => syncListener?.(),
     setPending: (pending: PendingLifecycleCommand | null) => {
       state.pendingCommand = pending;
@@ -286,6 +294,7 @@ describe("DirectedCallPresentationModel", () => {
     harness.emit(projection("delivered", "recipient"));
     expect(harness.model.getSnapshot()).toMatchObject({ phase: "incoming", callId: CALL_ID, peerUsername: "Alice" });
     expect(harness.model.getSnapshot().incomingModal.presentationKey).toBe(CALL_ID);
+    expect(harness.model.getSnapshot().incomingModal.visible).toBe(true);
   });
 
   it("maps recipient presented to ringing without resending presented", async () => {
@@ -316,6 +325,62 @@ describe("DirectedCallPresentationModel", () => {
     const harness = createHarness();
     harness.emit(projection("dispatching", "recipient"));
     expect(harness.model.getSnapshot()).toMatchObject({ phase: "idle", incomingModal: { visible: false } });
+  });
+
+  it("fails closed when a stale recipient snapshot is paired with a different outgoing call", () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient", 1, CALL_ID, "Old caller"));
+    harness.emitProjectionOnly(projection("presented", "initiator", 1, SECOND_CALL_ID, "New target"));
+
+    expect(harness.model.getSnapshot().incomingModal).toMatchObject({ visible: false, presentationKey: null });
+    expect(harness.model.getSnapshot().peerUsername).toBe("New target");
+  });
+
+  it("fails closed when the selected projection is an initiator even with the same call ID", () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient", 1, CALL_ID, "Incoming caller"));
+    harness.emitProjectionOnly(projection("presented", "initiator", 2, CALL_ID, "Outgoing target"));
+
+    expect(harness.model.getSnapshot().incomingModal.visible).toBe(false);
+  });
+
+  it("uses the correlated recipient projection for caller identity and exact actions", async () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient", 1, CALL_ID, "Incoming caller"));
+    const modal = harness.model.getSnapshot().incomingModal;
+
+    expect(modal.callerDisplayName).toBe("Incoming caller");
+    await modal.onAccept();
+    expect(harness.lifecycle.accept).toHaveBeenCalledWith(CALL_ID);
+
+    const declineHarness = createHarness();
+    declineHarness.emit(projection("presented", "recipient", 1, SECOND_CALL_ID, "Another caller"));
+    await declineHarness.model.getSnapshot().incomingModal.onDecline();
+    expect(declineHarness.lifecycle.decline).toHaveBeenCalledWith(SECOND_CALL_ID);
+  });
+
+  it("does not inherit stale incoming state when a new outgoing call starts", async () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", "recipient", 1, CALL_ID, "Old caller"));
+    harness.emitProjectionOnly(projection("ended", "initiator", 2, CALL_ID, "Old caller"));
+
+    const result = await harness.model.startCall(TARGET_ID, "New target");
+
+    expect(result.status).toBe("acknowledged");
+    expect(harness.model.getSnapshot().incomingModal.visible).toBe(false);
+    expect(harness.model.getSnapshot().peerUsername).toBe("New target");
+  });
+
+  it("keeps a replayed old incoming call hidden while a new outgoing call is selected", () => {
+    const harness = createHarness();
+    harness.emitProjectionOnly(projection("presented", "initiator", 2, SECOND_CALL_ID, "New target"));
+    harness.incomingState.visible = true;
+    harness.incomingState.callId = CALL_ID;
+    harness.incomingState.projection = projection("presented", "recipient", 3, CALL_ID, "Old caller");
+    harness.incomingState.recoverableError = null;
+    harness.emitSync();
+
+    expect(harness.model.getSnapshot().incomingModal.visible).toBe(false);
   });
 
   it("queues accept and decline during delivered until presented, mutually exclusively", async () => {

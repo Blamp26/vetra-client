@@ -303,6 +303,14 @@ describe("DirectedCallIncomingCoordinator", () => {
     expect(harness.coordinator.getSnapshot().visible).toBe(false);
   });
 
+  it("clears stale incoming presentation when a different outgoing call is accepted", () => {
+    const harness = createHarness();
+    harness.emit(projection("presented", 2, "recipient"));
+    harness.emit({ ...projection("presented", 1, "initiator"), call_id: "66666666-6666-4666-8666-666666666666" });
+
+    expect(harness.coordinator.getSnapshot()).toMatchObject({ visible: false, callId: null, projection: null });
+  });
+
   it("cancels obsolete presentation work on disposal and does not emit terminal commands", () => {
     const harness = createHarness();
     harness.emit(projection("delivered", 2));

@@ -149,6 +149,12 @@ export class DirectedCallIncomingCoordinator {
       this.incomingCallId = projection.call_id;
     }
 
+    if (projection.participant_role === "initiator" &&
+        this.incomingProjection !== null &&
+        this.incomingProjection.call_id !== projection.call_id) {
+      this.clearIncoming();
+    }
+
     if (!isIncomingProjection(projection)) {
       this.clearObsoleteActions(projection);
       if (this.incomingCallId === projection.call_id) this.clearIncoming();

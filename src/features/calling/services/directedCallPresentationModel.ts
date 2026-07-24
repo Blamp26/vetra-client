@@ -123,6 +123,7 @@ const TERMINAL_STATES = new Set<CanonicalState>([
 ]);
 const CANCEL_STATES = new Set<CanonicalState>(["dispatching", "delivered", "presented"]);
 const HANGUP_STATES = new Set<CanonicalState>(["accepted", "connecting", "active"]);
+const INCOMING_PRESENTATION_STATES = new Set<CanonicalState>(["delivered", "presented"]);
 
 const TERMINAL_LABELS: Record<CanonicalState, string> = {
   unavailable: "Call unavailable",
@@ -281,12 +282,13 @@ export class DirectedCallPresentationModel {
         ? reply.state
         : null;
     const phase = this.mapPhase(projection, reply, role, terminalState);
+    const correlatedIncomingProjection = this.correlatedIncomingProjection(projection);
+    const correlatedIncomingCallId = correlatedIncomingProjection?.call_id ?? null;
     const fallback = this.fallbackPeer;
     const peerPublicId = projection?.peer.user_id ?? fallback?.id ?? null;
     const peerUsername = projection?.peer.username ?? fallback?.username ?? null;
     const recoverableError = this.currentError();
-    const modalVisible = this.incomingSnapshot.visible && Boolean(projection) &&
-      (projection?.state === "delivered" || projection?.state === "presented");
+    const modalVisible = correlatedIncomingProjection !== null;
 
     return {
       disposed: this.disposed,
@@ -318,12 +320,12 @@ export class DirectedCallPresentationModel {
       mediaControlsAvailable: false,
       incomingModal: {
         visible: modalVisible,
-        callerDisplayName: peerUsername ?? "Unknown caller",
+        callerDisplayName: correlatedIncomingProjection?.peer.username ?? "Unknown caller",
         isPending: this.visiblePendingAction() === "accepting" || this.visiblePendingAction() === "declining",
-        presentationKey: modalVisible ? callId : null,
-        onPresented: modalVisible && callId ? () => this.incoming.onModalPresented(callId) : undefined,
-        onAccept: () => this.accept(),
-        onDecline: () => this.decline(),
+        presentationKey: correlatedIncomingCallId,
+        onPresented: correlatedIncomingCallId ? () => this.incoming.onModalPresented(correlatedIncomingCallId) : undefined,
+        onAccept: () => this.incomingAction("accepting", correlatedIncomingCallId ?? undefined),
+        onDecline: () => this.incomingAction("declining", correlatedIncomingCallId ?? undefined),
       },
     };
   }
@@ -338,9 +340,9 @@ export class DirectedCallPresentationModel {
     if (this.disposed || !this.enabled || !isUuid(targetPublicUserId)) {
       return { status: "failed", error: { kind: "protocol_validation", message: "A public user ID is required." } };
     }
-    const existingProjection = this.currentProjection();
+    const existingProjection = this.controllerSnapshot.projection;
     if ((this.controllerSnapshot.preparing && !this.initiationResult) ||
-        (existingProjection && !TERMINAL_STATES.has(existingProjection.state))) return { status: "ignored" };
+        (existingProjection && isLiveProjection(existingProjection))) return { status: "ignored" };
 
     const generation = ++this.initiationGeneration;
     this.fallbackPeer = { id: targetPublicUserId.toLowerCase(), username: targetUsername };
@@ -348,6 +350,7 @@ export class DirectedCallPresentationModel {
     this.authoritativeProjection = null;
     this.scopedError = null;
     this.initiationResult = null;
+    this.incomingSnapshot = { ...this.incomingSnapshot, visible: false };
     this.emit();
     const operation = this.controller.initiate(targetPublicUserId);
     this.initiationPromise = operation;
@@ -430,12 +433,30 @@ export class DirectedCallPresentationModel {
 
   private currentProjection(): StateProjection | null {
     const controllerProjection = this.controllerSnapshot.projection;
+    if (controllerProjection && isLiveProjection(controllerProjection)) return controllerProjection;
+    if (this.controllerSnapshot.preparing || this.initiationResult) return null;
     const alternateProjections = [this.incomingSnapshot.projection, this.authoritativeProjection]
       .filter((projection): projection is StateProjection => projection !== null && isLiveProjection(projection))
       .sort(compareProjection);
-    if (controllerProjection && isLiveProjection(controllerProjection)) return controllerProjection;
     if (alternateProjections[0]) return alternateProjections[0];
     return controllerProjection ?? this.authoritativeProjection;
+  }
+
+  private correlatedIncomingProjection(projection: StateProjection | null): StateProjection | null {
+    const incomingProjection = this.incomingSnapshot.projection;
+    if (
+      this.controllerSnapshot.preparing ||
+      !this.incomingSnapshot.visible ||
+      !projection ||
+      !incomingProjection ||
+      projection.call_id !== this.incomingSnapshot.callId ||
+      incomingProjection.call_id !== projection.call_id ||
+      projection.participant_role !== "recipient" ||
+      incomingProjection.participant_role !== "recipient" ||
+      !INCOMING_PRESENTATION_STATES.has(projection.state) ||
+      !INCOMING_PRESENTATION_STATES.has(incomingProjection.state)
+    ) return null;
+    return incomingProjection;
   }
 
   private clearActionRecord(): void {
@@ -572,10 +593,11 @@ export class DirectedCallPresentationModel {
     this.emit();
   }
 
-  private async incomingAction(action: "accepting" | "declining"): Promise<PresentationActionResult> {
+  private async incomingAction(action: "accepting" | "declining", expectedCallId?: string): Promise<PresentationActionResult> {
     if (this.disposed || !this.enabled) return { status: "ignored" };
     const projection = this.currentProjection();
-    if (!projection || projection.participant_role !== "recipient" || !["delivered", "presented"].includes(projection.state)) {
+    if (!projection || (expectedCallId && projection.call_id !== expectedCallId) ||
+        projection.participant_role !== "recipient" || !["delivered", "presented"].includes(projection.state)) {
       return { status: "ignored" };
     }
     if (this.actionRecord && this.actionRecord.action !== action) return { status: "ignored" };
