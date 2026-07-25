@@ -512,7 +512,7 @@ export class DirectedCallWebRtcAdapter {
       }
       await this.screenShareTransceiver.sender.replaceTrack(track);
       if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) {
-        await this.screenShareTransceiver.sender.replaceTrack(null);
+        this.detachScreenShareTrack();
         stream.getTracks().forEach((candidate) => candidate.stop());
         return false;
       }
@@ -544,9 +544,16 @@ export class DirectedCallWebRtcAdapter {
         this.localScreenShareTrackEndedListener = null;
       }
     }
-    if (track && this.screenShareTransceiver?.sender) void this.screenShareTransceiver.sender.replaceTrack(null);
+    if (track) this.detachScreenShareTrack();
     stream?.getTracks().forEach((ownedTrack) => ownedTrack.stop());
     if (notify) this.localScreenShareEndedHandler?.();
+  }
+
+  private detachScreenShareTrack(): void {
+    const sender = this.screenShareTransceiver?.sender;
+    if (!sender) return;
+    // Detach is best-effort; synchronous local cleanup must not await or propagate its failure.
+    void sender.replaceTrack(null).catch(() => undefined);
   }
 
   private async ensureAudioPeer(epoch: number): Promise<void> {

@@ -95,6 +95,20 @@ async function flushMicrotasks() {
   await Promise.resolve();
 }
 
+function rejectingScreenDetach(harness: ReturnType<typeof createHarness>) {
+  let rejectDetach!: (reason?: unknown) => void;
+  const detach = new Promise<void>((_, reject) => { rejectDetach = reject; });
+  const catchObserver = vi.spyOn(detach, "catch");
+  harness.screenSender.replaceTrack.mockImplementation((nextTrack) => {
+    if (nextTrack) {
+      harness.screenSender.track = nextTrack;
+      return Promise.resolve();
+    }
+    return detach;
+  });
+  return { rejectDetach, catchObserver };
+}
+
 function createRemoteTrack(kind: "audio" | "video" = "audio") {
   const listeners = new Map<string, Set<EventListener>>();
   return {
@@ -829,6 +843,28 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.track.stop).not.toHaveBeenCalled();
   });
 
+  it("contains an explicit-stop screen detach rejection after deterministic cleanup", async () => {
+    const harness = createHarness();
+    const extraDisplayTrack = { stop: vi.fn() };
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack, extraDisplayTrack));
+    const onEnded = vi.fn();
+    harness.adapter.onLocalScreenShareEnded(onEnded);
+    await harness.adapter.startScreenShare();
+    const detach = rejectingScreenDetach(harness);
+
+    expect(() => harness.adapter.stopScreenShare()).not.toThrow();
+    expect(harness.adapter.getLocalScreenShareStream()).toBeNull();
+    expect(harness.screenTrack.stop).toHaveBeenCalledOnce();
+    expect(extraDisplayTrack.stop).toHaveBeenCalledOnce();
+    expect(harness.track.stop).not.toHaveBeenCalled();
+    detach.rejectDetach(new Error("detach failed"));
+    await flushMicrotasks();
+
+    expect(detach.catchObserver).toHaveBeenCalledOnce();
+    expect(onEnded).not.toHaveBeenCalled();
+    expect(() => harness.adapter.stopScreenShare()).not.toThrow();
+  });
+
   it("cleans browser-ended screen media and notifies exactly once", async () => {
     const harness = createHarness();
     const onEnded = vi.fn();
@@ -844,6 +880,26 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(onEnded).toHaveBeenCalledOnce();
     expect(harness.adapter.getLocalScreenShareStream()).toBeNull();
     expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
+  it("contains a browser-ended screen detach rejection and preserves exactly-once notification", async () => {
+    const harness = createHarness();
+    const onEnded = vi.fn();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    harness.adapter.onLocalScreenShareEnded(onEnded);
+    await harness.adapter.startScreenShare();
+    const detach = rejectingScreenDetach(harness);
+
+    harness.screenTrack.emit("ended");
+    expect(harness.adapter.getLocalScreenShareStream()).toBeNull();
+    expect(harness.screenTrack.stop).toHaveBeenCalledOnce();
+    expect(harness.track.stop).not.toHaveBeenCalled();
+    detach.rejectDetach(new Error("detach failed"));
+    await flushMicrotasks();
+    harness.screenTrack.emit("ended");
+
+    expect(detach.catchObserver).toHaveBeenCalledOnce();
+    expect(onEnded).toHaveBeenCalledOnce();
   });
 
   it("does not notify when explicit stop causes an ended event", async () => {
@@ -959,5 +1015,53 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(null);
     expect(harness.track.stop).toHaveBeenCalledOnce();
     expect(harness.pc.close).toHaveBeenCalledOnce();
+  });
+
+  it("contains a disposal screen detach rejection while completing full cleanup", async () => {
+    const harness = createHarness();
+    const onEnded = vi.fn();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    harness.adapter.onLocalScreenShareEnded(onEnded);
+    await harness.adapter.startScreenShare();
+    const detach = rejectingScreenDetach(harness);
+
+    expect(() => harness.adapter.dispose()).not.toThrow();
+    expect(harness.adapter.getLocalScreenShareStream()).toBeNull();
+    expect(harness.screenTrack.stop).toHaveBeenCalledOnce();
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+    expect(harness.pc.close).toHaveBeenCalledOnce();
+    detach.rejectDetach(new Error("detach failed"));
+    await flushMicrotasks();
+    harness.adapter.dispose();
+
+    expect(detach.catchObserver).toHaveBeenCalledOnce();
+    expect(onEnded).not.toHaveBeenCalled();
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+    expect(harness.pc.close).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a restarted screen share isolated from a late rejected detach", async () => {
+    const harness = createHarness();
+    const trackA = harness.screenTrack;
+    const trackB = { ...harness.screenTrack, stop: vi.fn() };
+    const streamB = displayStream(trackB);
+    const onEnded = vi.fn();
+    harness.getDisplayMedia.mockResolvedValueOnce(displayStream(trackA)).mockResolvedValueOnce(streamB);
+    harness.adapter.onLocalScreenShareEnded(onEnded);
+
+    await harness.adapter.startScreenShare();
+    const detach = rejectingScreenDetach(harness);
+    harness.adapter.stopScreenShare();
+    await expect(harness.adapter.startScreenShare()).resolves.toBe(true);
+    detach.rejectDetach(new Error("late detach failed"));
+    await flushMicrotasks();
+
+    expect(detach.catchObserver).toHaveBeenCalledOnce();
+    expect(harness.adapter.getLocalScreenShareStream()).toBe(streamB);
+    expect(harness.screenSender.track).toBe(trackB);
+    expect(trackA.stop).toHaveBeenCalledOnce();
+    expect(trackB.stop).not.toHaveBeenCalled();
+    expect(onEnded).not.toHaveBeenCalled();
+    expect(harness.pc.addTransceiver).toHaveBeenCalledOnce();
   });
 });
