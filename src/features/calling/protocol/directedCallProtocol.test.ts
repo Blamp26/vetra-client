@@ -12,11 +12,16 @@ import {
   buildJoin,
   buildSetupFailed,
   buildSignal,
+  buildIceRestartRequest,
+  buildIceRestartSdp,
+  classifyIceRestartTransaction,
   buildSync,
   classifyState,
   decodeCommand,
   decodeInitiate,
   decodeSignal,
+  decodeIceRestartRequest,
+  decodeIceRestartSdp,
   decodeState,
   decodeSetupFailed,
   decodeSync,
@@ -115,6 +120,36 @@ describe("directed call V1 protocol", () => {
     expect(buildSignal(call, command, device, "ice_candidate", { candidate: "candidate:1", sdp_mid: null, sdp_mline_index: 0, username_fragment: null, renegotiation_id: id }).payload).toHaveProperty("renegotiation_id", id);
     expect(() => buildSignal(call, command, device, "renegotiate_request", { renegotiation_id: id, screen_share: true, sdp: "v=0" } as never)).toThrow();
     expect(() => buildSignal(call, command, device, "renegotiate_offer", { renegotiation_id: id, screen_share: true } as never)).toThrow();
+  });
+
+  it("validates active ICE restart relays and transaction identity", () => {
+    const restart = "77777777-7777-4777-8777-777777777777";
+    const offerSdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=setup:actpass";
+    const answerSdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=setup:active";
+    const request = buildIceRestartRequest(call, command, device);
+    expect(decodeIceRestartRequest({ protocol_version: 1, call_id: call, signal_id: command })).toMatchObject({ kind: "request", call_id: call });
+    expect(request.device_id).toBe(device);
+
+    const offer = buildIceRestartSdp("offer", call, command, device, restart, offerSdp);
+    const answer = buildIceRestartSdp("answer", call, "88888888-8888-4888-8888-888888888888", device, restart, answerSdp);
+    expect(decodeIceRestartSdp("offer", { ...offer, device_id: undefined })).toBeNull();
+    const { device_id: _offerDevice, ...offerRelay } = offer;
+    expect(decodeIceRestartSdp("offer", offerRelay)).toMatchObject({ kind: "offer", ice_restart_id: restart });
+    const { device_id: _answerDevice, ...answerRelay } = answer;
+    expect(decodeIceRestartSdp("answer", answerRelay)).toMatchObject({ kind: "answer", ice_restart_id: restart });
+    expect(() => buildIceRestartSdp("offer", call, command, device, "not-a-uuid", offerSdp)).toThrow();
+    expect(decodeIceRestartSdp("answer", { ...answerRelay, sdp: offerSdp })).toBeNull();
+    expect(classifyIceRestartTransaction(null, restart)).toBe("accept");
+    expect(classifyIceRestartTransaction(restart, restart)).toBe("duplicate");
+    expect(classifyIceRestartTransaction(restart, command)).toBe("supersedes");
+    expect(classifyIceRestartTransaction(restart, command, [command])).toBe("stale");
+  });
+
+  it("keeps restart ICE tags mutually exclusive with screen-share tags", () => {
+    const payload = { candidate: "candidate:1", sdp_mid: null, sdp_mline_index: 0, username_fragment: null, ice_restart_id: command };
+    expect(buildSignal(call, command, device, "ice_candidate", payload).payload).toMatchObject({ ice_restart_id: command });
+    expect(() => buildSignal(call, command, device, "ice_candidate", { ...payload, renegotiation_id: command })).toThrow();
+    expect(buildSignal(call, command, device, "ice_candidate", { candidate: "candidate:2", sdp_mid: null, sdp_mline_index: 0, username_fragment: null }).payload).not.toHaveProperty("ice_restart_id");
   });
 
   it("keeps the wire state enum free of local and viewer-projection states", () => {

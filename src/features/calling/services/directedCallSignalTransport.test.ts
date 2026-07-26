@@ -5,19 +5,31 @@ import type { DirectedCallSession } from "./directedCallSession";
 const callId = "33333333-3333-4333-8333-333333333333";
 const otherCallId = "44444444-4444-4444-8444-444444444444";
 const signalId = "99999999-9999-4999-8999-999999999999";
+const restartId = "77777777-7777-4777-8777-777777777777";
 
 function createSession() {
   const listeners = new Set<(signal: any) => void>();
+  const restartListeners = new Set<(signal: any) => void>();
   return {
     sendSignal: vi.fn().mockResolvedValue({ ok: true }),
+    sendIceRestartRequest: vi.fn().mockResolvedValue({ ok: true }),
+    sendIceRestartOffer: vi.fn().mockResolvedValue({ ok: true }),
+    sendIceRestartAnswer: vi.fn().mockResolvedValue({ ok: true }),
     subscribeToSignals: vi.fn((listener: (signal: any) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     }),
+    subscribeToIceRestartSignals: vi.fn((listener: (signal: any) => void) => {
+      restartListeners.add(listener);
+      return () => restartListeners.delete(listener);
+    }),
     emit(signal: unknown) {
       listeners.forEach((listener) => listener(signal));
     },
-  } as unknown as DirectedCallSession & { emit: (signal: unknown) => void };
+    emitRestart(signal: unknown) {
+      restartListeners.forEach((listener) => listener(signal));
+    },
+  } as unknown as DirectedCallSession & { emit: (signal: unknown) => void; emitRestart: (signal: unknown) => void };
 }
 
 describe("DirectedCallSignalTransport", () => {
@@ -45,6 +57,25 @@ describe("DirectedCallSignalTransport", () => {
 
     expect(received).toHaveBeenCalledTimes(1);
     expect(received).toHaveBeenCalledWith(own);
+  });
+
+  it("sends and receives typed active ICE restart protocol events without WebRTC execution", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { callId, generation: "g1" });
+    const received = vi.fn();
+    transport.subscribeToIceRestart(received);
+
+    await transport.sendIceRestartRequest(signalId);
+    await transport.sendIceRestartOffer(signalId, restartId, "v=0\r\nm=audio\r\na=setup:actpass");
+    await transport.sendIceRestartAnswer(signalId, restartId, "v=0\r\nm=audio\r\na=setup:active");
+    expect(session.sendIceRestartRequest).toHaveBeenCalledWith({ call_id: callId, signal_id: signalId });
+    expect(session.sendIceRestartOffer).toHaveBeenCalledWith({ call_id: callId, signal_id: signalId, ice_restart_id: restartId, sdp: "v=0\r\nm=audio\r\na=setup:actpass" });
+    expect(session.sendIceRestartAnswer).toHaveBeenCalledWith({ call_id: callId, signal_id: signalId, ice_restart_id: restartId, sdp: "v=0\r\nm=audio\r\na=setup:active" });
+
+    session.emitRestart({ kind: "request", protocol_version: 1, call_id: callId, signal_id: signalId });
+    session.emitRestart({ kind: "offer", protocol_version: 1, call_id: callId, signal_id: signalId, ice_restart_id: restartId, sdp: "v=0" });
+    session.emitRestart({ kind: "request", protocol_version: 1, call_id: otherCallId, signal_id: signalId });
+    expect(received).toHaveBeenCalledTimes(2);
   });
 
   it("fences stale generations and never exposes signal payloads in errors", async () => {

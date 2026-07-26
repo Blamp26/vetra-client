@@ -15,6 +15,9 @@ export const DIRECTED_CALL_EVENTS = {
   hangup: "call:hangup",
   sync: "call:sync",
   signal: "call:signal",
+  iceRestartRequest: "call:ice_restart_request",
+  iceRestartOffer: "call:ice_restart_offer",
+  iceRestartAnswer: "call:ice_restart_answer",
   state: "call:state",
 } as const;
 
@@ -59,10 +62,15 @@ export interface SyncResponse { protocol_version: 1; status: "ok"; request_id: U
 export interface RenegotiationRequestPayload { renegotiation_id: UUID; screen_share: boolean }
 export interface RenegotiationSdpPayload extends RenegotiationRequestPayload { sdp: string }
 export interface InitialSdpPayload { sdp: string }
-export interface IcePayload { candidate: string; sdp_mid: string | null; sdp_mline_index: number | null; username_fragment: string | null; renegotiation_id?: UUID }
+export interface IcePayload { candidate: string; sdp_mid: string | null; sdp_mline_index: number | null; username_fragment: string | null; renegotiation_id?: UUID; ice_restart_id?: UUID }
 export type SignalPayload = InitialSdpPayload | RenegotiationRequestPayload | RenegotiationSdpPayload | IcePayload;
 export interface SignalEnvelope { protocol_version: 1; call_id: UUID; signal_id: UUID; kind: SignalKind; payload: SignalPayload | IcePayload }
 export interface OutboundSignalEnvelope extends SignalEnvelope { device_id: UUID }
+export interface IceRestartRequestPayload { protocol_version: 1; call_id: UUID; signal_id: UUID; device_id: UUID }
+export interface IceRestartSdpPayload extends IceRestartRequestPayload { ice_restart_id: UUID; sdp: string }
+export interface IceRestartRequestRelay { kind: "request"; protocol_version: 1; call_id: UUID; signal_id: UUID }
+export interface IceRestartSdpRelay { kind: "offer" | "answer"; protocol_version: 1; call_id: UUID; signal_id: UUID; ice_restart_id: UUID; sdp: string }
+export type IceRestartRelay = IceRestartRequestRelay | IceRestartSdpRelay;
 
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -96,6 +104,36 @@ export function buildSync(requestId: UUID, deviceId: UUID, knownCalls: KnownCall
 export function buildSignal(callId: UUID, signalId: UUID, deviceId: UUID, kind: SignalKind, payload: SignalPayload | IcePayload): OutboundSignalEnvelope {
   if (![callId, signalId, deviceId].every(isUuid) || !SIGNAL_KINDS.includes(kind) || !validSignalPayload(kind, payload)) throw new Error("invalid directed-call signal");
   return { protocol_version: 1, call_id: canonicalUuid(callId), signal_id: canonicalUuid(signalId), device_id: canonicalUuid(deviceId), kind, payload };
+}
+
+export function buildIceRestartRequest(callId: UUID, signalId: UUID, deviceId: UUID): IceRestartRequestPayload {
+  if (![callId, signalId, deviceId].every(isUuid)) throw new Error("invalid directed-call ICE restart request");
+  return { protocol_version: 1, call_id: canonicalUuid(callId), signal_id: canonicalUuid(signalId), device_id: canonicalUuid(deviceId) };
+}
+
+export function buildIceRestartSdp(event: "offer" | "answer", callId: UUID, signalId: UUID, deviceId: UUID, iceRestartId: UUID, sdp: string): IceRestartSdpPayload {
+  if (![callId, signalId, deviceId, iceRestartId].every(isUuid) || !validRestartSdp(event, sdp)) throw new Error("invalid directed-call ICE restart SDP");
+  return { protocol_version: 1, call_id: canonicalUuid(callId), signal_id: canonicalUuid(signalId), device_id: canonicalUuid(deviceId), ice_restart_id: canonicalUuid(iceRestartId), sdp };
+}
+
+export function decodeIceRestartRequest(value: unknown): IceRestartRequestRelay | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["protocol_version", "call_id", "signal_id"]) || value.protocol_version !== 1 || !isUuid(value.call_id) || !isUuid(value.signal_id)) return null;
+  return { kind: "request", protocol_version: 1, call_id: canonicalUuid(value.call_id), signal_id: canonicalUuid(value.signal_id) };
+}
+
+export function decodeIceRestartSdp(event: "offer" | "answer", value: unknown): IceRestartSdpRelay | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["protocol_version", "call_id", "signal_id", "ice_restart_id", "sdp"]) || value.protocol_version !== 1 || !isUuid(value.call_id) || !isUuid(value.signal_id) || !isUuid(value.ice_restart_id) || !validRestartSdp(event, value.sdp)) return null;
+  return { kind: event, protocol_version: 1, call_id: canonicalUuid(value.call_id), signal_id: canonicalUuid(value.signal_id), ice_restart_id: canonicalUuid(value.ice_restart_id), sdp: value.sdp };
+}
+
+export type IceRestartTransactionClassification = "accept" | "duplicate" | "stale" | "supersedes";
+
+export function classifyIceRestartTransaction(currentId: UUID | null, incomingId: unknown, completedIds: readonly UUID[] = []): IceRestartTransactionClassification {
+  if (!isUuid(incomingId)) return "stale";
+  const canonicalIncoming = canonicalUuid(incomingId);
+  if (completedIds.some((id) => isUuid(id) && canonicalUuid(id) === canonicalIncoming)) return "stale";
+  if (currentId && isUuid(currentId) && canonicalUuid(currentId) === canonicalIncoming) return "duplicate";
+  return currentId ? "supersedes" : "accept";
 }
 
 export function decodeInitiate(value: unknown): InitiatePayload | null {
@@ -151,10 +189,16 @@ function hasOnlyKeys(value: Record<string, any>, keys: string[]): boolean { retu
 function validSignalPayload(kind: SignalKind, value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (kind === "ice_candidate") {
-    const keys = value.renegotiation_id === undefined ? ["candidate", "sdp_mid", "sdp_mline_index", "username_fragment"] : ["candidate", "sdp_mid", "sdp_mline_index", "username_fragment", "renegotiation_id"];
-    return hasOnlyKeys(value, keys) && typeof value.candidate === "string" && value.candidate.length > 0 && value.candidate.length <= 8192 && (value.sdp_mid === null || (typeof value.sdp_mid === "string" && value.sdp_mid.length <= 256)) && (value.sdp_mline_index === null || isSafeInteger(value.sdp_mline_index)) && (value.username_fragment === null || (typeof value.username_fragment === "string" && value.username_fragment.length <= 256)) && (value.renegotiation_id === undefined || isUuid(value.renegotiation_id));
+    const keys = ["candidate", "sdp_mid", "sdp_mline_index", "username_fragment"];
+    if (value.renegotiation_id !== undefined) keys.push("renegotiation_id");
+    if (value.ice_restart_id !== undefined) keys.push("ice_restart_id");
+    return hasOnlyKeys(value, keys) && typeof value.candidate === "string" && value.candidate.length > 0 && value.candidate.length <= 8192 && (value.sdp_mid === null || (typeof value.sdp_mid === "string" && value.sdp_mid.length <= 256)) && (value.sdp_mline_index === null || isSafeInteger(value.sdp_mline_index)) && (value.username_fragment === null || (typeof value.username_fragment === "string" && value.username_fragment.length <= 256)) && (value.renegotiation_id === undefined || isUuid(value.renegotiation_id)) && (value.ice_restart_id === undefined || isUuid(value.ice_restart_id)) && !(value.renegotiation_id !== undefined && value.ice_restart_id !== undefined);
   }
   if (kind === "renegotiate_request") return hasOnlyKeys(value, ["renegotiation_id", "screen_share"]) && isUuid(value.renegotiation_id) && typeof value.screen_share === "boolean";
   if (kind === "renegotiate_offer" || kind === "renegotiate_answer") return hasOnlyKeys(value, ["renegotiation_id", "screen_share", "sdp"]) && isUuid(value.renegotiation_id) && typeof value.screen_share === "boolean" && typeof value.sdp === "string" && value.sdp.length > 0 && value.sdp.length <= 262144;
   return hasOnlyKeys(value, ["sdp"]) && typeof value.sdp === "string" && value.sdp.length > 0 && value.sdp.length <= 262144;
+}
+function validRestartSdp(event: "offer" | "answer", value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 262144 || !value.startsWith("v=0") || !value.includes("\nm=")) return false;
+  return event === "offer" ? value.includes("a=setup:actpass") : value.includes("a=setup:active") || value.includes("a=setup:passive");
 }

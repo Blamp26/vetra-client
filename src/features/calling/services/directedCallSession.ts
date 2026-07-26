@@ -5,7 +5,11 @@ import {
   buildJoin,
   buildSync,
   buildSignal,
+  buildIceRestartRequest,
+  buildIceRestartSdp,
   decodeSignal,
+  decodeIceRestartRequest,
+  decodeIceRestartSdp,
   decodeState,
   isUuid,
   type SignalEnvelope,
@@ -13,6 +17,9 @@ import {
   type SignalKind,
   type SignalPayload,
   type StateProjection,
+  type IceRestartRelay,
+  type IceRestartRequestPayload,
+  type IceRestartSdpPayload,
 } from "../protocol/directedCallProtocol";
 import { getOrCreateDirectedCallDeviceId } from "./directedCallDevice";
 import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
@@ -22,6 +29,7 @@ type ProjectionListener = (
   classification: "accepted" | "duplicate",
 ) => void;
 type SignalListener = (signal: SignalEnvelope) => void;
+type IceRestartListener = (event: IceRestartRelay) => void;
 type SyncListener = () => void;
 
 export type StateApplyResult =
@@ -247,6 +255,7 @@ export class DirectedCallSession {
   private retryAttempt = 0;
   private readonly projectionListeners = new Set<ProjectionListener>();
   private readonly signalListeners = new Set<SignalListener>();
+  private readonly iceRestartListeners = new Set<IceRestartListener>();
   private readonly syncListeners = new Set<SyncListener>();
   private readonly channelRefs: Array<{ event: string; ref: number }> = [];
   private socketOpenRef: string | null = null;
@@ -352,6 +361,30 @@ export class DirectedCallSession {
           this.signalListeners.forEach((listener) => listener(signal));
         }),
       },
+      {
+        event: DIRECTED_CALL_EVENTS.iceRestartRequest,
+        ref: channel.on(DIRECTED_CALL_EVENTS.iceRestartRequest, (payload) => {
+          if (!isCurrent()) return;
+          const event = decodeIceRestartRequest(payload);
+          if (event) this.iceRestartListeners.forEach((listener) => listener(event));
+        }),
+      },
+      {
+        event: DIRECTED_CALL_EVENTS.iceRestartOffer,
+        ref: channel.on(DIRECTED_CALL_EVENTS.iceRestartOffer, (payload) => {
+          if (!isCurrent()) return;
+          const event = decodeIceRestartSdp("offer", payload);
+          if (event) this.iceRestartListeners.forEach((listener) => listener(event));
+        }),
+      },
+      {
+        event: DIRECTED_CALL_EVENTS.iceRestartAnswer,
+        ref: channel.on(DIRECTED_CALL_EVENTS.iceRestartAnswer, (payload) => {
+          if (!isCurrent()) return;
+          const event = decodeIceRestartSdp("answer", payload);
+          if (event) this.iceRestartListeners.forEach((listener) => listener(event));
+        }),
+      },
     );
   }
 
@@ -427,6 +460,11 @@ export class DirectedCallSession {
     return () => this.signalListeners.delete(listener);
   }
 
+  subscribeToIceRestartSignals(listener: IceRestartListener): () => void {
+    this.iceRestartListeners.add(listener);
+    return () => this.iceRestartListeners.delete(listener);
+  }
+
   sendSignal(
     callId: string,
     signalId: string,
@@ -437,6 +475,18 @@ export class DirectedCallSession {
       DIRECTED_CALL_EVENTS.signal,
       buildSignal(callId, signalId, this.deviceId, kind, payload),
     );
+  }
+
+  sendIceRestartRequest(payload: Omit<IceRestartRequestPayload, "device_id" | "protocol_version">): Promise<unknown> {
+    return this.pushCommand(DIRECTED_CALL_EVENTS.iceRestartRequest, buildIceRestartRequest(payload.call_id, payload.signal_id, this.deviceId));
+  }
+
+  sendIceRestartOffer(payload: Omit<IceRestartSdpPayload, "device_id" | "protocol_version">): Promise<unknown> {
+    return this.pushCommand(DIRECTED_CALL_EVENTS.iceRestartOffer, buildIceRestartSdp("offer", payload.call_id, payload.signal_id, this.deviceId, payload.ice_restart_id, payload.sdp));
+  }
+
+  sendIceRestartAnswer(payload: Omit<IceRestartSdpPayload, "device_id" | "protocol_version">): Promise<unknown> {
+    return this.pushCommand(DIRECTED_CALL_EVENTS.iceRestartAnswer, buildIceRestartSdp("answer", payload.call_id, payload.signal_id, this.deviceId, payload.ice_restart_id, payload.sdp));
   }
 
   subscribeToSync(listener: SyncListener): () => void {
@@ -540,6 +590,7 @@ export class DirectedCallSession {
     this.channel = null;
     this.projectionListeners.clear();
     this.signalListeners.clear();
+    this.iceRestartListeners.clear();
     this.syncListeners.clear();
     this.projections.clear();
   }

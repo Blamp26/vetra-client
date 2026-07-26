@@ -306,6 +306,29 @@ describe("DirectedCallSession", () => {
     expect(session.getProjection(callId)).toBeNull();
   });
 
+  it("parses and sends typed active ICE restart relay events", async () => {
+    const channel = createMockChannel();
+    const socket = createMockSocket(channel);
+    const session = new DirectedCallSession({ socket: socket as unknown as Socket, publicUserRef: peerId, deviceId, enabled: true });
+    const restartEvents: string[] = [];
+    session.subscribeToIceRestartSignals((event) => restartEvents.push(event.kind));
+    await session.start();
+
+    channel.emit("call:ice_restart_request", { protocol_version: 1, call_id: callId, signal_id: signalId });
+    channel.emit("call:ice_restart_offer", { protocol_version: 1, call_id: callId, signal_id: signalId, ice_restart_id: signalId, sdp: "v=0\r\nm=audio\r\na=setup:actpass" });
+    channel.emit("call:ice_restart_answer", { protocol_version: 1, call_id: callId, signal_id: signalId, ice_restart_id: signalId, sdp: "v=0\r\nm=audio\r\na=setup:active" });
+    expect(restartEvents).toEqual(["request", "offer", "answer"]);
+
+    await session.sendIceRestartRequest({ call_id: callId, signal_id: signalId });
+    await session.sendIceRestartOffer({ call_id: callId, signal_id: signalId, ice_restart_id: signalId, sdp: "v=0\r\nm=audio\r\na=setup:actpass" });
+    await session.sendIceRestartAnswer({ call_id: callId, signal_id: signalId, ice_restart_id: signalId, sdp: "v=0\r\nm=audio\r\na=setup:active" });
+    expect(channel.pushes.slice(-3).map(({ event }) => event)).toEqual([
+      "call:ice_restart_request",
+      "call:ice_restart_offer",
+      "call:ice_restart_answer",
+    ]);
+  });
+
   it("disposes handlers, signals, and account-scoped projections", async () => {
     const channel = createMockChannel();
     const socket = createMockSocket(channel);

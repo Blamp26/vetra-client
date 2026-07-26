@@ -203,3 +203,21 @@ timestamps, and nullability match the server bundle. Strict server validation
 rejects unknown keys; client inbound decoders may ignore unknown future fields
 and retain only known fields, including stripping the extra state `device_id`
 and signal `state_version` fields.
+
+The active-call ICE restart protocol foundation is signaling-only. The
+original answerer may send `call:ice_restart_request`; only the original
+offerer may send `call:ice_restart_offer`; and only the original answerer may
+send `call:ice_restart_answer`. Each restart offer owns a fresh UUID
+`ice_restart_id`, repeated on its answer and tagged ICE candidates. Restart
+candidates use the existing `call:signal` ICE envelope and must not combine
+`ice_restart_id` with screen-share `renegotiation_id`.
+
+Restart relay events are active-only and carry no device identity. They keep
+the same `call_id`, do not create attempts, do not change canonical state,
+`state_version`, `active_at`, history duration, or reservations, and remain
+independent of state-version deduplication. Matching transaction identity is
+required for answers and candidates; completed, abandoned, and superseded IDs
+are stale, and a newer offer supersedes an incomplete older transaction.
+UUID lexical order has no protocol meaning. RTCPeerConnection execution,
+automatic triggers, retries, reconnect presentation, and screen-share recovery
+are deferred to the next Stage 6 cut.
