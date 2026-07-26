@@ -370,10 +370,39 @@ describe("MessageList bubble layout", () => {
 
     expect(screen.getByText("ordinary message")).toBeInTheDocument();
     const row = screen.getByTestId("directed-call-history-row");
-    expect(row).toHaveAccessibleName("Completed call, 0:00");
+    const visibleTime = new Date("2026-07-01T10:02:00Z").toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    expect(row).toHaveAccessibleName(`Completed call, 0:00, ${visibleTime}`);
+    expect(row.querySelector("time")).toHaveTextContent(visibleTime);
+    expect(row.querySelector("time")).toHaveAttribute("dateTime", "2026-07-01T10:02:00Z");
     expect(row.querySelector("button")).not.toBeInTheDocument();
     expect(row.closest("button")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("message-date-group")).toHaveLength(1);
+  });
+
+  it("uses created_at for the visible call time when ended_at is absent", () => {
+    renderMessageList([makeMessage({ inserted_at: "2026-07-02T10:00:00Z" })], {
+      directedCallHistoryEntries: [{
+        call_id: "00000000-0000-0000-0000-000000000009",
+        status: "missed",
+        peer: { user_id: "peer-1", username: "peer" },
+        created_at: "2026-07-02T10:03:00Z",
+        ended_at: null,
+        duration_ms: null,
+      }],
+    });
+    const visibleTime = new Date("2026-07-02T10:03:00Z").toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const row = screen.getByTestId("directed-call-history-row");
+    expect(row.querySelector("time")).toHaveTextContent(visibleTime);
+    expect(row.querySelector("time")).toHaveAttribute("dateTime", "2026-07-02T10:03:00Z");
+    expect(row.textContent).not.toContain("2026-07-02T10:03:00Z");
   });
 
   it("does not render call history in room timelines", () => {

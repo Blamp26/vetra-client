@@ -1063,7 +1063,11 @@ export function MessageList({
                 if (entry.kind === "call") {
                   return (
                     <div key={entry.call.call_id} className="mt-2.5" data-testid="directed-call-history-spacing">
-                      <DirectedCallHistoryRow entry={entry.call} />
+                      <DirectedCallHistoryRow
+                        entry={entry.call}
+                        timestamp={entry.timestamp}
+                        formatTime={formatTime}
+                      />
                     </div>
                   );
                 }

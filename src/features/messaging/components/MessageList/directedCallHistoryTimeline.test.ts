@@ -53,8 +53,12 @@ describe("directed call history presentation", () => {
 
   it("formats duration deterministically without rounding and keeps zero visible", () => {
     expect(formatDirectedCallDuration(0)).toBe("0:00");
-    expect(formatDirectedCallDuration(61_999)).toBe("1:01");
-    expect(formatDirectedCallDuration(3_600_000 + 2 * 60_000 + 4_999)).toBe("1:02:04");
+    expect(formatDirectedCallDuration(999)).toBe("0:00");
+    expect(formatDirectedCallDuration(1_000)).toBe("0:01");
+    expect(formatDirectedCallDuration(59_999)).toBe("0:59");
+    expect(formatDirectedCallDuration(60_000)).toBe("1:00");
+    expect(formatDirectedCallDuration(3_599_999)).toBe("59:59");
+    expect(formatDirectedCallDuration(3_600_000)).toBe("1:00:00");
     expect(getDirectedCallHistoryDuration(call("completed", undefined, { duration_ms: null }))).toBeNull();
     expect(getDirectedCallHistoryDuration(call("completed", undefined, { duration_ms: 0 }))).toBe("0:00");
     for (const status of statuses.filter((candidate) => candidate !== "completed")) {
