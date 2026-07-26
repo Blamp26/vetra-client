@@ -1175,6 +1175,8 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(request?.[3]).toEqual({ renegotiation_id: id, screen_share: true });
     expect(offer?.[3]).toEqual({ renegotiation_id: id, screen_share: true, sdp: "screen-offer" });
     expect(adapter.getLocalScreenShareStream?.()).not.toBeNull();
+    expect(coordinator.getSnapshot().isLocalScreenShareActive).toBe(true);
+    expect(coordinator.getSnapshot().localScreenShareStream).not.toBeNull();
 
     session.emitSignal(iceCandidate(id, "candidate:screen-offerer"));
     await vi.waitFor(() => expect(adapter.addRemoteIceCandidate).toHaveBeenCalledWith(expect.objectContaining({ candidate: "candidate:screen-offerer" })));
@@ -1339,6 +1341,8 @@ describe("DirectedCallMediaCoordinator", () => {
     await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(2));
     await expect(coordinator.stopScreenShare()).resolves.toBe(true);
     expect(session.sendSignal).toHaveBeenCalledTimes(2);
+    expect(coordinator.getSnapshot().isLocalScreenShareActive).toBe(false);
+    expect(coordinator.getSnapshot().localScreenShareStream).toBeNull();
     coordinator.dispose();
   });
 

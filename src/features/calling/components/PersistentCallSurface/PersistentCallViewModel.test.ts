@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { persistentActiveCallDockModel, persistentCallElapsedSeconds, persistentCallSidebarModel } from "./PersistentCallViewModel";
 
 const basePresentation = {
@@ -51,6 +51,35 @@ describe("persistent call presentation adapter", () => {
 
     expect(model).toMatchObject({ remoteUserId: basePresentation.peerPublicId, remoteUsername: "Morf", seconds: 12, callIssue: { message: "Connection issue" } });
     expect(model.diagnostics.connectionState).toBe("connected");
+  });
+
+  it("carries persistent screen capability, state, streams, and coordinator actions", async () => {
+    const startScreenShare = vi.fn().mockResolvedValue(true);
+    const stopScreenShare = vi.fn().mockResolvedValue(true);
+    const localScreenShareStream = {} as any;
+    const remoteScreenShareStream = {} as any;
+    const model = persistentActiveCallDockModel({
+      ...call({ ...basePresentation, phase: "active" }),
+      screenShareAvailable: true,
+      isScreenSharing: true,
+      localScreenShareStream,
+      remoteScreenShareAvailable: true,
+      remoteScreenShareStream,
+      startScreenShare,
+      stopScreenShare,
+    } as any, { id: 1, public_id: "me", display_name: "Me" } as any, null, 0);
+
+    expect(model).toMatchObject({
+      screenShareAvailable: true,
+      isScreenSharing: true,
+      localScreenShareStream,
+      remoteScreenShareAvailable: true,
+      remoteScreenShareStream,
+    });
+    await model.startScreenShare();
+    await model.stopScreenShare();
+    expect(startScreenShare).toHaveBeenCalledTimes(1);
+    expect(stopScreenShare).toHaveBeenCalledTimes(1);
   });
 
   it("stops elapsed time at termination and resets without timestamps", () => {

@@ -3,6 +3,7 @@ import type {
   DirectedCallMediaCoordinator,
   DirectedCallMediaCoordinatorSnapshot,
 } from "../services/directedCallMediaCoordinator";
+import type { DirectedCallMediaStream } from "../services/directedCallWebRtcAdapter";
 import type { DirectedCallPresentationModel, PersistentPresentationSnapshot, PresentationActionResult } from "../services/directedCallPresentationModel";
 import type { CallAuthorityBackend, CallAuthorityState, CallAuthorityTraceEvent } from "../services/callAuthorityOwnership";
 
@@ -42,6 +43,13 @@ export interface PersistentCallRuntimeValue {
   isMuted: boolean;
   canToggleMute: boolean;
   toggleMute: () => boolean;
+  screenShareAvailable: boolean;
+  isScreenSharing: boolean;
+  localScreenShareStream: DirectedCallMediaStream | null;
+  remoteScreenShareAvailable: boolean;
+  remoteScreenShareStream: DirectedCallMediaStream | null;
+  startScreenShare: () => Promise<boolean>;
+  stopScreenShare: () => Promise<boolean>;
 }
 
 const PersistentCallContext = createContext<PersistentCallRuntimeValue | null>(null);
@@ -73,6 +81,15 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
     isMuted: media.isMuted,
     canToggleMute: media.canToggleMute,
     toggleMute: () => runtime.media.toggleMute(),
+    screenShareAvailable: media.projection?.state === "active"
+      && typeof navigator !== "undefined"
+      && typeof navigator.mediaDevices?.getDisplayMedia === "function",
+    isScreenSharing: media.isLocalScreenShareActive,
+    localScreenShareStream: media.localScreenShareStream,
+    remoteScreenShareAvailable: media.projection?.state === "active" && Boolean(media.remoteScreenShareStream),
+    remoteScreenShareStream: media.remoteScreenShareStream,
+    startScreenShare: () => runtime.media.startScreenShare(),
+    stopScreenShare: () => runtime.media.stopScreenShare(),
   }), [media, presentation, runtime]);
 
   return <PersistentCallContext.Provider value={value}>{children}</PersistentCallContext.Provider>;

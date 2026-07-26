@@ -3,6 +3,7 @@ import type { CallDiagnostics, CallIssue, CallStatus } from "../../hooks/useCall
 import type { User } from "@/shared/types";
 import type { PersistentCallRuntimeValue } from "../../context/PersistentCallContext";
 import type { PersistentPresentationSnapshot } from "../../services/directedCallPresentationModel";
+import type { DirectedCallMediaStream } from "../../services/directedCallWebRtcAdapter";
 
 export type PersistentCallDirection = "incoming" | "outgoing" | null;
 
@@ -27,6 +28,13 @@ export interface PersistentActiveCallDockModel {
   isMuted: boolean;
   callIssue: CallIssue | null;
   diagnostics: CallDiagnostics;
+  screenShareAvailable: boolean;
+  isScreenSharing: boolean;
+  localScreenShareStream: DirectedCallMediaStream | null;
+  remoteScreenShareAvailable: boolean;
+  remoteScreenShareStream: DirectedCallMediaStream | null;
+  startScreenShare: () => Promise<boolean>;
+  stopScreenShare: () => Promise<boolean>;
 }
 
 function toCallIssue(snapshot: PersistentPresentationSnapshot): CallIssue | null {
@@ -104,6 +112,13 @@ export function persistentActiveCallDockModel(call: PersistentCallRuntimeValue, 
     seconds,
     isMuted: call.isMuted,
     callIssue: runtimeCallIssue(call),
+    screenShareAvailable: call.screenShareAvailable,
+    isScreenSharing: call.isScreenSharing,
+    localScreenShareStream: call.localScreenShareStream,
+    remoteScreenShareAvailable: call.remoteScreenShareAvailable,
+    remoteScreenShareStream: call.remoteScreenShareStream,
+    startScreenShare: call.startScreenShare,
+    stopScreenShare: call.stopScreenShare,
     diagnostics: {
       connectionState: call.media.peerConnectionState ?? "unknown",
       iceConnectionState: "unknown",
