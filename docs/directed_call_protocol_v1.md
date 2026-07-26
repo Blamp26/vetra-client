@@ -182,8 +182,16 @@ data are never logged. Persistent mode is selected by
 browser media APIs fail closed without fallback. Peer signals are
 still transient and currently fan out to all peer devices. Owner crash cannot
 resume the previous WebRTC session, no TURN-specific rollout is included, and
-Windows/Tauri runtime verification remains unclaimed. C3 leaves hardened
-transient recovery and broader rollout safeguards for later work.
+Manual Windows/Tauri runtime verification remains a separate operator step. C3
+leaves hardened transient recovery and broader rollout safeguards for later work.
+
+For a persistent Windows/Tauri runtime, press `Ctrl+Shift+Alt+D` once to enable
+the in-app directed-call diagnostics panel and clear any stale timeline. Keep
+the panel visible on both peers before reproducing the call or screen-share
+failure, then copy each peer's ordered timeline through terminal cleanup. Press
+the same shortcut again on both peers to clear the timeline and disable the
+setting. The shortcut is application-local and is inactive in browser or legacy
+authority paths.
 
 The shared fixture bundle contains 14 valid and 12 invalid fixtures, including
 numeric target and peer IDs, unknown keys, invalid failure codes, negative

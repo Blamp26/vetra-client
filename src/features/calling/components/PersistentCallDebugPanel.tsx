@@ -3,8 +3,12 @@ import {
   useOptionalPersistentCall,
   usePersistentCallBoundaryDebug,
 } from "../context/PersistentCallContext";
+import { getDirectedCallDiagnosticTimeline, resetDirectedCallDiagnosticTimeline } from "../services/directedCallDiagnostics";
+import { isCallDebugEnabled, setCallDebugEnabled } from "../utils/callDebug";
 
 export type PersistentPeerUuidSource = "user" | "preview" | "partnerRef" | "none";
+
+const DIAGNOSTICS_SHORTCUT_KEYS = new Set(["d", "control", "shift", "alt"]);
 
 interface Props {
   activeChatType: string;
@@ -16,6 +20,50 @@ interface Props {
 
 function yesNo(value: boolean): string {
   return value ? "yes" : "no";
+}
+
+export function PersistentCallDiagnosticsShortcut() {
+  const boundary = usePersistentCallBoundaryDebug();
+
+  useEffect(() => {
+    if (boundary?.mode !== "persistent" || !boundary.tauriDetected) return;
+    let chordHeld = false;
+
+    const resetChord = (event: KeyboardEvent) => {
+      if (DIAGNOSTICS_SHORTCUT_KEYS.has(event.key.toLowerCase())) chordHeld = false;
+    };
+    const resetOnBlur = () => { chordHeld = false; };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      try {
+        if (
+          event.repeat
+          || chordHeld
+          || event.key.toLowerCase() !== "d"
+          || !event.ctrlKey
+          || !event.shiftKey
+          || !event.altKey
+        ) return;
+        chordHeld = true;
+        event.preventDefault();
+        setCallDebugEnabled(!isCallDebugEnabled());
+        resetDirectedCallDiagnosticTimeline();
+        getDirectedCallDiagnosticTimeline();
+      } catch {
+        // Diagnostics must never affect application control flow.
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", resetChord);
+    window.addEventListener("blur", resetOnBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", resetChord);
+      window.removeEventListener("blur", resetOnBlur);
+    };
+  }, [boundary?.mode, boundary?.tauriDetected]);
+
+  return null;
 }
 
 export function PersistentCallDebugPanel({
@@ -75,6 +123,7 @@ export function PersistentCallDebugPanel({
       "last ownership event": value.lastOwnershipEvent?.event ?? "none",
       "ownership event timeline": value.ownershipEventTimeline.map((event) => `${event.sequence}:${event.event}${event.reason ? `(${event.reason})` : ""}${event.errorCategory ? `[${event.errorCategory}${event.serverErrorCode ? `/${event.serverErrorCode}` : ""}: ${event.errorDetails ?? "unknown"}]` : event.errorType ? `[${event.errorType}: ${event.errorMessage ?? "unknown"}]` : ""}`).join(" | ") || "none",
       "directed call event timeline": (value.directedCallEventTimeline ?? []).map((event) => `${event.sequence}:${event.line}`).join(" | ") || "none",
+      "disable diagnostics": "Ctrl+Shift+Alt+D",
       "active chat type": activeChatType,
       "direct-chat check": directChat ? "pass" : "fail",
       "peer UUID source": peerUuidSource,

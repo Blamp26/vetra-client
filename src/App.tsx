@@ -25,7 +25,7 @@ import { useOptionalPersistentCall } from "@/features/calling/context/Persistent
 import { persistentCallSidebarModel, usePersistentCallElapsedSeconds } from "@/features/calling/components/PersistentCallSurface/PersistentCallViewModel";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
-import { PersistentCallDebugPanel } from "@/features/calling/components/PersistentCallDebugPanel";
+import { PersistentCallDebugPanel, PersistentCallDiagnosticsShortcut } from "@/features/calling/components/PersistentCallDebugPanel";
 import type { ActiveChat } from "@/shared/types";
 
 const LEFT_PANE_STORAGE_KEY = "vetra:left-pane-width";
@@ -688,6 +688,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
       )}
 
       <ToastHost />
+      <PersistentCallDiagnosticsShortcut />
       <PersistentCallDebugPanel
         activeChatType={activeChat?.type ?? "none"}
         directChat={activeChat?.type === "direct"}
