@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAppStore, type RootState } from "@/store";
 import type { ActiveChat } from "@/shared/types";
 import type { DirectedCallHistoryEntry } from "@/api/directedCallHistory";
@@ -21,6 +21,7 @@ function resolveDirectPeerUserId(
 }
 
 export function useDirectedCallHistoryForChat(activeChat: ActiveChat | null) {
+  const replayGuardRef = useRef<{ peerUserId: string; replayCandidate: boolean } | null>(null);
   const currentUser = useAppStore((state: RootState) => state.currentUser);
   const conversationPreviews = useAppStore(
     (state: RootState) => state.conversationPreviews,
@@ -39,7 +40,26 @@ export function useDirectedCallHistoryForChat(activeChat: ActiveChat | null) {
 
   useEffect(() => {
     if (!peerUserId) return;
-    void refreshDirectedCallHistory();
+
+    const existingGuard = replayGuardRef.current;
+    if (existingGuard?.peerUserId === peerUserId && existingGuard.replayCandidate) {
+      existingGuard.replayCandidate = false;
+    } else {
+      void refreshDirectedCallHistory();
+      replayGuardRef.current = { peerUserId, replayCandidate: false };
+    }
+
+    return () => {
+      const guard = replayGuardRef.current;
+      if (!guard || guard.peerUserId !== peerUserId) return;
+
+      guard.replayCandidate = true;
+      queueMicrotask(() => {
+        if (replayGuardRef.current === guard && guard.replayCandidate) {
+          replayGuardRef.current = null;
+        }
+      });
+    };
   }, [peerUserId, refreshDirectedCallHistory]);
 
   const entries = useMemo(() => {

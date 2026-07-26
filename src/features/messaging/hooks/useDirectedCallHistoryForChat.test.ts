@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { createElement, StrictMode, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DirectedCallHistoryEntry } from "@/api/directedCallHistory";
 import type { ActiveChat } from "@/shared/types";
@@ -37,6 +38,8 @@ function makeState() {
       3: { partner_id: 3, partner_public_id: peerB },
     },
     refreshDirectedCallHistory: vi.fn().mockResolvedValue(undefined),
+    resetDirectedCallHistory: vi.fn(),
+    disposeDirectedCallHistory: vi.fn(),
     getDirectedCallHistoryEntries: vi.fn(() => entries.map((item) => ({
       ...item,
       peer: item.peer ? { ...item.peer } : null,
@@ -45,9 +48,22 @@ function makeState() {
   };
 }
 
-function render(activeChat: Parameters<typeof useDirectedCallHistoryForChat>[0], state = makeState()) {
+function StrictModeWrapper({ children }: { children: ReactNode }) {
+  return createElement(StrictMode, null, children);
+}
+
+function render(
+  activeChat: Parameters<typeof useDirectedCallHistoryForChat>[0],
+  state = makeState(),
+  strict = false,
+) {
   useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
-  return { ...renderHook(() => useDirectedCallHistoryForChat(activeChat)), state };
+  return {
+    ...renderHook(() => useDirectedCallHistoryForChat(activeChat), {
+      wrapper: strict ? StrictModeWrapper : undefined,
+    }),
+    state,
+  };
 }
 
 describe("useDirectedCallHistoryForChat", () => {
@@ -56,9 +72,17 @@ describe("useDirectedCallHistoryForChat", () => {
   });
 
   it("refreshes once when entering a valid direct chat", async () => {
-    const { state } = render({ type: "direct", partnerId: 2 });
+    const { state } = render({ type: "direct", partnerId: 2 }, makeState(), true);
 
     await waitFor(() => expect(state.refreshDirectedCallHistory).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not refresh twice during Strict Mode setup-cleanup-setup replay", async () => {
+    const { state } = render({ type: "direct", partnerId: 2 }, makeState(), true);
+
+    await waitFor(() => expect(state.refreshDirectedCallHistory).toHaveBeenCalledTimes(1));
+    expect(state.resetDirectedCallHistory).not.toHaveBeenCalled();
+    expect(state.disposeDirectedCallHistory).not.toHaveBeenCalled();
   });
 
   it("does not refresh again when the same direct chat rerenders", async () => {
@@ -74,7 +98,7 @@ describe("useDirectedCallHistoryForChat", () => {
     useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
     const { rerender } = renderHook(
       ({ partnerId }) => useDirectedCallHistoryForChat({ type: "direct", partnerId }),
-      { initialProps: { partnerId: 2 } },
+      { initialProps: { partnerId: 2 }, wrapper: StrictModeWrapper },
     );
 
     await waitFor(() => expect(state.refreshDirectedCallHistory).toHaveBeenCalledTimes(1));
@@ -105,7 +129,10 @@ describe("useDirectedCallHistoryForChat", () => {
     useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
     const { result, rerender } = renderHook(
       ({ activeChat }: { activeChat: ActiveChat }) => useDirectedCallHistoryForChat(activeChat),
-      { initialProps: { activeChat: { type: "direct", partnerId: 2 } as ActiveChat } },
+      {
+        initialProps: { activeChat: { type: "direct", partnerId: 2 } as ActiveChat },
+        wrapper: StrictModeWrapper,
+      },
     );
 
     expect(result.current.entries).toEqual([entry("22222222-2222-2222-2222-222222222222", peerA)]);
@@ -151,5 +178,58 @@ describe("useDirectedCallHistoryForChat", () => {
     state.messageState = { messages: [{ id: 11 }], cursor: "next-message-cursor" };
     rerender();
     expect(state.refreshDirectedCallHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes again after leaving and returning to the same peer", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+    const { rerender } = renderHook(
+      ({ activeChat }: { activeChat: ActiveChat }) => useDirectedCallHistoryForChat(activeChat),
+      {
+        initialProps: { activeChat: { type: "direct", partnerId: 2 } as ActiveChat },
+        wrapper: StrictModeWrapper,
+      },
+    );
+
+    await waitFor(() => expect(state.refreshDirectedCallHistory).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      rerender({ activeChat: { type: "room", roomId: 8 } });
+    });
+    await Promise.resolve();
+    rerender({ activeChat: { type: "direct", partnerId: 2 } });
+
+    await waitFor(() => expect(state.refreshDirectedCallHistory).toHaveBeenCalledTimes(2));
+  });
+
+  it("refreshes again after a real unmount and later remount", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+    const first = renderHook(
+      () => useDirectedCallHistoryForChat({ type: "direct", partnerId: 2 }),
+      { wrapper: StrictModeWrapper },
+    );
+    await waitFor(() => expect(state.refreshDirectedCallHistory).toHaveBeenCalledTimes(1));
+    first.unmount();
+
+    renderHook(
+      () => useDirectedCallHistoryForChat({ type: "direct", partnerId: 2 }),
+      { wrapper: StrictModeWrapper },
+    );
+    await waitFor(() => expect(state.refreshDirectedCallHistory).toHaveBeenCalledTimes(2));
+  });
+
+  it("refreshes when a missing preview becomes valid", async () => {
+    const state = makeState();
+    delete (state.conversationPreviews as Record<number, unknown>)[2];
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+    const { rerender } = renderHook(
+      () => useDirectedCallHistoryForChat({ type: "direct", partnerId: 2 }),
+      { wrapper: StrictModeWrapper },
+    );
+
+    expect(state.refreshDirectedCallHistory).not.toHaveBeenCalled();
+    state.conversationPreviews[2] = { partner_id: 2, partner_public_id: peerA };
+    rerender();
+    await waitFor(() => expect(state.refreshDirectedCallHistory).toHaveBeenCalledTimes(1));
   });
 });
