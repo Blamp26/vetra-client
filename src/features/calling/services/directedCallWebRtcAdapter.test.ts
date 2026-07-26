@@ -54,6 +54,7 @@ function createHarness() {
     replaceTrack: vi.fn(async (nextTrack: typeof screenTrack | null) => { screenSender.track = nextTrack; }),
   };
   const screenTransceiver = {
+    kind: "video" as const,
     direction: "inactive" as RTCRtpTransceiverDirection,
     currentDirection: null as RTCRtpTransceiverDirection | null,
     mid: "1",
@@ -61,6 +62,11 @@ function createHarness() {
     receiver: { track: null },
     stop: vi.fn(),
   };
+  const audioTransceiver = {
+    kind: "audio" as const,
+    direction: "sendrecv" as RTCRtpTransceiverDirection,
+  };
+  const transceivers: Array<{ kind: "audio" | "video"; direction: RTCRtpTransceiverDirection }> = [audioTransceiver];
   const pc = {
     localDescription: null as RTCSessionDescription | null,
     remoteDescription: null as RTCSessionDescription | null,
@@ -73,10 +79,22 @@ function createHarness() {
     oniceconnectionstatechange: null as (() => void) | null,
     onicegatheringstatechange: null as (() => void) | null,
     onsignalingstatechange: null as (() => void) | null,
-    addTrack: vi.fn(),
-    addTransceiver: vi.fn(() => screenTransceiver),
+    addTrack: vi.fn((nextTrack: { kind?: string }) => {
+      if (nextTrack.kind === "audio" && !transceivers.includes(audioTransceiver)) transceivers.push(audioTransceiver);
+    }),
+    addTransceiver: vi.fn(() => {
+      transceivers.push(screenTransceiver);
+      return screenTransceiver;
+    }),
+    getTransceivers: vi.fn(() => transceivers),
     getSenders: vi.fn(() => [sender]),
-    createOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "offer" }),
+    createOffer: vi.fn(async (): Promise<RTCSessionDescriptionInit> => {
+      const video = transceivers.find((transceiver) => transceiver.kind === "video");
+      const sdp = video
+        ? `offer|audio:${audioTransceiver.direction}|video:${video.direction}`
+        : "offer";
+      return { type: "offer", sdp };
+    }),
     createAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "answer" }),
     setLocalDescription: vi.fn(async (description: RTCSessionDescriptionInit) => {
       pc.localDescription = description as RTCSessionDescription;
@@ -102,7 +120,7 @@ function createHarness() {
     };
   });
   const adapter = new DirectedCallWebRtcAdapter({ dependencies: { getUserMedia, getDisplayMedia, createPeerConnection, createRemoteStream } });
-  return { adapter, pc, sender, track, stream, screenTrack, screenSender, screenTransceiver, getUserMedia, getDisplayMedia, createPeerConnection, createRemoteStream };
+  return { adapter, pc, sender, track, stream, screenTrack, screenSender, screenTransceiver, transceivers, getUserMedia, getDisplayMedia, createPeerConnection, createRemoteStream };
 }
 
 function displayStream(...tracks: any[]) {
@@ -825,14 +843,51 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.screenTransceiver.direction).toBe("recvonly");
     expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
 
-    await harness.adapter.createRenegotiationOffer();
+    const offer = await harness.adapter.createRenegotiationOffer();
     expect(harness.pc.createOffer).toHaveBeenCalledTimes(2);
+    expect(offer.sdp).toBe("offer|audio:sendrecv|video:recvonly");
     expect(harness.screenTransceiver.direction).toBe("recvonly");
+    const videoTransceivers = harness.pc.getTransceivers().filter((transceiver) => transceiver.kind === "video");
+    expect(videoTransceivers).toHaveLength(1);
+    expect(videoTransceivers[0]).toBe(harness.screenTransceiver);
+    expect(videoTransceivers[0].direction).toBe("recvonly");
+    expect(harness.pc.localDescription?.sdp).toContain("video:recvonly");
+    expect(harness.pc.localDescription?.sdp).toContain("audio:sendrecv");
     const remoteTrack = createRemoteTrack("video");
     harness.pc.ontrack?.({ track: remoteTrack, streams: [], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
     expect(harness.adapter.getRemoteScreenShareStream()?.getTracks()).toEqual([remoteTrack]);
     expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
     expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
+  it("ignores a remote video track from a conflicting transceiver", async () => {
+    const onRemoteScreenShareChanged = vi.fn();
+    const harness = createHarness();
+    harness.adapter.onRemoteScreenShareChanged(onRemoteScreenShareChanged);
+    await harness.adapter.prepareOffer();
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+
+    const ownedTrack = createRemoteTrack("video");
+    harness.pc.ontrack?.({ track: ownedTrack, streams: [], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
+    const ownedRemoteScreen = harness.adapter.getRemoteScreenShareStream();
+    const conflictingTransceiver = { ...harness.screenTransceiver, mid: "2", direction: "recvonly" as const };
+    const conflictingTrack = createRemoteTrack("video");
+    harness.pc.ontrack?.({ track: conflictingTrack, streams: [], transceiver: conflictingTransceiver } as unknown as RTCTrackEvent);
+
+    expect(harness.pc.getTransceivers().filter((transceiver) => transceiver.kind === "video")).toHaveLength(1);
+    expect(harness.screenTransceiver).toEqual(expect.objectContaining({ direction: "recvonly" }));
+    expect(harness.adapter.getRemoteScreenShareStream()).toBe(ownedRemoteScreen);
+    expect(harness.adapter.getRemoteScreenShareStream()?.getTracks()).toEqual([ownedTrack]);
+    expect(onRemoteScreenShareChanged).toHaveBeenCalledTimes(1);
+    expect(onRemoteScreenShareChanged).toHaveBeenCalledWith(ownedRemoteScreen);
+
+    const remoteAudioTrack = createRemoteTrack("audio");
+    const remoteAudioStream = harness.createRemoteStream();
+    harness.pc.ontrack?.({ track: remoteAudioTrack, streams: [remoteAudioStream] } as unknown as RTCTrackEvent);
+    expect(remoteAudioStream.getTracks()).toEqual([remoteAudioTrack]);
+    expect(harness.adapter.remoteMediaStream).toBe(remoteAudioStream);
+    expect(harness.sender.track).toBe(harness.track);
+    expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
   });
 
   it("exposes remote screen video separately and handles duplicate, replacement, and ended tracks", async () => {
