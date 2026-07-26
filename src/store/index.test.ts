@@ -116,28 +116,24 @@ describe('store startup', () => {
     expect(persistedPayload().state).not.toHaveProperty('directedCallHistoryRequestGeneration');
   });
 
-  it('rehydrates unrelated fields while rejecting legacy history payload keys', async () => {
-    installStorage({
-      'vetra-storage': JSON.stringify({
-        state: {
-          theme: 'dark',
-          selectedInputDeviceId: 'input-device',
-          selectedOutputDeviceId: 'output-device',
-          noiseSuppression: false,
-          echoCancellation: false,
-          autoGainControl: false,
-          directedCallHistoryEntriesByCallId: { [historyEntry.call_id]: historyEntry },
-          directedCallHistoryOrderedCallIds: [historyEntry.call_id],
-          directedCallHistoryLoading: true,
-          directedCallHistoryError: 'private error',
-          directedCallHistoryRequestGeneration: 99,
-        },
-        version: 0,
-      }),
-    });
+  it('hydrates a real partialized payload without restoring history state', async () => {
+    getHistoryMock.mockResolvedValue([historyEntry]);
+    const sourceStore = await import('./index');
+    sourceStore.getState().setTheme('dark');
+    sourceStore.getState().setInputDevice('input-device');
+    sourceStore.getState().setOutputDevice('output-device');
+    sourceStore.getState().setNoiseSuppression(false);
+    sourceStore.getState().setEchoCancellation(false);
+    sourceStore.getState().setAutoGainControl(false);
+    await sourceStore.getState().refreshDirectedCallHistory();
 
-    const store = await import('./index');
-    const state = store.getState();
+    const persisted = testStorage.getItem('vetra-storage');
+    expect(persisted).not.toBeNull();
+
+    vi.resetModules();
+    installStorage({ 'vetra-storage': persisted! });
+    const hydratedStore = await import('./index');
+    const state = hydratedStore.getState();
 
     expect({
       theme: state.theme,

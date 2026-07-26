@@ -58,27 +58,6 @@ const useAppStoreBase = create<RootState>()(
         echoCancellation: state.echoCancellation,
         autoGainControl: state.autoGainControl,
       }),
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...{
-          theme: (persistedState as Partial<RootState> | undefined)?.theme ?? currentState.theme,
-          selectedInputDeviceId:
-            (persistedState as Partial<RootState> | undefined)?.selectedInputDeviceId ??
-            currentState.selectedInputDeviceId,
-          selectedOutputDeviceId:
-            (persistedState as Partial<RootState> | undefined)?.selectedOutputDeviceId ??
-            currentState.selectedOutputDeviceId,
-          noiseSuppression:
-            (persistedState as Partial<RootState> | undefined)?.noiseSuppression ??
-            currentState.noiseSuppression,
-          echoCancellation:
-            (persistedState as Partial<RootState> | undefined)?.echoCancellation ??
-            currentState.echoCancellation,
-          autoGainControl:
-            (persistedState as Partial<RootState> | undefined)?.autoGainControl ??
-            currentState.autoGainControl,
-        },
-      }),
     }
   )
 );
