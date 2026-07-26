@@ -3,6 +3,7 @@ import {
   DirectedCallWebRtcAdapter,
   DirectedCallWebRtcError,
   DirectedCallWebRtcStaleError,
+  type DirectedCallMediaStream,
   type DirectedCallInitialMediaReadiness,
   type DirectedCallWebRtcAdapterOptions,
 } from "./directedCallWebRtcAdapter";
@@ -52,7 +53,14 @@ function createHarness() {
     track: null as typeof screenTrack | null,
     replaceTrack: vi.fn(async (nextTrack: typeof screenTrack | null) => { screenSender.track = nextTrack; }),
   };
-  const screenTransceiver = { sender: screenSender, stop: vi.fn() };
+  const screenTransceiver = {
+    direction: "inactive" as RTCRtpTransceiverDirection,
+    currentDirection: null as RTCRtpTransceiverDirection | null,
+    mid: "1",
+    sender: screenSender,
+    receiver: { track: null },
+    stop: vi.fn(),
+  };
   const pc = {
     localDescription: null as RTCSessionDescription | null,
     remoteDescription: null as RTCSessionDescription | null,
@@ -82,8 +90,19 @@ function createHarness() {
   const getUserMedia = vi.fn().mockResolvedValue(stream);
   const getDisplayMedia = vi.fn();
   const createPeerConnection = vi.fn(() => pc);
-  const adapter = new DirectedCallWebRtcAdapter({ dependencies: { getUserMedia, getDisplayMedia, createPeerConnection } });
-  return { adapter, pc, sender, track, stream, screenTrack, screenSender, screenTransceiver, getUserMedia, getDisplayMedia, createPeerConnection };
+  const createRemoteStream = vi.fn(() => {
+    const tracks: any[] = [];
+    return {
+      getTracks: () => tracks,
+      addTrack: (nextTrack: any) => tracks.push(nextTrack),
+      removeTrack: (trackToRemove: any) => {
+        const index = tracks.indexOf(trackToRemove);
+        if (index >= 0) tracks.splice(index, 1);
+      },
+    };
+  });
+  const adapter = new DirectedCallWebRtcAdapter({ dependencies: { getUserMedia, getDisplayMedia, createPeerConnection, createRemoteStream } });
+  return { adapter, pc, sender, track, stream, screenTrack, screenSender, screenTransceiver, getUserMedia, getDisplayMedia, createPeerConnection, createRemoteStream };
 }
 
 function displayStream(...tracks: any[]) {
@@ -765,6 +784,152 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(harness.screenTrack);
     expect(harness.adapter.getLocalScreenShareStream()?.getTracks()).toEqual([harness.screenTrack]);
     expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports every screen direction transition on one reusable transceiver", async () => {
+    const harness = createHarness();
+    const trackA = harness.screenTrack;
+    const trackB = { ...harness.screenTrack, stop: vi.fn() };
+    harness.getDisplayMedia.mockResolvedValueOnce(displayStream(trackA)).mockResolvedValueOnce(displayStream(trackB));
+
+    await harness.adapter.prepareOffer();
+    await harness.adapter.startScreenShare();
+    expect(harness.screenTransceiver.direction).toBe("sendonly");
+
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    expect(harness.screenTransceiver.direction).toBe("sendrecv");
+    harness.adapter.stopScreenShare();
+    expect(harness.screenTransceiver.direction).toBe("recvonly");
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(false)).toBe(true);
+    expect(harness.screenTransceiver.direction).toBe("inactive");
+
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    expect(harness.screenTransceiver.direction).toBe("recvonly");
+    await harness.adapter.startScreenShare();
+    expect(harness.screenTransceiver.direction).toBe("sendrecv");
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(false)).toBe(true);
+    expect(harness.screenTransceiver.direction).toBe("sendonly");
+    harness.adapter.stopScreenShare();
+    expect(harness.screenTransceiver.direction).toBe("inactive");
+
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+    expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
+  it("prepares answerer-originated reception before creating an offer", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    expect(harness.getDisplayMedia).not.toHaveBeenCalled();
+
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    expect(harness.screenTransceiver.direction).toBe("recvonly");
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+
+    await harness.adapter.createRenegotiationOffer();
+    expect(harness.pc.createOffer).toHaveBeenCalledTimes(2);
+    expect(harness.screenTransceiver.direction).toBe("recvonly");
+    const remoteTrack = createRemoteTrack("video");
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
+    expect(harness.adapter.getRemoteScreenShareStream()?.getTracks()).toEqual([remoteTrack]);
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+    expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
+  it("exposes remote screen video separately and handles duplicate, replacement, and ended tracks", async () => {
+    const harness = createHarness();
+    const changes: Array<DirectedCallMediaStream | null> = [];
+    const unsubscribe = harness.adapter.onRemoteScreenShareChanged((stream) => changes.push(stream));
+    await harness.adapter.prepareOffer();
+    const remoteTransceiver = { ...harness.screenTransceiver, direction: "recvonly" as const };
+    const firstTrack = createRemoteTrack("video");
+    const secondTrack = createRemoteTrack("video");
+
+    harness.pc.ontrack?.({ track: firstTrack, streams: [], transceiver: remoteTransceiver } as unknown as RTCTrackEvent);
+    const firstStream = harness.adapter.getRemoteScreenShareStream();
+    expect(firstStream?.getTracks()).toEqual([firstTrack]);
+    expect(harness.adapter.remoteMediaStream).toBeNull();
+    harness.pc.ontrack?.({ track: firstTrack, streams: [], transceiver: remoteTransceiver } as unknown as RTCTrackEvent);
+    expect(changes).toHaveLength(1);
+
+    harness.pc.ontrack?.({ track: secondTrack, streams: [], transceiver: remoteTransceiver } as unknown as RTCTrackEvent);
+    expect(harness.adapter.getRemoteScreenShareStream()?.getTracks()).toEqual([secondTrack]);
+    firstTrack.emit("ended");
+    expect(harness.adapter.getRemoteScreenShareStream()?.getTracks()).toEqual([secondTrack]);
+    secondTrack.emit("ended");
+    expect(harness.adapter.getRemoteScreenShareStream()).toBeNull();
+    expect(changes).toHaveLength(3);
+    expect(changes[2]).toBeNull();
+
+    unsubscribe();
+    const thirdTrack = createRemoteTrack("video");
+    harness.pc.ontrack?.({ track: thirdTrack, streams: [], transceiver: remoteTransceiver } as unknown as RTCTrackEvent);
+    expect(changes).toHaveLength(3);
+  });
+
+  it("keeps remote screen ownership until committed inactive reconciliation", async () => {
+    const harness = createHarness();
+    const changes: Array<DirectedCallMediaStream | null> = [];
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    harness.adapter.onRemoteScreenShareChanged((stream) => changes.push(stream));
+    await harness.adapter.prepareOffer();
+    await harness.adapter.startScreenShare();
+    const remoteTrack = createRemoteTrack("video");
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
+    const visibleStream = harness.adapter.getRemoteScreenShareStream();
+    expect(visibleStream).not.toBeNull();
+
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(false)).toBe(true);
+    expect(harness.adapter.getRemoteScreenShareStream()).toBe(visibleStream);
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    expect(harness.adapter.getRemoteScreenShareStream()).toBe(visibleStream);
+    expect(harness.screenTransceiver.direction).toBe("sendrecv");
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(false)).toBe(true);
+    harness.adapter.reconcileRemoteScreenShareState(false);
+    expect(harness.adapter.getRemoteScreenShareStream()).toBeNull();
+    expect(changes).toHaveLength(2);
+    expect(changes[1]).toBeNull();
+    harness.adapter.reconcileRemoteScreenShareState(false);
+    expect(changes).toHaveLength(2);
+    expect(harness.screenTransceiver.direction).toBe("sendonly");
+
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    expect(harness.screenTransceiver.direction).toBe("sendrecv");
+    expect(harness.adapter.getRemoteScreenShareStream()).toBeNull();
+    expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
+  it("does not let stale remote video populate a replacement adapter", async () => {
+    const first = createHarness();
+    await first.adapter.prepareOffer();
+    const oldOnTrack = first.pc.ontrack;
+    first.adapter.dispose();
+
+    const second = createHarness();
+    await second.adapter.prepareOffer();
+    const staleTrack = createRemoteTrack("video");
+    oldOnTrack?.({ track: staleTrack, streams: [], transceiver: first.screenTransceiver } as unknown as RTCTrackEvent);
+
+    expect(first.adapter.getRemoteScreenShareStream()).toBeNull();
+    expect(second.adapter.getRemoteScreenShareStream()).toBeNull();
+    expect(second.pc.addTransceiver).not.toHaveBeenCalled();
+  });
+
+  it("clears remote screen ownership on disposal without disturbing audio cleanup", async () => {
+    const harness = createHarness();
+    const changes: Array<DirectedCallMediaStream | null> = [];
+    harness.adapter.onRemoteScreenShareChanged((stream) => changes.push(stream));
+    await harness.adapter.prepareOffer();
+    const remoteTrack = createRemoteTrack("video");
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [], transceiver: { ...harness.screenTransceiver, direction: "recvonly" } } as unknown as RTCTrackEvent);
+    expect(harness.adapter.getRemoteScreenShareStream()).not.toBeNull();
+
+    harness.adapter.dispose();
+    expect(harness.adapter.getRemoteScreenShareStream()).toBeNull();
+    expect(changes).toHaveLength(1);
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+    remoteTrack.emit("ended");
+    expect(changes).toHaveLength(1);
   });
 
   it("preserves microphone ownership throughout screen-share operations", async () => {
