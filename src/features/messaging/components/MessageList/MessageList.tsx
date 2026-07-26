@@ -7,6 +7,7 @@ import {
   useLayoutEffect,
 } from "react";
 import type { Message, MessageReactionGroup, User } from "@/shared/types";
+import type { DirectedCallHistoryEntry } from "@/api/directedCallHistory";
 import { useAppStore, type RootState } from "@/store";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { ForwardModal } from "../ForwardModal";
@@ -60,6 +61,8 @@ import { MessageItem } from "./MessageItem";
 import { MessageContextMenu } from "./MessageContextMenu";
 import { MediaVisibilityContext } from "@/shared/components/MediaVisibilityContext";
 import { GifResolverProvider } from "./GifResolverContext";
+import { DirectedCallHistoryRow } from "./DirectedCallHistoryRow";
+import { mergeMessageAndCallTimeline } from "./directedCallHistoryTimeline";
 
 interface Props {
   messages:      Message[];
@@ -73,6 +76,7 @@ interface Props {
     | { type: "room";   roomId: number; roomRef?: string | number };
   onReply?: (target: { id: number; content: string; author: string }) => void;
   onOpenStickerPack?: (packId: string, stickerId: string) => void;
+  directedCallHistoryEntries?: DirectedCallHistoryEntry[];
 }
 
 interface ContextMenu {
@@ -194,6 +198,7 @@ export function MessageList({
   chatContext,
   onReply,
   onOpenStickerPack,
+  directedCallHistoryEntries = [],
 }: Props) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -972,19 +977,27 @@ export function MessageList({
     );
   };
 
-  const groupedMessages = useMemo(() => {
-    const groups: Array<{ date: string; messages: Message[] }> = [];
-    for (const msg of messages) {
-      const date = formatDate(msg.inserted_at);
+  const timeline = useMemo(
+    () => mergeMessageAndCallTimeline(
+      messages,
+      chatContext.type === "direct" ? directedCallHistoryEntries : [],
+    ),
+    [messages, directedCallHistoryEntries, chatContext.type],
+  );
+
+  const groupedTimeline = useMemo(() => {
+    const groups: Array<{ date: string; entries: typeof timeline }> = [];
+    for (const entry of timeline) {
+      const date = formatDate(entry.timestamp);
       const last = groups[groups.length - 1];
       if (last?.date === date) {
-        last.messages.push(msg);
+        last.entries.push(entry);
       } else {
-        groups.push({ date, messages: [msg] });
+        groups.push({ date, entries: [entry] });
       }
     }
     return groups;
-  }, [messages]);
+  }, [timeline]);
 
   const alignmentMode =
     chatViewportWidth > WIDE_CHAT_LEFT_COLUMN_THRESHOLD
@@ -1027,7 +1040,7 @@ export function MessageList({
               </button>
             </div>
           )}
-          {messages.length === 0 && !isLoading && (
+          {timeline.length === 0 && messages.length === 0 && !isLoading && (
             <div className="vt-panel mx-auto max-w-md px-5 py-6 text-center">
               <div className="space-y-1.5">
                 <span className="vt-kicker">No messages yet</span>
@@ -1037,7 +1050,7 @@ export function MessageList({
               </div>
             </div>
           )}
-          {groupedMessages.map(({ date, messages: dayMessages }) => (
+          {groupedTimeline.map(({ date, entries }) => (
             <div key={date} className="w-full" data-testid="message-date-group">
               <div className="my-3 flex items-center gap-3">
                 <div className="h-px flex-1 bg-border" />
@@ -1046,9 +1059,19 @@ export function MessageList({
                 </span>
                 <div className="h-px flex-1 bg-border" />
               </div>
-              {dayMessages.map((msg, idx) => {
-                const prevMsg = dayMessages[idx - 1];
-                const nextMsg = dayMessages[idx + 1];
+              {entries.map((entry, idx) => {
+                if (entry.kind === "call") {
+                  return (
+                    <div key={entry.call.call_id} className="mt-2.5" data-testid="directed-call-history-spacing">
+                      <DirectedCallHistoryRow entry={entry.call} />
+                    </div>
+                  );
+                }
+                const msg = entry.message;
+                const previousEntry = entries[idx - 1];
+                const nextEntry = entries[idx + 1];
+                const prevMsg = previousEntry?.kind === "message" ? previousEntry.message : undefined;
+                const nextMsg = nextEntry?.kind === "message" ? nextEntry.message : undefined;
                 const isConsecutive = prevMsg?.sender_id === msg.sender_id;
                 const isGroupedWithNext = nextMsg?.sender_id === msg.sender_id;
                 const messageAttachments = getMessageAttachments(msg);

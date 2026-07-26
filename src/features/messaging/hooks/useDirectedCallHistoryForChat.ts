@@ -45,7 +45,9 @@ export function useDirectedCallHistoryForChat(activeChat: ActiveChat | null) {
     if (existingGuard?.peerUserId === peerUserId && existingGuard.replayCandidate) {
       existingGuard.replayCandidate = false;
     } else {
-      void refreshDirectedCallHistory();
+      if (typeof refreshDirectedCallHistory === "function") {
+        void refreshDirectedCallHistory();
+      }
       replayGuardRef.current = { peerUserId, replayCandidate: false };
     }
 
@@ -64,7 +66,10 @@ export function useDirectedCallHistoryForChat(activeChat: ActiveChat | null) {
 
   const entries = useMemo(() => {
     if (!peerUserId) return [];
-    return getDirectedCallHistoryEntries().filter(
+    const loadedEntries = typeof getDirectedCallHistoryEntries === "function"
+      ? getDirectedCallHistoryEntries()
+      : [];
+    return loadedEntries.filter(
       (entry: DirectedCallHistoryEntry) => entry.peer?.user_id === peerUserId,
     );
   }, [getDirectedCallHistoryEntries, peerUserId]);

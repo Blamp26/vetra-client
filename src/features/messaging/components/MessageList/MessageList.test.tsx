@@ -353,6 +353,44 @@ describe("MessageList bubble layout", () => {
     );
   });
 
+  it("renders loaded direct-call history as non-interactive timeline entries", () => {
+    renderMessageList(
+      [makeMessage({ id: 7, content: "ordinary message", inserted_at: "2026-07-01T10:00:00Z" })],
+      {
+        directedCallHistoryEntries: [{
+          call_id: "00000000-0000-0000-0000-000000000007",
+          status: "completed",
+          peer: { user_id: "peer-1", username: "peer" },
+          created_at: "2026-07-01T10:01:00Z",
+          ended_at: "2026-07-01T10:02:00Z",
+          duration_ms: 0,
+        }],
+      },
+    );
+
+    expect(screen.getByText("ordinary message")).toBeInTheDocument();
+    const row = screen.getByTestId("directed-call-history-row");
+    expect(row).toHaveAccessibleName("Completed call, 0:00");
+    expect(row.querySelector("button")).not.toBeInTheDocument();
+    expect(row.closest("button")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("message-date-group")).toHaveLength(1);
+  });
+
+  it("does not render call history in room timelines", () => {
+    renderMessageList([makeMessage()], {
+      chatContext: { type: "room", roomId: 9 },
+      directedCallHistoryEntries: [{
+        call_id: "00000000-0000-0000-0000-000000000008",
+        status: "missed",
+        peer: null,
+        created_at: "2026-07-01T10:00:00Z",
+        ended_at: null,
+        duration_ms: null,
+      }],
+    });
+    expect(screen.queryByTestId("directed-call-history-row")).not.toBeInTheDocument();
+  });
+
   it("renders date dividers while keeping messages in a vertical bubble list", () => {
     renderMessageList([
       makeMessage({

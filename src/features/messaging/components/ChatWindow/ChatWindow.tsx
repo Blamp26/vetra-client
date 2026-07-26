@@ -72,7 +72,7 @@ function isActiveCallForChat(
 
 export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props) {
   const persistentCall = useOptionalPersistentCall();
-  useDirectedCallHistoryForChat(activeChat);
+  const { entries: directedCallHistoryEntries } = useDirectedCallHistoryForChat(activeChat);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
 
@@ -496,6 +496,7 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
           chatContext={chatContext!}
           onReply={setReplyTo}
           onOpenStickerPack={openStickerPreview}
+          directedCallHistoryEntries={directedCallHistoryEntries}
         />
       </div>
 
