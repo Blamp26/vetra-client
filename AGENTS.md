@@ -129,11 +129,21 @@ the full test suite.
 
 ## Task-writing guidance
 
-GPT-5.6 tasks should describe only the current delta and reference this file,
-the client protocol document, and the server canonical architecture instead of
-copying stable history. State each restriction once and prefer observable
-acceptance criteria over procedural micromanagement. Keep detail for lifecycle
-transitions, authorization, concurrency, recovery, media timing, privacy, and
-destructive actions. Request concise, evidence-based reports with deviations
-and limitations explicit. Ordinary bounded tasks should normally fit in about
-5–10 thousand characters.
+Every task must begin with:
+
+```text
+Read and follow AGENTS.md.
+```
+
+Prompts should contain only the current delta. Do not repeat Git rules,
+protected paths, architecture, standard validation, or reporting rules already
+in AGENTS.md. One prompt should cover one bounded cut. Do not copy history,
+protocol text, exhaustive file inventories, line-by-line command lists, or
+reports with dozens of fields.
+
+Reports should contain only the verdict, scope, important evidence,
+defects/gaps, command results, final status, and limitations. Read-only
+audit/verification prompts should normally target 1.5–3.5k characters.
+Bounded implementation prompts should normally target 2–5k characters. Exceed
+5k only for genuinely distinct protocol, concurrency, recovery, privacy, or
+destructive-operation risks.
