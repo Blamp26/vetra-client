@@ -59,14 +59,20 @@ export interface DirectedCallMediaCoordinatorOptions {
 }
 
 type Listener = (snapshot: DirectedCallMediaCoordinatorSnapshot) => void;
+type ScreenShareAction = "none" | "start" | "stop";
 type RenegotiationTransaction = {
   callId: string;
   generation: string;
   id: string;
   phase: "preparing_screen" | "requested" | "creating_offer" | "offered" | "answering" | "applying_answer";
   screenShare: boolean;
+  screenAction: ScreenShareAction;
   localScreenShareStarted: boolean;
+  localScreenShareStopped: boolean;
   remoteScreenReceptionEnabledByTransaction: boolean;
+  remoteScreenReceptionDisabledByTransaction: boolean;
+  remoteScreenReceptionWasEnabled: boolean;
+  browserEndedDuringTransaction: boolean;
 };
 const MAX_COMPLETED_RENEGOTIATIONS = 32;
 
@@ -136,6 +142,7 @@ export class DirectedCallMediaCoordinator {
   private readonly adapterFactory: (options: DirectedCallWebRtcAdapterOptions) => DirectedCallWebRtcAdapter;
   private readonly audioConstraints?: () => MediaStreamConstraints;
   private adapter: DirectedCallWebRtcAdapter;
+  private localScreenShareEndedCleanup: (() => void) | null = null;
   private unsubscribeProjection: (() => void) | null = null;
   private unsubscribeSignal: (() => void) | null = null;
   private snapshot: DirectedCallMediaCoordinatorSnapshot;
@@ -167,6 +174,11 @@ export class DirectedCallMediaCoordinator {
   private adapterEpoch = 0;
   private renegotiation: RenegotiationTransaction | null = null;
   private readonly completedRenegotiations: string[] = [];
+  private remoteScreenShareCommitted = false;
+  private localScreenShareActive = false;
+  private localScreenShareCommitted = false;
+  private pendingBrowserScreenStop = false;
+  private stopScreenShareInFlight: Promise<boolean> | null = null;
 
   constructor(
     session: DirectedCallSession,
@@ -187,8 +199,10 @@ export class DirectedCallMediaCoordinator {
   }
 
   private createAdapter(): DirectedCallWebRtcAdapter {
+    this.localScreenShareEndedCleanup?.();
+    this.localScreenShareEndedCleanup = null;
     const adapterEpoch = ++this.adapterEpoch;
-    return this.adapterFactory({
+    const adapter = this.adapterFactory({
       getAudioConstraints: this.audioConstraints,
       onIceCandidate: (candidate) => {
         if (this.adapterEpoch === adapterEpoch) this.queueLocalIceCandidate(candidate);
@@ -204,6 +218,10 @@ export class DirectedCallMediaCoordinator {
       onPeerConnectionState: (state) => this.handlePeerConnectionState(state, adapterEpoch),
       onPeerConnectionDiagnostics: (diagnostics) => this.handlePeerConnectionDiagnostics(diagnostics, adapterEpoch),
     });
+    this.localScreenShareEndedCleanup = adapter.onLocalScreenShareEnded?.(() => {
+      if (this.adapterEpoch === adapterEpoch) this.handleLocalScreenShareEnded();
+    }) ?? null;
+    return adapter;
   }
 
   start(): void {
@@ -254,6 +272,7 @@ export class DirectedCallMediaCoordinator {
       || !this.isGenerationCurrent(this.generation)
       || this.renegotiation
       || this.adapter.getLocalScreenShareStream?.()
+      || this.localScreenShareCommitted
     ) return false;
 
     const id = createDirectedCallUuid();
@@ -263,8 +282,13 @@ export class DirectedCallMediaCoordinator {
       id,
       phase: "preparing_screen",
       screenShare: true,
+      screenAction: "start",
       localScreenShareStarted: false,
+      localScreenShareStopped: false,
       remoteScreenReceptionEnabledByTransaction: false,
+      remoteScreenReceptionDisabledByTransaction: false,
+      remoteScreenReceptionWasEnabled: false,
+      browserEndedDuringTransaction: false,
     };
     this.renegotiation = transaction;
     let captureStarted = false;
@@ -275,21 +299,99 @@ export class DirectedCallMediaCoordinator {
       }
       captureStarted = true;
       if (!this.ownsRenegotiation(transaction, id, projection.call_id, "preparing_screen")) return false;
+      if (transaction.browserEndedDuringTransaction) {
+        this.clearRenegotiation(id);
+        return false;
+      }
       transaction.localScreenShareStarted = true;
+      this.localScreenShareActive = true;
       transaction.phase = "requested";
       await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_request", { renegotiation_id: id, screen_share: true });
-      if (!this.ownsRenegotiation(transaction, id, projection.call_id, "requested")) return false;
       if (projection.participant_role === "initiator") {
+        if (!this.ownsRenegotiation(transaction, id, projection.call_id, "requested")) return false;
         await this.createAndSendRenegotiationOffer(projection.call_id, id, true);
         return this.renegotiation?.id === id && this.renegotiation.phase === "offered";
       }
-      return true;
+      return this.renegotiation?.id === id && this.acceptsRenegotiationId(id, projection.call_id);
     } catch {
       this.clearRenegotiation(id);
       return false;
     } finally {
       if (captureStarted && this.renegotiation?.id !== id && this.adapter.getLocalScreenShareStream?.()) this.adapter.stopScreenShare?.();
     }
+  }
+
+  async stopScreenShare(): Promise<boolean> {
+    return this.stopScreenShareInternal(false);
+  }
+
+  private stopScreenShareInternal(fromBrowser: boolean): Promise<boolean> {
+    if (this.stopScreenShareInFlight) return this.stopScreenShareInFlight;
+    const projection = this.snapshot.projection;
+    if (this.disposed || !projection || projection.state !== "active" || !this.isGenerationCurrent(this.generation)) return Promise.resolve(false);
+    if (this.renegotiation) {
+      if (fromBrowser) {
+        this.pendingBrowserScreenStop = true;
+        this.renegotiation.browserEndedDuringTransaction = true;
+      }
+      return Promise.resolve(false);
+    }
+    if (!fromBrowser && !this.localScreenShareActive && !this.adapter.getLocalScreenShareStream?.() && !this.localScreenShareCommitted) return Promise.resolve(true);
+
+    const id = createDirectedCallUuid();
+    const transaction: RenegotiationTransaction = {
+      callId: projection.call_id,
+      generation: this.generation,
+      id,
+      phase: "requested",
+      screenShare: false,
+      screenAction: "stop",
+      localScreenShareStarted: false,
+      localScreenShareStopped: true,
+      remoteScreenReceptionEnabledByTransaction: false,
+      remoteScreenReceptionDisabledByTransaction: false,
+      remoteScreenReceptionWasEnabled: false,
+      browserEndedDuringTransaction: false,
+    };
+    this.renegotiation = transaction;
+    this.localScreenShareActive = false;
+    this.adapter.stopScreenShare?.();
+    const operation = (async (): Promise<boolean> => {
+      try {
+        await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_request", { renegotiation_id: id, screen_share: false });
+        if (projection.participant_role === "initiator") {
+          if (!this.ownsRenegotiation(transaction, id, projection.call_id, "requested")) return false;
+          await this.createAndSendRenegotiationOffer(projection.call_id, id, false);
+          return this.renegotiation?.id === id && this.renegotiation.phase === "offered";
+        }
+        return this.renegotiation?.id === id && this.acceptsRenegotiationId(id, projection.call_id);
+      } catch {
+        this.clearRenegotiation(id);
+        return false;
+      }
+    })();
+    this.stopScreenShareInFlight = operation;
+    void operation.finally(() => {
+      if (this.stopScreenShareInFlight === operation) this.stopScreenShareInFlight = null;
+    });
+    return operation;
+  }
+
+  private handleLocalScreenShareEnded(): void {
+    if (this.disposed) return;
+    if (this.renegotiation?.screenAction === "start" && this.renegotiation.phase === "preparing_screen") {
+      this.pendingBrowserScreenStop = true;
+      this.renegotiation.browserEndedDuringTransaction = true;
+      return;
+    }
+    if (!this.localScreenShareActive) return;
+    this.localScreenShareActive = false;
+    if (this.renegotiation) {
+      this.pendingBrowserScreenStop = true;
+      this.renegotiation.browserEndedDuringTransaction = true;
+      return;
+    }
+    void this.stopScreenShareInternal(true);
   }
 
   private resetCallState(callId: string): void {
@@ -299,6 +401,11 @@ export class DirectedCallMediaCoordinator {
     this.signalTransport.unbindCall();
     this.renegotiation = null;
     this.completedRenegotiations.length = 0;
+    this.remoteScreenShareCommitted = false;
+    this.localScreenShareActive = false;
+    this.localScreenShareCommitted = false;
+    this.pendingBrowserScreenStop = false;
+    this.stopScreenShareInFlight = null;
     this.mediaStartInFlight = false;
     this.mediaStarted = false;
     this.beginConnectingSent = false;
@@ -340,6 +447,13 @@ export class DirectedCallMediaCoordinator {
     this.signalTransport.dispose();
     this.renegotiation = null;
     this.completedRenegotiations.length = 0;
+    this.localScreenShareEndedCleanup?.();
+    this.localScreenShareEndedCleanup = null;
+    this.remoteScreenShareCommitted = false;
+    this.localScreenShareActive = false;
+    this.localScreenShareCommitted = false;
+    this.pendingBrowserScreenStop = false;
+    this.stopScreenShareInFlight = null;
     this.offer = null;
     this.remoteAudioStream = null;
     this.localIssue = null;
@@ -528,7 +642,20 @@ export class DirectedCallMediaCoordinator {
     const projection = this.snapshot.projection;
     if (this.disposed || !projection || projection.state !== "active" || this.renegotiation) return null;
     const id = createDirectedCallUuid();
-    this.renegotiation = { callId: projection.call_id, generation: this.generation, id, phase: "requested", screenShare, localScreenShareStarted: false, remoteScreenReceptionEnabledByTransaction: false };
+    this.renegotiation = {
+      callId: projection.call_id,
+      generation: this.generation,
+      id,
+      phase: "requested",
+      screenShare,
+      screenAction: screenShare ? "start" : "none",
+      localScreenShareStarted: false,
+      localScreenShareStopped: false,
+      remoteScreenReceptionEnabledByTransaction: false,
+      remoteScreenReceptionDisabledByTransaction: false,
+      remoteScreenReceptionWasEnabled: false,
+      browserEndedDuringTransaction: false,
+    };
     try {
       await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_request", { renegotiation_id: id, screen_share: screenShare });
       if (projection.participant_role === "initiator") await this.createAndSendRenegotiationOffer(projection.call_id, id, screenShare);
@@ -544,9 +671,25 @@ export class DirectedCallMediaCoordinator {
     const id = payload.renegotiation_id;
     if (this.completedRenegotiations.includes(id)) return;
     if (this.renegotiation && this.renegotiation.id !== id) return;
-    if (!this.renegotiation) this.renegotiation = { callId: projection.call_id, generation: this.generation, id, phase: "requested", screenShare: payload.screen_share, localScreenShareStarted: false, remoteScreenReceptionEnabledByTransaction: false };
+    if (!this.renegotiation) this.renegotiation = {
+      callId: projection.call_id,
+      generation: this.generation,
+      id,
+      phase: "requested",
+      screenShare: payload.screen_share,
+      screenAction: payload.screen_share
+        ? "start"
+        : (this.remoteScreenShareCommitted || Boolean(this.adapter.getRemoteScreenShareStream?.()) ? "stop" : "none"),
+      localScreenShareStarted: false,
+      localScreenShareStopped: false,
+      remoteScreenReceptionEnabledByTransaction: false,
+      remoteScreenReceptionDisabledByTransaction: false,
+      remoteScreenReceptionWasEnabled: false,
+      browserEndedDuringTransaction: false,
+    };
     if (projection.participant_role === "initiator") {
       if (payload.screen_share && !this.prepareRemoteScreenReception(id, projection.call_id)) return;
+      if (!payload.screen_share && this.renegotiation.screenAction === "stop" && !this.prepareRemoteScreenStop(id, projection.call_id)) return;
       await this.createAndSendRenegotiationOffer(projection.call_id, id, payload.screen_share);
     }
   }
@@ -569,11 +712,27 @@ export class DirectedCallMediaCoordinator {
     const id = payload.renegotiation_id;
     if (projection.participant_role !== "recipient" || this.completedRenegotiations.includes(id)) return;
     if (this.renegotiation && this.renegotiation.id !== id) return;
-    if (!this.renegotiation) this.renegotiation = { callId: projection.call_id, generation: this.generation, id, phase: "offered", screenShare: payload.screen_share, localScreenShareStarted: false, remoteScreenReceptionEnabledByTransaction: false };
+    if (!this.renegotiation) this.renegotiation = {
+      callId: projection.call_id,
+      generation: this.generation,
+      id,
+      phase: "offered",
+      screenShare: payload.screen_share,
+      screenAction: payload.screen_share
+        ? "start"
+        : (this.remoteScreenShareCommitted || Boolean(this.adapter.getRemoteScreenShareStream?.()) ? "stop" : "none"),
+      localScreenShareStarted: false,
+      localScreenShareStopped: false,
+      remoteScreenReceptionEnabledByTransaction: false,
+      remoteScreenReceptionDisabledByTransaction: false,
+      remoteScreenReceptionWasEnabled: false,
+      browserEndedDuringTransaction: false,
+    };
     if (this.renegotiation.phase === "answering") return;
     if (this.renegotiation.phase === "requested") this.renegotiation.phase = "offered";
     if (this.renegotiation.phase !== "offered") return;
-    if (payload.screen_share && !this.renegotiation.localScreenShareStarted && !this.prepareRemoteScreenReception(id, projection.call_id)) return;
+    if (this.renegotiation.screenAction === "start" && !this.renegotiation.localScreenShareStarted && !this.prepareRemoteScreenReception(id, projection.call_id)) return;
+    if (this.renegotiation.screenAction === "stop" && !this.renegotiation.localScreenShareStarted && !this.prepareRemoteScreenStop(id, projection.call_id)) return;
     this.renegotiation.phase = "answering";
     const transaction = this.renegotiation;
     try {
@@ -619,8 +778,20 @@ export class DirectedCallMediaCoordinator {
     this.completedRenegotiations.push(id);
     if (this.completedRenegotiations.length > MAX_COMPLETED_RENEGOTIATIONS) this.completedRenegotiations.shift();
     this.renegotiation = null;
+    if (transaction.screenAction === "start" && transaction.localScreenShareStarted) this.localScreenShareCommitted = true;
+    if (transaction.screenAction === "stop") this.localScreenShareCommitted = false;
     if (transaction.screenShare && transaction.remoteScreenReceptionEnabledByTransaction) {
+      this.remoteScreenShareCommitted = true;
       this.adapter.reconcileRemoteScreenShareState?.(true);
+    }
+    if (transaction.screenAction === "stop" && transaction.remoteScreenReceptionDisabledByTransaction) {
+      this.remoteScreenShareCommitted = false;
+      this.adapter.reconcileRemoteScreenShareState?.(false);
+    }
+    const browserStopPending = transaction.browserEndedDuringTransaction || this.pendingBrowserScreenStop;
+    this.pendingBrowserScreenStop = false;
+    if (browserStopPending && this.localScreenShareCommitted) {
+      queueMicrotask(() => { void this.stopScreenShareInternal(true); });
     }
   }
 
@@ -628,10 +799,22 @@ export class DirectedCallMediaCoordinator {
     const transaction = this.renegotiation;
     if (transaction?.id !== id) return;
     this.renegotiation = null;
-    if (transaction.localScreenShareStarted) this.adapter.stopScreenShare?.();
+    if (transaction.localScreenShareStarted) {
+      this.localScreenShareActive = false;
+      this.adapter.stopScreenShare?.();
+    }
+    if (transaction.screenAction === "start") this.localScreenShareCommitted = false;
     if (transaction.remoteScreenReceptionEnabledByTransaction) {
       this.adapter.setRemoteScreenShareReceptionEnabled?.(false);
       this.adapter.reconcileRemoteScreenShareState?.(false);
+    }
+    if (transaction.remoteScreenReceptionDisabledByTransaction && transaction.remoteScreenReceptionWasEnabled) {
+      this.adapter.setRemoteScreenShareReceptionEnabled?.(true);
+    }
+    const browserStopPending = transaction.browserEndedDuringTransaction || this.pendingBrowserScreenStop;
+    this.pendingBrowserScreenStop = false;
+    if (browserStopPending && this.localScreenShareCommitted) {
+      queueMicrotask(() => { void this.stopScreenShareInternal(true); });
     }
   }
 
@@ -639,11 +822,27 @@ export class DirectedCallMediaCoordinator {
     const transaction = this.renegotiation;
     if (!transaction || transaction.id !== id || transaction.callId !== callId || !transaction.screenShare) return false;
     if (transaction.remoteScreenReceptionEnabledByTransaction) return true;
-    if (!this.adapter.setRemoteScreenShareReceptionEnabled?.(true)) {
+    const enabled = this.adapter.setRemoteScreenShareReceptionEnabled ? this.adapter.setRemoteScreenShareReceptionEnabled(true) : true;
+    if (!enabled) {
       this.clearRenegotiation(id);
       return false;
     }
     transaction.remoteScreenReceptionEnabledByTransaction = true;
+    return true;
+  }
+
+  private prepareRemoteScreenStop(id: string, callId: string): boolean {
+    const transaction = this.renegotiation;
+    if (!transaction || transaction.id !== id || transaction.callId !== callId || transaction.screenAction !== "stop") return false;
+    if (transaction.remoteScreenReceptionDisabledByTransaction) return true;
+    transaction.remoteScreenReceptionWasEnabled = this.remoteScreenShareCommitted || Boolean(this.adapter.getRemoteScreenShareStream?.());
+    if (!transaction.remoteScreenReceptionWasEnabled) return true;
+    const disabled = this.adapter.setRemoteScreenShareReceptionEnabled ? this.adapter.setRemoteScreenShareReceptionEnabled(false) : true;
+    if (!disabled) {
+      this.clearRenegotiation(id);
+      return false;
+    }
+    transaction.remoteScreenReceptionDisabledByTransaction = true;
     return true;
   }
 

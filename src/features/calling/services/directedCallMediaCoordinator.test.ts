@@ -94,6 +94,7 @@ function createLifecycle() {
 type TestAdapter = DirectedCallWebRtcAdapter & {
   configure(options: DirectedCallWebRtcAdapterOptions): void;
   setReadiness(readiness: DirectedCallInitialMediaReadiness): void;
+  emitLocalScreenShareEnded(): void;
 };
 
 function mockedMethod(method: (...args: any[]) => any): ReturnType<typeof vi.fn> {
@@ -109,6 +110,7 @@ function createAdapter(options: DirectedCallWebRtcAdapterOptions = {}): TestAdap
     ready: false,
   });
   let localScreenShareStream: ReturnType<typeof createStream> | null = null;
+  let localScreenShareEndedHandler: (() => void) | null = null;
   let readinessCallback = options.onInitialMediaReadinessChange;
   const adapter = {
     get initialMediaReadinessSnapshot() { return readiness; },
@@ -128,11 +130,19 @@ function createAdapter(options: DirectedCallWebRtcAdapterOptions = {}): TestAdap
     createRenegotiationAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "renegotiation-answer" }),
     applyRenegotiationAnswer: vi.fn().mockResolvedValue(undefined),
     getLocalScreenShareStream: vi.fn(() => localScreenShareStream),
+    getRemoteScreenShareStream: vi.fn(() => null),
     startScreenShare: vi.fn(async () => {
       localScreenShareStream = createStream([createTrack("video")]);
       return true;
     }),
     stopScreenShare: vi.fn(() => { localScreenShareStream = null; }),
+    onLocalScreenShareEnded: vi.fn((handler: () => void) => {
+      localScreenShareEndedHandler = handler;
+      return () => {
+        if (localScreenShareEndedHandler === handler) localScreenShareEndedHandler = null;
+      };
+    }),
+    emitLocalScreenShareEnded: vi.fn(() => { localScreenShareEndedHandler?.(); }),
     setRemoteScreenShareReceptionEnabled: vi.fn(() => true),
     reconcileRemoteScreenShareState: vi.fn(),
     addRemoteIceCandidate: vi.fn().mockResolvedValue(true),
@@ -1207,6 +1217,236 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(initiatorAdapter.reconcileRemoteScreenShareState).toHaveBeenCalledWith(true);
     recipient.dispose();
     initiator.dispose();
+  });
+
+  it("stops screen sharing as the canonical offerer and binds the false transaction", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    await expect(coordinator.startScreenShare()).resolves.toBe(true);
+    const startId = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_request")?.[3].renegotiation_id as string;
+    session.emitSignal(renegotiationAnswer(startId, true));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    (session.sendSignal as ReturnType<typeof vi.fn>).mockClear();
+    mockedMethod(adapter.stopScreenShare).mockClear();
+
+    const stopPromise = coordinator.stopScreenShare();
+    expect(adapter.stopScreenShare).toHaveBeenCalledTimes(1);
+    const request = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_request");
+    const stopId = request?.[3].renegotiation_id as string;
+    expect(request?.[3]).toEqual({ renegotiation_id: stopId, screen_share: false });
+    await vi.waitFor(() => expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(2));
+    expect((session.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_offer")?.[3])
+      .toEqual({ renegotiation_id: stopId, screen_share: false, sdp: "renegotiation-offer" });
+    expect(adapter.getLocalScreenShareStream?.()).toBeNull();
+    session.emitSignal(renegotiationAnswer(stopId, false));
+    await expect(stopPromise).resolves.toBe(true);
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(2));
+    await expect(coordinator.stopScreenShare()).resolves.toBe(true);
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it("stops screen sharing as the canonical answerer and clears the offerer's committed reception on completion", async () => {
+    const recipientSession = createSession();
+    const recipientTransport = new DirectedCallSignalTransport(recipientSession, { generation: "g1" });
+    const recipientAdapter = createAdapter();
+    const recipient = new DirectedCallMediaCoordinator(recipientSession, recipientTransport, createLifecycle(), "g1", {
+      adapterFactory: (options) => bindAdapter(options, recipientAdapter),
+    });
+    startActive(recipient, recipientSession, "recipient");
+    await vi.waitFor(() => expect(recipientAdapter.prepareAnswer).toHaveBeenCalled());
+    await expect(recipient.startScreenShare()).resolves.toBe(true);
+    const startId = (recipientSession.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_request")?.[3].renegotiation_id as string;
+
+    const initiatorSession = createSession();
+    const initiatorTransport = new DirectedCallSignalTransport(initiatorSession, { generation: "g1" });
+    const initiatorAdapter = createAdapter();
+    const initiator = new DirectedCallMediaCoordinator(initiatorSession, initiatorTransport, createLifecycle(), "g1", {
+      adapterFactory: (options) => bindAdapter(options, initiatorAdapter),
+    });
+    startActive(initiator, initiatorSession);
+    await vi.waitFor(() => expect(initiatorAdapter.prepareOffer).toHaveBeenCalled());
+    initiatorSession.emitSignal(renegotiationRequest(startId, true));
+    await vi.waitFor(() => expect(initiatorAdapter.createRenegotiationOffer).toHaveBeenCalledTimes(1));
+    recipientSession.emitSignal(renegotiationOffer(startId, true));
+    await vi.waitFor(() => expect(recipientAdapter.createRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(recipientSession.sendSignal).toHaveBeenCalledWith(callId, expect.any(String), "renegotiate_answer", expect.objectContaining({ renegotiation_id: startId })));
+    await Promise.resolve();
+    await vi.waitFor(() => expect(recipientSession.sendSignal).toHaveBeenCalledTimes(2));
+    await Promise.resolve();
+    initiatorSession.emitSignal(renegotiationAnswer(startId, true));
+    await vi.waitFor(() => expect(initiatorAdapter.reconcileRemoteScreenShareState).toHaveBeenCalledWith(true));
+    (recipientSession.sendSignal as ReturnType<typeof vi.fn>).mockClear();
+    (initiatorSession.sendSignal as ReturnType<typeof vi.fn>).mockClear();
+    mockedMethod(initiatorAdapter.setRemoteScreenShareReceptionEnabled).mockClear();
+    mockedMethod(initiatorAdapter.reconcileRemoteScreenShareState).mockClear();
+
+    const stopPromise = recipient.stopScreenShare();
+    const request = (recipientSession.sendSignal as ReturnType<typeof vi.fn>).mock.calls[0];
+    const stopId = request[3].renegotiation_id as string;
+    expect(request[3]).toEqual({ renegotiation_id: stopId, screen_share: false });
+    initiatorSession.emitSignal(renegotiationRequest(stopId, false));
+    await vi.waitFor(() => expect(initiatorAdapter.createRenegotiationOffer).toHaveBeenCalledTimes(2));
+    expect(initiatorAdapter.setRemoteScreenShareReceptionEnabled).toHaveBeenLastCalledWith(false);
+    expect(initiatorAdapter.reconcileRemoteScreenShareState).not.toHaveBeenCalled();
+    recipientSession.emitSignal(renegotiationOffer(stopId, false));
+    await vi.waitFor(() => expect(recipientAdapter.createRenegotiationAnswer).toHaveBeenCalledTimes(2));
+    initiatorSession.emitSignal(renegotiationAnswer(stopId, false));
+    await expect(stopPromise).resolves.toBe(true);
+    await vi.waitFor(() => expect(initiatorAdapter.reconcileRemoteScreenShareState).toHaveBeenCalledWith(false));
+    expect(recipientAdapter.getLocalScreenShareStream?.()).toBeNull();
+    recipient.dispose();
+    initiator.dispose();
+  });
+
+  it("is idempotent for explicit stop and translates one browser-ended callback into one stop", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    await expect(coordinator.startScreenShare()).resolves.toBe(true);
+    const startId = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_request")?.[3].renegotiation_id as string;
+    session.emitSignal(renegotiationAnswer(startId, true));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    (session.sendSignal as ReturnType<typeof vi.fn>).mockClear();
+    adapter.emitLocalScreenShareEnded();
+    adapter.emitLocalScreenShareEnded();
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(2));
+    const stopRequest = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls[0];
+    const stopId = stopRequest[3].renegotiation_id as string;
+    expect(stopRequest[3]).toEqual({ renegotiation_id: stopId, screen_share: false });
+    session.emitSignal(renegotiationAnswer(stopId, false));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(2));
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it("queues browser-ended stop behind another transaction without duplicating it", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    await expect(coordinator.startScreenShare()).resolves.toBe(true);
+    const startId = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_request")?.[3].renegotiation_id as string;
+    session.emitSignal(renegotiationAnswer(startId, true));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    (session.sendSignal as ReturnType<typeof vi.fn>).mockClear();
+    const ordinaryId = await coordinator.requestRenegotiation();
+    adapter.emitLocalScreenShareEnded();
+    expect(session.sendSignal).toHaveBeenCalledTimes(2);
+    session.emitSignal(renegotiationAnswer(ordinaryId!));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(4));
+    expect((session.sendSignal as ReturnType<typeof vi.fn>).mock.calls[2][3].screen_share).toBe(false);
+    const stopId = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls[2][3].renegotiation_id as string;
+    session.emitSignal(renegotiationAnswer(stopId, false));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(3));
+    coordinator.dispose();
+  });
+
+  it("retains committed remote visibility and receive intent when stop answer fails, then permits retry", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const remoteStream = createStream([createTrack("video")]);
+    mockedMethod(adapter.getRemoteScreenShareStream).mockReturnValue(remoteStream);
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    const startId = "11111111-1111-4111-8111-111111111111";
+    session.emitSignal(renegotiationRequest(startId, true));
+    await vi.waitFor(() => expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(1));
+    session.emitSignal(renegotiationAnswer(startId, true));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    mockedMethod(adapter.applyRenegotiationAnswer).mockRejectedValueOnce(new Error("stop answer failed"));
+    mockedMethod(adapter.setRemoteScreenShareReceptionEnabled).mockClear();
+    mockedMethod(adapter.reconcileRemoteScreenShareState).mockClear();
+    (session.sendSignal as ReturnType<typeof vi.fn>).mockClear();
+
+    const firstId = "22222222-2222-4222-8222-222222222222";
+    session.emitSignal(renegotiationRequest(firstId, false));
+    await vi.waitFor(() => expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(2));
+    session.emitSignal(renegotiationAnswer(firstId, false));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(2));
+    expect(adapter.getRemoteScreenShareStream?.()).toBe(remoteStream);
+    expect(adapter.setRemoteScreenShareReceptionEnabled).toHaveBeenLastCalledWith(true);
+    expect(adapter.reconcileRemoteScreenShareState).not.toHaveBeenCalledWith(false);
+
+    const retryId = "33333333-3333-4333-8333-333333333333";
+    session.emitSignal(renegotiationRequest(retryId, false));
+    await vi.waitFor(() => expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(3));
+    session.emitSignal(renegotiationAnswer(retryId, false));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(adapter.reconcileRemoteScreenShareState).toHaveBeenCalledWith(false));
+    coordinator.dispose();
+  });
+
+  it("rolls back failed stop request or offer delivery while allowing a later retry", async () => {
+    for (const failure of ["request", "offer"] as const) {
+      const session = createSession();
+      const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+      const adapter = createAdapter();
+      const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+        adapterFactory: (options) => bindAdapter(options, adapter),
+      });
+      startActive(coordinator, session);
+      await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+      await expect(coordinator.startScreenShare()).resolves.toBe(true);
+      const startId = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_request")?.[3].renegotiation_id as string;
+      session.emitSignal(renegotiationAnswer(startId, true));
+      await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+      (session.sendSignal as ReturnType<typeof vi.fn>).mockClear();
+      if (failure === "request") mockedMethod(session.sendSignal).mockRejectedValueOnce(new Error("request failed"));
+      if (failure === "offer") mockedMethod(adapter.createRenegotiationOffer).mockRejectedValueOnce(new Error("offer failed"));
+
+      await expect(coordinator.stopScreenShare()).resolves.toBe(false);
+      expect(adapter.getLocalScreenShareStream?.()).toBeNull();
+      (session.sendSignal as ReturnType<typeof vi.fn>).mockClear();
+      await expect(coordinator.stopScreenShare()).resolves.toBe(true);
+      const retryId = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_request")?.[3].renegotiation_id as string;
+      session.emitSignal(renegotiationAnswer(retryId, false));
+      await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(2));
+      coordinator.dispose();
+    }
+  });
+
+  it("fences a pending stop request after disposal", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    await expect(coordinator.startScreenShare()).resolves.toBe(true);
+    const startId = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_request")?.[3].renegotiation_id as string;
+    session.emitSignal(renegotiationAnswer(startId, true));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    const request = deferred<unknown>();
+    mockedMethod(session.sendSignal).mockReturnValueOnce(request.promise);
+    const stop = coordinator.stopScreenShare();
+    expect(adapter.getLocalScreenShareStream?.()).toBeNull();
+    coordinator.dispose();
+    request.resolve(undefined);
+    await expect(stop).resolves.toBe(false);
+    expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(1);
   });
 
   it("rolls back screen ownership when capture, request, or offer fails", async () => {
