@@ -60,7 +60,7 @@ function createHarness(options: Pick<DirectedCallWebRtcAdapterOptions, "onDiagno
     kind: "video" as const,
     direction: "inactive" as RTCRtpTransceiverDirection,
     currentDirection: null as RTCRtpTransceiverDirection | null,
-    mid: "1",
+    mid: "1" as string | null,
     sender: screenSender,
     receiver: { track: null },
     stop: vi.fn(),
@@ -69,7 +69,7 @@ function createHarness(options: Pick<DirectedCallWebRtcAdapterOptions, "onDiagno
     kind: "audio" as const,
     direction: "sendrecv" as RTCRtpTransceiverDirection,
   };
-  const transceivers: Array<{ kind: "audio" | "video"; direction: RTCRtpTransceiverDirection }> = [audioTransceiver];
+  const transceivers: Array<{ kind?: "audio" | "video"; direction: RTCRtpTransceiverDirection; mid?: string | null; sender?: unknown; receiver?: unknown }> = [audioTransceiver];
   const pc = {
     localDescription: null as RTCSessionDescription | null,
     remoteDescription: null as RTCSessionDescription | null,
@@ -963,7 +963,110 @@ describe("DirectedCallWebRtcAdapter", () => {
     }));
   });
 
-  it("records equal-MID transceiver identity rejection without changing association", async () => {
+  it("adopts the distinct MID 1 transceiver exposed by a remote screen offer", async () => {
+    const diagnostics: Array<{ event: string; details: DirectedCallWebRtcDiagnosticDetails }> = [];
+    const harness = createHarness({ onDiagnostic: (event, details) => diagnostics.push({ event, details }) });
+    await harness.adapter.prepareOffer();
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    harness.screenTransceiver.mid = null;
+    const remoteTrack = createRemoteTrack("video");
+    const authoritative = {
+      direction: "recvonly" as RTCRtpTransceiverDirection,
+      currentDirection: null as RTCRtpTransceiverDirection | null,
+      mid: "1",
+      sender: { track: null, replaceTrack: vi.fn().mockResolvedValue(undefined) },
+      receiver: { track: remoteTrack },
+    };
+    const unrelated = {
+      kind: "video" as const,
+      direction: "inactive" as RTCRtpTransceiverDirection,
+      currentDirection: "inactive" as RTCRtpTransceiverDirection,
+      mid: "2",
+      sender: { track: null, replaceTrack: vi.fn().mockResolvedValue(undefined) },
+      receiver: { track: null },
+    };
+    harness.pc.setRemoteDescription = vi.fn(async (description: RTCSessionDescriptionInit) => {
+      harness.pc.remoteDescription = description as RTCSessionDescription;
+      harness.transceivers.push(unrelated);
+      harness.transceivers.push(authoritative);
+    });
+
+    await harness.adapter.applyRenegotiationOffer({
+      type: "offer",
+      sdp: "v=0\r\nm=audio 9 RTP/AVP 111\r\nm=video 0 RTP/AVP 96\r\na=mid:2\r\na=inactive\r\nm=video 9 RTP/AVP 96\r\na=mid:1\r\na=sendonly\r\n",
+    });
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [], transceiver: authoritative } as unknown as RTCTrackEvent);
+
+    expect(harness.adapter.getRemoteScreenShareStream()?.getTracks()).toEqual([remoteTrack]);
+    expect(harness.screenTransceiver.direction).toBe("inactive");
+    expect(authoritative.direction).toBe("recvonly");
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+    expect(diagnostics.some(({ details }) => details.associationStrategy === "offer_mid" && details.associationAccepted === true)).toBe(true);
+    expect(diagnostics.some(({ details }) => details.transceiverMid === "1" && details.selectedScreenTransceiver === true)).toBe(true);
+
+    harness.pc.ontrack?.({ track: createRemoteTrack("video"), streams: [], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
+    expect(harness.adapter.getRemoteScreenShareStream()?.getTracks()).toEqual([remoteTrack]);
+
+    await harness.adapter.applyRenegotiationOffer({
+      type: "offer",
+      sdp: "v=0\r\nm=audio 9 RTP/AVP 111\r\nm=video 0 RTP/AVP 96\r\na=mid:2\r\na=inactive\r\nm=video 9 RTP/AVP 96\r\na=mid:1\r\na=sendonly\r\n",
+    });
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+    expect(harness.adapter.getRemoteScreenShareStream()?.getTracks()).toEqual([remoteTrack]);
+  });
+
+  it("uses receiver-track identity when the adopted transceiver MID is temporarily missing", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    harness.screenTransceiver.mid = null;
+    const remoteTrack = createRemoteTrack("video");
+    const wrapper = { ...harness.screenTransceiver, receiver: { track: remoteTrack }, mid: null };
+
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [], transceiver: wrapper } as unknown as RTCTrackEvent);
+
+    expect(harness.adapter.getRemoteScreenShareStream()?.getTracks()).toEqual([remoteTrack]);
+    expect(harness.adapter.getRemoteScreenShareStream()).not.toBeNull();
+  });
+
+  it("moves an existing local screen sender onto the offer MID before creating a sendonly answer", async () => {
+    const harness = createHarness();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    await harness.adapter.prepareOffer();
+    expect(harness.adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    harness.screenTransceiver.mid = null;
+    await harness.adapter.startScreenShare();
+    const authoritative = {
+      direction: "inactive" as RTCRtpTransceiverDirection,
+      currentDirection: null as RTCRtpTransceiverDirection | null,
+      mid: "1",
+      sender: { track: null, replaceTrack: vi.fn(async (track) => { authoritative.sender.track = track; }) },
+      receiver: { track: null },
+    };
+    harness.pc.setRemoteDescription = vi.fn(async (description: RTCSessionDescriptionInit) => {
+      harness.pc.remoteDescription = description as RTCSessionDescription;
+      harness.transceivers.push(authoritative);
+    });
+    harness.pc.createAnswer.mockResolvedValue({
+      type: "answer",
+      sdp: "v=0\r\nm=video 9 RTP/AVP 96\r\na=mid:1\r\na=sendonly\r\n",
+    });
+
+    await harness.adapter.applyRenegotiationOffer({
+      type: "offer",
+      sdp: "v=0\r\nm=video 9 RTP/AVP 96\r\na=mid:1\r\na=recvonly\r\n",
+    });
+    const answer = await harness.adapter.createRenegotiationAnswer();
+
+    expect(harness.screenTransceiver.direction).toBe("inactive");
+    expect(harness.screenSender.track).toBeNull();
+    expect(authoritative.sender.track).toBe(harness.screenTrack);
+    expect(authoritative.direction).toBe("sendonly");
+    expect(answer.sdp).toContain("a=sendonly");
+    expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
+  });
+
+  it("adopts equal-MID transceiver wrappers without requiring object identity", async () => {
     const diagnostics: Array<{ event: string; details: any }> = [];
     const harness = createHarness({ onDiagnostic: (event, details) => diagnostics.push({ event, details }) });
     await harness.adapter.prepareOffer();
@@ -971,16 +1074,17 @@ describe("DirectedCallWebRtcAdapter", () => {
     const eventTransceiver = { ...harness.screenTransceiver, mid: "1" };
     harness.pc.ontrack?.({ track: createRemoteTrack("video"), streams: [], transceiver: eventTransceiver } as unknown as RTCTrackEvent);
 
-    const rejection = diagnostics.find(({ details }) => details.diagnosticStage === "association_rejected");
-    expect(rejection?.details).toMatchObject({
-      diagnosticReason: "transceiver_identity_mismatch",
+    const adoption = diagnostics.find(({ event, details }) => event === "remote_video_ontrack" && details.diagnosticStage === "association_checked" && details.associationAccepted);
+    expect(adoption?.details).toMatchObject({
+      diagnosticReason: "succeeded",
       eventTransceiverPresent: true,
       eventTransceiverMid: "1",
       expectedScreenTransceiverMid: "1",
-      transceiverIdentityMatch: false,
-      associationStrategy: "strict_identity",
-      associationAccepted: false,
+      transceiverIdentityMatch: true,
+      associationStrategy: "offer_mid",
+      associationAccepted: true,
     });
+    expect(harness.adapter.getRemoteScreenShareStream()).not.toBeNull();
   });
 
   it("records a fixed value for a missing event transceiver MID", async () => {

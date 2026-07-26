@@ -121,7 +121,7 @@ export interface DirectedCallWebRtcDiagnosticDetails {
   expectedSenderTrackPresent?: boolean;
   eventReceiverTrackPresent?: boolean;
   expectedReceiverTrackPresent?: boolean;
-  associationStrategy?: "strict_identity" | "owned_transceiver" | "event_transceiver";
+  associationStrategy?: "strict_identity" | "owned_transceiver" | "event_transceiver" | "offer_mid" | "receiver_track_identity";
   associationAccepted?: boolean;
   videoTransceiverIndex?: number | null;
   videoTransceiverCount?: number | null;
@@ -314,6 +314,7 @@ export class DirectedCallWebRtcAdapter {
   private audioSwitchEpoch = 0;
   private audioReplacementTail: Promise<void> = Promise.resolve();
   private screenShareTransceiver: ScreenShareTransceiverLike | null = null;
+  private readonly retiredScreenTransceivers = new WeakSet<object>();
   private readonly videoTransceiverIndices = new WeakMap<object, number>();
   private nextVideoTransceiverIndex = 0;
   private localScreenShareEnabled = false;
@@ -522,6 +523,7 @@ export class DirectedCallWebRtcAdapter {
     try {
       await this.peerConnection!.setRemoteDescription(offer);
       this.assertCurrent(epoch);
+      await this.adoptAuthoritativeScreenTransceiver(offer.sdp);
       await this.flushQueuedCandidates(epoch);
       const answer = await this.peerConnection!.createAnswer();
       this.assertCurrent(epoch);
@@ -578,6 +580,7 @@ export class DirectedCallWebRtcAdapter {
     try {
       await this.peerConnection!.setRemoteDescription(offer);
       this.assertCurrent(epoch);
+      await this.adoptAuthoritativeScreenTransceiver(offer.sdp);
       this.emitVideoTransceiverDiagnostics("after_set_remote_offer", "after_set_remote_offer", offer.sdp);
       this.emitTransceiverDiagnostic("peer_connection", undefined, offer.sdp);
       await this.flushQueuedCandidates(epoch);
@@ -789,13 +792,99 @@ export class DirectedCallWebRtcAdapter {
     if (this.screenShareTransceiver) this.screenShareTransceiver.direction = this.screenShareDirection();
   }
 
-  private adoptRemoteScreenTransceiver(transceiver?: ScreenShareTransceiverLike): boolean {
-    if (this.screenShareTransceiver && transceiver && this.screenShareTransceiver !== transceiver) return false;
-    if (!transceiver && !this.screenShareTransceiver) return false;
-    if (transceiver) this.ensureScreenShareTransceiver(transceiver);
-    this.remoteScreenShareReceptionEnabled = true;
-    this.updateScreenShareTransceiverDirection();
+  private isRetiredScreenTransceiver(transceiver?: ScreenShareTransceiverLike): boolean {
+    return Boolean(transceiver && this.retiredScreenTransceivers.has(transceiver as unknown as object));
+  }
+
+  private rebindScreenShareTransceiver(
+    transceiver: ScreenShareTransceiverLike,
+    associationStrategy: "offer_mid" | "receiver_track_identity" | "event_transceiver",
+  ): boolean {
+    if (this.isRetiredScreenTransceiver(transceiver)) return false;
+    const previous = this.screenShareTransceiver;
+    if (previous === transceiver) return true;
+
+    if (previous) {
+      this.retiredScreenTransceivers.add(previous as unknown as object);
+      previous.direction = "inactive";
+      if (previous.sender.track) void previous.sender.replaceTrack(null).catch(() => undefined);
+    }
+    this.screenShareTransceiver = transceiver;
+    this.emitDiagnostic("peer_connection", {
+      diagnosticStage: "association_checked",
+      diagnosticReason: "succeeded",
+      associationStrategy,
+      associationAccepted: true,
+      ...this.transceiverDiagnosticDetails(),
+    });
     return true;
+  }
+
+  private async migrateLocalScreenShareTrack(): Promise<void> {
+    const transceiver = this.screenShareTransceiver;
+    const track = this.localScreenShareTrack;
+    if (!transceiver || !track || transceiver.sender.track === track) return;
+    await transceiver.sender.replaceTrack(track);
+  }
+
+  private async adoptAuthoritativeScreenTransceiver(sdp?: string): Promise<boolean> {
+    const summaries = videoSdpSummaries(sdp ?? "")
+      .filter((summary) => !summary.rejected && summary.mid !== null);
+    if (summaries.length === 0) return false;
+
+    let transceivers: ScreenShareTransceiverLike[] = [];
+    try {
+      transceivers = this.peerConnection?.getTransceivers?.() ?? [];
+    } catch {
+      return false;
+    }
+    for (const summary of summaries) {
+      const mid = summary.mid;
+      const candidate = transceivers.find((transceiver) =>
+        !this.isRetiredScreenTransceiver(transceiver)
+        && transceiver.mid === mid,
+      );
+      if (!candidate) continue;
+      const adopted = this.adoptRemoteScreenTransceiver(
+        candidate,
+        undefined,
+        summary.direction === "sendonly" || summary.direction === "sendrecv",
+        true,
+      );
+      if (!adopted.accepted) continue;
+      await this.migrateLocalScreenShareTrack();
+      this.updateScreenShareTransceiverDirection();
+      return true;
+    }
+    return false;
+  }
+
+  private adoptRemoteScreenTransceiver(
+    transceiver?: ScreenShareTransceiverLike,
+    track?: DirectedCallMediaStreamTrack,
+    receiveRemote = true,
+    allowOfferMid = false,
+  ): { accepted: boolean; associationStrategy: "strict_identity" | "owned_transceiver" | "event_transceiver" | "offer_mid" | "receiver_track_identity" } {
+    if (this.isRetiredScreenTransceiver(transceiver)) return { accepted: false, associationStrategy: "strict_identity" };
+    if (!transceiver && !this.screenShareTransceiver) return { accepted: false, associationStrategy: "owned_transceiver" };
+    if (transceiver && this.screenShareTransceiver && this.screenShareTransceiver !== transceiver) {
+      const sameMid = Boolean(this.screenShareTransceiver?.mid && transceiver.mid && this.screenShareTransceiver.mid === transceiver.mid);
+      const receiverTrackMatches = Boolean(track && transceiver.receiver?.track === track);
+      if (!sameMid && !receiverTrackMatches && !allowOfferMid) return { accepted: false, associationStrategy: "strict_identity" };
+      const associationStrategy = allowOfferMid || sameMid ? "offer_mid" : "receiver_track_identity";
+      if (!this.rebindScreenShareTransceiver(transceiver, associationStrategy)) {
+        return { accepted: false, associationStrategy };
+      }
+      this.remoteScreenShareReceptionEnabled = receiveRemote;
+      this.updateScreenShareTransceiverDirection();
+      return { accepted: true, associationStrategy };
+    }
+    if (transceiver) {
+      this.ensureScreenShareTransceiver(transceiver);
+    }
+    this.remoteScreenShareReceptionEnabled = receiveRemote;
+    this.updateScreenShareTransceiverDirection();
+    return { accepted: true, associationStrategy: transceiver ? "event_transceiver" : "owned_transceiver" };
   }
 
   private emitRemoteScreenShareChanged(stream: DirectedCallMediaStream | null): void {
@@ -1179,8 +1268,8 @@ export class DirectedCallWebRtcAdapter {
         if (!this.isCurrent(epoch)) return;
         if (event.track.kind === "video") {
           const eventTransceiver = event.transceiver as unknown as ScreenShareTransceiverLike | undefined;
-          const expectedTransceiver = this.screenShareTransceiver;
-          const identityMatch = expectedTransceiver && eventTransceiver ? expectedTransceiver === eventTransceiver : null;
+          let expectedTransceiver = this.screenShareTransceiver;
+          let identityMatch = expectedTransceiver && eventTransceiver ? expectedTransceiver === eventTransceiver : null;
           const receiverTrackIdentity = eventTransceiver?.receiver?.track
             ? (eventTransceiver.receiver.track === event.track ? "match" : "mismatch")
             : "unavailable";
@@ -1217,10 +1306,12 @@ export class DirectedCallWebRtcAdapter {
             });
             return;
           }
-          const associationAccepted = this.adoptRemoteScreenTransceiver(eventTransceiver);
+          const adoption = this.adoptRemoteScreenTransceiver(eventTransceiver, event.track);
+          expectedTransceiver = this.screenShareTransceiver;
+          identityMatch = expectedTransceiver && eventTransceiver ? expectedTransceiver === eventTransceiver : null;
           this.emitDiagnostic("remote_video_ontrack", {
             diagnosticStage: "association_checked",
-            diagnosticReason: associationAccepted ? "succeeded" : "failed",
+            diagnosticReason: adoption.accepted ? "succeeded" : "failed",
             remoteTrackKind: event.track.kind,
             remoteTrackReadyState: event.track.readyState,
             eventTransceiverPresent: Boolean(eventTransceiver),
@@ -1232,12 +1323,12 @@ export class DirectedCallWebRtcAdapter {
             expectedSenderTrackPresent: Boolean(expectedTransceiver?.sender?.track),
             eventReceiverTrackPresent: Boolean(eventTransceiver?.receiver?.track),
             expectedReceiverTrackPresent: Boolean(expectedTransceiver?.receiver?.track),
-            associationStrategy: eventTransceiver ? "strict_identity" : "owned_transceiver",
-            associationAccepted,
+            associationStrategy: adoption.associationStrategy,
+            associationAccepted: adoption.accepted,
             senderTrackPresent: Boolean(expectedTransceiver?.sender?.track),
             receiverTrackPresent: Boolean(expectedTransceiver?.receiver?.track),
           });
-          if (!associationAccepted) {
+          if (!adoption.accepted) {
             this.emitDiagnostic("remote_video_ontrack", {
               diagnosticStage: "association_rejected",
               diagnosticReason: identityMatch === false ? "transceiver_identity_mismatch" : "missing_transceiver",
@@ -1252,7 +1343,7 @@ export class DirectedCallWebRtcAdapter {
               expectedSenderTrackPresent: Boolean(expectedTransceiver?.sender?.track),
               eventReceiverTrackPresent: Boolean(eventTransceiver?.receiver?.track),
               expectedReceiverTrackPresent: Boolean(expectedTransceiver?.receiver?.track),
-              associationStrategy: eventTransceiver ? "strict_identity" : "owned_transceiver",
+              associationStrategy: adoption.associationStrategy,
               associationAccepted: false,
             });
             return;
