@@ -92,6 +92,35 @@ describe("PersistentCallDebugPanel", () => {
     expect(screen.queryByTestId("persistent-call-debug-panel")).not.toBeInTheDocument();
   });
 
+  it("does not render in a browser even when persistent diagnostics are enabled or settings change", () => {
+    const { rerender } = render(
+      <PersistentCallBoundaryDebugProvider value={{ ...boundary, tauriDetected: false }}>
+        <PersistentCallDebugPanel
+          activeChatType="direct"
+          directChat
+          peerUuidSource="partnerRef"
+          peerUuidValid
+          finalButtonPredicate
+        />
+      </PersistentCallBoundaryDebugProvider>,
+    );
+
+    expect(screen.queryByTestId("persistent-call-debug-panel")).not.toBeInTheDocument();
+    window.dispatchEvent(new Event("vetra:call-debug-changed"));
+    rerender(
+      <PersistentCallBoundaryDebugProvider value={{ ...boundary, tauriDetected: false }}>
+        <PersistentCallDebugPanel
+          activeChatType="direct"
+          directChat
+          peerUuidSource="partnerRef"
+          peerUuidValid
+          finalButtonPredicate
+        />
+      </PersistentCallBoundaryDebugProvider>,
+    );
+    expect(screen.queryByTestId("persistent-call-debug-panel")).not.toBeInTheDocument();
+  });
+
   it("shows safe ownership release reasons in the visible timeline", () => {
     render(
       <PersistentCallBoundaryDebugProvider value={{

@@ -138,7 +138,11 @@ export function PersistentCallDebugPanel({
     console.info("[persistent-call-debug]", fields);
   }, [fields]);
 
-  if (boundary?.directedCallDiagnosticsEnabled !== true || boundary?.mode !== "persistent") return null;
+  if (
+    boundary?.directedCallDiagnosticsEnabled !== true
+    || boundary.mode !== "persistent"
+    || boundary.tauriDetected !== true
+  ) return null;
 
   return (
     <aside
