@@ -52,6 +52,9 @@ export function useDirectedCallHistoryForChat(activeChat: ActiveChat | null) {
   const getDirectedCallHistoryEntries = useAppStore(
     (state: RootState) => state.getDirectedCallHistoryEntries,
   );
+  const directedCallHistoryEntriesByCallId = useAppStore(
+    (state: RootState) => state.directedCallHistoryEntriesByCallId,
+  );
   const persistentCall = useOptionalPersistentCall();
   const presentation = persistentCall?.presentation;
 
@@ -164,7 +167,7 @@ export function useDirectedCallHistoryForChat(activeChat: ActiveChat | null) {
     return loadedEntries.filter(
       (entry: DirectedCallHistoryEntry) => entry.peer?.user_id === peerUserId,
     );
-  }, [getDirectedCallHistoryEntries, peerUserId]);
+  }, [directedCallHistoryEntriesByCallId, getDirectedCallHistoryEntries, peerUserId]);
 
   return { peerUserId, entries };
 }
