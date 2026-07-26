@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DirectedCallWebRtcAdapter,
   DirectedCallWebRtcError,
@@ -8,6 +8,8 @@ import {
   type DirectedCallWebRtcAdapterOptions,
   type DirectedCallWebRtcDiagnosticDetails,
 } from "./directedCallWebRtcAdapter";
+import { getDirectedCallDiagnosticTimeline, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
+import { setCallDebugEnabled } from "../utils/callDebug";
 
 function createHarness(options: Pick<DirectedCallWebRtcAdapterOptions, "onDiagnostic"> = {}) {
   const trackListeners = new Map<string, Set<EventListener>>();
@@ -87,7 +89,7 @@ function createHarness(options: Pick<DirectedCallWebRtcAdapterOptions, "onDiagno
       transceivers.push(screenTransceiver);
       return screenTransceiver;
     }),
-    getTransceivers: vi.fn(() => transceivers),
+    getTransceivers: vi.fn(() => transceivers as unknown as Array<typeof screenTransceiver>),
     getSenders: vi.fn(() => [sender]),
     createOffer: vi.fn(async (): Promise<RTCSessionDescriptionInit> => {
       const video = transceivers.find((transceiver) => transceiver.kind === "video");
@@ -195,6 +197,12 @@ function readinessHarness() {
 }
 
 describe("DirectedCallWebRtcAdapter", () => {
+  beforeEach(() => setCallDebugEnabled(true));
+  afterEach(() => {
+    resetDirectedCallDiagnosticTimeline();
+    setCallDebugEnabled(false);
+  });
+
   it("starts with a fully false initial media readiness snapshot", () => {
     const harness = readinessHarness();
 
@@ -949,10 +957,133 @@ describe("DirectedCallWebRtcAdapter", () => {
 
     expect(harness.adapter.getRemoteScreenShareStream()).toBe(browserStream);
     expect(browserStream.getTracks()).toEqual([remoteTrack]);
-    expect(diagnostics[1]).toEqual(expect.objectContaining({
+    expect(diagnostics.find(({ event }) => event === "remote_screen_stream_created")).toEqual(expect.objectContaining({
       event: "remote_screen_stream_created",
       details: expect.objectContaining({ remoteStreamSource: "browser-provided" }),
     }));
+  });
+
+  it("records equal-MID transceiver identity rejection without changing association", async () => {
+    const diagnostics: Array<{ event: string; details: any }> = [];
+    const harness = createHarness({ onDiagnostic: (event, details) => diagnostics.push({ event, details }) });
+    await harness.adapter.prepareOffer();
+    harness.adapter.setRemoteScreenShareReceptionEnabled(true);
+    const eventTransceiver = { ...harness.screenTransceiver, mid: "1" };
+    harness.pc.ontrack?.({ track: createRemoteTrack("video"), streams: [], transceiver: eventTransceiver } as unknown as RTCTrackEvent);
+
+    const rejection = diagnostics.find(({ details }) => details.diagnosticStage === "association_rejected");
+    expect(rejection?.details).toMatchObject({
+      diagnosticReason: "transceiver_identity_mismatch",
+      eventTransceiverPresent: true,
+      eventTransceiverMid: "1",
+      expectedScreenTransceiverMid: "1",
+      transceiverIdentityMatch: false,
+      associationStrategy: "strict_identity",
+      associationAccepted: false,
+    });
+  });
+
+  it("records a fixed value for a missing event transceiver MID", async () => {
+    const diagnostics: any[] = [];
+    const harness = createHarness({ onDiagnostic: (_event, details) => diagnostics.push(details) });
+    await harness.adapter.prepareOffer();
+    harness.adapter.setRemoteScreenShareReceptionEnabled(true);
+    harness.pc.ontrack?.({ track: createRemoteTrack("video"), streams: [], transceiver: { ...harness.screenTransceiver, mid: null } } as unknown as RTCTrackEvent);
+
+    expect(diagnostics.find((details) => details.diagnosticStage === "association_rejected")).toMatchObject({
+      eventTransceiverMid: null,
+      expectedScreenTransceiverMid: "1",
+      diagnosticReason: "transceiver_identity_mismatch",
+    });
+  });
+
+  it.each([
+    ["stream_constructor_failed", () => { throw new Error("constructor-secret"); }],
+    ["add_track_failed", () => { throw new Error("add-track-secret"); }],
+  ] as const)("records %s without exposing the exception", async (diagnosticReason, failure) => {
+    const diagnostics: any[] = [];
+    const harness = createHarness({ onDiagnostic: (_event, details) => diagnostics.push(details) });
+    await harness.adapter.prepareOffer();
+    harness.adapter.setRemoteScreenShareReceptionEnabled(true);
+    if (diagnosticReason === "stream_constructor_failed") {
+      harness.createRemoteStream.mockImplementationOnce(failure);
+    } else {
+      harness.createRemoteStream.mockImplementationOnce(() => ({ getTracks: () => [], addTrack: failure, removeTrack: vi.fn() }));
+    }
+
+    expect(() => harness.pc.ontrack?.({ track: createRemoteTrack("video"), streams: [], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent)).toThrow();
+    expect(diagnostics).toContainEqual(expect.objectContaining({ diagnosticReason }));
+    expect(JSON.stringify(diagnostics)).not.toContain("secret");
+  });
+
+  it("records listener and publication callback failures while preserving throws", async () => {
+    const listenerDiagnostics: any[] = [];
+    const listenerHarness = createHarness({ onDiagnostic: (_event, details) => listenerDiagnostics.push(details) });
+    await listenerHarness.adapter.prepareOffer();
+    listenerHarness.adapter.setRemoteScreenShareReceptionEnabled(true);
+    const listenerTrack = createRemoteTrack("video");
+    listenerTrack.addEventListener = () => { throw new Error("listener-secret"); };
+    expect(() => listenerHarness.pc.ontrack?.({ track: listenerTrack, streams: [], transceiver: listenerHarness.screenTransceiver } as unknown as RTCTrackEvent)).toThrow("listener-secret");
+    expect(listenerDiagnostics).toContainEqual(expect.objectContaining({ diagnosticReason: "listener_binding_failed" }));
+    expect(JSON.stringify(listenerDiagnostics)).not.toContain("listener-secret");
+
+    const callbackDiagnostics: any[] = [];
+    const callbackHarness = createHarness({ onDiagnostic: (_event, details) => callbackDiagnostics.push(details) });
+    const callbackAdapter = new DirectedCallWebRtcAdapter({
+      dependencies: {
+        getUserMedia: callbackHarness.getUserMedia,
+        createPeerConnection: callbackHarness.createPeerConnection,
+        createRemoteStream: callbackHarness.createRemoteStream,
+      },
+      onRemoteScreenShareChanged: () => { throw new Error("callback-secret"); },
+      onDiagnostic: (_event, details) => callbackDiagnostics.push(details),
+    });
+    await callbackAdapter.prepareOffer();
+    callbackAdapter.setRemoteScreenShareReceptionEnabled(true);
+    expect(() => callbackHarness.pc.ontrack?.({ track: createRemoteTrack("video"), streams: [], transceiver: callbackHarness.screenTransceiver } as unknown as RTCTrackEvent)).toThrow("callback-secret");
+    expect(callbackDiagnostics).toContainEqual(expect.objectContaining({ diagnosticReason: "publication_callback_failed" }));
+    expect(JSON.stringify(callbackDiagnostics)).not.toContain("callback-secret");
+  });
+
+  it("summarizes every video transceiver and SDP video section with stable safe indices", async () => {
+    const diagnostics: any[] = [];
+    const harness = createHarness({ onDiagnostic: (_event, details) => diagnostics.push(details) });
+    const secondTransceiver = {
+      kind: "video" as const,
+      mid: null,
+      direction: "inactive" as RTCRtpTransceiverDirection,
+      currentDirection: "inactive" as RTCRtpTransceiverDirection,
+      sender: { track: null, replaceTrack: vi.fn().mockResolvedValue(undefined) },
+      receiver: { track: null },
+    };
+    harness.transceivers.push(secondTransceiver as any);
+    await harness.adapter.prepareOffer();
+    harness.adapter.setRemoteScreenShareReceptionEnabled(true);
+    harness.pc.createOffer.mockResolvedValueOnce({
+      type: "offer",
+      sdp: "v=0\r\nm=video 9 RTP/AVP 96\r\na=mid:screen\r\na=sendonly\r\nm=video 0 RTP/AVP 96\r\na=mid:backup\r\na=inactive\r\n",
+    });
+    await harness.adapter.createRenegotiationOffer();
+
+    const snapshots = diagnostics.filter((details) => details.diagnosticStage === "before_create_offer");
+    expect(snapshots.map((details) => details.videoTransceiverIndex)).toEqual([0, 1]);
+    expect(snapshots.find((details) => details.selectedScreenTransceiver)).toMatchObject({ selectedScreenTransceiver: true, localScreenSenderTransceiver: false });
+    const summaries = diagnostics.filter((details) => details.diagnosticStage === "sdp_summary" && details.diagnosticReason === "after_set_local_offer");
+    expect(summaries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ videoMLineCount: 2, videoMLineIndex: 0, videoMLineMid: "screen", videoMLineDirection: "sendonly", videoMLineRejected: false }),
+      expect.objectContaining({ videoMLineCount: 2, videoMLineIndex: 1, videoMLineMid: "backup", videoMLineDirection: "inactive", videoMLineRejected: true }),
+    ]));
+    expect(JSON.stringify(diagnostics)).not.toMatch(/v=0|candidate:|track_id|label=|device_id|stream_id|secret/i);
+  });
+
+  it("does not append diagnostics when the existing diagnostics gate is disabled", async () => {
+    setCallDebugEnabled(false);
+    resetDirectedCallDiagnosticTimeline();
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    harness.adapter.setRemoteScreenShareReceptionEnabled(true);
+    harness.pc.ontrack?.({ track: createRemoteTrack("video"), streams: [], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
+    expect(getDirectedCallDiagnosticTimeline()).toEqual([]);
   });
 
   it("distinguishes remote ontrack from remote stream publication diagnostics", async () => {
@@ -962,7 +1093,8 @@ describe("DirectedCallWebRtcAdapter", () => {
     const remoteTrack = createRemoteTrack("video");
     harness.pc.ontrack?.({ track: remoteTrack, streams: [], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
 
-    expect(diagnostics).toEqual(["remote_video_ontrack", "remote_screen_stream_created"]);
+    expect(diagnostics[0]).toBe("remote_video_ontrack");
+    expect(diagnostics).toContain("remote_screen_stream_created");
   });
 
   it("keeps remote screen ownership until committed inactive reconciliation", async () => {

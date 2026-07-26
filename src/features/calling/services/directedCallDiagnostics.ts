@@ -279,7 +279,24 @@ export function recordDirectedCallDiagnostic(
     candidateAction?: string | null;
     candidateReason?: string | null;
     candidateIndex?: number | null;
+    diagnosticStage?: string | null;
+    diagnosticReason?: string | null;
     transceiverMid?: string | null;
+    eventTransceiverPresent?: boolean | null;
+    eventTransceiverMid?: string | null;
+    expectedScreenTransceiverMid?: string | null;
+    transceiverIdentityMatch?: boolean | null;
+    receiverTrackIdentity?: string | null;
+    eventSenderTrackPresent?: boolean | null;
+    expectedSenderTrackPresent?: boolean | null;
+    eventReceiverTrackPresent?: boolean | null;
+    expectedReceiverTrackPresent?: boolean | null;
+    associationStrategy?: string | null;
+    associationAccepted?: boolean | null;
+    videoTransceiverIndex?: number | null;
+    videoTransceiverCount?: number | null;
+    selectedScreenTransceiver?: boolean | null;
+    localScreenSenderTransceiver?: boolean | null;
     transceiverCurrentDirection?: string | null;
     transceiverDirection?: string | null;
     localVideoDirection?: string | null;
@@ -287,6 +304,9 @@ export function recordDirectedCallDiagnostic(
     senderTrackPresent?: boolean | null;
     receiverTrackPresent?: boolean | null;
     remoteTrackKind?: string | null;
+    remoteTrackReadyState?: string | null;
+    remoteTrackMuted?: boolean | null;
+    browserStreamPresent?: boolean | null;
     remoteStreamPresent?: boolean | null;
     selectedCallId?: string | null;
     selectedState?: string | null;
@@ -294,6 +314,11 @@ export function recordDirectedCallDiagnostic(
     fallbackPeerPresent?: boolean | null;
     initiationResultPresent?: boolean | null;
     staleGeneration?: string | null;
+    videoMLineCount?: number | null;
+    videoMLineIndex?: number | null;
+    videoMLineMid?: string | null;
+    videoMLineDirection?: string | null;
+    videoMLineRejected?: boolean | null;
     producerFamily?: DirectedCallDiagnosticProducerFamily;
   } = {},
 ): void {
@@ -335,7 +360,24 @@ export function recordDirectedCallDiagnostic(
     candidate_action: details.candidateAction,
     candidate_reason: safeDiagnosticText(details.candidateReason),
     candidate_index: details.candidateIndex,
+    diagnostic_stage: details.diagnosticStage,
+    diagnostic_reason: safeDiagnosticText(details.diagnosticReason),
     transceiver_mid: details.transceiverMid,
+    event_transceiver_present: details.eventTransceiverPresent,
+    event_transceiver_mid: details.eventTransceiverMid,
+    expected_screen_transceiver_mid: details.expectedScreenTransceiverMid,
+    transceiver_identity_match: details.transceiverIdentityMatch,
+    receiver_track_identity: details.receiverTrackIdentity,
+    event_sender_track_present: details.eventSenderTrackPresent,
+    expected_sender_track_present: details.expectedSenderTrackPresent,
+    event_receiver_track_present: details.eventReceiverTrackPresent,
+    expected_receiver_track_present: details.expectedReceiverTrackPresent,
+    association_strategy: details.associationStrategy,
+    association_accepted: details.associationAccepted,
+    video_transceiver_index: details.videoTransceiverIndex,
+    video_transceiver_count: details.videoTransceiverCount,
+    selected_screen_transceiver: details.selectedScreenTransceiver,
+    local_screen_sender_transceiver: details.localScreenSenderTransceiver,
     transceiver_current_direction: details.transceiverCurrentDirection,
     transceiver_direction: details.transceiverDirection,
     local_video_direction: details.localVideoDirection,
@@ -343,6 +385,9 @@ export function recordDirectedCallDiagnostic(
     sender_track_present: details.senderTrackPresent,
     receiver_track_present: details.receiverTrackPresent,
     remote_track_kind: details.remoteTrackKind,
+    remote_track_ready_state: details.remoteTrackReadyState,
+    remote_track_muted: details.remoteTrackMuted,
+    browser_stream_present: details.browserStreamPresent,
     remote_stream_present: details.remoteStreamPresent,
     selected_call_id: redactCallId(details.selectedCallId),
     selected_state: details.selectedState,
@@ -350,6 +395,11 @@ export function recordDirectedCallDiagnostic(
     fallback_peer_present: details.fallbackPeerPresent,
     initiation_result_present: details.initiationResultPresent,
     stale_generation: details.staleGeneration,
+    video_mline_count: details.videoMLineCount,
+    video_mline_index: details.videoMLineIndex,
+    video_mline_mid: details.videoMLineMid,
+    video_mline_direction: details.videoMLineDirection,
+    video_mline_rejected: details.videoMLineRejected,
   };
   const line = Object.entries(fields)
     .filter(([, value]) => value !== undefined)

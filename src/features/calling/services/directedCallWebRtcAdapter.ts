@@ -1,6 +1,7 @@
 import { createDirectedCallUuid } from "./directedCallDevice";
 import { buildIceServers } from "./iceServerConfig";
 import { buildMicrophoneConstraints, DEFAULT_AUDIO_PREFERENCES } from "@/shared/utils/audioConstraints";
+import { isCallDebugEnabled } from "../utils/callDebug";
 
 export type DirectedCallWebRtcFailureCode =
   | "permission_denied"
@@ -45,6 +46,7 @@ export interface DirectedCallMediaStream {
 }
 
 interface ScreenShareTransceiverLike {
+  kind?: string;
   direction: RTCRtpTransceiverDirection;
   currentDirection?: RTCRtpTransceiverDirection | null;
   mid?: string | null;
@@ -73,6 +75,7 @@ interface PeerConnectionLike {
   ontrack: ((event: RTCTrackEvent) => void) | null;
   addTrack(track: DirectedCallMediaStreamTrack, stream: DirectedCallMediaStream): unknown;
   addTransceiver?(trackOrKind: string, init?: { direction?: RTCRtpTransceiverDirection }): ScreenShareTransceiverLike;
+  getTransceivers?(): ScreenShareTransceiverLike[];
   getSenders?(): Array<{
     track: DirectedCallMediaStreamTrack | null;
     replaceTrack(track: DirectedCallMediaStreamTrack | null): Promise<void>;
@@ -106,7 +109,24 @@ export interface DirectedCallWebRtcAdapterOptions {
 }
 
 export interface DirectedCallWebRtcDiagnosticDetails {
+  diagnosticStage?: DirectedCallWebRtcDiagnosticStage;
+  diagnosticReason?: DirectedCallWebRtcDiagnosticReason;
   transceiverMid?: string | null;
+  eventTransceiverPresent?: boolean;
+  eventTransceiverMid?: string | null;
+  expectedScreenTransceiverMid?: string | null;
+  transceiverIdentityMatch?: boolean | null;
+  receiverTrackIdentity?: "match" | "mismatch" | "unavailable";
+  eventSenderTrackPresent?: boolean;
+  expectedSenderTrackPresent?: boolean;
+  eventReceiverTrackPresent?: boolean;
+  expectedReceiverTrackPresent?: boolean;
+  associationStrategy?: "strict_identity" | "owned_transceiver" | "event_transceiver";
+  associationAccepted?: boolean;
+  videoTransceiverIndex?: number | null;
+  videoTransceiverCount?: number | null;
+  selectedScreenTransceiver?: boolean;
+  localScreenSenderTransceiver?: boolean;
   transceiverCurrentDirection?: string | null;
   transceiverDirection?: string | null;
   localVideoDirection?: string | null;
@@ -114,9 +134,64 @@ export interface DirectedCallWebRtcDiagnosticDetails {
   senderTrackPresent?: boolean;
   receiverTrackPresent?: boolean;
   remoteTrackKind?: string;
+  remoteTrackReadyState?: string;
+  remoteTrackMuted?: boolean;
+  browserStreamPresent?: boolean;
   remoteStreamPresent?: boolean;
   remoteStreamSource?: "browser-provided" | "adapter-created";
+  videoMLineCount?: number;
+  videoMLineIndex?: number;
+  videoMLineMid?: string | null;
+  videoMLineDirection?: "sendonly" | "recvonly" | "sendrecv" | "inactive" | "missing";
+  videoMLineRejected?: boolean;
 }
+
+export type DirectedCallWebRtcDiagnosticStage =
+  | "ontrack_received"
+  | "association_checked"
+  | "association_rejected"
+  | "duplicate_suppressed"
+  | "stream_construction"
+  | "track_addition"
+  | "ended_listener"
+  | "stream_assigned"
+  | "publication_callback"
+  | "publication_reconciled"
+  | "transceiver_snapshot"
+  | "sdp_summary"
+  | "before_create_offer"
+  | "after_set_local_offer"
+  | "after_set_remote_offer"
+  | "before_create_answer"
+  | "after_create_answer"
+  | "after_set_local_answer"
+  | "after_set_remote_answer";
+
+export type DirectedCallWebRtcDiagnosticReason =
+  | "started"
+  | "succeeded"
+  | "failed"
+  | "track_ended"
+  | "reception_disabled"
+  | "missing_transceiver"
+  | "transceiver_identity_mismatch"
+  | "duplicate_track"
+  | "stream_unavailable"
+  | "stream_constructor_failed"
+  | "stream_inspection_failed"
+  | "add_track_unavailable"
+  | "add_track_failed"
+  | "listener_unavailable"
+  | "listener_binding_failed"
+  | "publication_callback_failed"
+  | "diagnostic_read_failed"
+  | "before_create_offer"
+  | "after_set_local_offer"
+  | "after_set_remote_offer"
+  | "before_create_answer"
+  | "after_create_answer"
+  | "after_set_local_answer"
+  | "after_set_remote_answer";
 
 export type DirectedCallLocalScreenShareEndedHandler = () => void;
 export type DirectedCallRemoteScreenShareChangedHandler = (stream: DirectedCallMediaStream | null) => void;
@@ -169,6 +244,33 @@ function videoDirection(sdp: string): string | null {
   return direction ?? null;
 }
 
+const MAX_VIDEO_DIAGNOSTIC_ITEMS = 8;
+
+interface VideoSdpSummary {
+  mid: string | null;
+  direction: "sendonly" | "recvonly" | "sendrecv" | "inactive" | "missing";
+  rejected: boolean;
+}
+
+function videoSdpSummaries(sdp: string): VideoSdpSummary[] {
+  return sdp
+    .split(/(?=m=)/)
+    .filter((section) => section.startsWith("m=video"))
+    .slice(0, MAX_VIDEO_DIAGNOSTIC_ITEMS)
+    .map((section) => {
+      const firstLine = section.split(/\r?\n/, 1)[0] ?? "";
+      const port = Number(firstLine.split(/\s+/, 3)[1]);
+      const mid = section.match(/(?:^|\r?\n)a=mid:([^\r\n]+)/)?.[1] ?? null;
+      const direction = section.match(/(?:^|\r?\n)a?=(sendrecv|sendonly|recvonly|inactive)(?:\r?\n|$)/)?.[1]
+        ?? "missing";
+      return {
+        mid,
+        direction: direction as VideoSdpSummary["direction"],
+        rejected: port === 0,
+      };
+    });
+}
+
 function initialMediaReadiness(values: Omit<DirectedCallInitialMediaReadiness, "ready">): DirectedCallInitialMediaReadiness {
   return Object.freeze({
     ...values,
@@ -212,6 +314,8 @@ export class DirectedCallWebRtcAdapter {
   private audioSwitchEpoch = 0;
   private audioReplacementTail: Promise<void> = Promise.resolve();
   private screenShareTransceiver: ScreenShareTransceiverLike | null = null;
+  private readonly videoTransceiverIndices = new WeakMap<object, number>();
+  private nextVideoTransceiverIndex = 0;
   private localScreenShareEnabled = false;
   private remoteScreenShareReceptionEnabled = false;
   private remoteScreenShareStream: DirectedCallMediaStream | null = null;
@@ -453,10 +557,12 @@ export class DirectedCallWebRtcAdapter {
     await this.ensureAudioPeer(epoch);
     this.assertCurrent(epoch);
     try {
+      this.emitVideoTransceiverDiagnostics("before_create_offer", "before_create_offer");
       const offer = await this.peerConnection!.createOffer();
       this.assertCurrent(epoch);
       await this.peerConnection!.setLocalDescription(offer);
       this.assertCurrent(epoch);
+      this.emitVideoTransceiverDiagnostics("after_set_local_offer", "after_set_local_offer", offer.sdp);
       this.emitTransceiverDiagnostic("peer_connection", offer.sdp ?? undefined, undefined);
       return offer;
     } catch {
@@ -472,6 +578,7 @@ export class DirectedCallWebRtcAdapter {
     try {
       await this.peerConnection!.setRemoteDescription(offer);
       this.assertCurrent(epoch);
+      this.emitVideoTransceiverDiagnostics("after_set_remote_offer", "after_set_remote_offer", offer.sdp);
       this.emitTransceiverDiagnostic("peer_connection", undefined, offer.sdp);
       await this.flushQueuedCandidates(epoch);
     } catch {
@@ -485,10 +592,13 @@ export class DirectedCallWebRtcAdapter {
     await this.ensureAudioPeer(epoch);
     this.assertCurrent(epoch);
     try {
+      this.emitVideoTransceiverDiagnostics("before_create_answer", "before_create_answer");
       const answer = await this.peerConnection!.createAnswer();
       this.assertCurrent(epoch);
+      this.emitVideoTransceiverDiagnostics("after_create_answer", "after_create_answer", answer.sdp);
       await this.peerConnection!.setLocalDescription(answer);
       this.assertCurrent(epoch);
+      this.emitVideoTransceiverDiagnostics("after_set_local_answer", "after_set_local_answer", answer.sdp);
       this.emitTransceiverDiagnostic("peer_connection", undefined, answer.sdp);
       return answer;
     } catch {
@@ -504,6 +614,7 @@ export class DirectedCallWebRtcAdapter {
     try {
       await this.peerConnection!.setRemoteDescription(answer);
       this.assertCurrent(epoch);
+      this.emitVideoTransceiverDiagnostics("after_set_remote_answer", "after_set_remote_answer", answer.sdp);
       this.emitTransceiverDiagnostic("peer_connection", undefined, answer.sdp);
       await this.flushQueuedCandidates(epoch);
     } catch {
@@ -692,6 +803,95 @@ export class DirectedCallWebRtcAdapter {
     this.remoteScreenShareChangedHandler?.(stream);
   }
 
+  private emitDiagnostic(
+    event: "peer_connection" | "remote_video_ontrack" | "remote_screen_stream_created" | "remote_screen_stream_updated" | "remote_screen_stream_cleared",
+    details: DirectedCallWebRtcDiagnosticDetails,
+  ): void {
+    if (!isCallDebugEnabled()) return;
+    try {
+      this.onDiagnostic?.(event, details);
+    } catch {
+      // Diagnostic sinks are best-effort and must never affect call control flow.
+    }
+  }
+
+  private videoTransceiverIndex(transceiver: ScreenShareTransceiverLike): number {
+    const object = transceiver as unknown as object;
+    const existing = this.videoTransceiverIndices.get(object);
+    if (existing !== undefined) return existing;
+    const index = this.nextVideoTransceiverIndex++;
+    this.videoTransceiverIndices.set(object, index);
+    return index;
+  }
+
+  private isVideoTransceiver(transceiver: ScreenShareTransceiverLike): boolean {
+    return transceiver.kind === "video"
+      || transceiver.sender?.track?.kind === "video"
+      || transceiver.receiver?.track?.kind === "video"
+      || transceiver === this.screenShareTransceiver;
+  }
+
+  private emitVideoTransceiverDiagnostics(stage: DirectedCallWebRtcDiagnosticStage, reason: DirectedCallWebRtcDiagnosticReason, sdp?: string): void {
+    if (!isCallDebugEnabled()) return;
+    let transceivers: ScreenShareTransceiverLike[] = [];
+    try {
+      transceivers = this.peerConnection?.getTransceivers?.()?.filter((transceiver) => this.isVideoTransceiver(transceiver)).slice(0, MAX_VIDEO_DIAGNOSTIC_ITEMS) ?? [];
+    } catch {
+      this.emitDiagnostic("peer_connection", {
+        diagnosticStage: "transceiver_snapshot",
+        diagnosticReason: "diagnostic_read_failed",
+      });
+      return;
+    }
+    if (transceivers.length === 0) {
+      this.emitDiagnostic("peer_connection", {
+        diagnosticStage: "transceiver_snapshot",
+        diagnosticReason: "diagnostic_read_failed",
+        videoTransceiverCount: 0,
+      });
+    }
+    transceivers.forEach((transceiver) => {
+      try {
+        this.emitDiagnostic("peer_connection", {
+          diagnosticStage: stage,
+          diagnosticReason: reason,
+          transceiverMid: transceiver.mid ?? null,
+          transceiverCurrentDirection: transceiver.currentDirection ?? null,
+          transceiverDirection: transceiver.direction ?? null,
+          senderTrackPresent: transceiver.sender?.track?.kind === "video",
+          receiverTrackPresent: transceiver.receiver?.track?.kind === "video",
+          videoTransceiverIndex: this.videoTransceiverIndex(transceiver),
+          videoTransceiverCount: transceivers.length,
+          selectedScreenTransceiver: transceiver === this.screenShareTransceiver,
+          localScreenSenderTransceiver: Boolean(this.localScreenShareTrack && transceiver.sender?.track === this.localScreenShareTrack),
+        });
+      } catch {
+        this.emitDiagnostic("peer_connection", {
+          diagnosticStage: "transceiver_snapshot",
+          diagnosticReason: "diagnostic_read_failed",
+          videoTransceiverCount: transceivers.length,
+        });
+      }
+    });
+    if (sdp !== undefined) {
+      const summaries = videoSdpSummaries(sdp);
+      summaries.forEach((summary, index) => this.emitDiagnostic("peer_connection", {
+        diagnosticStage: "sdp_summary",
+        diagnosticReason: reason,
+        videoMLineCount: summaries.length,
+        videoMLineIndex: index,
+        videoMLineMid: summary.mid,
+        videoMLineDirection: summary.direction,
+        videoMLineRejected: summary.rejected,
+      }));
+      if (summaries.length === 0) this.emitDiagnostic("peer_connection", {
+        diagnosticStage: "sdp_summary",
+        diagnosticReason: reason,
+        videoMLineCount: 0,
+      });
+    }
+  }
+
   private clearRemoteScreenShare(notify: boolean): void {
     const stream = this.remoteScreenShareStream;
     const track = this.remoteScreenShareTrack;
@@ -704,7 +904,9 @@ export class DirectedCallWebRtcAdapter {
     this.remoteScreenShareStream = null;
     const source = this.remoteScreenShareStreamSource;
     this.remoteScreenShareStreamSource = null;
-    if (stream) this.onDiagnostic?.("remote_screen_stream_cleared", {
+    if (stream) this.emitDiagnostic("remote_screen_stream_cleared", {
+      diagnosticStage: "stream_assigned",
+      diagnosticReason: "succeeded",
       remoteStreamPresent: false,
       ...(source ? { remoteStreamSource: source } : {}),
     });
@@ -712,13 +914,43 @@ export class DirectedCallWebRtcAdapter {
   }
 
   private bindRemoteScreenTrack(track: DirectedCallMediaStreamTrack, epoch: number): void {
-    if (!track.addEventListener) return;
+    this.emitDiagnostic("remote_video_ontrack", {
+      diagnosticStage: "ended_listener",
+      diagnosticReason: "started",
+      remoteTrackKind: track.kind,
+      remoteTrackReadyState: track.readyState,
+    });
+    if (!track.addEventListener) {
+      this.emitDiagnostic("remote_video_ontrack", {
+        diagnosticStage: "ended_listener",
+        diagnosticReason: "listener_unavailable",
+        remoteTrackKind: track.kind,
+        remoteTrackReadyState: track.readyState,
+      });
+      return;
+    }
     const listener = () => {
       if (!this.isCurrent(epoch) || this.remoteScreenShareTrack !== track) return;
       this.clearRemoteScreenShare(true);
     };
     this.remoteScreenShareTrackEndedListener = listener as EventListener;
-    track.addEventListener("ended", this.remoteScreenShareTrackEndedListener);
+    try {
+      track.addEventListener("ended", this.remoteScreenShareTrackEndedListener);
+      this.emitDiagnostic("remote_video_ontrack", {
+        diagnosticStage: "ended_listener",
+        diagnosticReason: "succeeded",
+        remoteTrackKind: track.kind,
+        remoteTrackReadyState: track.readyState,
+      });
+    } catch (error) {
+      this.emitDiagnostic("remote_video_ontrack", {
+        diagnosticStage: "ended_listener",
+        diagnosticReason: "listener_binding_failed",
+        remoteTrackKind: track.kind,
+        remoteTrackReadyState: track.readyState,
+      });
+      throw error;
+    }
   }
 
   private exposeRemoteScreenTrack(
@@ -726,7 +958,17 @@ export class DirectedCallWebRtcAdapter {
     epoch: number,
     browserStream?: DirectedCallMediaStream,
   ): void {
-    if (this.remoteScreenShareTrack === track) return;
+    if (this.remoteScreenShareTrack === track) {
+      this.emitDiagnostic("remote_video_ontrack", {
+        diagnosticStage: "duplicate_suppressed",
+        diagnosticReason: "duplicate_track",
+        remoteTrackKind: track.kind,
+        remoteTrackReadyState: track.readyState,
+        remoteStreamPresent: Boolean(this.remoteScreenShareStream),
+        browserStreamPresent: Boolean(browserStream),
+      });
+      return;
+    }
     const previousStream = this.remoteScreenShareStream;
     const previousTrack = this.remoteScreenShareTrack;
     if (previousTrack && this.remoteScreenShareTrackEndedListener) {
@@ -738,36 +980,142 @@ export class DirectedCallWebRtcAdapter {
     let stream = browserStream ?? previousStream;
     const streamSource = browserStream ? "browser-provided" : this.remoteScreenShareStreamSource;
     if (!stream || !previousStream?.removeTrack && stream === previousStream) {
-      stream = this.dependencies.createRemoteStream?.() ?? null;
+      this.emitDiagnostic("remote_video_ontrack", {
+        diagnosticStage: "stream_construction",
+        diagnosticReason: "started",
+        remoteTrackKind: track.kind,
+        browserStreamPresent: Boolean(browserStream),
+      });
+      try {
+        stream = this.dependencies.createRemoteStream?.() ?? null;
+        this.emitDiagnostic("remote_video_ontrack", {
+          diagnosticStage: "stream_construction",
+          diagnosticReason: stream ? "succeeded" : "stream_unavailable",
+          remoteTrackKind: track.kind,
+          browserStreamPresent: Boolean(browserStream),
+        });
+      } catch (error) {
+        this.emitDiagnostic("remote_video_ontrack", {
+          diagnosticStage: "stream_construction",
+          diagnosticReason: "stream_constructor_failed",
+          remoteTrackKind: track.kind,
+          browserStreamPresent: Boolean(browserStream),
+        });
+        throw error;
+      }
     }
     if (!stream) return;
-    if (!stream.getTracks().includes(track)) stream.addTrack?.(track);
+    let hasTrack = false;
+    try {
+      hasTrack = stream.getTracks().includes(track);
+    } catch (error) {
+      this.emitDiagnostic("remote_video_ontrack", {
+        diagnosticStage: "track_addition",
+        diagnosticReason: "stream_inspection_failed",
+        remoteTrackKind: track.kind,
+      });
+      throw error;
+    }
+    if (!hasTrack) {
+      this.emitDiagnostic("remote_video_ontrack", {
+        diagnosticStage: "track_addition",
+        diagnosticReason: "started",
+        remoteTrackKind: track.kind,
+      });
+      if (!stream.addTrack) {
+        this.emitDiagnostic("remote_video_ontrack", {
+          diagnosticStage: "track_addition",
+          diagnosticReason: "add_track_unavailable",
+          remoteTrackKind: track.kind,
+        });
+      } else {
+        try {
+          stream.addTrack(track);
+          this.emitDiagnostic("remote_video_ontrack", {
+            diagnosticStage: "track_addition",
+            diagnosticReason: "succeeded",
+            remoteTrackKind: track.kind,
+          });
+        } catch (error) {
+          this.emitDiagnostic("remote_video_ontrack", {
+            diagnosticStage: "track_addition",
+            diagnosticReason: "add_track_failed",
+            remoteTrackKind: track.kind,
+          });
+          throw error;
+        }
+      }
+    }
     this.remoteScreenShareStream = stream;
     this.remoteScreenShareTrack = track;
     this.remoteScreenShareStreamSource = streamSource ?? "adapter-created";
     this.bindRemoteScreenTrack(track, epoch);
-    this.onDiagnostic?.(previousStream ? "remote_screen_stream_updated" : "remote_screen_stream_created", {
+    this.emitDiagnostic(previousStream ? "remote_screen_stream_updated" : "remote_screen_stream_created", {
+      diagnosticStage: "stream_assigned",
+      diagnosticReason: "succeeded",
       remoteTrackKind: track.kind,
       remoteStreamPresent: true,
       remoteStreamSource: this.remoteScreenShareStreamSource,
       ...this.transceiverDiagnosticDetails(),
     });
-    this.emitRemoteScreenShareChanged(stream);
+    this.emitDiagnostic("remote_video_ontrack", {
+      diagnosticStage: "publication_callback",
+      diagnosticReason: "started",
+      remoteTrackKind: track.kind,
+      remoteStreamPresent: true,
+      remoteStreamSource: this.remoteScreenShareStreamSource,
+    });
+    try {
+      this.emitRemoteScreenShareChanged(stream);
+      this.emitDiagnostic("remote_video_ontrack", {
+        diagnosticStage: "publication_callback",
+        diagnosticReason: "succeeded",
+        remoteTrackKind: track.kind,
+        remoteStreamPresent: true,
+        remoteStreamSource: this.remoteScreenShareStreamSource,
+      });
+    } catch (error) {
+      this.emitDiagnostic("remote_video_ontrack", {
+        diagnosticStage: "publication_callback",
+        diagnosticReason: "publication_callback_failed",
+        remoteTrackKind: track.kind,
+        remoteStreamPresent: Boolean(this.remoteScreenShareStream),
+        remoteStreamSource: this.remoteScreenShareStreamSource ?? undefined,
+      });
+      throw error;
+    }
+    this.emitDiagnostic("remote_video_ontrack", {
+      diagnosticStage: "publication_reconciled",
+      diagnosticReason: "succeeded",
+      remoteTrackKind: track.kind,
+      remoteStreamPresent: Boolean(this.remoteScreenShareStream),
+      remoteStreamSource: this.remoteScreenShareStreamSource ?? undefined,
+    });
   }
 
   private transceiverDiagnosticDetails(): DirectedCallWebRtcDiagnosticDetails {
     const transceiver = this.screenShareTransceiver;
-    return {
-      transceiverMid: transceiver?.mid ?? null,
-      transceiverCurrentDirection: transceiver?.currentDirection ?? null,
-      transceiverDirection: transceiver?.direction ?? null,
-      senderTrackPresent: Boolean(transceiver?.sender.track),
-      receiverTrackPresent: Boolean(transceiver?.receiver?.track),
-    };
+    try {
+      return {
+        transceiverMid: transceiver?.mid ?? null,
+        transceiverCurrentDirection: transceiver?.currentDirection ?? null,
+        transceiverDirection: transceiver?.direction ?? null,
+        senderTrackPresent: Boolean(transceiver?.sender?.track),
+        receiverTrackPresent: Boolean(transceiver?.receiver?.track),
+      };
+    } catch {
+      return {
+        transceiverMid: null,
+        transceiverCurrentDirection: null,
+        transceiverDirection: null,
+        senderTrackPresent: false,
+        receiverTrackPresent: false,
+      };
+    }
   }
 
   private emitTransceiverDiagnostic(event: "peer_connection", localSdp?: string, remoteSdp?: string): void {
-    this.onDiagnostic?.(event, {
+    this.emitDiagnostic(event, {
       ...this.transceiverDiagnosticDetails(),
       localVideoDirection: localSdp ? videoDirection(localSdp) : null,
       remoteVideoDirection: remoteSdp ? videoDirection(remoteSdp) : null,
@@ -830,15 +1178,85 @@ export class DirectedCallWebRtcAdapter {
       this.peerConnection.ontrack = (event) => {
         if (!this.isCurrent(epoch)) return;
         if (event.track.kind === "video") {
-          if (event.track.readyState === "ended") return;
-          this.onDiagnostic?.("remote_video_ontrack", {
+          const eventTransceiver = event.transceiver as unknown as ScreenShareTransceiverLike | undefined;
+          const expectedTransceiver = this.screenShareTransceiver;
+          const identityMatch = expectedTransceiver && eventTransceiver ? expectedTransceiver === eventTransceiver : null;
+          const receiverTrackIdentity = eventTransceiver?.receiver?.track
+            ? (eventTransceiver.receiver.track === event.track ? "match" : "mismatch")
+            : "unavailable";
+          this.emitDiagnostic("remote_video_ontrack", {
+            diagnosticStage: "ontrack_received",
+            diagnosticReason: event.track.readyState === "ended" ? "track_ended" : "started",
             remoteTrackKind: event.track.kind,
+            remoteTrackReadyState: event.track.readyState,
+            remoteTrackMuted: (event.track as DirectedCallMediaStreamTrack & { muted?: boolean }).muted,
             remoteStreamPresent: Boolean(this.remoteScreenShareStream),
+            browserStreamPresent: Boolean(event.streams[0]),
+            eventTransceiverPresent: Boolean(eventTransceiver),
+            eventTransceiverMid: eventTransceiver?.mid ?? null,
+            expectedScreenTransceiverMid: expectedTransceiver?.mid ?? null,
+            transceiverIdentityMatch: identityMatch,
+            receiverTrackIdentity,
+            eventSenderTrackPresent: Boolean(eventTransceiver?.sender?.track),
+            expectedSenderTrackPresent: Boolean(expectedTransceiver?.sender?.track),
+            eventReceiverTrackPresent: Boolean(eventTransceiver?.receiver?.track),
+            expectedReceiverTrackPresent: Boolean(expectedTransceiver?.receiver?.track),
+            associationStrategy: eventTransceiver ? "strict_identity" : "owned_transceiver",
+            senderTrackPresent: Boolean(expectedTransceiver?.sender?.track),
+            receiverTrackPresent: Boolean(expectedTransceiver?.receiver?.track),
             ...this.transceiverDiagnosticDetails(),
           });
-          if (this.screenShareTransceiver && !this.remoteScreenShareReceptionEnabled) return;
-          const eventTransceiver = event.transceiver as unknown as ScreenShareTransceiverLike | undefined;
-          if (!this.adoptRemoteScreenTransceiver(eventTransceiver)) return;
+          if (event.track.readyState === "ended") return;
+          if (this.screenShareTransceiver && !this.remoteScreenShareReceptionEnabled) {
+            this.emitDiagnostic("remote_video_ontrack", {
+              diagnosticStage: "association_rejected",
+              diagnosticReason: "reception_disabled",
+              remoteTrackKind: event.track.kind,
+              remoteTrackReadyState: event.track.readyState,
+              associationAccepted: false,
+            });
+            return;
+          }
+          const associationAccepted = this.adoptRemoteScreenTransceiver(eventTransceiver);
+          this.emitDiagnostic("remote_video_ontrack", {
+            diagnosticStage: "association_checked",
+            diagnosticReason: associationAccepted ? "succeeded" : "failed",
+            remoteTrackKind: event.track.kind,
+            remoteTrackReadyState: event.track.readyState,
+            eventTransceiverPresent: Boolean(eventTransceiver),
+            eventTransceiverMid: eventTransceiver?.mid ?? null,
+            expectedScreenTransceiverMid: expectedTransceiver?.mid ?? null,
+            transceiverIdentityMatch: identityMatch,
+            receiverTrackIdentity,
+            eventSenderTrackPresent: Boolean(eventTransceiver?.sender?.track),
+            expectedSenderTrackPresent: Boolean(expectedTransceiver?.sender?.track),
+            eventReceiverTrackPresent: Boolean(eventTransceiver?.receiver?.track),
+            expectedReceiverTrackPresent: Boolean(expectedTransceiver?.receiver?.track),
+            associationStrategy: eventTransceiver ? "strict_identity" : "owned_transceiver",
+            associationAccepted,
+            senderTrackPresent: Boolean(expectedTransceiver?.sender?.track),
+            receiverTrackPresent: Boolean(expectedTransceiver?.receiver?.track),
+          });
+          if (!associationAccepted) {
+            this.emitDiagnostic("remote_video_ontrack", {
+              diagnosticStage: "association_rejected",
+              diagnosticReason: identityMatch === false ? "transceiver_identity_mismatch" : "missing_transceiver",
+              remoteTrackKind: event.track.kind,
+              remoteTrackReadyState: event.track.readyState,
+              eventTransceiverPresent: Boolean(eventTransceiver),
+              eventTransceiverMid: eventTransceiver?.mid ?? null,
+              expectedScreenTransceiverMid: expectedTransceiver?.mid ?? null,
+              transceiverIdentityMatch: identityMatch,
+              receiverTrackIdentity,
+              eventSenderTrackPresent: Boolean(eventTransceiver?.sender?.track),
+              expectedSenderTrackPresent: Boolean(expectedTransceiver?.sender?.track),
+              eventReceiverTrackPresent: Boolean(eventTransceiver?.receiver?.track),
+              expectedReceiverTrackPresent: Boolean(expectedTransceiver?.receiver?.track),
+              associationStrategy: eventTransceiver ? "strict_identity" : "owned_transceiver",
+              associationAccepted: false,
+            });
+            return;
+          }
           this.exposeRemoteScreenTrack(event.track, epoch, event.streams[0]);
           return;
         }
