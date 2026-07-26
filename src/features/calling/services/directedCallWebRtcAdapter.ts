@@ -115,6 +115,7 @@ export interface DirectedCallWebRtcDiagnosticDetails {
   receiverTrackPresent?: boolean;
   remoteTrackKind?: string;
   remoteStreamPresent?: boolean;
+  remoteStreamSource?: "browser-provided" | "adapter-created";
 }
 
 export type DirectedCallLocalScreenShareEndedHandler = () => void;
@@ -214,6 +215,7 @@ export class DirectedCallWebRtcAdapter {
   private localScreenShareEnabled = false;
   private remoteScreenShareReceptionEnabled = false;
   private remoteScreenShareStream: DirectedCallMediaStream | null = null;
+  private remoteScreenShareStreamSource: "browser-provided" | "adapter-created" | null = null;
   private remoteScreenShareTrack: DirectedCallMediaStreamTrack | null = null;
   private remoteScreenShareTrackEndedListener: EventListener | null = null;
   private remoteScreenShareChangedHandler: DirectedCallRemoteScreenShareChangedHandler | null = null;
@@ -700,7 +702,12 @@ export class DirectedCallWebRtcAdapter {
     if (stream && track) stream.removeTrack?.(track);
     this.remoteScreenShareTrack = null;
     this.remoteScreenShareStream = null;
-    if (stream) this.onDiagnostic?.("remote_screen_stream_cleared", { remoteStreamPresent: false });
+    const source = this.remoteScreenShareStreamSource;
+    this.remoteScreenShareStreamSource = null;
+    if (stream) this.onDiagnostic?.("remote_screen_stream_cleared", {
+      remoteStreamPresent: false,
+      ...(source ? { remoteStreamSource: source } : {}),
+    });
     if (notify && stream) this.emitRemoteScreenShareChanged(null);
   }
 
@@ -714,7 +721,11 @@ export class DirectedCallWebRtcAdapter {
     track.addEventListener("ended", this.remoteScreenShareTrackEndedListener);
   }
 
-  private exposeRemoteScreenTrack(track: DirectedCallMediaStreamTrack, epoch: number): void {
+  private exposeRemoteScreenTrack(
+    track: DirectedCallMediaStreamTrack,
+    epoch: number,
+    browserStream?: DirectedCallMediaStream,
+  ): void {
     if (this.remoteScreenShareTrack === track) return;
     const previousStream = this.remoteScreenShareStream;
     const previousTrack = this.remoteScreenShareTrack;
@@ -724,16 +735,21 @@ export class DirectedCallWebRtcAdapter {
     }
     if (previousStream && previousTrack && previousStream.removeTrack) previousStream.removeTrack(previousTrack);
 
-    let stream = previousStream;
-    if (!stream || !previousStream?.removeTrack) stream = this.dependencies.createRemoteStream?.() ?? null;
+    let stream = browserStream ?? previousStream;
+    const streamSource = browserStream ? "browser-provided" : this.remoteScreenShareStreamSource;
+    if (!stream || !previousStream?.removeTrack && stream === previousStream) {
+      stream = this.dependencies.createRemoteStream?.() ?? null;
+    }
     if (!stream) return;
-    stream.addTrack?.(track);
+    if (!stream.getTracks().includes(track)) stream.addTrack?.(track);
     this.remoteScreenShareStream = stream;
     this.remoteScreenShareTrack = track;
+    this.remoteScreenShareStreamSource = streamSource ?? "adapter-created";
     this.bindRemoteScreenTrack(track, epoch);
     this.onDiagnostic?.(previousStream ? "remote_screen_stream_updated" : "remote_screen_stream_created", {
       remoteTrackKind: track.kind,
       remoteStreamPresent: true,
+      remoteStreamSource: this.remoteScreenShareStreamSource,
       ...this.transceiverDiagnosticDetails(),
     });
     this.emitRemoteScreenShareChanged(stream);
@@ -823,7 +839,7 @@ export class DirectedCallWebRtcAdapter {
           if (this.screenShareTransceiver && !this.remoteScreenShareReceptionEnabled) return;
           const eventTransceiver = event.transceiver as unknown as ScreenShareTransceiverLike | undefined;
           if (!this.adoptRemoteScreenTransceiver(eventTransceiver)) return;
-          this.exposeRemoteScreenTrack(event.track, epoch);
+          this.exposeRemoteScreenTrack(event.track, epoch, event.streams[0]);
           return;
         }
         if (event.track.kind !== "audio" || event.track.readyState === "ended") return;

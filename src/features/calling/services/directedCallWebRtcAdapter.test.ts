@@ -934,6 +934,27 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(changes).toHaveLength(3);
   });
 
+  it("preserves a browser-provided remote screen stream", async () => {
+    const diagnostics: Array<{ event: string; details: unknown }> = [];
+    const harness = createHarness({ onDiagnostic: (event, details) => diagnostics.push({ event, details }) });
+    await harness.adapter.prepareOffer();
+    const remoteTrack = createRemoteTrack("video");
+    const browserStream = createRemoteStream(remoteTrack);
+
+    harness.pc.ontrack?.({
+      track: remoteTrack,
+      streams: [browserStream],
+      transceiver: harness.screenTransceiver,
+    } as unknown as RTCTrackEvent);
+
+    expect(harness.adapter.getRemoteScreenShareStream()).toBe(browserStream);
+    expect(browserStream.getTracks()).toEqual([remoteTrack]);
+    expect(diagnostics[1]).toEqual(expect.objectContaining({
+      event: "remote_screen_stream_created",
+      details: expect.objectContaining({ remoteStreamSource: "browser-provided" }),
+    }));
+  });
+
   it("distinguishes remote ontrack from remote stream publication diagnostics", async () => {
     const diagnostics: string[] = [];
     const harness = createHarness({ onDiagnostic: (event) => diagnostics.push(event) });
