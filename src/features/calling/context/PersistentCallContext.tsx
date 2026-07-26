@@ -24,6 +24,7 @@ export interface PersistentCallBoundaryDebugSnapshot {
   lastOwnershipEvent: CallAuthorityTraceEvent | null;
   ownershipEventTimeline: CallAuthorityTraceEvent[];
   directedCallEventTimeline: DirectedCallDiagnosticEntry[];
+  directedCallDiagnosticsEnabled: boolean;
 }
 
 const PersistentCallBoundaryDebugContext = createContext<PersistentCallBoundaryDebugSnapshot | null>(null);

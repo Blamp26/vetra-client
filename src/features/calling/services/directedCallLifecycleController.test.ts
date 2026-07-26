@@ -9,6 +9,7 @@ import {
 } from "./directedCallLifecycleController";
 import { DirectedCallSessionCommandError } from "./directedCallSession";
 import { getDirectedCallDiagnosticTimeline, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
+import { setCallDebugEnabled } from "../utils/callDebug";
 
 const deviceId = "11111111-1111-4111-8111-111111111111";
 const targetId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -101,6 +102,7 @@ function createSession(responses: unknown[] = []) {
 
 describe("DirectedCallLifecycleController", () => {
   beforeEach(() => {
+    setCallDebugEnabled(true);
     let next = 0;
     vi.stubGlobal("crypto", {
       randomUUID: vi.fn(() => {
@@ -113,6 +115,7 @@ describe("DirectedCallLifecycleController", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     resetDirectedCallDiagnosticTimeline();
+    setCallDebugEnabled(false);
   });
 
   it("enters local preparing before initiating and uses the public target and stable device", async () => {

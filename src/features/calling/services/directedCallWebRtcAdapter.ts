@@ -109,8 +109,8 @@ export interface DirectedCallWebRtcDiagnosticDetails {
   transceiverMid?: string | null;
   transceiverCurrentDirection?: string | null;
   transceiverDirection?: string | null;
-  offerVideoDirection?: string | null;
-  answerVideoDirection?: string | null;
+  localVideoDirection?: string | null;
+  remoteVideoDirection?: string | null;
   senderTrackPresent?: boolean;
   receiverTrackPresent?: boolean;
   remoteTrackKind?: string;
@@ -753,8 +753,8 @@ export class DirectedCallWebRtcAdapter {
   private emitTransceiverDiagnostic(event: "peer_connection", localSdp?: string, remoteSdp?: string): void {
     this.onDiagnostic?.(event, {
       ...this.transceiverDiagnosticDetails(),
-      offerVideoDirection: localSdp ? videoDirection(localSdp) : null,
-      answerVideoDirection: remoteSdp ? videoDirection(remoteSdp) : null,
+      localVideoDirection: localSdp ? videoDirection(localSdp) : null,
+      remoteVideoDirection: remoteSdp ? videoDirection(remoteSdp) : null,
     });
   }
 

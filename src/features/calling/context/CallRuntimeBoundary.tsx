@@ -20,6 +20,7 @@ import {
   recordDirectedCallRuntimeBranch,
   subscribeToDirectedCallDiagnostics,
 } from "../services/directedCallDiagnostics";
+import { isCallDebugEnabled, subscribeToCallDebugState } from "../utils/callDebug";
 import { getOrCreateDirectedCallDeviceId } from "../services/directedCallDevice";
 import { isUuid } from "../protocol/directedCallProtocol";
 import { parseCallRuntimeMode, type CallRuntimeMode } from "../services/callRuntimeMode";
@@ -97,7 +98,8 @@ export function CallRuntimeBoundary({
   const [authority, setAuthority] = useState<CallAuthoritySnapshot>(() => ownership.getSnapshot());
   const ownershipTrace = ownership.getTraceSnapshot?.() ?? { events: [], lastEvent: null, nativeHolderPresent: false };
   const [persistentRuntime, setPersistentRuntime] = useState<PersistentRuntime | null>(null);
-  const [directedCallEventTimeline, setDirectedCallEventTimeline] = useState(getDirectedCallDiagnosticTimeline);
+  const [directedCallDiagnosticsEnabled, setDirectedCallDiagnosticsEnabled] = useState(isCallDebugEnabled);
+  const [directedCallEventTimeline, setDirectedCallEventTimeline] = useState(() => getDirectedCallDiagnosticTimeline());
   const selectedInputDeviceId = useAppStore((state: RootState) => state.selectedInputDeviceId);
   const noiseSuppression = useAppStore((state: RootState) => state.noiseSuppression);
   const echoCancellation = useAppStore((state: RootState) => state.echoCancellation);
@@ -107,7 +109,16 @@ export function CallRuntimeBoundary({
   const acquiredOwnershipsRef = useRef(new Set<CallAuthorityOwnership>());
   const effectGenerationRef = useRef(0);
 
-  useEffect(() => subscribeToDirectedCallDiagnostics(setDirectedCallEventTimeline), []);
+  useEffect(() => subscribeToCallDebugState(setDirectedCallDiagnosticsEnabled), []);
+
+  useEffect(() => {
+    if (!directedCallDiagnosticsEnabled) {
+      setDirectedCallEventTimeline([]);
+      return;
+    }
+    setDirectedCallEventTimeline(getDirectedCallDiagnosticTimeline());
+    return subscribeToDirectedCallDiagnostics(setDirectedCallEventTimeline);
+  }, [directedCallDiagnosticsEnabled]);
 
   useEffect(() => {
     if (!persistentRuntime) return;
@@ -326,6 +337,7 @@ export function CallRuntimeBoundary({
     lastOwnershipEvent: ownershipTrace.lastEvent,
     ownershipEventTimeline: ownership.getTraceSnapshot?.().events ?? [],
     directedCallEventTimeline,
+    directedCallDiagnosticsEnabled,
   };
 
   const persistentCallAffordance: PersistentCallAffordance =

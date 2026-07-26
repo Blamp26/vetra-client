@@ -24,6 +24,7 @@ const boundary = {
   lastOwnershipEvent: null,
   ownershipEventTimeline: [],
   directedCallEventTimeline: [],
+  directedCallDiagnosticsEnabled: true,
 };
 
 function Runtime({ children }: { children: ReactNode }) {
@@ -74,6 +75,21 @@ describe("PersistentCallDebugPanel", () => {
       "PersistentCallContext provider mounted": "yes",
       "failed gates": ["none"],
     }));
+  });
+
+  it("does not render when the existing debug flag is disabled", () => {
+    render(
+      <PersistentCallBoundaryDebugProvider value={{ ...boundary, directedCallDiagnosticsEnabled: false }}>
+        <PersistentCallDebugPanel
+          activeChatType="direct"
+          directChat
+          peerUuidSource="partnerRef"
+          peerUuidValid
+          finalButtonPredicate
+        />
+      </PersistentCallBoundaryDebugProvider>,
+    );
+    expect(screen.queryByTestId("persistent-call-debug-panel")).not.toBeInTheDocument();
   });
 
   it("shows safe ownership release reasons in the visible timeline", () => {

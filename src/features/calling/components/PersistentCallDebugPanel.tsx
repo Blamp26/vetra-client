@@ -44,6 +44,7 @@ export function PersistentCallDebugPanel({
       currentLeaseSuffix: null,
       lastOwnershipEvent: null,
       ownershipEventTimeline: [],
+      directedCallDiagnosticsEnabled: false,
       ...boundary,
     };
     const contextMounted = persistentCall !== null;
@@ -88,7 +89,7 @@ export function PersistentCallDebugPanel({
     console.info("[persistent-call-debug]", fields);
   }, [fields]);
 
-  if (!import.meta.env.DEV || boundary?.mode !== "persistent") return null;
+  if (boundary?.directedCallDiagnosticsEnabled !== true || boundary?.mode !== "persistent") return null;
 
   return (
     <aside

@@ -1,4 +1,4 @@
-import { debugCall } from "../utils/callDebug";
+import { debugCall, isCallDebugEnabled } from "../utils/callDebug";
 
 const runtimeBranchDiagnostics = new Set<string>();
 const MAX_DIRECTED_CALL_DIAGNOSTICS = 160;
@@ -13,6 +13,26 @@ type DirectedCallDiagnosticListener = (entries: DirectedCallDiagnosticEntry[]) =
 const directedCallDiagnosticTimeline: DirectedCallDiagnosticEntry[] = [];
 const directedCallDiagnosticListeners = new Set<DirectedCallDiagnosticListener>();
 let nextDiagnosticSequence = 1;
+let lastDiagnosticKey: string | null = null;
+
+const ORDERED_DIAGNOSTIC_EVENTS = new Set<DirectedCallDiagnosticEvent>([
+  "ice_sent", "ice_received", "ice_applied", "ice_buffered", "ice_rejected",
+]);
+
+function safeDiagnosticText(value: string | null | undefined): string | undefined {
+  if (value == null) return undefined;
+  let safe = value
+    .replace(/https?:\/\/[^\s]+/gi, "[url-redacted]")
+    .replace(/candidate\s*:[^\s]+/gi, "[candidate-redacted]")
+    .replace(/v=0[^\s]*/gi, "[sdp-redacted]")
+    .replace(/\b(?:token|password|credential|secret|authorization|ticket)\s*[=:]\s*[^\s]+/gi, "[secret-redacted]")
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[ip-redacted]")
+    .replace(/[^\x20-\x7E]/g, "")
+    .replace(/[^A-Za-z0-9._:/ -]/g, "")
+    .trim();
+  if (safe.length > 96) safe = `${safe.slice(0, 93)}...`;
+  return safe || "[redacted]";
+}
 
 export function recordDirectedCallRuntimeBranch(
   branch: "owner" | "non-owner" | "unavailable",
@@ -97,8 +117,8 @@ export function recordDirectedCallDiagnostic(
     transceiverMid?: string | null;
     transceiverCurrentDirection?: string | null;
     transceiverDirection?: string | null;
-    offerVideoDirection?: string | null;
-    answerVideoDirection?: string | null;
+    localVideoDirection?: string | null;
+    remoteVideoDirection?: string | null;
     senderTrackPresent?: boolean | null;
     receiverTrackPresent?: boolean | null;
     remoteTrackKind?: string | null;
@@ -111,6 +131,12 @@ export function recordDirectedCallDiagnostic(
     staleGeneration?: string | null;
   } = {},
 ): void {
+  if (!isCallDebugEnabled()) {
+    directedCallDiagnosticTimeline.length = 0;
+    lastDiagnosticKey = null;
+    directedCallDiagnosticListeners.clear();
+    return;
+  }
   const fields: Record<string, string | number | boolean | null | undefined> = {
     call_id: redactCallId(details.callId),
     previous_call_id: redactCallId(details.previousCallId),
@@ -126,8 +152,8 @@ export function recordDirectedCallDiagnostic(
     signaling_state: details.signalingState,
     queued_local_candidate_count: details.queuedLocalCandidateCount,
     flushed_local_candidate_count: details.flushedLocalCandidateCount,
-    failure_kind: details.failureKind,
-    reason: details.reason,
+    failure_kind: safeDiagnosticText(details.failureKind),
+    reason: safeDiagnosticText(details.reason),
     transaction_id: redactCallId(details.transactionId),
     role: details.role ?? null,
     generation: details.generation ?? null,
@@ -135,13 +161,13 @@ export function recordDirectedCallDiagnostic(
     screen_share: details.screenShare,
     transaction_phase: details.transactionPhase,
     candidate_action: details.candidateAction,
-    candidate_reason: details.candidateReason,
+    candidate_reason: safeDiagnosticText(details.candidateReason),
     candidate_index: details.candidateIndex,
     transceiver_mid: details.transceiverMid,
     transceiver_current_direction: details.transceiverCurrentDirection,
     transceiver_direction: details.transceiverDirection,
-    offer_video_direction: details.offerVideoDirection,
-    answer_video_direction: details.answerVideoDirection,
+    local_video_direction: details.localVideoDirection,
+    remote_video_direction: details.remoteVideoDirection,
     sender_track_present: details.senderTrackPresent,
     receiver_track_present: details.receiverTrackPresent,
     remote_track_kind: details.remoteTrackKind,
@@ -157,19 +183,31 @@ export function recordDirectedCallDiagnostic(
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => `${key}=${String(value)}`)
     .join(" ");
+  const diagnosticKey = `${event}|${line}`;
+  if (!ORDERED_DIAGNOSTIC_EVENTS.has(event) && diagnosticKey === lastDiagnosticKey) return;
+  lastDiagnosticKey = diagnosticKey;
   const entry: DirectedCallDiagnosticEntry = { sequence: nextDiagnosticSequence++, event, line: `${event} ${line}`.trim() };
   directedCallDiagnosticTimeline.push(entry);
   if (directedCallDiagnosticTimeline.length > MAX_DIRECTED_CALL_DIAGNOSTICS) directedCallDiagnosticTimeline.shift();
   const snapshot = directedCallDiagnosticTimeline.slice();
-  directedCallDiagnosticListeners.forEach((listener) => listener(snapshot));
-  debugCall(`[directed-call] ${event}`, fields);
+  directedCallDiagnosticListeners.forEach((listener) => {
+    try { listener(snapshot); } catch { /* diagnostics cannot affect call control flow */ }
+  });
+  try { debugCall(`[directed-call] ${event}`, fields); } catch { /* best-effort sink */ }
 }
 
 export function getDirectedCallDiagnosticTimeline(): DirectedCallDiagnosticEntry[] {
+  if (!isCallDebugEnabled()) {
+    directedCallDiagnosticTimeline.length = 0;
+    lastDiagnosticKey = null;
+    directedCallDiagnosticListeners.clear();
+    return [];
+  }
   return directedCallDiagnosticTimeline.slice();
 }
 
 export function subscribeToDirectedCallDiagnostics(listener: DirectedCallDiagnosticListener): () => void {
+  if (!isCallDebugEnabled()) return () => undefined;
   directedCallDiagnosticListeners.add(listener);
   return () => directedCallDiagnosticListeners.delete(listener);
 }
@@ -177,5 +215,8 @@ export function subscribeToDirectedCallDiagnostics(listener: DirectedCallDiagnos
 export function resetDirectedCallDiagnosticTimeline(): void {
   directedCallDiagnosticTimeline.length = 0;
   nextDiagnosticSequence = 1;
-  directedCallDiagnosticListeners.forEach((listener) => listener([]));
+  lastDiagnosticKey = null;
+  directedCallDiagnosticListeners.forEach((listener) => {
+    try { listener([]); } catch { /* diagnostics cannot affect call control flow */ }
+  });
 }

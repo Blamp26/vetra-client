@@ -6,6 +6,7 @@ import {
   type DirectedCallMediaStream,
   type DirectedCallInitialMediaReadiness,
   type DirectedCallWebRtcAdapterOptions,
+  type DirectedCallWebRtcDiagnosticDetails,
 } from "./directedCallWebRtcAdapter";
 
 function createHarness(options: Pick<DirectedCallWebRtcAdapterOptions, "onDiagnostic"> = {}) {
@@ -802,6 +803,18 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(harness.screenTrack);
     expect(harness.adapter.getLocalScreenShareStream()?.getTracks()).toEqual([harness.screenTrack]);
     expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels local and remote SDP video directions without swapping them", async () => {
+    const diagnostics: DirectedCallWebRtcDiagnosticDetails[] = [];
+    const harness = createHarness({ onDiagnostic: (_event, details) => diagnostics.push(details) });
+    await harness.adapter.prepareOffer();
+    harness.pc.createOffer.mockResolvedValueOnce({ type: "offer", sdp: "v=0\r\nm=video 9 RTP/AVP 96\r\nsendonly\r\n" });
+    await harness.adapter.createRenegotiationOffer();
+    expect(diagnostics[diagnostics.length - 1]).toMatchObject({ localVideoDirection: "sendonly", remoteVideoDirection: null });
+
+    await harness.adapter.applyRenegotiationOffer({ type: "offer", sdp: "v=0\r\nm=video 9 RTP/AVP 96\r\nrecvonly\r\n" });
+    expect(diagnostics[diagnostics.length - 1]).toMatchObject({ localVideoDirection: null, remoteVideoDirection: "recvonly" });
   });
 
   it("supports every screen direction transition on one reusable transceiver", async () => {

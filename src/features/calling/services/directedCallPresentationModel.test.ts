@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StateProjection } from "../protocol/directedCallProtocol";
 import type {
   DirectedCallControllerSnapshot,
@@ -13,6 +13,7 @@ import {
   type DirectedCallPresentationLifecyclePort,
 } from "./directedCallPresentationModel";
 import { getDirectedCallDiagnosticTimeline, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
+import { setCallDebugEnabled } from "../utils/callDebug";
 
 const CALL_ID = "11111111-1111-4111-8111-111111111111";
 const DEVICE_ID = "22222222-2222-4222-8222-222222222222";
@@ -178,7 +179,8 @@ function createHarness() {
 }
 
 describe("DirectedCallPresentationModel", () => {
-  afterEach(() => resetDirectedCallDiagnosticTimeline());
+  beforeEach(() => setCallDebugEnabled(true));
+  afterEach(() => { resetDirectedCallDiagnosticTimeline(); setCallDebugEnabled(false); });
   it("is dormant by default", () => {
     const harness = createHarness();
     const dormant = new DirectedCallPresentationModel(harness.session, harness.lifecycle, harness.incoming);
