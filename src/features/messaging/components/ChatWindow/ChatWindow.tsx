@@ -30,6 +30,7 @@ import {
   resolvePresenceStatus,
 } from "@/shared/utils/presence";
 import { Search } from "lucide-react";
+import { useDirectedCallHistoryForChat } from "@/features/messaging/hooks/useDirectedCallHistoryForChat";
 
 interface Props {
   activeChat: ActiveChat;
@@ -71,6 +72,7 @@ function isActiveCallForChat(
 
 export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props) {
   const persistentCall = useOptionalPersistentCall();
+  useDirectedCallHistoryForChat(activeChat);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
 
