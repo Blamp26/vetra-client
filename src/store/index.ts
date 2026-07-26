@@ -14,6 +14,7 @@ import { createPresenceSlice, PresenceSlice } from './slices/presenceSlice';
 import { createUISlice, UISlice } from './slices/uiSlice';
 import { createChannelsSlice, ChannelsSlice } from './slices/channelsSlice';
 import { createAudioSlice, AudioSlice } from './slices/audioSlice';
+import { createDirectedCallHistorySlice, DirectedCallHistorySlice } from './slices/directedCallHistorySlice';
 import { storage, STORAGE_KEYS } from '@/shared/utils/storage';
 
 export type RootState =
@@ -24,7 +25,8 @@ export type RootState =
   PresenceSlice &
   UISlice &
   ChannelsSlice &
-  AudioSlice;
+  AudioSlice &
+  DirectedCallHistorySlice;
 
 const safePersistStorage: StateStorage = {
   getItem: (name) => storage.getString(name),
@@ -43,6 +45,7 @@ const useAppStoreBase = create<RootState>()(
       ...createUISlice(...a),
       ...createChannelsSlice(...a),
       ...createAudioSlice(...a),
+      ...createDirectedCallHistorySlice(...a),
     }),
     {
       name: STORAGE_KEYS.APP_STATE,
