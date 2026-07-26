@@ -59,7 +59,15 @@ export interface DirectedCallMediaCoordinatorOptions {
 }
 
 type Listener = (snapshot: DirectedCallMediaCoordinatorSnapshot) => void;
-type RenegotiationTransaction = { callId: string; generation: string; id: string; phase: "requested" | "creating_offer" | "offered" | "answering" | "applying_answer" };
+type RenegotiationTransaction = {
+  callId: string;
+  generation: string;
+  id: string;
+  phase: "preparing_screen" | "requested" | "creating_offer" | "offered" | "answering" | "applying_answer";
+  screenShare: boolean;
+  localScreenShareStarted: boolean;
+  remoteScreenReceptionEnabledByTransaction: boolean;
+};
 const MAX_COMPLETED_RENEGOTIATIONS = 32;
 
 type SetupFailureReport = {
@@ -235,6 +243,53 @@ export class DirectedCallMediaCoordinator {
 
   getSignalTransport(): DirectedCallSignalTransport {
     return this.signalTransport;
+  }
+
+  async startScreenShare(): Promise<boolean> {
+    const projection = this.snapshot.projection;
+    if (
+      this.disposed
+      || !projection
+      || projection.state !== "active"
+      || !this.isGenerationCurrent(this.generation)
+      || this.renegotiation
+      || this.adapter.getLocalScreenShareStream?.()
+    ) return false;
+
+    const id = createDirectedCallUuid();
+    const transaction: RenegotiationTransaction = {
+      callId: projection.call_id,
+      generation: this.generation,
+      id,
+      phase: "preparing_screen",
+      screenShare: true,
+      localScreenShareStarted: false,
+      remoteScreenReceptionEnabledByTransaction: false,
+    };
+    this.renegotiation = transaction;
+    let captureStarted = false;
+    try {
+      if (!await this.adapter.startScreenShare()) {
+        this.clearRenegotiation(id);
+        return false;
+      }
+      captureStarted = true;
+      if (!this.ownsRenegotiation(transaction, id, projection.call_id, "preparing_screen")) return false;
+      transaction.localScreenShareStarted = true;
+      transaction.phase = "requested";
+      await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_request", { renegotiation_id: id, screen_share: true });
+      if (!this.ownsRenegotiation(transaction, id, projection.call_id, "requested")) return false;
+      if (projection.participant_role === "initiator") {
+        await this.createAndSendRenegotiationOffer(projection.call_id, id, true);
+        return this.renegotiation?.id === id && this.renegotiation.phase === "offered";
+      }
+      return true;
+    } catch {
+      this.clearRenegotiation(id);
+      return false;
+    } finally {
+      if (captureStarted && this.renegotiation?.id !== id && this.adapter.getLocalScreenShareStream?.()) this.adapter.stopScreenShare?.();
+    }
   }
 
   private resetCallState(callId: string): void {
@@ -473,7 +528,7 @@ export class DirectedCallMediaCoordinator {
     const projection = this.snapshot.projection;
     if (this.disposed || !projection || projection.state !== "active" || this.renegotiation) return null;
     const id = createDirectedCallUuid();
-    this.renegotiation = { callId: projection.call_id, generation: this.generation, id, phase: "requested" };
+    this.renegotiation = { callId: projection.call_id, generation: this.generation, id, phase: "requested", screenShare, localScreenShareStarted: false, remoteScreenReceptionEnabledByTransaction: false };
     try {
       await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_request", { renegotiation_id: id, screen_share: screenShare });
       if (projection.participant_role === "initiator") await this.createAndSendRenegotiationOffer(projection.call_id, id, screenShare);
@@ -489,8 +544,11 @@ export class DirectedCallMediaCoordinator {
     const id = payload.renegotiation_id;
     if (this.completedRenegotiations.includes(id)) return;
     if (this.renegotiation && this.renegotiation.id !== id) return;
-    if (!this.renegotiation) this.renegotiation = { callId: projection.call_id, generation: this.generation, id, phase: "requested" };
-    if (projection.participant_role === "initiator") await this.createAndSendRenegotiationOffer(projection.call_id, id, payload.screen_share);
+    if (!this.renegotiation) this.renegotiation = { callId: projection.call_id, generation: this.generation, id, phase: "requested", screenShare: payload.screen_share, localScreenShareStarted: false, remoteScreenReceptionEnabledByTransaction: false };
+    if (projection.participant_role === "initiator") {
+      if (payload.screen_share && !this.prepareRemoteScreenReception(id, projection.call_id)) return;
+      await this.createAndSendRenegotiationOffer(projection.call_id, id, payload.screen_share);
+    }
   }
 
   private async createAndSendRenegotiationOffer(callId: string, id: string, screenShare: boolean): Promise<void> {
@@ -511,10 +569,11 @@ export class DirectedCallMediaCoordinator {
     const id = payload.renegotiation_id;
     if (projection.participant_role !== "recipient" || this.completedRenegotiations.includes(id)) return;
     if (this.renegotiation && this.renegotiation.id !== id) return;
-    if (!this.renegotiation) this.renegotiation = { callId: projection.call_id, generation: this.generation, id, phase: "offered" };
+    if (!this.renegotiation) this.renegotiation = { callId: projection.call_id, generation: this.generation, id, phase: "offered", screenShare: payload.screen_share, localScreenShareStarted: false, remoteScreenReceptionEnabledByTransaction: false };
     if (this.renegotiation.phase === "answering") return;
     if (this.renegotiation.phase === "requested") this.renegotiation.phase = "offered";
     if (this.renegotiation.phase !== "offered") return;
+    if (payload.screen_share && !this.renegotiation.localScreenShareStarted && !this.prepareRemoteScreenReception(id, projection.call_id)) return;
     this.renegotiation.phase = "answering";
     const transaction = this.renegotiation;
     try {
@@ -536,8 +595,10 @@ export class DirectedCallMediaCoordinator {
     if (projection.participant_role !== "initiator" || this.completedRenegotiations.includes(id)) return;
     if (!this.renegotiation || this.renegotiation.id !== id || this.renegotiation.phase !== "offered") return;
     this.renegotiation.phase = "applying_answer";
+    const transaction = this.renegotiation;
     try {
       await this.adapter.applyRenegotiationAnswer({ type: "answer", sdp: payload.sdp });
+      if (!this.ownsRenegotiation(transaction, id, projection.call_id, "applying_answer")) return;
       this.completeRenegotiation(id);
     } catch {
       this.clearRenegotiation(id);
@@ -553,14 +614,37 @@ export class DirectedCallMediaCoordinator {
   }
 
   private completeRenegotiation(id: string): void {
-    if (this.renegotiation?.id !== id) return;
+    const transaction = this.renegotiation;
+    if (transaction?.id !== id) return;
     this.completedRenegotiations.push(id);
     if (this.completedRenegotiations.length > MAX_COMPLETED_RENEGOTIATIONS) this.completedRenegotiations.shift();
     this.renegotiation = null;
+    if (transaction.screenShare && transaction.remoteScreenReceptionEnabledByTransaction) {
+      this.adapter.reconcileRemoteScreenShareState?.(true);
+    }
   }
 
   private clearRenegotiation(id: string): void {
-    if (this.renegotiation?.id === id) this.renegotiation = null;
+    const transaction = this.renegotiation;
+    if (transaction?.id !== id) return;
+    this.renegotiation = null;
+    if (transaction.localScreenShareStarted) this.adapter.stopScreenShare?.();
+    if (transaction.remoteScreenReceptionEnabledByTransaction) {
+      this.adapter.setRemoteScreenShareReceptionEnabled?.(false);
+      this.adapter.reconcileRemoteScreenShareState?.(false);
+    }
+  }
+
+  private prepareRemoteScreenReception(id: string, callId: string): boolean {
+    const transaction = this.renegotiation;
+    if (!transaction || transaction.id !== id || transaction.callId !== callId || !transaction.screenShare) return false;
+    if (transaction.remoteScreenReceptionEnabledByTransaction) return true;
+    if (!this.adapter.setRemoteScreenShareReceptionEnabled?.(true)) {
+      this.clearRenegotiation(id);
+      return false;
+    }
+    transaction.remoteScreenReceptionEnabledByTransaction = true;
+    return true;
   }
 
   private queueLocalIceCandidate(candidate: RTCIceCandidateInit): void {
@@ -786,6 +870,7 @@ export class DirectedCallMediaCoordinator {
   }
 
   private invalidateMediaAttempt(): void {
+    if (this.renegotiation) this.clearRenegotiation(this.renegotiation.id);
     this.mediaAttemptEpoch += 1;
     this.mediaAttemptActive = false;
     this.offer = null;
