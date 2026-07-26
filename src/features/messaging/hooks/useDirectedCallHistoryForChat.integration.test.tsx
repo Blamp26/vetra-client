@@ -202,7 +202,15 @@ describe("directed call history terminal refresh integration", () => {
     await waitFor(() => expect(screen.getByText("Completed call")).toBeInTheDocument());
 
     const row = screen.getByTestId("directed-call-history-row");
-    expect(row).toHaveAccessibleName(expect.stringContaining("0:28"));
+    const visibleTime = new Date("2026-07-26T12:05:00.000Z").toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    expect(row).toHaveAccessibleName(`Completed call, 0:28, ${visibleTime}`);
+    expect(row.querySelector("time")).toHaveTextContent(visibleTime);
+    expect(row.querySelector("time")).not.toHaveTextContent("2026-07-26T12:05:00.000Z");
+    expect(row).not.toHaveTextContent("2026-07-26T12:05:00.000Z");
     const before = screen.getByText("BEFORE CALL");
     const after = screen.getByText("AFTER CALL");
     expect(Boolean(before.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
@@ -211,7 +219,18 @@ describe("directed call history terminal refresh integration", () => {
     expect(getState().conversations[2].messages.map(({ id }) => id)).toEqual([1, 2]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
+    act(() => runtime.emit({ canonicalState: "ended", terminalState: "ended", stateVersion: 8 }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(screen.getAllByTestId("directed-call-history-row")).toHaveLength(1);
+    expect(getState().directedCallHistoryOrderedCallIds.filter((callId) => callId === firstCall)).toHaveLength(1);
+    expect(getState().conversations[2].messages.map(({ id }) => id)).toEqual([1, 2]);
+
     act(() => runtime.emit({ callId: null, canonicalState: "idle", terminalState: null, stateVersion: null }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("directed-call-history-row")).toBeInTheDocument();
+    expect(getState().directedCallHistoryEntriesByCallId[firstCall]).toBeDefined();
+    expect(getState().conversations[2].messages.map(({ id }) => id)).toEqual([1, 2]);
+
     act(() => runtime.emit({ callId: secondCall, canonicalState: "active", terminalState: null, stateVersion: 10 }));
     act(() => runtime.emit({ canonicalState: "ended", terminalState: "ended", stateVersion: 11 }));
     await waitFor(() => expect(getState().directedCallHistoryEntriesByCallId[secondCall]).toBeDefined());
