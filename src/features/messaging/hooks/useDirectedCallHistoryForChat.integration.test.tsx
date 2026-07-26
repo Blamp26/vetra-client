@@ -255,8 +255,19 @@ describe("directed call history terminal refresh integration", () => {
       },
     }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId("directed-call-history-row")).toBeInTheDocument();
-    expect(getState().directedCallHistoryEntriesByCallId[firstCall]).toBeDefined();
+    const cleanupState = getState();
+    expect(cleanupState.directedCallHistoryEntriesByCallId).toEqual({
+      [firstCall]: historyEntry(firstCall, "2026-07-26T12:04:00.000Z", "2026-07-26T12:05:00.000Z", 28000),
+    });
+    expect(cleanupState.directedCallHistoryOrderedCallIds).toEqual([firstCall]);
+    expect(cleanupState.directedCallHistoryOrderedCallIds.filter((callId) => callId === firstCall)).toHaveLength(1);
+    expect(cleanupState.directedCallHistoryLoading).toBe(false);
+    expect(cleanupState.directedCallHistoryError).toBeNull();
+    expect(screen.getAllByTestId("directed-call-history-row")).toHaveLength(1);
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("BEFORE CALL")).toBeInTheDocument();
+    expect(screen.getByText("AFTER CALL")).toBeInTheDocument();
     expect(getState().conversations[2].messages.map(({ id }) => id)).toEqual([1, 2]);
 
     act(() => runtime.emit({
