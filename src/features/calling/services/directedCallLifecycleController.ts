@@ -16,6 +16,7 @@ import {
   DirectedCallSessionCommandError as SessionCommandError,
   type DirectedCallCommandTransportError,
 } from "./directedCallSession";
+import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
 
 export type DirectedCallLifecycleEvent =
   | "call:received"
@@ -408,6 +409,16 @@ export class DirectedCallLifecycleController {
   }
 
   private selectFromProjection(projection: StateProjection): void {
+    const terminal = TERMINAL_STATES.has(projection.state);
+    recordDirectedCallDiagnostic(terminal ? "terminal_projection_received" : "controller_selection", {
+      callId: projection.call_id,
+      role: projection.participant_role,
+      generation: String(this.generation),
+      canonicalState: projection.state,
+      selectedCallId: this.controlledCallId,
+      selectedState: this.controlledCallId ? this.session.getProjection(this.controlledCallId)?.state ?? null : null,
+      reason: terminal ? projection.state : "projection_received",
+    });
     if (this.pendingCommand?.event === "call:setup_failed" &&
         this.pendingCommand.callId === projection.call_id &&
         (projection.state === "active" || TERMINAL_STATES.has(projection.state))) {
@@ -428,6 +439,17 @@ export class DirectedCallLifecycleController {
     const selected = this.controlledCallId ? this.session.getProjection(this.controlledCallId) : null;
     if (selected && isLiveProjection(selected)) {
       if (projection.call_id === selected.call_id) this.preparing = false;
+      if (terminal && projection.call_id !== selected.call_id) {
+        recordDirectedCallDiagnostic("terminal_projection_ignored", {
+          callId: projection.call_id,
+          role: projection.participant_role,
+          generation: String(this.generation),
+          canonicalState: projection.state,
+          selectedCallId: selected.call_id,
+          selectedState: selected.state,
+          reason: "another_live_call_selected",
+        });
+      }
       return;
     }
 
@@ -451,6 +473,15 @@ export class DirectedCallLifecycleController {
       this.lastCommandError = null;
       this.authoritativelyAdvancedCommands.clear();
     }
+    recordDirectedCallDiagnostic("controller_selection", {
+      callId: projection.call_id,
+      role: projection.participant_role,
+      generation: String(this.generation),
+      canonicalState: projection.state,
+      selectedCallId: this.controlledCallId,
+      selectedState: this.controlledCallId ? this.session.getProjection(this.controlledCallId)?.state ?? null : null,
+      reason: this.controlledCallId === projection.call_id ? "selected" : "not_selected",
+    });
   }
 
   private selectFromStore(): void {

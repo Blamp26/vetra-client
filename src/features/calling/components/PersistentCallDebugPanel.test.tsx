@@ -23,6 +23,7 @@ const boundary = {
   currentLeaseSuffix: "lease-42",
   lastOwnershipEvent: null,
   ownershipEventTimeline: [],
+  directedCallEventTimeline: [],
 };
 
 function Runtime({ children }: { children: ReactNode }) {

@@ -8,7 +8,7 @@ import {
   type DirectedCallWebRtcAdapterOptions,
 } from "./directedCallWebRtcAdapter";
 
-function createHarness() {
+function createHarness(options: Pick<DirectedCallWebRtcAdapterOptions, "onDiagnostic"> = {}) {
   const trackListeners = new Map<string, Set<EventListener>>();
   const track = {
     kind: "audio",
@@ -119,7 +119,7 @@ function createHarness() {
       },
     };
   });
-  const adapter = new DirectedCallWebRtcAdapter({ dependencies: { getUserMedia, getDisplayMedia, createPeerConnection, createRemoteStream } });
+  const adapter = new DirectedCallWebRtcAdapter({ dependencies: { getUserMedia, getDisplayMedia, createPeerConnection, createRemoteStream }, ...options });
   return { adapter, pc, sender, track, stream, screenTrack, screenSender, screenTransceiver, transceivers, getUserMedia, getDisplayMedia, createPeerConnection, createRemoteStream };
 }
 
@@ -919,6 +919,16 @@ describe("DirectedCallWebRtcAdapter", () => {
     const thirdTrack = createRemoteTrack("video");
     harness.pc.ontrack?.({ track: thirdTrack, streams: [], transceiver: remoteTransceiver } as unknown as RTCTrackEvent);
     expect(changes).toHaveLength(3);
+  });
+
+  it("distinguishes remote ontrack from remote stream publication diagnostics", async () => {
+    const diagnostics: string[] = [];
+    const harness = createHarness({ onDiagnostic: (event) => diagnostics.push(event) });
+    await harness.adapter.prepareOffer();
+    const remoteTrack = createRemoteTrack("video");
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
+
+    expect(diagnostics).toEqual(["remote_video_ontrack", "remote_screen_stream_created"]);
   });
 
   it("keeps remote screen ownership until committed inactive reconciliation", async () => {

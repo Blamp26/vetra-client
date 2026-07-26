@@ -25,6 +25,7 @@ import { useOptionalPersistentCall } from "@/features/calling/context/Persistent
 import { persistentCallSidebarModel, usePersistentCallElapsedSeconds } from "@/features/calling/components/PersistentCallSurface/PersistentCallViewModel";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
+import { PersistentCallDebugPanel } from "@/features/calling/components/PersistentCallDebugPanel";
 import type { ActiveChat } from "@/shared/types";
 
 const LEFT_PANE_STORAGE_KEY = "vetra:left-pane-width";
@@ -132,6 +133,12 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const resolvedCallIssue = call?.callIssue ?? callIssue;
   const resolvedIncomingActionPending = call?.isIncomingActionPending ?? isIncomingActionPending;
   const activeChat = useAppStore((s) => s.activeChat);
+  const debugPeerUuidSource = persistentCall?.presentation.peerPublicId
+    ? "user" as const
+    : activeChat?.type === "direct" && activeChat.partnerRef !== undefined
+      ? "partnerRef" as const
+      : "none" as const;
+  const debugPeerUuidValid = Boolean(persistentCall?.presentation.peerPublicId || (activeChat?.type === "direct" && activeChat.partnerRef !== undefined));
   const conversationPreviews = useAppStore((s) => s.conversationPreviews);
   const roomPreviews = useAppStore((s) => s.roomPreviews);
   const servers = useAppStore((s) => s.servers);
@@ -681,6 +688,13 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
       )}
 
       <ToastHost />
+      <PersistentCallDebugPanel
+        activeChatType={activeChat?.type ?? "none"}
+        directChat={activeChat?.type === "direct"}
+        peerUuidSource={debugPeerUuidSource}
+        peerUuidValid={debugPeerUuidValid}
+        finalButtonPredicate={activeChat?.type === "direct" && debugPeerUuidValid}
+      />
     </div>
   );
 }

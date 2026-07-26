@@ -23,6 +23,7 @@ import {
 import type { DirectedCallSession } from "./directedCallSession";
 import type { LifecycleCommandOutcome } from "./directedCallLifecycleController";
 import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
+import type { DirectedCallDiagnosticEvent } from "./directedCallDiagnostics";
 
 export type DirectedCallMediaCoordinatorState =
   | "idle"
@@ -224,6 +225,7 @@ export class DirectedCallMediaCoordinator {
       },
       onPeerConnectionState: (state) => this.handlePeerConnectionState(state, adapterEpoch),
       onPeerConnectionDiagnostics: (diagnostics) => this.handlePeerConnectionDiagnostics(diagnostics, adapterEpoch),
+      onDiagnostic: (event, details) => this.recordMediaDiagnostic(event, details, adapterEpoch),
     });
     this.localScreenShareEndedCleanup = adapter.onLocalScreenShareEnded?.(() => {
       if (this.adapterEpoch === adapterEpoch) this.handleLocalScreenShareEnded();
@@ -318,6 +320,7 @@ export class DirectedCallMediaCoordinator {
       this.localScreenShareActive = true;
       this.updateLocalScreenShareSnapshot();
       transaction.phase = "requested";
+      this.recordMediaDiagnostic("renegotiate_request_sent", { transactionId: id, screenShare: true, transactionPhase: transaction.phase });
       await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_request", { renegotiation_id: id, screen_share: true });
       if (projection.participant_role === "initiator") {
         if (!this.ownsRenegotiation(transaction, id, projection.call_id, "requested")) return false;
@@ -415,6 +418,7 @@ export class DirectedCallMediaCoordinator {
       : null;
     if (nextStream === this.remoteScreenShareStream) return;
     this.remoteScreenShareStream = nextStream;
+    this.recordMediaDiagnostic("remote_screen_snapshot_published", { remoteStreamPresent: Boolean(nextStream) }, adapterEpoch);
     this.setSnapshot({ ...this.snapshot, remoteScreenShareStream: nextStream });
   }
 
@@ -457,6 +461,7 @@ export class DirectedCallMediaCoordinator {
     this.remoteAudioStream = null;
     this.peerConnectionState = null;
     this.adapter = this.createAdapter();
+    this.recordMediaDiagnostic("cleanup", { callId, reason: "coordinator_reset" });
     recordDirectedCallDiagnostic("cleanup", { callId, reason: "call_terminal_reset" });
     this.setSnapshot({
       state: "idle",
@@ -480,6 +485,7 @@ export class DirectedCallMediaCoordinator {
     this.retireSetupFailureReport();
     this.invalidateMediaAttempt();
     this.disposed = true;
+    this.recordMediaDiagnostic("cleanup", { reason: "coordinator_dispose" });
     this.setSnapshot({ ...this.snapshot, state: "disposing" });
     this.unsubscribeProjection?.();
     this.unsubscribeSignal?.();
@@ -508,11 +514,19 @@ export class DirectedCallMediaCoordinator {
   }
 
   private applyProjection(projection: StateProjection): void {
-    if (this.disposed || !CANONICAL_STATES.includes(projection.state)) return;
+    if (this.disposed) {
+      if (TERMINAL_STATES.has(projection.state)) recordDirectedCallDiagnostic("terminal_projection_ignored", { callId: projection.call_id, canonicalState: projection.state, generation: this.generation, reason: "coordinator_disposed" });
+      return;
+    }
+    if (!CANONICAL_STATES.includes(projection.state)) {
+      recordDirectedCallDiagnostic("terminal_projection_ignored", { callId: projection.call_id, canonicalState: projection.state, generation: this.generation, reason: "invalid_canonical_state" });
+      return;
+    }
     if (this.snapshot.callId === null) {
       if (!isUsableProjection(projection)) return;
       this.signalTransport.bindCall(projection.call_id);
       if (this.lastTerminalCallId) {
+        this.recordMediaDiagnostic("call_rollover", { previousCallId: this.lastTerminalCallId, nextCallId: projection.call_id });
         recordDirectedCallDiagnostic("cleanup", {
           callId: projection.call_id,
           previousCallId: this.lastTerminalCallId,
@@ -527,6 +541,7 @@ export class DirectedCallMediaCoordinator {
     }
 
     if (TERMINAL_STATES.has(projection.state)) {
+      this.recordMediaDiagnostic("terminal_projection_received", { canonicalState: projection.state, reason: projection.state });
       if (this.snapshot.callId === projection.call_id) {
         if (projection.state === "connection_failed") this.acknowledgeSetupFailureFromProjection(projection.call_id);
         else this.retireSetupFailureReport();
@@ -660,13 +675,22 @@ export class DirectedCallMediaCoordinator {
   private async handleSignal(signal: SignalEnvelope): Promise<void> {
     const projection = this.snapshot.projection;
     const attempt = this.mediaAttemptEpoch;
-    if (!projection || !this.isCurrentCall(signal.call_id, attempt) || !["connecting", "active"].includes(projection.state)) return;
+    if (!projection || !this.isCurrentCall(signal.call_id, attempt) || !["connecting", "active"].includes(projection.state)) {
+      this.recordMediaDiagnostic("stale_generation_rejected", { reason: !projection ? "no_projection" : "stale_call_or_generation" });
+      return;
+    }
     try {
       if (projection.state === "active" && signal.kind === "renegotiate_request") {
+        const payload = signal.payload as RenegotiationRequestPayload;
+        this.recordMediaDiagnostic("renegotiate_request_received", { transactionId: payload.renegotiation_id, screenShare: payload.screen_share });
         await this.handleRenegotiationRequest(signal, projection);
       } else if (projection.state === "active" && signal.kind === "renegotiate_offer") {
+        const payload = signal.payload as RenegotiationSdpPayload;
+        this.recordMediaDiagnostic("renegotiate_offer_received", { transactionId: payload.renegotiation_id, screenShare: payload.screen_share });
         await this.handleRenegotiationOffer(signal, projection);
       } else if (projection.state === "active" && signal.kind === "renegotiate_answer") {
+        const payload = signal.payload as RenegotiationSdpPayload;
+        this.recordMediaDiagnostic("renegotiate_answer_received", { transactionId: payload.renegotiation_id, screenShare: payload.screen_share });
         await this.handleRenegotiationAnswer(signal, projection);
       } else if (projection.participant_role === "initiator" && signal.kind === "answer" && isSdpPayload(signal)) {
         if (await this.adapter.acceptAnswer({ type: "answer", sdp: signal.payload.sdp })) {
@@ -681,8 +705,19 @@ export class DirectedCallMediaCoordinator {
           this.maybeSendMediaReady(projection.call_id, attempt, this.adapterEpoch);
         }
       } else if (isIcePayload(signal)) {
-        if (signal.payload.renegotiation_id && !this.acceptsRenegotiationId(signal.payload.renegotiation_id, projection.call_id)) return;
-        await this.adapter.addRemoteIceCandidate(toRtcIceCandidate(signal.payload));
+        const transactionId = signal.payload.renegotiation_id;
+        this.recordMediaDiagnostic("ice_received", { transactionId, candidateAction: "received" });
+        if (transactionId && !this.acceptsRenegotiationId(transactionId, projection.call_id)) {
+          this.recordMediaDiagnostic("ice_rejected", { transactionId, candidateAction: "rejected", candidateReason: "stale_or_unknown_renegotiation" });
+          return;
+        }
+        const buffered = !this.adapter.hasRemoteDescription;
+        const applied = await this.adapter.addRemoteIceCandidate(toRtcIceCandidate(signal.payload));
+        if (!applied) {
+          this.recordMediaDiagnostic("ice_rejected", { transactionId, candidateAction: "rejected", candidateReason: "duplicate_or_stale_candidate" });
+        } else {
+          this.recordMediaDiagnostic(buffered ? "ice_buffered" : "ice_applied", { transactionId, candidateAction: buffered ? "buffered" : "applied" });
+        }
       }
     } catch (error) {
       if (error instanceof DirectedCallWebRtcStaleError) return;
@@ -711,6 +746,7 @@ export class DirectedCallMediaCoordinator {
     };
     try {
       await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_request", { renegotiation_id: id, screen_share: screenShare });
+      this.recordMediaDiagnostic("renegotiate_request_sent", { transactionId: id, screenShare, transactionPhase: this.renegotiation?.phase });
       if (projection.participant_role === "initiator") await this.createAndSendRenegotiationOffer(projection.call_id, id, screenShare);
       return id;
     } catch {
@@ -754,6 +790,7 @@ export class DirectedCallMediaCoordinator {
       const offer = await this.adapter.createRenegotiationOffer();
       if (!offer.sdp || !this.acceptsRenegotiationId(id, callId)) return;
       this.renegotiation.phase = "offered";
+      this.recordMediaDiagnostic("renegotiate_offer_sent", { transactionId: id, screenShare, transactionPhase: this.renegotiation.phase });
       await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_offer", { renegotiation_id: id, screen_share: screenShare, sdp: offer.sdp });
     } catch {
       this.clearRenegotiation(id);
@@ -793,6 +830,7 @@ export class DirectedCallMediaCoordinator {
       if (!this.ownsRenegotiation(transaction, id, projection.call_id, "answering")) return;
       const answer = await this.adapter.createRenegotiationAnswer();
       if (!answer.sdp || !this.ownsRenegotiation(transaction, id, projection.call_id, "answering")) return;
+      this.recordMediaDiagnostic("renegotiate_answer_sent", { transactionId: id, screenShare: payload.screen_share, transactionPhase: this.renegotiation.phase });
       await this.signalTransport.send(createDirectedCallUuid(), "renegotiate_answer", { renegotiation_id: id, screen_share: payload.screen_share, sdp: answer.sdp });
       if (!this.ownsRenegotiation(transaction, id, projection.call_id, "answering")) return;
       this.completeRenegotiation(id);
@@ -928,6 +966,7 @@ export class DirectedCallMediaCoordinator {
           await this.signalTransport.send(createDirectedCallUuid(), "ice_candidate", toWireIceCandidate(entry.candidate, entry.renegotiationId));
           if (!this.isCurrentCall(callId, attempt)) return;
           this.flushedLocalCandidateCount += 1;
+          this.recordMediaDiagnostic("ice_sent", { transactionId: entry.renegotiationId, candidateAction: "sent", candidateIndex: this.flushedLocalCandidateCount });
           this.recordPeerConnectionDiagnostics();
         } catch {
           this.retireForTransport(callId, attempt);
@@ -1140,6 +1179,22 @@ export class DirectedCallMediaCoordinator {
     this.peerConnectionDiagnostics = null;
     this.clearLocalMediaState();
     this.adapter.dispose();
+  }
+
+  private recordMediaDiagnostic(
+    event: DirectedCallDiagnosticEvent,
+    details: Parameters<typeof recordDirectedCallDiagnostic>[1] = {},
+    adapterGeneration = this.adapterEpoch,
+  ): void {
+    recordDirectedCallDiagnostic(event, {
+      ...details,
+      callId: details.callId ?? this.snapshot.callId,
+      role: details.role ?? this.snapshot.participantRole,
+      generation: details.generation ?? this.generation,
+      adapterGeneration,
+      canonicalState: details.canonicalState ?? this.snapshot.projection?.state ?? null,
+      mediaPhase: details.mediaPhase ?? this.snapshot.state,
+    });
   }
 
   toggleMute(): boolean {

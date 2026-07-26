@@ -15,8 +15,10 @@ import {
   type PersistentCallRuntimeServices,
 } from "./PersistentCallContext";
 import {
+  getDirectedCallDiagnosticTimeline,
   recordDirectedCallDiagnostic,
   recordDirectedCallRuntimeBranch,
+  subscribeToDirectedCallDiagnostics,
 } from "../services/directedCallDiagnostics";
 import { getOrCreateDirectedCallDeviceId } from "../services/directedCallDevice";
 import { isUuid } from "../protocol/directedCallProtocol";
@@ -95,6 +97,7 @@ export function CallRuntimeBoundary({
   const [authority, setAuthority] = useState<CallAuthoritySnapshot>(() => ownership.getSnapshot());
   const ownershipTrace = ownership.getTraceSnapshot?.() ?? { events: [], lastEvent: null, nativeHolderPresent: false };
   const [persistentRuntime, setPersistentRuntime] = useState<PersistentRuntime | null>(null);
+  const [directedCallEventTimeline, setDirectedCallEventTimeline] = useState(getDirectedCallDiagnosticTimeline);
   const selectedInputDeviceId = useAppStore((state: RootState) => state.selectedInputDeviceId);
   const noiseSuppression = useAppStore((state: RootState) => state.noiseSuppression);
   const echoCancellation = useAppStore((state: RootState) => state.echoCancellation);
@@ -103,6 +106,8 @@ export function CallRuntimeBoundary({
   const activeOwnershipRef = useRef<CallAuthorityOwnership | null>(null);
   const acquiredOwnershipsRef = useRef(new Set<CallAuthorityOwnership>());
   const effectGenerationRef = useRef(0);
+
+  useEffect(() => subscribeToDirectedCallDiagnostics(setDirectedCallEventTimeline), []);
 
   useEffect(() => {
     if (!persistentRuntime) return;
@@ -320,6 +325,7 @@ export function CallRuntimeBoundary({
     currentLeaseSuffix: ownershipTrace.lastEvent?.leaseSuffix ?? null,
     lastOwnershipEvent: ownershipTrace.lastEvent,
     ownershipEventTimeline: ownership.getTraceSnapshot?.().events ?? [],
+    directedCallEventTimeline,
   };
 
   const persistentCallAffordance: PersistentCallAffordance =

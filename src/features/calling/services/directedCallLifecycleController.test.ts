@@ -8,6 +8,7 @@ import {
   type DirectedCallSessionPort,
 } from "./directedCallLifecycleController";
 import { DirectedCallSessionCommandError } from "./directedCallSession";
+import { getDirectedCallDiagnosticTimeline, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
 
 const deviceId = "11111111-1111-4111-8111-111111111111";
 const targetId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -111,6 +112,7 @@ describe("DirectedCallLifecycleController", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetDirectedCallDiagnosticTimeline();
   });
 
   it("enters local preparing before initiating and uses the public target and stable device", async () => {
@@ -417,6 +419,16 @@ describe("DirectedCallLifecycleController", () => {
     session.emit(liveB);
 
     expect(controller.getSnapshot()).toMatchObject({ callId, projection: liveA });
+  });
+
+  it("logs a terminal projection that is not authoritative without selecting it", () => {
+    const session = createSession();
+    const controller = new DirectedCallLifecycleController(session);
+    session.emit(state("active", 2, callId));
+    session.emit(state("ended", 3, secondCallId));
+
+    expect(controller.getSnapshot().callId).toBe(callId);
+    expect(getDirectedCallDiagnosticTimeline().some((entry) => entry.event === "terminal_projection_ignored" && entry.line.includes("another_live_call_selected"))).toBe(true);
   });
 
   it("selects a deterministic live projection after sync when selection is empty or terminal", () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StateProjection } from "../protocol/directedCallProtocol";
 import type {
   DirectedCallControllerSnapshot,
@@ -12,6 +12,7 @@ import {
   type DirectedCallPresentationIncomingPort,
   type DirectedCallPresentationLifecyclePort,
 } from "./directedCallPresentationModel";
+import { getDirectedCallDiagnosticTimeline, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
 
 const CALL_ID = "11111111-1111-4111-8111-111111111111";
 const DEVICE_ID = "22222222-2222-4222-8222-222222222222";
@@ -177,6 +178,7 @@ function createHarness() {
 }
 
 describe("DirectedCallPresentationModel", () => {
+  afterEach(() => resetDirectedCallDiagnosticTimeline());
   it("is dormant by default", () => {
     const harness = createHarness();
     const dormant = new DirectedCallPresentationModel(harness.session, harness.lifecycle, harness.incoming);
@@ -470,6 +472,9 @@ describe("DirectedCallPresentationModel", () => {
     await harness.model.accept();
     harness.emit(projection("declined", "recipient", 2));
     expect(harness.model.getSnapshot()).toMatchObject({ phase: "terminal", terminalState: "declined", terminalLabel: "Call declined", pendingAction: null });
+    expect(getDirectedCallDiagnosticTimeline().map((entry) => entry.event)).toContain("presentation_projection");
+    const phases = getDirectedCallDiagnosticTimeline().filter((entry) => entry.event === "presentation_phase");
+    expect(phases[phases.length - 1]?.line).toContain("final_phase=terminal");
   });
 
   it.each(["delivered", "presented"] as const)("rolls from terminal call A to the correct presentation for call B in %s", (stateName) => {

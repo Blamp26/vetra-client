@@ -14,6 +14,7 @@ import {
 import type {
   IncomingPresentationSnapshot,
 } from "./directedCallIncomingCoordinator";
+import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
 
 export type PersistentPresentationPhase =
   | "idle"
@@ -211,6 +212,7 @@ export class DirectedCallPresentationModel {
   private initiationGeneration = 0;
   private selectedCallId: string | null = null;
   private disposed = false;
+  private lastDiagnosticSignature = "";
 
   constructor(
     session: DirectedCallPresentationSessionPort,
@@ -563,6 +565,27 @@ export class DirectedCallPresentationModel {
 
   private handleProjection(projection: StateProjection): void {
     if (this.disposed) return;
+    recordDirectedCallDiagnostic("presentation_projection", {
+      callId: projection.call_id,
+      role: projection.participant_role,
+      canonicalState: projection.state,
+      selectedCallId: this.selectedCallId,
+      reason: TERMINAL_STATES.has(projection.state) ? projection.state : "accepted",
+      fallbackPeerPresent: Boolean(this.fallbackPeer),
+      initiationResultPresent: Boolean(this.initiationResult),
+    });
+    if (TERMINAL_STATES.has(projection.state) && this.authoritativeProjection && isLiveProjection(this.authoritativeProjection) && this.authoritativeProjection.call_id !== projection.call_id) {
+      recordDirectedCallDiagnostic("terminal_projection_ignored", {
+        callId: projection.call_id,
+        role: projection.participant_role,
+        canonicalState: projection.state,
+        selectedCallId: this.authoritativeProjection.call_id,
+        selectedState: this.authoritativeProjection.state,
+        reason: "another_authoritative_live_call",
+        fallbackPeerPresent: Boolean(this.fallbackPeer),
+        initiationResultPresent: Boolean(this.initiationResult),
+      });
+    }
     const selectedProjection = this.currentProjection();
     if (this.actionRecord && selectedProjection?.call_id === projection.call_id && this.actionRecord.callId !== projection.call_id) {
       this.clearActionRecord();
@@ -771,6 +794,19 @@ export class DirectedCallPresentationModel {
 
   private emit(): void {
     const snapshot = this.getSnapshot();
+    const signature = [snapshot.callId, snapshot.canonicalState, snapshot.phase, snapshot.terminalState, Boolean(this.fallbackPeer), Boolean(this.initiationResult)].join("|");
+    if (signature !== this.lastDiagnosticSignature) {
+      this.lastDiagnosticSignature = signature;
+      recordDirectedCallDiagnostic("presentation_phase", {
+        callId: snapshot.callId,
+        role: snapshot.participantRole,
+        canonicalState: snapshot.canonicalState,
+        finalPhase: snapshot.phase,
+        fallbackPeerPresent: Boolean(this.fallbackPeer),
+        initiationResultPresent: Boolean(this.initiationResult),
+        reason: snapshot.terminalState ?? "phase_changed",
+      });
+    }
     this.listeners.forEach((listener) => listener(snapshot));
   }
 }

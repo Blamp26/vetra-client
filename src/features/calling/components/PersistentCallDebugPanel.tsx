@@ -73,6 +73,7 @@ export function PersistentCallDebugPanel({
       "current lease suffix": value.currentLeaseSuffix ?? "none",
       "last ownership event": value.lastOwnershipEvent?.event ?? "none",
       "ownership event timeline": value.ownershipEventTimeline.map((event) => `${event.sequence}:${event.event}${event.reason ? `(${event.reason})` : ""}${event.errorCategory ? `[${event.errorCategory}${event.serverErrorCode ? `/${event.serverErrorCode}` : ""}: ${event.errorDetails ?? "unknown"}]` : event.errorType ? `[${event.errorType}: ${event.errorMessage ?? "unknown"}]` : ""}`).join(" | ") || "none",
+      "directed call event timeline": (value.directedCallEventTimeline ?? []).map((event) => `${event.sequence}:${event.line}`).join(" | ") || "none",
       "active chat type": activeChatType,
       "direct-chat check": directChat ? "pass" : "fail",
       "peer UUID source": peerUuidSource,

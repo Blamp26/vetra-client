@@ -6,6 +6,7 @@ import type {
 import type { DirectedCallMediaStream } from "../services/directedCallWebRtcAdapter";
 import type { DirectedCallPresentationModel, PersistentPresentationSnapshot, PresentationActionResult } from "../services/directedCallPresentationModel";
 import type { CallAuthorityBackend, CallAuthorityState, CallAuthorityTraceEvent } from "../services/callAuthorityOwnership";
+import type { DirectedCallDiagnosticEntry } from "../services/directedCallDiagnostics";
 
 export interface PersistentCallBoundaryDebugSnapshot {
   mode: "persistent" | "disabled";
@@ -22,6 +23,7 @@ export interface PersistentCallBoundaryDebugSnapshot {
   currentLeaseSuffix: string | null;
   lastOwnershipEvent: CallAuthorityTraceEvent | null;
   ownershipEventTimeline: CallAuthorityTraceEvent[];
+  directedCallEventTimeline: DirectedCallDiagnosticEntry[];
 }
 
 const PersistentCallBoundaryDebugContext = createContext<PersistentCallBoundaryDebugSnapshot | null>(null);
