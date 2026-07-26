@@ -225,13 +225,51 @@ describe("directed call history terminal refresh integration", () => {
     expect(getState().directedCallHistoryOrderedCallIds.filter((callId) => callId === firstCall)).toHaveLength(1);
     expect(getState().conversations[2].messages.map(({ id }) => id)).toEqual([1, 2]);
 
-    act(() => runtime.emit({ callId: null, canonicalState: "idle", terminalState: null, stateVersion: null }));
+    act(() => runtime.emit({
+      disposed: false,
+      phase: "idle",
+      callId: null,
+      participantRole: null,
+      peerPublicId: null,
+      peerUsername: null,
+      canonicalState: null,
+      stateVersion: null,
+      timestamps: null,
+      terminalState: null,
+      pendingAction: null,
+      recoverableError: null,
+      statusLabel: "Ready",
+      terminalLabel: null,
+      callIssue: null,
+      canCancel: false,
+      canHangup: false,
+      mediaControlsAvailable: false,
+      incomingModal: {
+        visible: false,
+        callerDisplayName: "Unknown caller",
+        isPending: false,
+        presentationKey: null,
+        onPresented: undefined,
+        onAccept: vi.fn(),
+        onDecline: vi.fn(),
+      },
+    }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId("directed-call-history-row")).toBeInTheDocument();
     expect(getState().directedCallHistoryEntriesByCallId[firstCall]).toBeDefined();
     expect(getState().conversations[2].messages.map(({ id }) => id)).toEqual([1, 2]);
 
-    act(() => runtime.emit({ callId: secondCall, canonicalState: "active", terminalState: null, stateVersion: 10 }));
+    act(() => runtime.emit({
+      phase: "active",
+      callId: secondCall,
+      participantRole: "initiator",
+      peerPublicId,
+      peerUsername: "alice",
+      canonicalState: "active",
+      terminalState: null,
+      stateVersion: 10,
+      canHangup: true,
+    }));
     act(() => runtime.emit({ canonicalState: "ended", terminalState: "ended", stateVersion: 11 }));
     await waitFor(() => expect(getState().directedCallHistoryEntriesByCallId[secondCall]).toBeDefined());
     expect(fetchMock).toHaveBeenCalledTimes(3);
