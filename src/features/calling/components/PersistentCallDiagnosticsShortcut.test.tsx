@@ -118,8 +118,9 @@ describe("PersistentCallDiagnosticsShortcut", () => {
     recordDirectedCallDiagnostic("presentation_phase", { producerFamily: "presentation" });
     await waitFor(() => {
       expect(screen.getByTestId("persistent-call-debug-panel")).toHaveTextContent("probe recorder entries/suppressed:1/0");
-      expect(screen.getByTestId("persistent-call-debug-panel")).toHaveTextContent("presentation_phase");
     });
+    fireEvent.click(screen.getByTestId("persistent-call-debug-timeline-tab"));
+    expect(screen.getByTestId("persistent-call-debug-timeline")).toHaveTextContent("presentation_phase");
     expect(getDirectedCallDiagnosticsProbe().timelineAppendCount).toBe(1);
   });
 

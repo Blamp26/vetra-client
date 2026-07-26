@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -52,7 +52,10 @@ function Runtime({ children }: { children: ReactNode }) {
 }
 
 describe("PersistentCallDebugPanel", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
 
   it("reports the real owner/provider/direct-chat button gates", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
@@ -181,5 +184,107 @@ describe("PersistentCallDebugPanel", () => {
     expect(panel).toHaveTextContent(/ownership state:non_owner/);
     expect(panel).toHaveTextContent(/failed gates:ownership_state, persistent_runtime, persistent_context, direct_chat, peer_uuid/);
     expect(panel).not.toHaveTextContent("33333333");
+  });
+
+  it("constrains the viewport and keeps long probe/timeline content scrollable", () => {
+    const longText = "x".repeat(800);
+    render(
+      <PersistentCallBoundaryDebugProvider value={{
+        ...boundary,
+        ownershipEventTimeline: [{
+          sequence: 1,
+          elapsedMs: 1,
+          event: "release_requested",
+          frontendGeneration: 3,
+          windowLabel: "main",
+          ownershipKeyHash: "safe",
+          leaseSuffix: null,
+          reason: longText,
+          startupPhase: "session_start",
+          errorType: undefined,
+          errorMessage: undefined,
+          errorCategory: undefined,
+          errorDetails: longText,
+          serverErrorCode: undefined,
+          frontendState: "owner",
+          rustHolderPresent: true,
+          outcome: null,
+        }],
+        directedCallEventTimeline: [{ sequence: 1, event: "media_phase", line: `media_phase ${longText}` }],
+      }}>
+        <PersistentCallDebugPanel activeChatType="direct" directChat peerUuidSource="partnerRef" peerUuidValid finalButtonPredicate />
+      </PersistentCallBoundaryDebugProvider>,
+    );
+
+    const panel = screen.getByTestId("persistent-call-debug-panel");
+    const body = screen.getByTestId("persistent-call-debug-body");
+    expect(panel.className).toContain("max-h-[calc(100vh-1rem)]");
+    expect(panel.className).toContain("w-[min(36rem,calc(100vw-1rem))]");
+    expect(body.className).toContain("overflow-y-auto");
+    expect(body.className).toContain("overflow-x-auto");
+    expect(panel).toHaveTextContent(longText.slice(0, 96));
+
+    fireEvent.click(screen.getByTestId("persistent-call-debug-timeline-tab"));
+    expect(screen.getByTestId("persistent-call-debug-timeline")).toHaveTextContent(longText);
+  });
+
+  it("switches views without clearing data and copies complete off-screen content", async () => {
+    const longProbeText = "probe-value-".repeat(120);
+    const longTimelineText = "timeline-value-".repeat(120);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(
+      <PersistentCallBoundaryDebugProvider value={{
+        ...boundary,
+        ownershipEventTimeline: [{
+          sequence: 1,
+          elapsedMs: 1,
+          event: "release_requested",
+          frontendGeneration: 3,
+          windowLabel: "main",
+          ownershipKeyHash: "safe",
+          leaseSuffix: null,
+          reason: longProbeText,
+          startupPhase: "session_start",
+          errorType: undefined,
+          errorMessage: undefined,
+          errorCategory: undefined,
+          errorDetails: longProbeText,
+          serverErrorCode: undefined,
+          frontendState: "owner",
+          rustHolderPresent: true,
+          outcome: null,
+        }],
+        directedCallEventTimeline: [{ sequence: 7, event: "media_phase", line: longTimelineText }],
+      }}>
+        <PersistentCallDebugPanel activeChatType="direct" directChat peerUuidSource="partnerRef" peerUuidValid finalButtonPredicate />
+      </PersistentCallBoundaryDebugProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("persistent-call-debug-copy"));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining(longProbeText)));
+    expect(screen.getByTestId("persistent-call-debug-copy-feedback")).toHaveTextContent("Copied");
+
+    fireEvent.click(screen.getByTestId("persistent-call-debug-timeline-tab"));
+    expect(screen.getByTestId("persistent-call-debug-timeline")).toHaveTextContent(longTimelineText);
+    fireEvent.click(screen.getByTestId("persistent-call-debug-copy"));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining(longTimelineText)));
+
+    fireEvent.click(screen.getByTestId("persistent-call-debug-probe-tab"));
+    fireEvent.click(screen.getByTestId("persistent-call-debug-timeline-tab"));
+    expect(screen.getByTestId("persistent-call-debug-timeline")).toHaveTextContent(longTimelineText);
+  });
+
+  it("isolates clipboard failures", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard unavailable"));
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(
+      <PersistentCallBoundaryDebugProvider value={boundary}>
+        <PersistentCallDebugPanel activeChatType="direct" directChat peerUuidSource="partnerRef" peerUuidValid finalButtonPredicate />
+      </PersistentCallBoundaryDebugProvider>,
+    );
+
+    expect(() => fireEvent.click(screen.getByTestId("persistent-call-debug-copy"))).not.toThrow();
+    await waitFor(() => expect(screen.getByTestId("persistent-call-debug-copy-feedback")).toHaveTextContent("Copy failed"));
   });
 });

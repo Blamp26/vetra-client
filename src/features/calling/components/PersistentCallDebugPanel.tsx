@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useOptionalPersistentCall,
   usePersistentCallBoundaryDebug,
@@ -90,6 +90,9 @@ export function PersistentCallDebugPanel({
     && boundary.directedCallDiagnosticsEnabled === true;
   const [probeSnapshot, setProbeSnapshot] = useState(getDirectedCallDiagnosticsProbe);
   const [panelReaderInstanceId, setPanelReaderInstanceId] = useState<string | null>(null);
+  const [view, setView] = useState<"probe" | "timeline">("probe");
+  const [copyFeedback, setCopyFeedback] = useState<"success" | "failure" | null>(null);
+  const copyFeedbackTimeout = useRef<number | null>(null);
 
   useEffect(() => {
     if (!diagnosticsEnabled) {
@@ -110,6 +113,10 @@ export function PersistentCallDebugPanel({
       setPanelReaderInstanceId(null);
     };
   }, [diagnosticsEnabled]);
+
+  useEffect(() => () => {
+    if (copyFeedbackTimeout.current !== null) window.clearTimeout(copyFeedbackTimeout.current);
+  }, []);
 
   const fields = useMemo(() => {
     const value = {
@@ -182,6 +189,38 @@ export function PersistentCallDebugPanel({
     };
   }, [activeChatType, directChat, boundary, persistentCall, peerUuidSource, peerUuidValid, finalButtonPredicate, panelReaderInstanceId, probeSnapshot]);
 
+  const timelineText = useMemo(
+    () => (fields["directed call event timeline"] as string) || "none",
+    [fields],
+  );
+  const probeText = useMemo(
+    () => Object.entries(fields)
+      .filter(([label]) => label !== "directed call event timeline")
+      .map(([label, value]) => `${label}: ${Array.isArray(value) ? value.join(", ") : value}`)
+      .join("\n"),
+    [fields],
+  );
+
+  const copyCurrentView = () => {
+    try {
+      const writeText = navigator.clipboard?.writeText;
+      if (!writeText) throw new Error("clipboard_unavailable");
+      const text = view === "probe" ? probeText : timelineText;
+      void writeText.call(navigator.clipboard, text).then(
+        () => {
+          setCopyFeedback("success");
+          if (copyFeedbackTimeout.current !== null) window.clearTimeout(copyFeedbackTimeout.current);
+          copyFeedbackTimeout.current = window.setTimeout(() => setCopyFeedback(null), 1800);
+        },
+        () => {
+          setCopyFeedback("failure");
+        },
+      );
+    } catch {
+      setCopyFeedback("failure");
+    }
+  };
+
   useEffect(() => {
     if (!import.meta.env.DEV || boundary?.mode !== "persistent") return;
     console.info("[persistent-call-debug]", fields);
@@ -191,19 +230,36 @@ export function PersistentCallDebugPanel({
 
   return (
     <aside
-      className="fixed bottom-2 right-2 z-[100] max-w-[360px] rounded border border-amber-500/60 bg-black/90 p-2 font-mono text-[10px] leading-4 text-amber-100 shadow-lg"
+      className="fixed bottom-2 right-2 z-[100] flex h-[min(42rem,calc(100vh-1rem))] max-h-[calc(100vh-1rem)] w-[min(36rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] flex-col rounded border border-amber-500/60 bg-black/90 p-2 font-mono text-[10px] leading-4 text-amber-100 shadow-lg"
       data-testid="persistent-call-debug-panel"
       aria-label="Persistent call runtime diagnostics"
     >
-      <div className="mb-1 font-semibold">Persistent call debug</div>
-      <dl>
-        {Object.entries(fields).map(([label, value]) => (
-          <div key={label} className="grid grid-cols-[auto_1fr] gap-x-2">
-            <dt>{label}:</dt>
-            <dd className="break-words">{Array.isArray(value) ? value.join(", ") : value}</dd>
-          </div>
-        ))}
-      </dl>
+      <header className="shrink-0 border-b border-amber-500/40 pb-2">
+        <div className="mb-1 flex items-center justify-between gap-2 font-semibold">
+          <span>Persistent call debug</span>
+          <span className="whitespace-nowrap">Ctrl+Shift+Alt+D disables</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <button type="button" aria-pressed={view === "probe"} onClick={() => setView("probe")} className="rounded border border-amber-300/60 px-1.5 py-0.5" data-testid="persistent-call-debug-probe-tab">Probe</button>
+          <button type="button" aria-pressed={view === "timeline"} onClick={() => setView("timeline")} className="rounded border border-amber-300/60 px-1.5 py-0.5" data-testid="persistent-call-debug-timeline-tab">Timeline</button>
+          <button type="button" onClick={copyCurrentView} className="rounded border border-amber-300/60 px-1.5 py-0.5" data-testid="persistent-call-debug-copy">Copy {view}</button>
+          {copyFeedback && <span role="status" data-testid="persistent-call-debug-copy-feedback">{copyFeedback === "success" ? "Copied" : "Copy failed"}</span>}
+        </div>
+      </header>
+      <div data-testid="persistent-call-debug-body" className="min-h-0 flex-1 overflow-x-auto overflow-y-auto pt-2">
+        {view === "probe" ? (
+          <dl>
+            {Object.entries(fields).filter(([label]) => label !== "directed call event timeline").map(([label, value]) => (
+              <div key={label} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+                <dt>{label}:</dt>
+                <dd className="min-w-0 break-words">{Array.isArray(value) ? value.join(", ") : value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <pre data-testid="persistent-call-debug-timeline" className="whitespace-pre-wrap break-words">{timelineText}</pre>
+        )}
+      </div>
     </aside>
   );
 }
