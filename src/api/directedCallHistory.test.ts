@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./base";
 import {
   directedCallHistoryApi,
+  normalizeDirectedCallHistoryResponse,
   type DirectedCallHistoryStatus,
 } from "./directedCallHistory";
 
@@ -98,6 +99,7 @@ describe("directedCallHistoryApi", () => {
     "cancelled",
     "missed",
     "no_answer",
+    "declined",
     "call_failed",
     "call_ended",
     "completed",
@@ -109,12 +111,19 @@ describe("directedCallHistoryApi", () => {
   it("accepts omitted and null peer identity and nullable terminal fields", async () => {
     mockSuccess([
       entry({ peer: undefined, ended_at: undefined, duration_ms: undefined }),
-      entry({ peer: { user_id: null, username: null }, ended_at: null, duration_ms: null }),
+      entry({ peer: null, ended_at: null, duration_ms: null }),
     ]);
 
     await expect(directedCallHistoryApi.getHistory()).resolves.toEqual([
       expect.objectContaining({ peer: null, ended_at: null, duration_ms: null }),
-      expect.objectContaining({ peer: { user_id: null, username: null }, ended_at: null, duration_ms: null }),
+      expect.objectContaining({ peer: null, ended_at: null, duration_ms: null }),
+    ]);
+  });
+
+  it("accepts a complete public peer", async () => {
+    mockSuccess([entry({ peer: { user_id: "peer-public", username: "peer" } })]);
+    await expect(directedCallHistoryApi.getHistory()).resolves.toEqual([
+      expect.objectContaining({ peer: { user_id: "peer-public", username: "peer" } }),
     ]);
   });
 
@@ -148,10 +157,29 @@ describe("directedCallHistoryApi", () => {
     ["status", entry({ status: "unknown" })],
     ["created_at", entry({ created_at: "not-a-timestamp" })],
     ["ended_at", entry({ ended_at: "not-a-timestamp" })],
+    ["peer.user_id", entry({ peer: { username: "peer" } })],
+    ["peer.username", entry({ peer: { user_id: "peer-public" } })],
+    ["peer.user_id", entry({ peer: { user_id: null, username: "peer" } })],
+    ["peer.username", entry({ peer: { user_id: "peer-public", username: null } })],
+    ["peer.user_id", entry({ peer: { user_id: 22, username: "peer" } })],
+    ["peer.username", entry({ peer: { user_id: "peer-public", username: 22 } })],
     ["duration_ms", entry({ duration_ms: "2000" })],
+    ["duration_ms", entry({ duration_ms: 1.5 })],
     ["duration_ms", entry({ duration_ms: -1 })],
   ])("rejects malformed %s", async (_field, value) => {
     mockSuccess([value]);
+    await expect(directedCallHistoryApi.getHistory()).rejects.toThrow();
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "rejects non-finite duration_ms %s at the runtime normalization boundary",
+    (duration_ms) => {
+      expect(() => normalizeDirectedCallHistoryResponse([entry({ duration_ms })])).toThrow();
+    },
+  );
+
+  it("rejects the complete response when any entry is malformed", async () => {
+    mockSuccess([entry(), entry({ status: "unknown" })]);
     await expect(directedCallHistoryApi.getHistory()).rejects.toThrow();
   });
 

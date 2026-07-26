@@ -6,13 +6,14 @@ export type DirectedCallHistoryStatus =
   | "cancelled"
   | "missed"
   | "no_answer"
+  | "declined"
   | "call_failed"
   | "call_ended"
   | "completed";
 
 export interface DirectedCallHistoryPeer {
-  user_id: string | null;
-  username: string | null;
+  user_id: string;
+  username: string;
 }
 
 export interface DirectedCallHistoryEntry {
@@ -34,6 +35,7 @@ const DIRECTED_CALL_HISTORY_STATUSES: ReadonlySet<string> = new Set([
   "cancelled",
   "missed",
   "no_answer",
+  "declined",
   "call_failed",
   "call_ended",
   "completed",
@@ -81,18 +83,12 @@ function normalizePeer(value: unknown): DirectedCallHistoryPeer | null {
   if (value === undefined || value === null) return null;
   if (!isRecord(value)) throw new Error("Invalid directed call history peer");
 
-  const userId = value.user_id;
-  const username = value.username;
-  if (userId !== undefined && userId !== null && typeof userId !== "string") {
-    throw new Error("Invalid directed call history peer.user_id");
-  }
-  if (username !== undefined && username !== null && typeof username !== "string") {
-    throw new Error("Invalid directed call history peer.username");
-  }
+  const userId = requireString(value.user_id, "peer.user_id");
+  const username = requireString(value.username, "peer.username");
 
   return {
-    user_id: userId === undefined ? null : userId,
-    username: username === undefined ? null : username,
+    user_id: userId,
+    username,
   };
 }
 
@@ -117,7 +113,7 @@ function normalizeEntry(value: unknown): DirectedCallHistoryEntry {
   };
 }
 
-function normalizeResponse(value: unknown): DirectedCallHistoryEntry[] {
+export function normalizeDirectedCallHistoryResponse(value: unknown): DirectedCallHistoryEntry[] {
   if (!Array.isArray(value)) throw new Error("Invalid directed call history response");
   return value.map(normalizeEntry);
 }
@@ -128,6 +124,6 @@ export const directedCallHistoryApi = {
     if (params.limit !== undefined) query.set("limit", String(params.limit));
 
     const suffix = query.toString() ? `?${query.toString()}` : "";
-    return get<unknown>(`/directed-calls/history${suffix}`).then(normalizeResponse);
+    return get<unknown>(`/directed-calls/history${suffix}`).then(normalizeDirectedCallHistoryResponse);
   },
 };
