@@ -2,6 +2,108 @@ import { debugCall, isCallDebugEnabled } from "../utils/callDebug";
 
 const runtimeBranchDiagnostics = new Set<string>();
 const MAX_DIRECTED_CALL_DIAGNOSTICS = 160;
+export type DirectedCallDiagnosticProducerFamily = "coordinator" | "adapter" | "lifecycle" | "session" | "presentation";
+export type DirectedCallDiagnosticsProbeStep = "recorder_entered" | "flag_checked" | "appended" | "listeners_notified" | null;
+
+export interface DirectedCallDiagnosticsProbeSnapshot {
+  rendererSessionProbeId: string;
+  recorderModuleInstanceIds: string[];
+  panelReaderInstanceIds: string[];
+  flagObservedByRecorder: boolean;
+  settingChangeCount: number;
+  boundaryMounted: boolean;
+  runtimeMounted: boolean;
+  recorderEntryCount: number;
+  suppressedDisabledCount: number;
+  timelineAppendCount: number;
+  currentTimelineLength: number;
+  listenerNotificationCount: number;
+  activeListenerCount: number;
+  lastEventFamily: DirectedCallDiagnosticProducerFamily | null;
+  lastCompletedStep: DirectedCallDiagnosticsProbeStep;
+  lastInternalErrorCode: string | null;
+  producerFamilies: DirectedCallDiagnosticProducerFamily[];
+}
+
+interface DirectedCallDiagnosticsProbeState extends Omit<DirectedCallDiagnosticsProbeSnapshot, "recorderModuleInstanceIds" | "panelReaderInstanceIds" | "producerFamilies"> {
+  recorderModuleInstanceIds: Set<string>;
+  panelReaderInstanceIds: Set<string>;
+  producerFamilies: Set<DirectedCallDiagnosticProducerFamily>;
+}
+
+const DIAGNOSTICS_PROBE_KEY = Symbol.for("vetra.directed-call-diagnostics.probe");
+const DIAGNOSTICS_PROBE_COUNTER_KEY = Symbol.for("vetra.directed-call-diagnostics.probe-counter");
+
+function nextProbeId(prefix: string): string {
+  try {
+    const root = globalThis as unknown as Record<symbol, unknown>;
+    const next = (typeof root[DIAGNOSTICS_PROBE_COUNTER_KEY] === "number" ? root[DIAGNOSTICS_PROBE_COUNTER_KEY] as number : 0) + 1;
+    root[DIAGNOSTICS_PROBE_COUNTER_KEY] = next;
+    return `${prefix}-${next}`;
+  } catch {
+    return `${prefix}-0`;
+  }
+}
+
+function createProbeState(): DirectedCallDiagnosticsProbeState {
+  return {
+    rendererSessionProbeId: nextProbeId("renderer"),
+    recorderModuleInstanceIds: new Set(),
+    panelReaderInstanceIds: new Set(),
+    flagObservedByRecorder: false,
+    settingChangeCount: 0,
+    boundaryMounted: false,
+    runtimeMounted: false,
+    recorderEntryCount: 0,
+    suppressedDisabledCount: 0,
+    timelineAppendCount: 0,
+    currentTimelineLength: 0,
+    listenerNotificationCount: 0,
+    activeListenerCount: 0,
+    lastEventFamily: null,
+    lastCompletedStep: null,
+    lastInternalErrorCode: null,
+    producerFamilies: new Set(),
+  };
+}
+
+function getProbeState(): DirectedCallDiagnosticsProbeState {
+  try {
+    const root = globalThis as unknown as Record<symbol, unknown>;
+    const existing = root[DIAGNOSTICS_PROBE_KEY] as DirectedCallDiagnosticsProbeState | undefined;
+    if (existing) return existing;
+    const state = createProbeState();
+    root[DIAGNOSTICS_PROBE_KEY] = state;
+    return state;
+  } catch {
+    return createProbeState();
+  }
+}
+
+const recorderModuleInstanceId = nextProbeId("recorder");
+getProbeState().recorderModuleInstanceIds.add(recorderModuleInstanceId);
+
+function updateProbe(mutator: (state: DirectedCallDiagnosticsProbeState) => void): void {
+  try {
+    mutator(getProbeState());
+  } catch {
+    try { getProbeState().lastInternalErrorCode = "probe_update_failed"; } catch { /* probe is best effort */ }
+  }
+}
+
+function probeRecorderEntry(enabled: boolean, family?: DirectedCallDiagnosticProducerFamily): void {
+  updateProbe((state) => {
+    state.recorderEntryCount += 1;
+    state.flagObservedByRecorder = enabled;
+    state.lastCompletedStep = "recorder_entered";
+    if (family) {
+      state.lastEventFamily = family;
+      state.producerFamilies.add(family);
+    }
+  });
+  updateProbe((state) => { state.lastCompletedStep = "flag_checked"; });
+  if (!enabled) updateProbe((state) => { state.suppressedDisabledCount += 1; });
+}
 
 export interface DirectedCallDiagnosticEntry {
   sequence: number;
@@ -14,6 +116,69 @@ const directedCallDiagnosticTimeline: DirectedCallDiagnosticEntry[] = [];
 const directedCallDiagnosticListeners = new Set<DirectedCallDiagnosticListener>();
 let nextDiagnosticSequence = 1;
 let lastDiagnosticKey: string | null = null;
+
+export function getDirectedCallDiagnosticsProbe(): DirectedCallDiagnosticsProbeSnapshot {
+  try {
+    const state = getProbeState();
+    return {
+      ...state,
+      recorderModuleInstanceIds: [...state.recorderModuleInstanceIds],
+      panelReaderInstanceIds: [...state.panelReaderInstanceIds],
+      producerFamilies: [...state.producerFamilies],
+      currentTimelineLength: directedCallDiagnosticTimeline.length,
+      activeListenerCount: directedCallDiagnosticListeners.size,
+    };
+  } catch {
+    return {
+      rendererSessionProbeId: "renderer-unavailable",
+      recorderModuleInstanceIds: [], panelReaderInstanceIds: [], flagObservedByRecorder: false,
+      settingChangeCount: 0, boundaryMounted: false, runtimeMounted: false, recorderEntryCount: 0,
+      suppressedDisabledCount: 0, timelineAppendCount: 0, currentTimelineLength: 0,
+      listenerNotificationCount: 0, activeListenerCount: 0, lastEventFamily: null,
+      lastCompletedStep: null, lastInternalErrorCode: "probe_read_failed", producerFamilies: [],
+    };
+  }
+}
+
+export function registerDirectedCallDiagnosticsPanelReader(): string {
+  const id = nextProbeId("panel");
+  updateProbe((state) => state.panelReaderInstanceIds.add(id));
+  return id;
+}
+
+export function unregisterDirectedCallDiagnosticsPanelReader(id: string): void {
+  updateProbe((state) => state.panelReaderInstanceIds.delete(id));
+}
+
+export function recordDirectedCallDiagnosticsSettingChange(enabled: boolean): void {
+  updateProbe((state) => {
+    state.flagObservedByRecorder = enabled;
+    state.settingChangeCount += 1;
+  });
+}
+
+export function setDirectedCallDiagnosticsBoundaryMounted(mounted: boolean): void {
+  updateProbe((state) => { state.boundaryMounted = mounted; });
+}
+
+export function setDirectedCallDiagnosticsRuntimeMounted(mounted: boolean): void {
+  updateProbe((state) => { state.runtimeMounted = mounted; });
+}
+
+export function resetDirectedCallDiagnosticsProbe(): void {
+  updateProbe((state) => {
+    state.flagObservedByRecorder = false;
+    state.settingChangeCount = 0;
+    state.recorderEntryCount = 0;
+    state.suppressedDisabledCount = 0;
+    state.timelineAppendCount = 0;
+    state.listenerNotificationCount = 0;
+    state.lastEventFamily = null;
+    state.lastCompletedStep = null;
+    state.lastInternalErrorCode = null;
+    state.producerFamilies.clear();
+  });
+}
 
 const ORDERED_DIAGNOSTIC_EVENTS = new Set<DirectedCallDiagnosticEvent>([
   "ice_sent", "ice_received", "ice_applied", "ice_buffered", "ice_rejected",
@@ -129,12 +294,19 @@ export function recordDirectedCallDiagnostic(
     fallbackPeerPresent?: boolean | null;
     initiationResultPresent?: boolean | null;
     staleGeneration?: string | null;
+    producerFamily?: DirectedCallDiagnosticProducerFamily;
   } = {},
 ): void {
-  if (!isCallDebugEnabled()) {
+  const enabled = isCallDebugEnabled();
+  probeRecorderEntry(enabled, details.producerFamily);
+  if (!enabled) {
     directedCallDiagnosticTimeline.length = 0;
     lastDiagnosticKey = null;
     directedCallDiagnosticListeners.clear();
+    updateProbe((state) => {
+      state.currentTimelineLength = 0;
+      state.activeListenerCount = 0;
+    });
     return;
   }
   const fields: Record<string, string | number | boolean | null | undefined> = {
@@ -189,9 +361,22 @@ export function recordDirectedCallDiagnostic(
   const entry: DirectedCallDiagnosticEntry = { sequence: nextDiagnosticSequence++, event, line: `${event} ${line}`.trim() };
   directedCallDiagnosticTimeline.push(entry);
   if (directedCallDiagnosticTimeline.length > MAX_DIRECTED_CALL_DIAGNOSTICS) directedCallDiagnosticTimeline.shift();
+  updateProbe((state) => {
+    state.timelineAppendCount += 1;
+    state.currentTimelineLength = directedCallDiagnosticTimeline.length;
+    state.lastCompletedStep = "appended";
+  });
   const snapshot = directedCallDiagnosticTimeline.slice();
   directedCallDiagnosticListeners.forEach((listener) => {
+    updateProbe((state) => {
+      state.listenerNotificationCount += 1;
+      state.activeListenerCount = directedCallDiagnosticListeners.size;
+    });
     try { listener(snapshot); } catch { /* diagnostics cannot affect call control flow */ }
+  });
+  updateProbe((state) => {
+    state.activeListenerCount = directedCallDiagnosticListeners.size;
+    state.lastCompletedStep = "listeners_notified";
   });
   try { debugCall(`[directed-call] ${event}`, fields); } catch { /* best-effort sink */ }
 }
@@ -201,6 +386,10 @@ export function getDirectedCallDiagnosticTimeline(): DirectedCallDiagnosticEntry
     directedCallDiagnosticTimeline.length = 0;
     lastDiagnosticKey = null;
     directedCallDiagnosticListeners.clear();
+    updateProbe((state) => {
+      state.currentTimelineLength = 0;
+      state.activeListenerCount = 0;
+    });
     return [];
   }
   return directedCallDiagnosticTimeline.slice();
@@ -209,13 +398,18 @@ export function getDirectedCallDiagnosticTimeline(): DirectedCallDiagnosticEntry
 export function subscribeToDirectedCallDiagnostics(listener: DirectedCallDiagnosticListener): () => void {
   if (!isCallDebugEnabled()) return () => undefined;
   directedCallDiagnosticListeners.add(listener);
-  return () => directedCallDiagnosticListeners.delete(listener);
+  updateProbe((state) => { state.activeListenerCount = directedCallDiagnosticListeners.size; });
+  return () => {
+    directedCallDiagnosticListeners.delete(listener);
+    updateProbe((state) => { state.activeListenerCount = directedCallDiagnosticListeners.size; });
+  };
 }
 
 export function resetDirectedCallDiagnosticTimeline(): void {
   directedCallDiagnosticTimeline.length = 0;
   nextDiagnosticSequence = 1;
   lastDiagnosticKey = null;
+  updateProbe((state) => { state.currentTimelineLength = 0; });
   directedCallDiagnosticListeners.forEach((listener) => {
     try { listener([]); } catch { /* diagnostics cannot affect call control flow */ }
   });

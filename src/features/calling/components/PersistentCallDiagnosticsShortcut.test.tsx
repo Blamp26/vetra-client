@@ -8,8 +8,11 @@ import {
 } from "../context/PersistentCallContext";
 import {
   getDirectedCallDiagnosticTimeline,
+  getDirectedCallDiagnosticsProbe,
+  recordDirectedCallDiagnosticsSettingChange,
   recordDirectedCallDiagnostic,
   resetDirectedCallDiagnosticTimeline,
+  subscribeToDirectedCallDiagnostics,
 } from "../services/directedCallDiagnostics";
 import * as callDebug from "../utils/callDebug";
 import { PersistentCallDebugPanel, PersistentCallDiagnosticsShortcut } from "./PersistentCallDebugPanel";
@@ -35,8 +38,20 @@ const baseBoundary: PersistentCallBoundaryDebugSnapshot = {
 
 function Harness({ boundary = baseBoundary }: { boundary?: PersistentCallBoundaryDebugSnapshot }) {
   const [enabled, setEnabled] = useState(callDebug.isCallDebugEnabled);
-  useEffect(() => callDebug.subscribeToCallDebugState(setEnabled), []);
-  const value = { ...boundary, directedCallDiagnosticsEnabled: enabled };
+  const [timeline, setTimeline] = useState(boundary.directedCallEventTimeline);
+  useEffect(() => callDebug.subscribeToCallDebugState((nextEnabled) => {
+    recordDirectedCallDiagnosticsSettingChange(nextEnabled);
+    setEnabled(nextEnabled);
+  }), []);
+  useEffect(() => {
+    if (!enabled) {
+      setTimeline([]);
+      return;
+    }
+    setTimeline(getDirectedCallDiagnosticTimeline());
+    return subscribeToDirectedCallDiagnostics(setTimeline);
+  }, [enabled]);
+  const value = { ...boundary, directedCallEventTimeline: timeline, directedCallDiagnosticsEnabled: enabled };
   return (
     <PersistentCallBoundaryDebugProvider value={value}>
       <PersistentCallDiagnosticsShortcut />
@@ -78,6 +93,8 @@ describe("PersistentCallDiagnosticsShortcut", () => {
     pressShortcut();
     await waitFor(() => expect(screen.getByTestId("persistent-call-debug-panel")).toBeInTheDocument());
     expect(callDebug.isCallDebugEnabled()).toBe(true);
+    expect(getDirectedCallDiagnosticsProbe().panelReaderInstanceIds.length).toBe(1);
+    expect(getDirectedCallDiagnosticsProbe().settingChangeCount).toBeGreaterThan(0);
     expect(getDirectedCallDiagnosticTimeline()).toEqual([]);
     expect(screen.getByTestId("persistent-call-debug-panel")).toHaveTextContent("disable diagnostics:Ctrl+Shift+Alt+D");
 
@@ -88,9 +105,22 @@ describe("PersistentCallDiagnosticsShortcut", () => {
     await waitFor(() => expect(screen.queryByTestId("persistent-call-debug-panel")).not.toBeInTheDocument());
     expect(callDebug.isCallDebugEnabled()).toBe(false);
     expect(getDirectedCallDiagnosticTimeline()).toEqual([]);
+    expect(getDirectedCallDiagnosticsProbe().panelReaderInstanceIds).toEqual([]);
     view.unmount();
     render(<Harness />);
     expect(screen.queryByTestId("persistent-call-debug-panel")).not.toBeInTheDocument();
+  });
+
+  it("observes a post-enable recorder event and timeline append without restart", async () => {
+    render(<Harness />);
+    pressShortcut();
+    await waitFor(() => expect(screen.getByTestId("persistent-call-debug-panel")).toBeInTheDocument());
+    recordDirectedCallDiagnostic("presentation_phase", { producerFamily: "presentation" });
+    await waitFor(() => {
+      expect(screen.getByTestId("persistent-call-debug-panel")).toHaveTextContent("probe recorder entries/suppressed:1/0");
+      expect(screen.getByTestId("persistent-call-debug-panel")).toHaveTextContent("presentation_phase");
+    });
+    expect(getDirectedCallDiagnosticsProbe().timelineAppendCount).toBe(1);
   });
 
   it("persists enabled state across remount and installs one deterministic listener", async () => {

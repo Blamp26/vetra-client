@@ -566,6 +566,7 @@ export class DirectedCallPresentationModel {
   private handleProjection(projection: StateProjection): void {
     if (this.disposed) return;
     recordDirectedCallDiagnostic("presentation_projection", {
+      producerFamily: "presentation",
       callId: projection.call_id,
       role: projection.participant_role,
       canonicalState: projection.state,
@@ -576,6 +577,7 @@ export class DirectedCallPresentationModel {
     });
     if (TERMINAL_STATES.has(projection.state) && this.authoritativeProjection && isLiveProjection(this.authoritativeProjection) && this.authoritativeProjection.call_id !== projection.call_id) {
       recordDirectedCallDiagnostic("terminal_projection_ignored", {
+        producerFamily: "presentation",
         callId: projection.call_id,
         role: projection.participant_role,
         canonicalState: projection.state,
@@ -798,6 +800,7 @@ export class DirectedCallPresentationModel {
     if (signature !== this.lastDiagnosticSignature) {
       this.lastDiagnosticSignature = signature;
       recordDirectedCallDiagnostic("presentation_phase", {
+        producerFamily: "presentation",
         callId: snapshot.callId,
         role: snapshot.participantRole,
         canonicalState: snapshot.canonicalState,

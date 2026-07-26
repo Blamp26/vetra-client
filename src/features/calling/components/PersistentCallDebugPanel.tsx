@@ -1,9 +1,16 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useOptionalPersistentCall,
   usePersistentCallBoundaryDebug,
 } from "../context/PersistentCallContext";
-import { getDirectedCallDiagnosticTimeline, resetDirectedCallDiagnosticTimeline } from "../services/directedCallDiagnostics";
+import {
+  getDirectedCallDiagnosticTimeline,
+  getDirectedCallDiagnosticsProbe,
+  registerDirectedCallDiagnosticsPanelReader,
+  resetDirectedCallDiagnosticTimeline,
+  resetDirectedCallDiagnosticsProbe,
+  unregisterDirectedCallDiagnosticsPanelReader,
+} from "../services/directedCallDiagnostics";
 import { isCallDebugEnabled, setCallDebugEnabled } from "../utils/callDebug";
 
 export type PersistentPeerUuidSource = "user" | "preview" | "partnerRef" | "none";
@@ -45,9 +52,12 @@ export function PersistentCallDiagnosticsShortcut() {
         ) return;
         chordHeld = true;
         event.preventDefault();
-        setCallDebugEnabled(!isCallDebugEnabled());
+        const enabled = !isCallDebugEnabled();
+        resetDirectedCallDiagnosticsProbe();
         resetDirectedCallDiagnosticTimeline();
+        setCallDebugEnabled(enabled);
         getDirectedCallDiagnosticTimeline();
+        if (!enabled) resetDirectedCallDiagnosticsProbe();
       } catch {
         // Diagnostics must never affect application control flow.
       }
@@ -75,6 +85,31 @@ export function PersistentCallDebugPanel({
 }: Props) {
   const boundary = usePersistentCallBoundaryDebug();
   const persistentCall = useOptionalPersistentCall();
+  const diagnosticsEnabled = boundary?.mode === "persistent"
+    && boundary.tauriDetected === true
+    && boundary.directedCallDiagnosticsEnabled === true;
+  const [probeSnapshot, setProbeSnapshot] = useState(getDirectedCallDiagnosticsProbe);
+  const [panelReaderInstanceId, setPanelReaderInstanceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!diagnosticsEnabled) {
+      setPanelReaderInstanceId(null);
+      return;
+    }
+    const readerId = registerDirectedCallDiagnosticsPanelReader();
+    setPanelReaderInstanceId(readerId);
+    const refresh = () => setProbeSnapshot((previous) => {
+      const next = getDirectedCallDiagnosticsProbe();
+      return JSON.stringify(previous) === JSON.stringify(next) ? previous : next;
+    });
+    refresh();
+    const refreshHandle = window.setInterval(refresh, 250);
+    return () => {
+      window.clearInterval(refreshHandle);
+      unregisterDirectedCallDiagnosticsPanelReader(readerId);
+      setPanelReaderInstanceId(null);
+    };
+  }, [diagnosticsEnabled]);
 
   const fields = useMemo(() => {
     const value = {
@@ -124,6 +159,20 @@ export function PersistentCallDebugPanel({
       "ownership event timeline": value.ownershipEventTimeline.map((event) => `${event.sequence}:${event.event}${event.reason ? `(${event.reason})` : ""}${event.errorCategory ? `[${event.errorCategory}${event.serverErrorCode ? `/${event.serverErrorCode}` : ""}: ${event.errorDetails ?? "unknown"}]` : event.errorType ? `[${event.errorType}: ${event.errorMessage ?? "unknown"}]` : ""}`).join(" | ") || "none",
       "directed call event timeline": (value.directedCallEventTimeline ?? []).map((event) => `${event.sequence}:${event.line}`).join(" | ") || "none",
       "disable diagnostics": "Ctrl+Shift+Alt+D",
+      "Diagnostics transport probe": "",
+      "probe renderer/session ID": probeSnapshot.rendererSessionProbeId,
+      "probe recorder module IDs": probeSnapshot.recorderModuleInstanceIds.join(", ") || "none",
+      "probe panel reader ID": panelReaderInstanceId ?? "none",
+      "probe recorder flag": probeSnapshot.flagObservedByRecorder ? "enabled" : "disabled",
+      "probe setting changes": probeSnapshot.settingChangeCount,
+      "probe boundary/runtime mounted": `${probeSnapshot.boundaryMounted ? "yes" : "no"}/${probeSnapshot.runtimeMounted ? "yes" : "no"}`,
+      "probe recorder entries/suppressed": `${probeSnapshot.recorderEntryCount}/${probeSnapshot.suppressedDisabledCount}`,
+      "probe timeline appends/length": `${probeSnapshot.timelineAppendCount}/${probeSnapshot.currentTimelineLength}`,
+      "probe listener notifications/active": `${probeSnapshot.listenerNotificationCount}/${probeSnapshot.activeListenerCount}`,
+      "probe last event family": probeSnapshot.lastEventFamily ?? "none",
+      "probe last completed step": probeSnapshot.lastCompletedStep ?? "none",
+      "probe last internal error": probeSnapshot.lastInternalErrorCode ?? "none",
+      "probe producer families": probeSnapshot.producerFamilies.join(", ") || "none",
       "active chat type": activeChatType,
       "direct-chat check": directChat ? "pass" : "fail",
       "peer UUID source": peerUuidSource,
@@ -131,18 +180,14 @@ export function PersistentCallDebugPanel({
       "final outgoing-button predicate": finalButtonPredicate ? "pass" : "fail",
       "failed gates": failedGates.length > 0 ? failedGates : ["none"],
     };
-  }, [activeChatType, directChat, boundary, persistentCall, peerUuidSource, peerUuidValid, finalButtonPredicate]);
+  }, [activeChatType, directChat, boundary, persistentCall, peerUuidSource, peerUuidValid, finalButtonPredicate, panelReaderInstanceId, probeSnapshot]);
 
   useEffect(() => {
     if (!import.meta.env.DEV || boundary?.mode !== "persistent") return;
     console.info("[persistent-call-debug]", fields);
   }, [fields]);
 
-  if (
-    boundary?.directedCallDiagnosticsEnabled !== true
-    || boundary.mode !== "persistent"
-    || boundary.tauriDetected !== true
-  ) return null;
+  if (!diagnosticsEnabled) return null;
 
   return (
     <aside

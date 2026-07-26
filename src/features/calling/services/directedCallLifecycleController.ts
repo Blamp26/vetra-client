@@ -411,6 +411,7 @@ export class DirectedCallLifecycleController {
   private selectFromProjection(projection: StateProjection): void {
     const terminal = TERMINAL_STATES.has(projection.state);
     recordDirectedCallDiagnostic(terminal ? "terminal_projection_received" : "controller_selection", {
+      producerFamily: "lifecycle",
       callId: projection.call_id,
       role: projection.participant_role,
       generation: String(this.generation),
@@ -441,6 +442,7 @@ export class DirectedCallLifecycleController {
       if (projection.call_id === selected.call_id) this.preparing = false;
       if (terminal && projection.call_id !== selected.call_id) {
         recordDirectedCallDiagnostic("terminal_projection_ignored", {
+          producerFamily: "lifecycle",
           callId: projection.call_id,
           role: projection.participant_role,
           generation: String(this.generation),
@@ -474,6 +476,7 @@ export class DirectedCallLifecycleController {
       this.authoritativelyAdvancedCommands.clear();
     }
     recordDirectedCallDiagnostic("controller_selection", {
+      producerFamily: "lifecycle",
       callId: projection.call_id,
       role: projection.participant_role,
       generation: String(this.generation),

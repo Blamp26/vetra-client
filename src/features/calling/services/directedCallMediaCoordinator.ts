@@ -23,7 +23,7 @@ import {
 import type { DirectedCallSession } from "./directedCallSession";
 import type { LifecycleCommandOutcome } from "./directedCallLifecycleController";
 import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
-import type { DirectedCallDiagnosticEvent } from "./directedCallDiagnostics";
+import type { DirectedCallDiagnosticEvent, DirectedCallDiagnosticProducerFamily } from "./directedCallDiagnostics";
 
 export type DirectedCallMediaCoordinatorState =
   | "idle"
@@ -225,7 +225,7 @@ export class DirectedCallMediaCoordinator {
       },
       onPeerConnectionState: (state) => this.handlePeerConnectionState(state, adapterEpoch),
       onPeerConnectionDiagnostics: (diagnostics) => this.handlePeerConnectionDiagnostics(diagnostics, adapterEpoch),
-      onDiagnostic: (event, details) => this.recordMediaDiagnostic(event, details, adapterEpoch),
+      onDiagnostic: (event, details) => this.recordMediaDiagnostic(event, details, adapterEpoch, "adapter"),
     });
     this.localScreenShareEndedCleanup = adapter.onLocalScreenShareEnded?.(() => {
       if (this.adapterEpoch === adapterEpoch) this.handleLocalScreenShareEnded();
@@ -1185,9 +1185,11 @@ export class DirectedCallMediaCoordinator {
     event: DirectedCallDiagnosticEvent,
     details: Parameters<typeof recordDirectedCallDiagnostic>[1] = {},
     adapterGeneration = this.adapterEpoch,
+    producerFamily: DirectedCallDiagnosticProducerFamily = "coordinator",
   ): void {
     recordDirectedCallDiagnostic(event, {
       ...details,
+      producerFamily,
       callId: details.callId ?? this.snapshot.callId,
       role: details.role ?? this.snapshot.participantRole,
       generation: details.generation ?? this.generation,

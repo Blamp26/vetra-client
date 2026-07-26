@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DirectedCallSignalTransport } from "./directedCallSignalTransport";
 import { DirectedCallMediaCoordinator } from "./directedCallMediaCoordinator";
 import { DirectedCallWebRtcError, DirectedCallWebRtcStaleError } from "./directedCallWebRtcAdapter";
@@ -9,6 +9,8 @@ import type {
   DirectedCallWebRtcAdapterOptions,
 } from "./directedCallWebRtcAdapter";
 import type { DirectedCallSession } from "./directedCallSession";
+import { getDirectedCallDiagnosticsProbe, resetDirectedCallDiagnosticsProbe, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
+import { setCallDebugEnabled } from "../utils/callDebug";
 
 const callId = "33333333-3333-4333-8333-333333333333";
 const peerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -287,6 +289,26 @@ function deferred<T>() {
 }
 
 describe("DirectedCallMediaCoordinator", () => {
+  beforeEach(() => setCallDebugEnabled(false));
+  afterEach(() => { resetDirectedCallDiagnosticTimeline(); resetDirectedCallDiagnosticsProbe(); setCallDebugEnabled(false); });
+
+  it("records a real coordinator event after enabling diagnostics on an existing runtime", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const coordinator = createCoordinator(session, transport);
+    startActive(coordinator, session);
+
+    setCallDebugEnabled(true);
+    resetDirectedCallDiagnosticsProbe();
+    resetDirectedCallDiagnosticTimeline();
+    await expect(coordinator.startScreenShare()).resolves.toBe(true);
+
+    const probe = getDirectedCallDiagnosticsProbe();
+    expect(probe.recorderEntryCount).toBeGreaterThan(0);
+    expect(probe.timelineAppendCount).toBeGreaterThan(0);
+    expect(probe.producerFamilies).toContain("coordinator");
+  });
+
   it("toggles only live local audio tracks and inherits mute for newly added tracks", async () => {
     const session = createSession();
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });

@@ -292,14 +292,14 @@ export class DirectedCallSession {
       this.socketOpenRef = this.socket.onOpen(() => {
         const wasAvailable = this.socketAvailable;
         this.socketAvailable = true;
-        recordDirectedCallDiagnostic("socket", { socket: "connected" });
+        recordDirectedCallDiagnostic("socket", { socket: "connected", producerFamily: "session" });
         if (!wasAvailable || typeof this.socket.onClose !== "function") void this.recoverConnection();
       });
       if (typeof this.socket.onClose === "function") {
         this.socketCloseRef = this.socket.onClose(() => {
           this.socketAvailable = false;
           this.cancelRetry();
-          recordDirectedCallDiagnostic("socket", { socket: "disconnected" });
+          recordDirectedCallDiagnostic("socket", { socket: "disconnected", producerFamily: "session" });
         });
       }
       this.trace?.("session_start_phase_succeeded", { reason: "subscription_installation", sessionPhase: "subscription_installation" });
@@ -333,7 +333,7 @@ export class DirectedCallSession {
       this.trace?.("session_start_phase_failed", { reason: "initial_request_sync", sessionPhase: "initial_request_sync", ...details });
       throw error;
     }
-    recordDirectedCallDiagnostic("socket", { socket: "connected" });
+    recordDirectedCallDiagnostic("socket", { socket: "connected", producerFamily: "session" });
     return true;
   }
 

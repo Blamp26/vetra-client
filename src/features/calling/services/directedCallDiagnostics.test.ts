@@ -1,15 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getDirectedCallDiagnosticTimeline,
+  getDirectedCallDiagnosticsProbe,
+  registerDirectedCallDiagnosticsPanelReader,
   recordDirectedCallDiagnostic,
+  resetDirectedCallDiagnosticsProbe,
   resetDirectedCallDiagnosticTimeline,
+  unregisterDirectedCallDiagnosticsPanelReader,
   subscribeToDirectedCallDiagnostics,
 } from "./directedCallDiagnostics";
 import { setCallDebugEnabled } from "../utils/callDebug";
 
 describe("directed-call diagnostics", () => {
   beforeEach(() => setCallDebugEnabled(true));
-  afterEach(() => { resetDirectedCallDiagnosticTimeline(); setCallDebugEnabled(false); });
+  afterEach(() => { resetDirectedCallDiagnosticTimeline(); resetDirectedCallDiagnosticsProbe(); setCallDebugEnabled(false); });
 
   it("keeps bounded, correlated single-line events without SDP or candidate contents", () => {
     recordDirectedCallDiagnostic("renegotiate_offer_sent", {
@@ -70,6 +74,43 @@ describe("directed-call diagnostics", () => {
     expect(() => recordDirectedCallDiagnostic("media_phase", { reason: "enabled" })).not.toThrow();
     expect(getDirectedCallDiagnosticTimeline()).toHaveLength(1);
     unsubscribe();
+  });
+
+  it("tracks disabled suppression and enabled recorder transport independently of listeners", () => {
+    resetDirectedCallDiagnosticsProbe();
+    setCallDebugEnabled(false);
+    recordDirectedCallDiagnostic("media_phase", { producerFamily: "coordinator" });
+    setCallDebugEnabled(true);
+    const throwingListener = subscribeToDirectedCallDiagnostics(() => { throw new Error("listener failure"); });
+    recordDirectedCallDiagnostic("remote_video_ontrack", { producerFamily: "adapter" });
+
+    const probe = getDirectedCallDiagnosticsProbe();
+    expect(probe.recorderEntryCount).toBe(2);
+    expect(probe.suppressedDisabledCount).toBe(1);
+    expect(probe.timelineAppendCount).toBe(1);
+    expect(probe.currentTimelineLength).toBe(1);
+    expect(probe.listenerNotificationCount).toBe(1);
+    expect(probe.lastCompletedStep).toBe("listeners_notified");
+    expect(probe.producerFamilies).toEqual(["coordinator", "adapter"]);
+    expect(probe.recorderModuleInstanceIds.length).toBeGreaterThan(0);
+    throwingListener();
+  });
+
+  it("reports the global recorder and panel reader identities without private fields", () => {
+    const reader = registerDirectedCallDiagnosticsPanelReader();
+    const probe = getDirectedCallDiagnosticsProbe();
+    expect(probe.rendererSessionProbeId).toMatch(/^renderer-/);
+    expect(probe.recorderModuleInstanceIds.every((id) => /^recorder-\d+$/.test(id))).toBe(true);
+    expect(probe.panelReaderInstanceIds).toContain(reader);
+    expect(JSON.stringify(probe)).not.toMatch(/call|transaction|candidate|sdp|ip|user|token|url|credential/i);
+    unregisterDirectedCallDiagnosticsPanelReader(reader);
+    expect(getDirectedCallDiagnosticsProbe().panelReaderInstanceIds).not.toContain(reader);
+  });
+
+  it("exposes duplicate recorder module instances through the shared probe", async () => {
+    vi.resetModules();
+    const duplicateModule = await import("./directedCallDiagnostics");
+    expect(duplicateModule.getDirectedCallDiagnosticsProbe().recorderModuleInstanceIds.length).toBeGreaterThanOrEqual(2);
   });
 
   it("deduplicates unchanged records but preserves ordered ICE records", () => {

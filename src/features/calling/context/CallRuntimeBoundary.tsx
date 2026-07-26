@@ -18,6 +18,9 @@ import {
   getDirectedCallDiagnosticTimeline,
   recordDirectedCallDiagnostic,
   recordDirectedCallRuntimeBranch,
+  recordDirectedCallDiagnosticsSettingChange,
+  setDirectedCallDiagnosticsBoundaryMounted,
+  setDirectedCallDiagnosticsRuntimeMounted,
   subscribeToDirectedCallDiagnostics,
 } from "../services/directedCallDiagnostics";
 import { isCallDebugEnabled, subscribeToCallDebugState } from "../utils/callDebug";
@@ -109,7 +112,19 @@ export function CallRuntimeBoundary({
   const acquiredOwnershipsRef = useRef(new Set<CallAuthorityOwnership>());
   const effectGenerationRef = useRef(0);
 
-  useEffect(() => subscribeToCallDebugState(setDirectedCallDiagnosticsEnabled), []);
+  useEffect(() => subscribeToCallDebugState((enabled) => {
+    recordDirectedCallDiagnosticsSettingChange(enabled);
+    setDirectedCallDiagnosticsEnabled(enabled);
+  }), []);
+
+  useEffect(() => {
+    setDirectedCallDiagnosticsBoundaryMounted(true);
+    return () => setDirectedCallDiagnosticsBoundaryMounted(false);
+  }, []);
+
+  useEffect(() => {
+    setDirectedCallDiagnosticsRuntimeMounted(persistentRuntime !== null);
+  }, [persistentRuntime]);
 
   useEffect(() => {
     if (!directedCallDiagnosticsEnabled) {
@@ -155,7 +170,7 @@ export function CallRuntimeBoundary({
             "unavailable",
             !persistentMediaAvailable ? "media_api_unavailable" : "persistent_runtime_unavailable",
           );
-          recordDirectedCallDiagnostic("failure", { failureKind: !persistentMediaAvailable ? "persistent_media_unavailable" : "persistent_runtime_unavailable" });
+          recordDirectedCallDiagnostic("failure", { producerFamily: "coordinator", failureKind: !persistentMediaAvailable ? "persistent_media_unavailable" : "persistent_runtime_unavailable" });
           await ownership.dispose(undefined, "runtime_prerequisite_unavailable");
           return;
         }
@@ -249,7 +264,7 @@ export function CallRuntimeBoundary({
 
     const onAuthority = (snapshot: CallAuthoritySnapshot) => {
       setAuthority(snapshot);
-      recordDirectedCallDiagnostic("authority", { mode, authority: snapshot.state });
+      recordDirectedCallDiagnostic("authority", { producerFamily: "coordinator", mode, authority: snapshot.state });
       if (snapshot.state === "owner") activateOwnerRuntime();
     };
     const unsubscribe = ownership.subscribe(onAuthority);
@@ -263,7 +278,7 @@ export function CallRuntimeBoundary({
       if (mode === "persistent" && !socketManager) return;
       acquiredOwnershipsRef.current.add(ownership);
       const acquired = await ownership.acquire();
-      recordDirectedCallDiagnostic("runtime_mode", { mode, authority: acquired.state });
+      recordDirectedCallDiagnostic("runtime_mode", { producerFamily: "coordinator", mode, authority: acquired.state });
       if (cancelled || activeOwnershipRef.current !== ownership) {
         ownership.trace?.("frontend_owner_rejected_stale", { outcome: "stale", reason: "obsolete_boundary_generation" });
         if (activeOwnershipRef.current !== ownership) await ownership.dispose(undefined, "stale_generation");
@@ -279,7 +294,8 @@ export function CallRuntimeBoundary({
             acquired.state === "non_owner" ? "non-owner" : "unavailable",
             acquired.state === "non_owner" ? undefined : "ownership_unavailable",
           );
-          recordDirectedCallDiagnostic("failure", {
+      recordDirectedCallDiagnostic("failure", {
+            producerFamily: "coordinator",
             failureKind: acquired.state === "unavailable" ? "persistent_authority_unavailable" : "persistent_authority_not_owned",
             reason: acquired.state === "unavailable" ? "web_locks_unavailable_or_failed" : "another_window_owns_call_runtime",
           });
