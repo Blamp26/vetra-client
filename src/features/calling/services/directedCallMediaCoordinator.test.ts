@@ -4,6 +4,7 @@ import { DirectedCallMediaCoordinator } from "./directedCallMediaCoordinator";
 import { DirectedCallWebRtcError, DirectedCallWebRtcStaleError } from "./directedCallWebRtcAdapter";
 import type {
   DirectedCallInitialMediaReadiness,
+  DirectedCallMediaStream,
   DirectedCallWebRtcAdapter,
   DirectedCallWebRtcAdapterOptions,
 } from "./directedCallWebRtcAdapter";
@@ -95,6 +96,7 @@ type TestAdapter = DirectedCallWebRtcAdapter & {
   configure(options: DirectedCallWebRtcAdapterOptions): void;
   setReadiness(readiness: DirectedCallInitialMediaReadiness): void;
   emitLocalScreenShareEnded(): void;
+  emitRemoteScreenShareForTest(stream: DirectedCallMediaStream | null): void;
 };
 
 function mockedMethod(method: (...args: any[]) => any): ReturnType<typeof vi.fn> {
@@ -110,7 +112,9 @@ function createAdapter(options: DirectedCallWebRtcAdapterOptions = {}): TestAdap
     ready: false,
   });
   let localScreenShareStream: ReturnType<typeof createStream> | null = null;
+  let remoteScreenShareStream: DirectedCallMediaStream | null = null;
   let localScreenShareEndedHandler: (() => void) | null = null;
+  let remoteScreenShareChangedHandler: ((stream: DirectedCallMediaStream | null) => void) | null = null;
   let readinessCallback = options.onInitialMediaReadinessChange;
   const adapter = {
     get initialMediaReadinessSnapshot() { return readiness; },
@@ -130,7 +134,7 @@ function createAdapter(options: DirectedCallWebRtcAdapterOptions = {}): TestAdap
     createRenegotiationAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "renegotiation-answer" }),
     applyRenegotiationAnswer: vi.fn().mockResolvedValue(undefined),
     getLocalScreenShareStream: vi.fn(() => localScreenShareStream),
-    getRemoteScreenShareStream: vi.fn(() => null),
+    getRemoteScreenShareStream: vi.fn(() => remoteScreenShareStream),
     startScreenShare: vi.fn(async () => {
       localScreenShareStream = createStream([createTrack("video")]);
       return true;
@@ -143,6 +147,16 @@ function createAdapter(options: DirectedCallWebRtcAdapterOptions = {}): TestAdap
       };
     }),
     emitLocalScreenShareEnded: vi.fn(() => { localScreenShareEndedHandler?.(); }),
+    onRemoteScreenShareChanged: vi.fn((handler: (stream: DirectedCallMediaStream | null) => void) => {
+      remoteScreenShareChangedHandler = handler;
+      return () => {
+        if (remoteScreenShareChangedHandler === handler) remoteScreenShareChangedHandler = null;
+      };
+    }),
+    emitRemoteScreenShareForTest: vi.fn((stream: DirectedCallMediaStream | null) => {
+      remoteScreenShareStream = stream;
+      remoteScreenShareChangedHandler?.(stream);
+    }),
     setRemoteScreenShareReceptionEnabled: vi.fn(() => true),
     reconcileRemoteScreenShareState: vi.fn(),
     addRemoteIceCandidate: vi.fn().mockResolvedValue(true),
@@ -1217,6 +1231,82 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(initiatorAdapter.reconcileRemoteScreenShareState).toHaveBeenCalledWith(true);
     recipient.dispose();
     initiator.dispose();
+  });
+
+  it("exposes remote screen stream changes once without confusing local screen ownership", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const lifecycle = createLifecycle();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+    });
+    const changes: Array<DirectedCallMediaStream | null> = [];
+    coordinator.subscribe((snapshot) => changes.push(snapshot.remoteScreenShareStream));
+    coordinator.start();
+    session.emit(projection("accepted"));
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBeNull();
+    session.emit(projection("connecting"));
+    session.emit(projection("active"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    const remoteStream = createStream([createTrack("video")]);
+
+    adapter.emitRemoteScreenShareForTest(remoteStream);
+    adapter.emitRemoteScreenShareForTest(remoteStream);
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBe(remoteStream);
+    expect(changes.filter((stream) => stream === remoteStream)).toHaveLength(1);
+
+    await expect(coordinator.startScreenShare()).resolves.toBe(true);
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBe(remoteStream);
+    const startId = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls.find(([, , kind]) => kind === "renegotiate_request")?.[3].renegotiation_id as string;
+    session.emitSignal(renegotiationAnswer(startId, true));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+    await expect(coordinator.stopScreenShare()).resolves.toBe(true);
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBe(remoteStream);
+    expect(lifecycle.mediaReady).not.toHaveBeenCalled();
+
+    const nullChangesBeforeRemoval = changes.filter((stream) => stream === null).length;
+    adapter.emitRemoteScreenShareForTest(null);
+    adapter.emitRemoteScreenShareForTest(null);
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBeNull();
+    expect(changes.filter((stream) => stream === null)).toHaveLength(nullChangesBeforeRemoval + 1);
+    coordinator.dispose();
+  });
+
+  it("fences remote screen ownership across call and adapter rollover and disposal", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapters: TestAdapter[] = [];
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => {
+        const adapter = createAdapter(options);
+        adapters.push(adapter);
+        return adapter;
+      },
+    });
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapters[0].prepareOffer).toHaveBeenCalled());
+    const oldStream = createStream([createTrack("video")]);
+    adapters[0].emitRemoteScreenShareForTest(oldStream);
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBe(oldStream);
+
+    const nextCallId = "44444444-4444-4444-8444-444444444444";
+    session.emit(projection("ended"));
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBeNull();
+    expect(adapters).toHaveLength(2);
+    session.emit(projection("accepted", nextCallId));
+    session.emit(projection("connecting", nextCallId));
+    session.emit(projection("active", nextCallId));
+    await vi.waitFor(() => expect(adapters[1].prepareOffer).toHaveBeenCalled());
+
+    adapters[0].emitRemoteScreenShareForTest(createStream([createTrack("video")]));
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBeNull();
+    const newStream = createStream([createTrack("video")]);
+    adapters[1].emitRemoteScreenShareForTest(newStream);
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBe(newStream);
+    coordinator.dispose();
+    adapters[1].emitRemoteScreenShareForTest(null);
+    expect(coordinator.getSnapshot().remoteScreenShareStream).toBeNull();
   });
 
   it("stops screen sharing as the canonical offerer and binds the false transaction", async () => {

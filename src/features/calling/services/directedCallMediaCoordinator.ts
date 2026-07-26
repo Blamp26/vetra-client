@@ -40,6 +40,7 @@ export interface DirectedCallMediaCoordinatorSnapshot {
   projection: StateProjection | null;
   generation: string;
   remoteAudioStream: DirectedCallMediaStream | null;
+  remoteScreenShareStream: DirectedCallMediaStream | null;
   localIssue: "transport_recovery" | "audio_input_switch_failed" | DirectedCallWebRtcError["failureCode"] | null;
   peerConnectionState: RTCPeerConnectionState | null;
   isMuted: boolean;
@@ -143,6 +144,7 @@ export class DirectedCallMediaCoordinator {
   private readonly audioConstraints?: () => MediaStreamConstraints;
   private adapter: DirectedCallWebRtcAdapter;
   private localScreenShareEndedCleanup: (() => void) | null = null;
+  private remoteScreenShareChangedCleanup: (() => void) | null = null;
   private unsubscribeProjection: (() => void) | null = null;
   private unsubscribeSignal: (() => void) | null = null;
   private snapshot: DirectedCallMediaCoordinatorSnapshot;
@@ -155,6 +157,7 @@ export class DirectedCallMediaCoordinator {
   private disposed = false;
   private localIssue: DirectedCallMediaCoordinatorSnapshot["localIssue"] = null;
   private remoteAudioStream: DirectedCallMediaStream | null = null;
+  private remoteScreenShareStream: DirectedCallMediaStream | null = null;
   private peerConnectionState: RTCPeerConnectionState | null = null;
   private mediaAttemptEpoch = 0;
   private mediaAttemptActive = false;
@@ -192,7 +195,7 @@ export class DirectedCallMediaCoordinator {
     this.lifecycle = lifecycle;
     this.generation = generation;
     this.isGenerationCurrent = options.isGenerationCurrent ?? ((current) => current === this.generation);
-    this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false };
+    this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, remoteAudioStream: null, remoteScreenShareStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false };
     this.adapterFactory = options.adapterFactory ?? ((adapterOptions) => new DirectedCallWebRtcAdapter(adapterOptions));
     this.audioConstraints = options.audioConstraints;
     this.adapter = this.createAdapter();
@@ -201,6 +204,8 @@ export class DirectedCallMediaCoordinator {
   private createAdapter(): DirectedCallWebRtcAdapter {
     this.localScreenShareEndedCleanup?.();
     this.localScreenShareEndedCleanup = null;
+    this.remoteScreenShareChangedCleanup?.();
+    this.remoteScreenShareChangedCleanup = null;
     const adapterEpoch = ++this.adapterEpoch;
     const adapter = this.adapterFactory({
       getAudioConstraints: this.audioConstraints,
@@ -221,6 +226,10 @@ export class DirectedCallMediaCoordinator {
     this.localScreenShareEndedCleanup = adapter.onLocalScreenShareEnded?.(() => {
       if (this.adapterEpoch === adapterEpoch) this.handleLocalScreenShareEnded();
     }) ?? null;
+    this.remoteScreenShareChangedCleanup = adapter.onRemoteScreenShareChanged?.(() => {
+      if (this.adapterEpoch === adapterEpoch) this.handleRemoteScreenShareChanged(adapterEpoch, adapter);
+    }) ?? null;
+    this.remoteScreenShareStream = adapter.getRemoteScreenShareStream?.() ?? null;
     return adapter;
   }
 
@@ -394,6 +403,16 @@ export class DirectedCallMediaCoordinator {
     void this.stopScreenShareInternal(true);
   }
 
+  private handleRemoteScreenShareChanged(adapterEpoch: number, adapter: DirectedCallWebRtcAdapter): void {
+    if (this.disposed || this.adapterEpoch !== adapterEpoch) return;
+    const nextStream = this.snapshot.projection?.state === "active"
+      ? (adapter.getRemoteScreenShareStream?.() ?? null)
+      : null;
+    if (nextStream === this.remoteScreenShareStream) return;
+    this.remoteScreenShareStream = nextStream;
+    this.setSnapshot({ ...this.snapshot, remoteScreenShareStream: nextStream });
+  }
+
   private resetCallState(callId: string): void {
     this.lastTerminalCallId = callId;
     this.retireSetupFailureReport();
@@ -402,6 +421,7 @@ export class DirectedCallMediaCoordinator {
     this.renegotiation = null;
     this.completedRenegotiations.length = 0;
     this.remoteScreenShareCommitted = false;
+    this.remoteScreenShareStream = null;
     this.localScreenShareActive = false;
     this.localScreenShareCommitted = false;
     this.pendingBrowserScreenStop = false;
@@ -425,6 +445,7 @@ export class DirectedCallMediaCoordinator {
       projection: null,
       generation: this.generation,
       remoteAudioStream: null,
+      remoteScreenShareStream: null,
       localIssue: null,
       peerConnectionState: null,
       isMuted: false,
@@ -449,7 +470,10 @@ export class DirectedCallMediaCoordinator {
     this.completedRenegotiations.length = 0;
     this.localScreenShareEndedCleanup?.();
     this.localScreenShareEndedCleanup = null;
+    this.remoteScreenShareChangedCleanup?.();
+    this.remoteScreenShareChangedCleanup = null;
     this.remoteScreenShareCommitted = false;
+    this.remoteScreenShareStream = null;
     this.localScreenShareActive = false;
     this.localScreenShareCommitted = false;
     this.pendingBrowserScreenStop = false;
@@ -457,7 +481,7 @@ export class DirectedCallMediaCoordinator {
     this.offer = null;
     this.remoteAudioStream = null;
     this.localIssue = null;
-    this.setSnapshot({ state: "disposed", callId: null, participantRole: null, projection: null, generation: this.generation, remoteAudioStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false });
+    this.setSnapshot({ state: "disposed", callId: null, participantRole: null, projection: null, generation: this.generation, remoteAudioStream: null, remoteScreenShareStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false });
     this.listeners.clear();
   }
 
@@ -484,7 +508,8 @@ export class DirectedCallMediaCoordinator {
       if (this.snapshot.callId === projection.call_id) {
         if (projection.state === "connection_failed") this.acknowledgeSetupFailureFromProjection(projection.call_id);
         else this.retireSetupFailureReport();
-        this.setSnapshot({ ...this.snapshot, projection, state: "disposing" });
+        this.remoteScreenShareStream = null;
+        this.setSnapshot({ ...this.snapshot, projection, state: "disposing", remoteScreenShareStream: null });
         this.resetCallState(projection.call_id);
       }
       return;
@@ -522,7 +547,10 @@ export class DirectedCallMediaCoordinator {
         : "waiting_for_connecting";
     this.localIssue = null;
     recordDirectedCallDiagnostic("call_projection", { callId: projection.call_id, canonicalState: projection.state });
-    this.setSnapshot({ state, callId: projection.call_id, participantRole: projection.participant_role, projection, generation: this.generation, remoteAudioStream: this.remoteAudioStream, localIssue: this.localIssue, peerConnectionState: this.peerConnectionState, isMuted: this.snapshot.isMuted, canToggleMute: this.snapshot.canToggleMute });
+    this.remoteScreenShareStream = projection.state === "active"
+      ? (this.adapter.getRemoteScreenShareStream?.() ?? null)
+      : null;
+    this.setSnapshot({ state, callId: projection.call_id, participantRole: projection.participant_role, projection, generation: this.generation, remoteAudioStream: this.remoteAudioStream, remoteScreenShareStream: this.remoteScreenShareStream, localIssue: this.localIssue, peerConnectionState: this.peerConnectionState, isMuted: this.snapshot.isMuted, canToggleMute: this.snapshot.canToggleMute });
 
     if (projection.state === "accepted") void this.startMedia(projection);
     if (projection.state === "connecting") {
@@ -1064,8 +1092,9 @@ export class DirectedCallMediaCoordinator {
     if (!callId || !this.isCurrentCall(callId, attempt)) return;
     this.localIssue = "transport_recovery";
     this.invalidateMediaAttempt();
+    this.remoteScreenShareStream = null;
     recordDirectedCallDiagnostic("failure", { callId, failureKind: this.localIssue });
-    this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: this.localIssue, remoteAudioStream: null, peerConnectionState });
+    this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: this.localIssue, remoteAudioStream: null, remoteScreenShareStream: null, peerConnectionState });
   }
 
   private invalidateMediaAttempt(): void {
