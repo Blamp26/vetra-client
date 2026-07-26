@@ -20,6 +20,7 @@ import {
     classifyCandidateType,
     inspectSelectedCandidatePairFromStats,
 } from './webrtcService';
+import type { RtcConfigurationSource } from './iceServerConfig';
 
 class MockMediaStream {
     getTracks = vi.fn(() => []);
@@ -1392,6 +1393,38 @@ describe('WebRTCService', () => {
                     credential: 'turn-pass',
                 },
             ]);
+        });
+
+        it('uses the shared injectable RTC configuration source', async () => {
+            const source: RtcConfigurationSource = {
+                getConfiguration: vi.fn(async () => ({
+                    iceServers: [{ urls: 'stun:injected.example.test' }],
+                })),
+            };
+            const injectedService = new WebRTCService(mockChannel, localUserId, remoteUserId, {
+                rtcConfigurationSource: source,
+            });
+
+            await injectedService.startCall();
+
+            const pc = (injectedService as any).peerConnection as MockRTCPeerConnection;
+            expect(source.getConfiguration).toHaveBeenCalledTimes(1);
+            expect(pc.config).toEqual({ iceServers: [{ urls: 'stun:injected.example.test' }] });
+            injectedService.hangUp();
+        });
+
+        it('does not construct a peer when the shared RTC configuration source rejects', async () => {
+            const source: RtcConfigurationSource = {
+                getConfiguration: async () => { throw new Error('credential=private-secret'); },
+            };
+            const peerConstructor = vi.spyOn(globalThis, 'RTCPeerConnection');
+            const injectedService = new WebRTCService(mockChannel, localUserId, remoteUserId, {
+                rtcConfigurationSource: source,
+            });
+
+            await expect(injectedService.startCall()).rejects.toThrow('Could not initialize call media');
+            expect(peerConstructor).not.toHaveBeenCalled();
+            expect((injectedService as any).peerConnection).toBeNull();
         });
     });
 

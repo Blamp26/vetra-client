@@ -10,6 +10,7 @@ import {
 } from "./directedCallWebRtcAdapter";
 import { getDirectedCallDiagnosticTimeline, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
 import { setCallDebugEnabled } from "../utils/callDebug";
+import type { RtcConfigurationSource } from "./iceServerConfig";
 
 function createHarness(options: Pick<DirectedCallWebRtcAdapterOptions, "onDiagnostic"> = {}) {
   const trackListeners = new Map<string, Set<EventListener>>();
@@ -131,6 +132,8 @@ function displayStream(...tracks: any[]) {
 }
 
 async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 }
@@ -475,6 +478,80 @@ describe("DirectedCallWebRtcAdapter", () => {
       ],
     });
     vi.unstubAllEnvs();
+  });
+
+  it("resolves an injected RTC configuration once per peer and passes a defensive snapshot", async () => {
+    const harness = createHarness();
+    const sourceConfiguration: RTCConfiguration = {
+      iceServers: [{ urls: ["stun:source.example.test"], username: "source-user", credential: "source-secret" }],
+    };
+    const source: RtcConfigurationSource = {
+      getConfiguration: vi.fn(async () => sourceConfiguration),
+    };
+    const createPeerConnection = vi.fn((configuration?: RTCConfiguration) => {
+      if (!configuration) throw new Error("missing RTC configuration");
+      (configuration.iceServers![0].urls as string[])[0] = "stun:mutated-by-peer";
+      return harness.pc;
+    });
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: harness.getUserMedia, createPeerConnection },
+      rtcConfigurationSource: source,
+    });
+
+    await adapter.prepareOffer();
+    await adapter.prepareOffer();
+
+    expect(source.getConfiguration).toHaveBeenCalledTimes(1);
+    expect(createPeerConnection).toHaveBeenCalledWith({
+      iceServers: [{ urls: ["stun:mutated-by-peer"], username: "source-user", credential: "source-secret" }],
+    });
+    expect(sourceConfiguration).toEqual({
+      iceServers: [{ urls: ["stun:source.example.test"], username: "source-user", credential: "source-secret" }],
+    });
+  });
+
+  it("uses a fresh source resolution for a separate peer", async () => {
+    const source: RtcConfigurationSource = {
+      getConfiguration: vi.fn(async () => ({ iceServers: [{ urls: "stun:source.example.test" }] })),
+    };
+    const first = createHarness();
+    const second = createHarness();
+    const firstAdapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: first.getUserMedia, createPeerConnection: first.createPeerConnection },
+      rtcConfigurationSource: source,
+    });
+    const secondAdapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: second.getUserMedia, createPeerConnection: second.createPeerConnection },
+      rtcConfigurationSource: source,
+    });
+
+    await firstAdapter.prepareOffer();
+    await secondAdapter.prepareOffer();
+
+    expect(source.getConfiguration).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the existing setup failure path when RTC configuration resolution fails", async () => {
+    const harness = createHarness();
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: harness.getUserMedia, createPeerConnection: harness.createPeerConnection },
+      rtcConfigurationSource: {
+        getConfiguration: async () => { throw new Error("credential=private-secret"); },
+      },
+    });
+
+    let error: Error & { failureCode?: string };
+    try {
+      await adapter.prepareOffer();
+      throw new Error("expected configuration failure");
+    } catch (reason) {
+      error = reason as Error & { failureCode?: string };
+    }
+
+    expect(error.failureCode).toBe("media_binding_failed");
+    expect(error.message).not.toContain("private-secret");
+    expect(harness.createPeerConnection).not.toHaveBeenCalled();
+    expect(harness.track.stop).toHaveBeenCalled();
   });
 
   it("uses the injected exact microphone and processing preferences", async () => {

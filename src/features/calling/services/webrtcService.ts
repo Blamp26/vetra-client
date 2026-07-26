@@ -3,7 +3,11 @@ import { getState } from '@/store';
 import type { ResourceRef } from '@/shared/types';
 import type { CallIceCandidatePayload, RenegotiationSignalPayload } from '../hooks/useCall.types';
 import { debugCall, isCallDebugEnabled } from '../utils/callDebug';
-import { buildIceServers } from './iceServerConfig';
+import {
+    createDefaultRtcConfigurationSource,
+    resolveRtcConfiguration,
+    type RtcConfigurationSource,
+} from './iceServerConfig';
 
 export type SelectedCandidateType = 'host' | 'srflx' | 'relay' | 'unknown';
 
@@ -22,6 +26,10 @@ export interface WebRTCDiagnostics {
     iceGatheringState: RTCIceGatheringState | 'unknown';
     signalingState: RTCSignalingState | 'unknown';
     selectedCandidatePair: CandidatePairDiagnostics | null;
+}
+
+export interface WebRTCServiceOptions {
+    rtcConfigurationSource?: RtcConfigurationSource;
 }
 
 type StatsValue = {
@@ -129,6 +137,7 @@ function isExpectedCandidateOrderingError(error: unknown): boolean {
 }
 
 export class WebRTCService {
+    private readonly rtcConfigurationSource: RtcConfigurationSource;
     private peerConnection: RTCPeerConnection | null = null;
     private localStream: MediaStream | null = null;
     private remoteStream: MediaStream | null = null;
@@ -184,9 +193,10 @@ export class WebRTCService {
     public onCallIdReceived: ((callId: string) => void) | null = null;
     public onDiagnosticsChange: ((diagnostics: WebRTCDiagnostics) => void) | null = null;
 
-    constructor(channel: Channel, _localUserId: number, remoteUserId: ResourceRef) {
+    constructor(channel: Channel, _localUserId: number, remoteUserId: ResourceRef, options: WebRTCServiceOptions = {}) {
         this.channel = channel;
         this.remoteUserId = remoteUserId;
+        this.rtcConfigurationSource = options.rtcConfigurationSource ?? createDefaultRtcConfigurationSource();
     }
 
     setCallId(callId: string | null): void {
@@ -1376,7 +1386,15 @@ export class WebRTCService {
             video: false,
         });
         this.setLocalMuted(this.localMuted);
-        this.peerConnection = new RTCPeerConnection({ iceServers: buildIceServers() });
+        let configuration: RTCConfiguration;
+        try {
+            configuration = await resolveRtcConfiguration(this.rtcConfigurationSource);
+        } catch {
+            this.localStream.getTracks().forEach(track => track.stop());
+            this.localStream = null;
+            throw new Error('Could not initialize call media');
+        }
+        this.peerConnection = new RTCPeerConnection(configuration);
         this.attachDiagnosticsListeners(this.peerConnection);
         this.localStream.getTracks().forEach(track => {
             this.peerConnection!.addTrack(track, this.localStream!);

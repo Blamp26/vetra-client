@@ -1,5 +1,9 @@
 import { createDirectedCallUuid } from "./directedCallDevice";
-import { buildIceServers } from "./iceServerConfig";
+import {
+  createDefaultRtcConfigurationSource,
+  resolveRtcConfiguration,
+  type RtcConfigurationSource,
+} from "./iceServerConfig";
 import { buildMicrophoneConstraints, DEFAULT_AUDIO_PREFERENCES } from "@/shared/utils/audioConstraints";
 import { isCallDebugEnabled } from "../utils/callDebug";
 
@@ -98,6 +102,7 @@ export interface DirectedCallWebRtcAdapterDependencies {
 
 export interface DirectedCallWebRtcAdapterOptions {
   dependencies?: DirectedCallWebRtcAdapterDependencies;
+  rtcConfigurationSource?: RtcConfigurationSource;
   getAudioConstraints?: () => MediaStreamConstraints;
   onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
   onRemoteStream?: (stream: DirectedCallMediaStream) => void;
@@ -284,6 +289,7 @@ function initialMediaReadiness(values: Omit<DirectedCallInitialMediaReadiness, "
 /** Isolated audio-only WebRTC primitive for persistent calls. */
 export class DirectedCallWebRtcAdapter {
   private readonly dependencies: DirectedCallWebRtcAdapterDependencies;
+  private readonly rtcConfigurationSource: RtcConfigurationSource;
   private readonly onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
   private readonly onRemoteStream?: (stream: DirectedCallMediaStream) => void;
   private readonly onRemoteScreenShareChange?: DirectedCallRemoteScreenShareChangedHandler;
@@ -334,6 +340,7 @@ export class DirectedCallWebRtcAdapter {
   constructor(options: DirectedCallWebRtcAdapterOptions = {}) {
     const dependencies = defaultDependencies();
     this.dependencies = { ...dependencies, ...options.dependencies };
+    this.rtcConfigurationSource = options.rtcConfigurationSource ?? createDefaultRtcConfigurationSource();
     this.onIceCandidate = options.onIceCandidate;
     this.onRemoteStream = options.onRemoteStream;
     this.onRemoteScreenShareChange = options.onRemoteScreenShareChanged;
@@ -1233,7 +1240,8 @@ export class DirectedCallWebRtcAdapter {
       this.bindReadinessTrack(track, epoch, "local");
     });
     try {
-      this.peerConnection = this.dependencies.createPeerConnection({ iceServers: buildIceServers() });
+      const configuration = await resolveRtcConfiguration(this.rtcConfigurationSource);
+      this.peerConnection = this.dependencies.createPeerConnection(configuration);
       this.assertCurrent(epoch);
       this.recomputeInitialMediaReadiness(epoch);
       this.peerConnection.onicecandidate = (event) => {
