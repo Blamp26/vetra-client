@@ -435,6 +435,20 @@ export class DirectedCallPresentationModel {
 
   private currentProjection(): StateProjection | null {
     const controllerProjection = this.controllerSnapshot.projection;
+    const authoritativeProjection = this.authoritativeProjection;
+    if (
+      authoritativeProjection &&
+      TERMINAL_STATES.has(authoritativeProjection.state) &&
+      !this.fallbackPeer &&
+      !this.initiationResult &&
+      (!controllerProjection || controllerProjection.call_id === authoritativeProjection.call_id)
+    ) return authoritativeProjection;
+    if (
+      controllerProjection &&
+      TERMINAL_STATES.has(controllerProjection.state) &&
+      !this.fallbackPeer &&
+      !this.initiationResult
+    ) return controllerProjection;
     if (controllerProjection && isLiveProjection(controllerProjection)) return controllerProjection;
     if (this.controllerSnapshot.preparing || this.initiationResult) return null;
     const alternateProjections = [this.incomingSnapshot.projection, this.authoritativeProjection]
@@ -588,6 +602,12 @@ export class DirectedCallPresentationModel {
         initiationResultPresent: Boolean(this.initiationResult),
       });
     }
+    const selectedCallId = this.selectedCallId ?? this.controllerSnapshot.projection?.call_id ?? this.controllerSnapshot.callId;
+    if (TERMINAL_STATES.has(projection.state) && selectedCallId && selectedCallId !== projection.call_id) {
+      this.emit();
+      return;
+    }
+
     const selectedProjection = this.currentProjection();
     if (this.actionRecord && selectedProjection?.call_id === projection.call_id && this.actionRecord.callId !== projection.call_id) {
       this.clearActionRecord();
@@ -600,6 +620,16 @@ export class DirectedCallPresentationModel {
         TERMINAL_STATES.has(this.authoritativeProjection.state) ||
         (this.controllerSnapshot.preparing && projection.participant_role === "initiator")) {
       this.authoritativeProjection = projection;
+    }
+
+    if (TERMINAL_STATES.has(projection.state) && this.authoritativeProjection?.call_id === projection.call_id) {
+      // Terminal presentation is a single transition: preserve the terminal
+      // projection and fence all provisional initiation state for this call.
+      this.fallbackPeer = null;
+      this.initiationResult = null;
+      this.initiationPromise = null;
+      this.initiationGeneration += 1;
+      this.cancelIntent = false;
     }
 
     const record = this.actionRecord;

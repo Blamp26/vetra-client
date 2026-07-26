@@ -159,6 +159,9 @@ function createHarness() {
     projectionListener?.(next, "accepted");
     controllerListener?.(state);
   };
+  const emitSessionProjection = (next: StateProjection) => {
+    projectionListener?.(next, "accepted");
+  };
   return {
     model,
     lifecycle,
@@ -169,6 +172,13 @@ function createHarness() {
     pushes,
     emit,
     emitProjectionOnly,
+    emitSessionProjection,
+    selectCall: (callId: string) => {
+      state.callId = callId;
+      state.projection = null;
+      state.preparing = false;
+      controllerListener?.(state);
+    },
     emitSync: () => syncListener?.(),
     setPending: (pending: PendingLifecycleCommand | null) => {
       state.pendingCommand = pending;
@@ -477,6 +487,73 @@ describe("DirectedCallPresentationModel", () => {
     expect(getDirectedCallDiagnosticTimeline().map((entry) => entry.event)).toContain("presentation_projection");
     const phases = getDirectedCallDiagnosticTimeline().filter((entry) => entry.event === "presentation_phase");
     expect(phases[phases.length - 1]?.line).toContain("final_phase=terminal");
+  });
+
+  it("atomically fences fallback state when an active call receives its terminal projection", async () => {
+    const harness = createHarness();
+    await harness.model.startCall(TARGET_ID, "Alice");
+    expect(harness.model.getSnapshot().phase).toBe("calling");
+    harness.emit(projection("active"));
+
+    harness.emitProjectionOnly(projection("ended", "initiator", 2));
+
+    expect(harness.model.getSnapshot()).toMatchObject({
+      phase: "terminal",
+      canonicalState: "ended",
+      terminalState: "ended",
+      callId: CALL_ID,
+      peerUsername: "Alice",
+    });
+  });
+
+  it("does not let delayed initiation completion resurrect a terminal call", async () => {
+    const harness = createHarness();
+    let resolveInitiate!: (outcome: LifecycleCommandOutcome) => void;
+    harness.lifecycle.initiate = vi.fn((_target: string) => new Promise((resolve) => { resolveInitiate = resolve; }));
+    const operation = harness.model.startCall(TARGET_ID, "Alice");
+    harness.emitProjectionOnly(projection("ended", "initiator", 2));
+
+    resolveInitiate(initiateOutcome("dispatching"));
+    await operation;
+
+    expect(harness.model.getSnapshot()).toMatchObject({ phase: "terminal", canonicalState: "ended", peerUsername: "Alice" });
+  });
+
+  it("keeps remote and local terminal presentation identical and makes duplicates idempotent", async () => {
+    const remote = createHarness();
+    remote.emit(projection("active"));
+    remote.emitProjectionOnly(projection("ended", "initiator", 2));
+    const remoteSnapshot = remote.model.getSnapshot();
+    remote.emitProjectionOnly(projection("ended", "initiator", 2));
+    expect(remote.model.getSnapshot()).toMatchObject({
+      phase: remoteSnapshot.phase,
+      callId: remoteSnapshot.callId,
+      canonicalState: remoteSnapshot.canonicalState,
+      terminalState: remoteSnapshot.terminalState,
+      peerUsername: remoteSnapshot.peerUsername,
+    });
+
+    const local = createHarness();
+    local.emit(projection("active"));
+    await local.model.hangup();
+    local.emitProjectionOnly(projection("ended", "initiator", 2));
+    expect(local.model.getSnapshot()).toMatchObject({
+      phase: remoteSnapshot.phase,
+      canonicalState: remoteSnapshot.canonicalState,
+      terminalState: remoteSnapshot.terminalState,
+      peerUsername: remoteSnapshot.peerUsername,
+    });
+  });
+
+  it("does not let a stale G1 terminal projection clear newer G2 fallback state", async () => {
+    const harness = createHarness();
+    harness.emit(projection("ended", "initiator", 2, CALL_ID, "G1"));
+    harness.selectCall(SECOND_CALL_ID);
+    harness.lifecycle.initiate.mockResolvedValueOnce(initiateOutcome("dispatching", SECOND_CALL_ID));
+    await harness.model.startCall(TARGET_ID, "G2");
+    harness.emitSessionProjection(projection("ended", "initiator", 3, CALL_ID, "G1"));
+
+    expect(harness.model.getSnapshot()).toMatchObject({ phase: "calling", callId: SECOND_CALL_ID, peerUsername: "G2" });
   });
 
   it.each(["delivered", "presented"] as const)("rolls from terminal call A to the correct presentation for call B in %s", (stateName) => {
