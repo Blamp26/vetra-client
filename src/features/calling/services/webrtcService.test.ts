@@ -1426,6 +1426,106 @@ describe('WebRTCService', () => {
             expect(peerConstructor).not.toHaveBeenCalled();
             expect((injectedService as any).peerConnection).toBeNull();
         });
+
+        it('single-flights concurrent legacy initialization', async () => {
+            let resolveConfiguration!: (configuration: RTCConfiguration) => void;
+            const configuration = new Promise<RTCConfiguration>((resolve) => { resolveConfiguration = resolve; });
+            const source: RtcConfigurationSource = {
+                getConfiguration: vi.fn(() => configuration),
+            };
+            const peerConstructor = vi.spyOn(globalThis, 'RTCPeerConnection');
+            const concurrentService = new WebRTCService(mockChannel, localUserId, remoteUserId, {
+                rtcConfigurationSource: source,
+            });
+
+            const first = concurrentService.startCall();
+            await Promise.resolve();
+            await Promise.resolve();
+            const second = concurrentService.startCall();
+            await Promise.resolve();
+            resolveConfiguration({ iceServers: [{ urls: 'stun:single-flight.example.test' }] });
+            await Promise.all([first, second]);
+
+            expect(source.getConfiguration).toHaveBeenCalledTimes(1);
+            expect(mockGetUserMedia).toHaveBeenCalledTimes(1);
+            expect(peerConstructor).toHaveBeenCalledTimes(1);
+            concurrentService.hangUp();
+        });
+
+        it('shares configuration failure and retries after the flight is released', async () => {
+            let rejectConfiguration!: (reason?: unknown) => void;
+            let valid = false;
+            const rejectedConfiguration = new Promise<RTCConfiguration>((_, reject) => { rejectConfiguration = reject; });
+            const source: RtcConfigurationSource = {
+                getConfiguration: vi.fn(() => valid
+                    ? Promise.resolve({ iceServers: [{ urls: 'stun:retry.example.test' }] })
+                    : rejectedConfiguration),
+            };
+            const peerConstructor = vi.spyOn(globalThis, 'RTCPeerConnection');
+            const retryService = new WebRTCService(mockChannel, localUserId, remoteUserId, {
+                rtcConfigurationSource: source,
+            });
+            const first = retryService.startCall();
+            const second = retryService.startCall();
+            await Promise.resolve();
+            rejectConfiguration(new Error('credential=private-secret'));
+            await Promise.allSettled([first, second]);
+
+            expect(source.getConfiguration).toHaveBeenCalledTimes(1);
+            expect(peerConstructor).not.toHaveBeenCalled();
+            expect(mockAudioTracks[0].stop).toHaveBeenCalledOnce();
+
+            valid = true;
+            await retryService.startCall();
+            expect(source.getConfiguration).toHaveBeenCalledTimes(2);
+            expect(peerConstructor).toHaveBeenCalledTimes(1);
+            retryService.hangUp();
+        });
+
+        it('does not construct a legacy peer after disposal while configuration is pending', async () => {
+            let resolveConfiguration!: (configuration: RTCConfiguration) => void;
+            const configuration = new Promise<RTCConfiguration>((resolve) => { resolveConfiguration = resolve; });
+            const source: RtcConfigurationSource = {
+                getConfiguration: () => configuration,
+            };
+            const peerConstructor = vi.spyOn(globalThis, 'RTCPeerConnection');
+            const staleService = new WebRTCService(mockChannel, localUserId, remoteUserId, {
+                rtcConfigurationSource: source,
+            });
+            const operation = staleService.startCall();
+            await Promise.resolve();
+            await Promise.resolve();
+            staleService.hangUp();
+            resolveConfiguration({ iceServers: [{ urls: 'stun:stale.example.test' }] });
+
+            await expect(operation).rejects.toThrow('Call initialization was cancelled');
+            expect(peerConstructor).not.toHaveBeenCalled();
+            expect(mockAudioTracks[0].stop).toHaveBeenCalledOnce();
+            expect((staleService as any).peerConnection).toBeNull();
+        });
+
+        it('keeps a later legacy service authoritative over a stale disposed attempt', async () => {
+            let resolveStale!: (configuration: RTCConfiguration) => void;
+            const staleConfiguration = new Promise<RTCConfiguration>((resolve) => { resolveStale = resolve; });
+            const staleService = new WebRTCService(mockChannel, localUserId, remoteUserId, {
+                rtcConfigurationSource: { getConfiguration: () => staleConfiguration },
+            });
+            const staleOperation = staleService.startCall();
+            await Promise.resolve();
+            await Promise.resolve();
+            staleService.hangUp();
+
+            const currentService = new WebRTCService(mockChannel, localUserId, remoteUserId, {
+                rtcConfigurationSource: { getConfiguration: async () => ({ iceServers: [{ urls: 'stun:current.example.test' }] }) },
+            });
+            await currentService.startCall();
+            resolveStale({ iceServers: [{ urls: 'stun:stale.example.test' }] });
+            await expect(staleOperation).rejects.toThrow('Call initialization was cancelled');
+
+            expect((staleService as any).peerConnection).toBeNull();
+            expect((currentService as any).peerConnection).not.toBeNull();
+            currentService.hangUp();
+        });
     });
 
     describe('diagnostics', () => {

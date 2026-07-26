@@ -44,6 +44,20 @@ describe("RTC configuration source", () => {
     expect(buildIceServers(env(values))).toEqual([{ urls: "stun:stun.l.google.com:19302" }]);
   });
 
+  it.each([
+    ["null", null],
+    ["array", []],
+    ["primitive", 1],
+    ["non-array iceServers", { iceServers: "stun:example.test" }],
+    ["malformed ICE server", { iceServers: [null] }],
+    ["malformed urls", { iceServers: [{ urls: [" "] }] }],
+    ["invalid credential fields", { iceServers: [{ urls: "turn:example.test", username: 1, credential: { secret: "hidden" } }] }],
+  ])("rejects structurally invalid configuration: %s", async (_name, value) => {
+    await expect(resolveRtcConfiguration({
+      getConfiguration: async () => value as RTCConfiguration,
+    })).rejects.toMatchObject({ message: "RTC configuration unavailable" });
+  });
+
   it("returns defensive snapshots and does not leak rejected source errors", async () => {
     const original = {
       iceServers: [{

@@ -307,6 +307,7 @@ export class DirectedCallWebRtcAdapter {
   private remoteAudioStreamBound = false;
   private readonly readinessTrackCleanups = new Map<DirectedCallMediaStreamTrack, () => void>();
   private readonly localReadinessTracks = new Set<DirectedCallMediaStreamTrack>();
+  private peerCreation: { epoch: number; promise: Promise<void> } | null = null;
   private initialMediaReadiness = initialMediaReadiness({
     transportConnected: false,
     localAudioSenderReady: false,
@@ -655,6 +656,7 @@ export class DirectedCallWebRtcAdapter {
     if (this.disposed) return;
     this.disposed = true;
     this.epoch += 1;
+    this.peerCreation = null;
     this.audioSwitchEpoch += 1;
     this.screenShareEpoch += 1;
     this.clearLocalScreenShare(false);
@@ -1221,6 +1223,29 @@ export class DirectedCallWebRtcAdapter {
   private async ensureAudioPeer(epoch: number): Promise<void> {
     this.assertCurrent(epoch);
     if (this.peerConnection && this.localStream) return;
+
+    const existingCreation = this.peerCreation;
+    if (existingCreation) {
+      await existingCreation.promise;
+      this.assertCurrent(epoch);
+      return;
+    }
+
+    const creation = {
+      epoch,
+      promise: this.createAudioPeer(epoch),
+    };
+    this.peerCreation = creation;
+    try {
+      await creation.promise;
+    } finally {
+      if (this.peerCreation === creation) this.peerCreation = null;
+    }
+  }
+
+  private async createAudioPeer(epoch: number): Promise<void> {
+    this.assertCurrent(epoch);
+    if (this.peerConnection && this.localStream) return;
     let acquiredStream: DirectedCallMediaStream | null = null;
     try {
       acquiredStream = await this.dependencies.getUserMedia(this.getAudioConstraints());
@@ -1239,9 +1264,17 @@ export class DirectedCallWebRtcAdapter {
       }
       this.bindReadinessTrack(track, epoch, "local");
     });
+    let createdPeerConnection: PeerConnectionLike | null = null;
     try {
       const configuration = await resolveRtcConfiguration(this.rtcConfigurationSource);
-      this.peerConnection = this.dependencies.createPeerConnection(configuration);
+      this.assertCurrent(epoch);
+      createdPeerConnection = this.dependencies.createPeerConnection(configuration);
+      if (!this.isCurrent(epoch)) {
+        createdPeerConnection.close();
+        createdPeerConnection = null;
+        throw new DirectedCallWebRtcStaleError();
+      }
+      this.peerConnection = createdPeerConnection;
       this.assertCurrent(epoch);
       this.recomputeInitialMediaReadiness(epoch);
       this.peerConnection.onicecandidate = (event) => {
@@ -1376,18 +1409,26 @@ export class DirectedCallWebRtcAdapter {
         this.recomputeInitialMediaReadiness(epoch);
       }
     } catch {
-      this.localStream?.getTracks().forEach((track) => track.stop());
-      this.localStream = null;
-      if (this.peerConnection) {
-        this.peerConnection.onicecandidate = null;
-        this.peerConnection.onconnectionstatechange = null;
-        this.peerConnection.oniceconnectionstatechange = null;
-        this.peerConnection.onicegatheringstatechange = null;
-        this.peerConnection.onsignalingstatechange = null;
-        this.peerConnection.ontrack = null;
+      if (this.localStream === acquiredStream) {
+        acquiredStream?.getTracks().forEach((track) => track.stop());
+        this.localStream = null;
       }
-      this.peerConnection?.close();
-      this.peerConnection = null;
+      if (this.peerConnection) {
+        const peerConnection = this.peerConnection;
+        peerConnection.onicecandidate = null;
+        peerConnection.onconnectionstatechange = null;
+        peerConnection.oniceconnectionstatechange = null;
+        peerConnection.onicegatheringstatechange = null;
+        peerConnection.onsignalingstatechange = null;
+        peerConnection.ontrack = null;
+        peerConnection.close();
+        if (createdPeerConnection === peerConnection) createdPeerConnection = null;
+        if (this.peerConnection === peerConnection) this.peerConnection = null;
+      }
+      if (createdPeerConnection) {
+        createdPeerConnection.close();
+        createdPeerConnection = null;
+      }
       this.recomputeInitialMediaReadiness(epoch);
       if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
       throw new DirectedCallWebRtcError("media_binding_failed");

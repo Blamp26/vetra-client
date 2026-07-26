@@ -173,6 +173,7 @@ export class WebRTCService {
     private sentLocalIceCandidateKeys = new Set<string>();
     private localIceFlushPromise: Promise<void> | null = null;
     private lifecycleGeneration = 0;
+    private peerConnectionCreation: { generation: number; promise: Promise<void> } | null = null;
     private iceCandidateQueue: RTCIceCandidateInit[] = [];
     private queuedIceCandidateKeys = new Set<string>();
     private appliedIceCandidateKeys = new Set<string>();
@@ -651,6 +652,7 @@ export class WebRTCService {
         this.pendingScreenShareChangeReason = null;
         this.rejectPendingScreenShareStarts(new Error('Screen share stopped because the peer was disposed'));
         this.lifecycleGeneration += 1;
+        this.peerConnectionCreation = null;
         this.pendingLocalIceCandidates = [];
         this.pendingLocalIceCandidateKeys.clear();
         this.sentLocalIceCandidateKeys.clear();
@@ -1373,10 +1375,32 @@ export class WebRTCService {
     }
 
     private async initPeerConnection(): Promise<void> {
+        if (this.peerConnection) return;
+        const generation = this.lifecycleGeneration;
+        const existingCreation = this.peerConnectionCreation;
+        if (existingCreation) {
+            await existingCreation.promise;
+            if (generation !== this.lifecycleGeneration) throw new Error('Call initialization was cancelled');
+            return;
+        }
+
+        const creation = {
+            generation,
+            promise: this.createPeerConnection(generation),
+        };
+        this.peerConnectionCreation = creation;
+        try {
+            await creation.promise;
+        } finally {
+            if (this.peerConnectionCreation === creation) this.peerConnectionCreation = null;
+        }
+    }
+
+    private async createPeerConnection(generation: number): Promise<void> {
         const state = getState();
         const inputId = state.selectedInputDeviceId || 'default';
 
-        this.localStream = await navigator.mediaDevices.getUserMedia({
+        const acquiredStream = await navigator.mediaDevices.getUserMedia({
             audio: {
                 deviceId: inputId !== 'default' ? { exact: inputId } : undefined,
                 noiseSuppression: state.noiseSuppression,
@@ -1385,28 +1409,52 @@ export class WebRTCService {
             },
             video: false,
         });
+        if (generation !== this.lifecycleGeneration) {
+            acquiredStream.getTracks().forEach(track => track.stop());
+            throw new Error('Call initialization was cancelled');
+        }
+        this.localStream = acquiredStream;
         this.setLocalMuted(this.localMuted);
         let configuration: RTCConfiguration;
         try {
             configuration = await resolveRtcConfiguration(this.rtcConfigurationSource);
         } catch {
-            this.localStream.getTracks().forEach(track => track.stop());
-            this.localStream = null;
+            if (this.localStream === acquiredStream) {
+                acquiredStream.getTracks().forEach(track => track.stop());
+                this.localStream = null;
+            }
+            if (generation !== this.lifecycleGeneration) throw new Error('Call initialization was cancelled');
             throw new Error('Could not initialize call media');
         }
-        this.peerConnection = new RTCPeerConnection(configuration);
-        this.attachDiagnosticsListeners(this.peerConnection);
-        this.localStream.getTracks().forEach(track => {
-            this.peerConnection!.addTrack(track, this.localStream!);
+        if (generation !== this.lifecycleGeneration) {
+            if (this.localStream === acquiredStream) {
+                acquiredStream.getTracks().forEach(track => track.stop());
+                this.localStream = null;
+            }
+            throw new Error('Call initialization was cancelled');
+        }
+        const peerConnection = new RTCPeerConnection(configuration);
+        if (generation !== this.lifecycleGeneration) {
+            peerConnection.close();
+            if (this.localStream === acquiredStream) {
+                acquiredStream.getTracks().forEach(track => track.stop());
+                this.localStream = null;
+            }
+            throw new Error('Call initialization was cancelled');
+        }
+        this.peerConnection = peerConnection;
+        this.attachDiagnosticsListeners(peerConnection);
+        acquiredStream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, acquiredStream);
         });
-        this.peerConnection.onicecandidate = (event) => {
+        peerConnection.onicecandidate = (event) => {
             if (!event.candidate) {
                 void this.refreshDiagnostics();
                 return;
             }
             this.handleLocalIceCandidate(event.candidate);
         };
-        this.peerConnection.ontrack = (event) => {
+        peerConnection.ontrack = (event) => {
             const stream = event.streams[0];
             if (!stream) return;
 

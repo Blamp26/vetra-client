@@ -53,7 +53,7 @@ function isValidIceServer(server: unknown): server is RTCIceServer {
 }
 
 function cloneRtcConfiguration(configuration: RTCConfiguration): RTCConfiguration {
-  if (!configuration || typeof configuration !== "object") throw new RtcConfigurationError();
+  if (!configuration || typeof configuration !== "object" || Array.isArray(configuration)) throw new RtcConfigurationError();
   if (configuration.iceServers !== undefined
     && (!Array.isArray(configuration.iceServers) || !configuration.iceServers.every(isValidIceServer))) {
     throw new RtcConfigurationError();

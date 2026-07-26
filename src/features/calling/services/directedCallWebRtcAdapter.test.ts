@@ -138,6 +138,16 @@ async function flushMicrotasks() {
   await Promise.resolve();
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function rejectingScreenDetach(harness: ReturnType<typeof createHarness>) {
   let rejectDetach!: (reason?: unknown) => void;
   const detach = new Promise<void>((_, reject) => { rejectDetach = reject; });
@@ -552,6 +562,113 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(error.message).not.toContain("private-secret");
     expect(harness.createPeerConnection).not.toHaveBeenCalled();
     expect(harness.track.stop).toHaveBeenCalled();
+  });
+
+  it("single-flights concurrent creation-triggering operations", async () => {
+    const harness = createHarness();
+    const configuration = deferred<RTCConfiguration>();
+    const source: RtcConfigurationSource = {
+      getConfiguration: vi.fn(() => configuration.promise),
+    };
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: harness.getUserMedia, createPeerConnection: harness.createPeerConnection },
+      rtcConfigurationSource: source,
+    });
+
+    const offer = adapter.prepareOffer();
+    const answer = adapter.prepareAnswer();
+    await flushMicrotasks();
+    expect(source.getConfiguration).toHaveBeenCalledTimes(1);
+    expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(harness.createPeerConnection).not.toHaveBeenCalled();
+
+    configuration.resolve({ iceServers: [{ urls: "stun:single-flight.example.test" }] });
+    await Promise.all([offer, answer]);
+
+    expect(harness.createPeerConnection).toHaveBeenCalledTimes(1);
+    expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["null", null],
+    ["array", []],
+    ["primitive", 1],
+    ["non-array iceServers", { iceServers: "invalid" }],
+    ["malformed ICE server", { iceServers: [null] }],
+    ["malformed urls", { iceServers: [{ urls: [" "] }] }],
+    ["invalid credential fields", { iceServers: [{ urls: "turn:example.test", username: 1, credential: "secret" }] }],
+  ])("rejects malformed injected configuration without constructing a peer: %s", async (_name, invalid) => {
+    const harness = createHarness();
+    let valid = false;
+    const source: RtcConfigurationSource = {
+      getConfiguration: vi.fn(async () => {
+        if (!valid) return invalid as RTCConfiguration;
+        return { iceServers: [{ urls: "stun:retry.example.test" }] };
+      }),
+    };
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: harness.getUserMedia, createPeerConnection: harness.createPeerConnection },
+      rtcConfigurationSource: source,
+    });
+
+    const error = await adapter.prepareOffer().then(
+      () => null,
+      (reason) => reason as Error & { failureCode?: string },
+    );
+    if (!error) throw new Error("Expected malformed RTC configuration to fail");
+    expect(error.failureCode).toBe("media_binding_failed");
+    expect(error.message).not.toContain("secret");
+    expect(harness.createPeerConnection).not.toHaveBeenCalled();
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+
+    valid = true;
+    await adapter.prepareOffer();
+    expect(source.getConfiguration).toHaveBeenCalledTimes(2);
+    expect(harness.createPeerConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not construct or restore a peer after disposal while configuration is pending", async () => {
+    const harness = createHarness();
+    const configuration = deferred<RTCConfiguration>();
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: harness.getUserMedia, createPeerConnection: harness.createPeerConnection },
+      rtcConfigurationSource: { getConfiguration: () => configuration.promise },
+    });
+
+    const operation = adapter.prepareOffer();
+    await flushMicrotasks();
+    adapter.dispose();
+    configuration.resolve({ iceServers: [{ urls: "stun:stale.example.test" }] });
+
+    await expect(operation).rejects.toBeInstanceOf(DirectedCallWebRtcStaleError);
+    expect(harness.createPeerConnection).not.toHaveBeenCalled();
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+    expect(adapter.localMediaStream).toBeNull();
+  });
+
+  it("does not let a stale adapter attempt affect a later adapter", async () => {
+    const staleHarness = createHarness();
+    const staleConfiguration = deferred<RTCConfiguration>();
+    const staleAdapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: staleHarness.getUserMedia, createPeerConnection: staleHarness.createPeerConnection },
+      rtcConfigurationSource: { getConfiguration: () => staleConfiguration.promise },
+    });
+    const staleOperation = staleAdapter.prepareOffer();
+    await flushMicrotasks();
+    staleAdapter.dispose();
+
+    const currentHarness = createHarness();
+    const currentAdapter = new DirectedCallWebRtcAdapter({
+      dependencies: { getUserMedia: currentHarness.getUserMedia, createPeerConnection: currentHarness.createPeerConnection },
+      rtcConfigurationSource: { getConfiguration: async () => ({ iceServers: [{ urls: "stun:current.example.test" }] }) },
+    });
+    await currentAdapter.prepareOffer();
+    staleConfiguration.resolve({ iceServers: [{ urls: "stun:stale.example.test" }] });
+    await expect(staleOperation).rejects.toBeInstanceOf(DirectedCallWebRtcStaleError);
+
+    expect(staleHarness.createPeerConnection).not.toHaveBeenCalled();
+    expect(currentHarness.createPeerConnection).toHaveBeenCalledTimes(1);
+    expect(currentHarness.track.stop).not.toHaveBeenCalled();
   });
 
   it("uses the injected exact microphone and processing preferences", async () => {
