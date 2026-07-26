@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { DirectedCallSignalTransport } from "./directedCallSignalTransport";
 import { DirectedCallMediaCoordinator } from "./directedCallMediaCoordinator";
 import { DirectedCallWebRtcError, DirectedCallWebRtcStaleError } from "./directedCallWebRtcAdapter";
@@ -9,7 +10,7 @@ import type {
   DirectedCallWebRtcAdapterOptions,
 } from "./directedCallWebRtcAdapter";
 import type { DirectedCallSession } from "./directedCallSession";
-import { getDirectedCallDiagnosticsProbe, resetDirectedCallDiagnosticsProbe, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
+import { getDirectedCallDiagnosticTimeline, getDirectedCallDiagnosticsProbe, resetDirectedCallDiagnosticsProbe, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
 import { setCallDebugEnabled } from "../utils/callDebug";
 
 const callId = "33333333-3333-4333-8333-333333333333";
@@ -307,6 +308,34 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(probe.recorderEntryCount).toBeGreaterThan(0);
     expect(probe.timelineAppendCount).toBeGreaterThan(0);
     expect(probe.producerFamilies).toContain("coordinator");
+  });
+
+  it("routes direct and adapter callback diagnostics through the tagged coordinator helper", () => {
+    const source = readFileSync("src/features/calling/services/directedCallMediaCoordinator.ts", "utf8");
+    const directRecorderCalls = source.match(/(?<!recordMediaDiagnostic\()recordDirectedCallDiagnostic\(/g) ?? [];
+    expect(directRecorderCalls).toHaveLength(1);
+    expect(source).toContain("producerFamily: DirectedCallDiagnosticProducerFamily = \"coordinator\"");
+    expect(source).toContain("this.recordMediaDiagnostic(event, details, adapterEpoch, \"adapter\")");
+  });
+
+  it("retains coordinator family tagging for direct cleanup after late enable", () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const coordinator = createCoordinator(session, transport);
+    coordinator.start();
+
+    setCallDebugEnabled(true);
+    resetDirectedCallDiagnosticsProbe();
+    resetDirectedCallDiagnosticTimeline();
+    coordinator.dispose();
+
+    const probe = getDirectedCallDiagnosticsProbe();
+    expect(probe.producerFamilies).toEqual(["coordinator"]);
+    expect(probe.timelineAppendCount).toBe(2);
+    expect(getDirectedCallDiagnosticTimeline().map((entry) => entry.line)).toEqual([
+      expect.stringContaining("reason=coordinator_dispose"),
+      expect.stringContaining("reason=coordinator_disposed"),
+    ]);
   });
 
   it("toggles only live local audio tracks and inherits mute for newly added tracks", async () => {

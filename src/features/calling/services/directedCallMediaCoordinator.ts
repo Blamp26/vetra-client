@@ -259,7 +259,7 @@ export class DirectedCallMediaCoordinator {
       .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.call_id.localeCompare(right.call_id))
       .slice(0, 1)
       .forEach((projection) => this.applyProjection(projection));
-    recordDirectedCallDiagnostic("media_phase", { mediaPhase: "idle" });
+    this.recordMediaDiagnostic("media_phase", { mediaPhase: "idle" });
   }
 
   getSnapshot(): DirectedCallMediaCoordinatorSnapshot {
@@ -462,7 +462,7 @@ export class DirectedCallMediaCoordinator {
     this.peerConnectionState = null;
     this.adapter = this.createAdapter();
     this.recordMediaDiagnostic("cleanup", { callId, reason: "coordinator_reset" });
-    recordDirectedCallDiagnostic("cleanup", { callId, reason: "call_terminal_reset" });
+    this.recordMediaDiagnostic("cleanup", { callId, reason: "call_terminal_reset" });
     this.setSnapshot({
       state: "idle",
       callId: null,
@@ -492,7 +492,7 @@ export class DirectedCallMediaCoordinator {
     this.unsubscribeProjection = null;
     this.unsubscribeSignal = null;
     this.clearLocalMediaState();
-    recordDirectedCallDiagnostic("cleanup", { callId: this.snapshot.callId, reason: "coordinator_disposed" });
+    this.recordMediaDiagnostic("cleanup", { callId: this.snapshot.callId, reason: "coordinator_disposed" });
     this.signalTransport.dispose();
     this.renegotiation = null;
     this.completedRenegotiations.length = 0;
@@ -515,11 +515,11 @@ export class DirectedCallMediaCoordinator {
 
   private applyProjection(projection: StateProjection): void {
     if (this.disposed) {
-      if (TERMINAL_STATES.has(projection.state)) recordDirectedCallDiagnostic("terminal_projection_ignored", { callId: projection.call_id, canonicalState: projection.state, generation: this.generation, reason: "coordinator_disposed" });
+      if (TERMINAL_STATES.has(projection.state)) this.recordMediaDiagnostic("terminal_projection_ignored", { callId: projection.call_id, canonicalState: projection.state, generation: this.generation, reason: "coordinator_disposed" });
       return;
     }
     if (!CANONICAL_STATES.includes(projection.state)) {
-      recordDirectedCallDiagnostic("terminal_projection_ignored", { callId: projection.call_id, canonicalState: projection.state, generation: this.generation, reason: "invalid_canonical_state" });
+      this.recordMediaDiagnostic("terminal_projection_ignored", { callId: projection.call_id, canonicalState: projection.state, generation: this.generation, reason: "invalid_canonical_state" });
       return;
     }
     if (this.snapshot.callId === null) {
@@ -527,7 +527,7 @@ export class DirectedCallMediaCoordinator {
       this.signalTransport.bindCall(projection.call_id);
       if (this.lastTerminalCallId) {
         this.recordMediaDiagnostic("call_rollover", { previousCallId: this.lastTerminalCallId, nextCallId: projection.call_id });
-        recordDirectedCallDiagnostic("cleanup", {
+        this.recordMediaDiagnostic("cleanup", {
           callId: projection.call_id,
           previousCallId: this.lastTerminalCallId,
           nextCallId: projection.call_id,
@@ -535,7 +535,7 @@ export class DirectedCallMediaCoordinator {
         });
         this.lastTerminalCallId = null;
       }
-      recordDirectedCallDiagnostic("media_phase", { callId: projection.call_id, reason: "fresh_media_session" });
+      this.recordMediaDiagnostic("media_phase", { callId: projection.call_id, reason: "fresh_media_session" });
     } else if (this.snapshot.callId !== projection.call_id) {
       return;
     }
@@ -583,7 +583,7 @@ export class DirectedCallMediaCoordinator {
         ? "signaling_ready"
         : "waiting_for_connecting";
     this.localIssue = null;
-    recordDirectedCallDiagnostic("call_projection", { callId: projection.call_id, canonicalState: projection.state });
+    this.recordMediaDiagnostic("call_projection", { callId: projection.call_id, canonicalState: projection.state });
     this.remoteScreenShareStream = projection.state === "active"
       ? (this.adapter.getRemoteScreenShareStream?.() ?? null)
       : null;
@@ -610,7 +610,7 @@ export class DirectedCallMediaCoordinator {
     const attempt = this.mediaAttemptEpoch;
     this.mediaStartInFlight = true;
     this.mediaStarted = true;
-    recordDirectedCallDiagnostic("peer_connection", { callId: projection.call_id, peerConnection: "starting" });
+    this.recordMediaDiagnostic("peer_connection", { callId: projection.call_id, peerConnection: "starting" });
     try {
       if (projection.participant_role === "initiator") {
         try {
@@ -1034,7 +1034,7 @@ export class DirectedCallMediaCoordinator {
     };
     this.setupFailureReport = report;
     this.localIssue = failureCode;
-    recordDirectedCallDiagnostic("failure", { callId, failureKind: failureCode });
+    this.recordMediaDiagnostic("failure", { callId, failureKind: failureCode });
     this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: failureCode });
 
     // Cleanup is deliberately complete before any server-report Promise is created.
@@ -1098,7 +1098,7 @@ export class DirectedCallMediaCoordinator {
     }
 
     report.retryable = false;
-    recordDirectedCallDiagnostic("failure", { callId: report.callId, failureKind: "setup_failure_report_rejected" });
+    this.recordMediaDiagnostic("failure", { callId: report.callId, failureKind: "setup_failure_report_rejected" });
   }
 
   private isCurrentSetupFailureReport(report: SetupFailureReport): boolean {
@@ -1121,7 +1121,7 @@ export class DirectedCallMediaCoordinator {
   private handlePeerConnectionState(state: RTCPeerConnectionState, adapterEpoch = this.adapterEpoch): void {
     if (this.disposed || adapterEpoch !== this.adapterEpoch) return;
     this.peerConnectionState = state;
-    recordDirectedCallDiagnostic("peer_connection", { callId: this.snapshot.callId, peerConnection: state });
+    this.recordMediaDiagnostic("peer_connection", { callId: this.snapshot.callId, peerConnection: state });
     if (["failed", "closed", "disconnected"].includes(state) && this.snapshot.projection?.state === "active") {
       this.retireForTransport(this.snapshot.callId, this.mediaAttemptEpoch, state);
       return;
@@ -1138,7 +1138,7 @@ export class DirectedCallMediaCoordinator {
   private recordPeerConnectionDiagnostics(): void {
     const diagnostics = this.peerConnectionDiagnostics;
     if (!diagnostics) return;
-    recordDirectedCallDiagnostic("peer_connection", {
+    this.recordMediaDiagnostic("peer_connection", {
       callId: this.snapshot.callId,
       peerConnection: diagnostics.connectionState,
       iceConnectionState: diagnostics.iceConnectionState,
@@ -1158,7 +1158,7 @@ export class DirectedCallMediaCoordinator {
     this.localIssue = "transport_recovery";
     this.invalidateMediaAttempt();
     this.remoteScreenShareStream = null;
-    recordDirectedCallDiagnostic("failure", { callId, failureKind: this.localIssue });
+    this.recordMediaDiagnostic("failure", { callId, failureKind: this.localIssue });
     this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: this.localIssue, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, peerConnectionState });
   }
 
