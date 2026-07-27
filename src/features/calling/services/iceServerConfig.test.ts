@@ -1,4 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { getTurnCredentialsMock } = vi.hoisted(() => ({
+  getTurnCredentialsMock: vi.fn(),
+}));
+
+vi.mock("@/api/auth", () => ({
+  authApi: {
+    getTurnCredentials: getTurnCredentialsMock,
+  },
+}));
+
 import {
   buildIceServers,
   createDefaultRtcConfigurationSource,
@@ -8,6 +19,15 @@ import {
 const env = (values: Record<string, string | undefined>): ImportMetaEnv => values as ImportMetaEnv;
 
 describe("RTC configuration source", () => {
+  beforeEach(() => {
+    getTurnCredentialsMock.mockReset();
+    getTurnCredentialsMock.mockRejectedValue(new Error("TURN unavailable"));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("uses the default Google STUN server without TURN variables", async () => {
     const source = createDefaultRtcConfigurationSource(env({}));
 
@@ -32,6 +52,91 @@ describe("RTC configuration source", () => {
       { urls: "stun:stun.example.test:3478" },
       { urls: "turn:turn.example.test:3478", username: "turn-user", credential: "turn-secret" },
     ]);
+  });
+
+  it("fetches valid single-URL TURN credentials and replaces static TURN", async () => {
+    getTurnCredentialsMock.mockResolvedValue({
+      urls: ["turn:dynamic.example.test:3478"],
+      username: "1700000600:user",
+      credential: "dynamic-credential",
+      expires_at: 1_700_000_600,
+    });
+
+    const source = createDefaultRtcConfigurationSource(env({
+      VITE_WEBRTC_STUN_URL: "stun:stun.example.test:3478",
+      VITE_WEBRTC_TURN_URL: "turn:static.example.test:3478",
+      VITE_WEBRTC_TURN_USERNAME: "static-user",
+      VITE_WEBRTC_TURN_CREDENTIAL: "static-credential",
+    }));
+
+    await expect(source.getConfiguration()).resolves.toEqual({
+      iceServers: [
+        { urls: "stun:stun.example.test:3478" },
+        {
+          urls: ["turn:dynamic.example.test:3478"],
+          username: "1700000600:user",
+          credential: "dynamic-credential",
+        },
+      ],
+    });
+    expect(getTurnCredentialsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves multiple dynamic TURN URLs as one server", async () => {
+    getTurnCredentialsMock.mockResolvedValue({
+      urls: ["turn:one.example.test:3478", "turns:two.example.test:5349"],
+      username: "1700000600:user",
+      credential: "dynamic-credential",
+      expires_at: 1_700_000_600,
+    });
+
+    await expect(createDefaultRtcConfigurationSource(env({})).getConfiguration()).resolves.toEqual({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+          urls: ["turn:one.example.test:3478", "turns:two.example.test:5349"],
+          username: "1700000600:user",
+          credential: "dynamic-credential",
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ["503", () => Promise.reject(new Error("Request failed: 503"))],
+    ["network failure", () => Promise.reject(new Error("network failure"))],
+    ["invalid payload", () => Promise.resolve({ urls: ["turn:example.test"], username: "", credential: "secret", expires_at: 1 })],
+  ])("falls back to static ICE servers for %s", async (_name, responseFactory) => {
+    getTurnCredentialsMock.mockReturnValue(responseFactory());
+    const source = createDefaultRtcConfigurationSource(env({
+      VITE_WEBRTC_STUN_URL: "stun:stun.example.test:3478",
+      VITE_WEBRTC_TURN_URL: "turn:static.example.test:3478",
+      VITE_WEBRTC_TURN_USERNAME: "static-user",
+      VITE_WEBRTC_TURN_CREDENTIAL: "static-credential",
+    }));
+
+    await expect(source.getConfiguration()).resolves.toEqual({
+      iceServers: [
+        { urls: "stun:stun.example.test:3478" },
+        { urls: "turn:static.example.test:3478", username: "static-user", credential: "static-credential" },
+      ],
+    });
+  });
+
+  it("fetches fresh credentials for every configuration resolution without persistence or logging", async () => {
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    getTurnCredentialsMock
+      .mockResolvedValueOnce({ urls: ["turn:first.example.test"], username: "first-user", credential: "first-secret", expires_at: 1 })
+      .mockResolvedValueOnce({ urls: ["turn:second.example.test"], username: "second-user", credential: "second-secret", expires_at: 2 });
+    const source = createDefaultRtcConfigurationSource(env({}));
+
+    const first = await source.getConfiguration();
+    const second = await source.getConfiguration();
+
+    expect(getTurnCredentialsMock).toHaveBeenCalledTimes(2);
+    expect(first).not.toEqual(second);
+    expect(consoleSpy).not.toHaveBeenCalled();
+    expect(source).not.toHaveProperty("credentials");
   });
 
   it.each([

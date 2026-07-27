@@ -12,6 +12,16 @@ import { getDirectedCallDiagnosticTimeline, resetDirectedCallDiagnosticTimeline 
 import { setCallDebugEnabled } from "../utils/callDebug";
 import type { RtcConfigurationSource } from "./iceServerConfig";
 
+const { getTurnCredentialsMock } = vi.hoisted(() => ({
+  getTurnCredentialsMock: vi.fn(),
+}));
+
+vi.mock("@/api/auth", () => ({
+  authApi: {
+    getTurnCredentials: getTurnCredentialsMock,
+  },
+}));
+
 function createHarness(options: Pick<DirectedCallWebRtcAdapterOptions, "onDiagnostic"> = {}) {
   const trackListeners = new Map<string, Set<EventListener>>();
   const track = {
@@ -284,7 +294,11 @@ function readinessHarness() {
 }
 
 describe("DirectedCallWebRtcAdapter", () => {
-  beforeEach(() => setCallDebugEnabled(true));
+  beforeEach(() => {
+    getTurnCredentialsMock.mockReset();
+    getTurnCredentialsMock.mockRejectedValue(new Error("TURN unavailable"));
+    setCallDebugEnabled(true);
+  });
 
   it("retains a live local screen capture and restores its sender after rebuild", async () => {
     const harness = createDistinctRebuildHarness();
@@ -675,6 +689,30 @@ describe("DirectedCallWebRtcAdapter", () => {
     await secondAdapter.prepareOffer();
 
     expect(source.getConfiguration).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses fresh dynamic TURN credentials for a replacement persistent peer", async () => {
+    getTurnCredentialsMock
+      .mockResolvedValueOnce({ urls: ["turn:first.example.test"], username: "first-user", credential: "first-secret", expires_at: 1 })
+      .mockResolvedValueOnce({ urls: ["turn:second.example.test"], username: "second-user", credential: "second-secret", expires_at: 2 });
+    const harness = createDistinctRebuildHarness();
+
+    await harness.adapter.prepareOffer();
+    await harness.adapter.rebuildPeerConnection();
+
+    expect(getTurnCredentialsMock).toHaveBeenCalledTimes(2);
+    expect((harness.createPeerConnection.mock.calls as any[])[0][0]).toEqual({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: ["turn:first.example.test"], username: "first-user", credential: "first-secret" },
+      ],
+    });
+    expect((harness.createPeerConnection.mock.calls as any[])[1][0]).toEqual({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: ["turn:second.example.test"], username: "second-user", credential: "second-secret" },
+      ],
+    });
   });
 
   it("uses the existing setup failure path when RTC configuration resolution fails", async () => {

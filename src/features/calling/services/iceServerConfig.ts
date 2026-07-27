@@ -1,3 +1,5 @@
+import { authApi, type TurnCredentials } from "@/api/auth";
+
 const DEFAULT_STUN_URL = "stun:stun.l.google.com:19302";
 
 export interface RtcConfigurationSource {
@@ -52,6 +54,21 @@ function isValidIceServer(server: unknown): server is RTCIceServer {
     && (candidate.credential === undefined || typeof candidate.credential === "string");
 }
 
+function isValidTurnCredentials(value: unknown): value is TurnCredentials {
+  if (!value || typeof value !== "object") return false;
+  const credentials = value as Partial<TurnCredentials>;
+  return Array.isArray(credentials.urls)
+    && credentials.urls.length > 0
+    && credentials.urls.every((url) => typeof url === "string" && url.trim().length > 0)
+    && typeof credentials.username === "string"
+    && credentials.username.trim().length > 0
+    && typeof credentials.credential === "string"
+    && credentials.credential.trim().length > 0
+    && typeof credentials.expires_at === "number"
+    && Number.isInteger(credentials.expires_at)
+    && credentials.expires_at > 0;
+}
+
 function cloneRtcConfiguration(configuration: RTCConfiguration): RTCConfiguration {
   if (!configuration || typeof configuration !== "object" || Array.isArray(configuration)) throw new RtcConfigurationError();
   if (configuration.iceServers !== undefined
@@ -73,7 +90,27 @@ export function createDefaultRtcConfigurationSource(
 ): RtcConfigurationSource {
   return {
     async getConfiguration(): Promise<RTCConfiguration> {
-      return cloneRtcConfiguration({ iceServers: buildIceServers(env) });
+      const staticIceServers = buildIceServers(env);
+
+      try {
+        const turnCredentials = await authApi.getTurnCredentials();
+        if (isValidTurnCredentials(turnCredentials)) {
+          return cloneRtcConfiguration({
+            iceServers: [
+              staticIceServers[0],
+              {
+                urls: [...turnCredentials.urls],
+                username: turnCredentials.username,
+                credential: turnCredentials.credential,
+              },
+            ],
+          });
+        }
+      } catch {
+        // Calls must remain usable before coturn is deployed or when TURN is unavailable.
+      }
+
+      return cloneRtcConfiguration({ iceServers: staticIceServers });
     },
   };
 }

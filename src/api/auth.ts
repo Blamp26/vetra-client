@@ -35,6 +35,13 @@ export interface SocketTicketResponse {
   expires_in?: number;
 }
 
+export interface TurnCredentials {
+  urls: string[];
+  username: string;
+  credential: string;
+  expires_at: number;
+}
+
 export const authApi = {
   register(payload: RegisterPayload): Promise<AuthResponse> {
     return post<AuthResponse>("/users/register", payload);
@@ -61,5 +68,9 @@ export const authApi = {
 
   createSocketTicket(): Promise<SocketTicketResponse> {
     return post<SocketTicketResponse>("/auth/socket-ticket", {});
+  },
+
+  getTurnCredentials(): Promise<TurnCredentials> {
+    return get<TurnCredentials>("/auth/turn-credentials");
   },
 };

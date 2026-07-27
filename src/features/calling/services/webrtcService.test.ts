@@ -14,6 +14,16 @@ vi.mock('@/store', () => ({
     getState: () => mockAppState,
 }));
 
+const { getTurnCredentialsMock } = vi.hoisted(() => ({
+    getTurnCredentialsMock: vi.fn(),
+}));
+
+vi.mock('@/api/auth', () => ({
+    authApi: {
+        getTurnCredentials: getTurnCredentialsMock,
+    },
+}));
+
 import {
     WebRTCService,
     buildIceServers,
@@ -194,6 +204,7 @@ function renegotiationPushes(type?: 'offer' | 'answer') {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    getTurnCredentialsMock.mockRejectedValue(new Error('TURN unavailable'));
     vi.unstubAllEnvs();
     localStorage.removeItem('vetra.debug.calls');
     mockAppState.selectedInputDeviceId = 'default';
@@ -1411,6 +1422,26 @@ describe('WebRTCService', () => {
             expect(source.getConfiguration).toHaveBeenCalledTimes(1);
             expect(pc.config).toEqual({ iceServers: [{ urls: 'stun:injected.example.test' }] });
             injectedService.hangUp();
+        });
+
+        it('uses dynamic TURN credentials through the default legacy source', async () => {
+            getTurnCredentialsMock.mockResolvedValue({
+                urls: ['turn:legacy.example.test'],
+                username: 'legacy-user',
+                credential: 'legacy-secret',
+                expires_at: 1,
+            });
+
+            await service.startCall();
+
+            const pc = (service as any).peerConnection as MockRTCPeerConnection;
+            expect(getTurnCredentialsMock).toHaveBeenCalledTimes(1);
+            expect(pc.config).toEqual({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: ['turn:legacy.example.test'], username: 'legacy-user', credential: 'legacy-secret' },
+                ],
+            });
         });
 
         it('does not construct a peer when the shared RTC configuration source rejects', async () => {
