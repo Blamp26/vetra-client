@@ -1204,6 +1204,39 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(session.sendIceRestartAnswer).not.toHaveBeenCalled();
   });
 
+  it("coalesces restart requests that arrive while rebuild creation is pending", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const rebuild = deferred<void>();
+    mockedMethod(adapter.rebuildPeerConnection).mockReturnValue(rebuild.promise);
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    startActive(coordinator, session);
+    connectionState("failed");
+    await vi.advanceTimersByTimeAsync(22_000);
+    expect(adapter.rebuildPeerConnection).toHaveBeenCalledTimes(1);
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(2);
+
+    session.emitIceRestart({ kind: "request", protocol_version: 1, call_id: callId, signal_id: "99999999-9999-4999-8999-999999999999" });
+    await Promise.resolve();
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(2);
+
+    rebuild.resolve();
+    await vi.waitFor(() => expect(adapter.createPeerConnectionRebuildOffer).toHaveBeenCalledTimes(1));
+    session.emitIceRestart({ kind: "request", protocol_version: 1, call_id: callId, signal_id: "88888888-8888-4888-8888-888888888888" });
+    await Promise.resolve();
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(2);
+
+    connectionState("connected");
+    session.emitIceRestart({ kind: "request", protocol_version: 1, call_id: callId, signal_id: "77777777-7777-4777-8777-777777777777" });
+    await vi.waitFor(() => expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(3));
+    coordinator.dispose();
+  });
+
   it("cancels recovery timers on terminal call replacement, disposal, and generation invalidation", async () => {
     vi.useFakeTimers();
     const secondCallId = "44444444-4444-4444-8444-444444444444";

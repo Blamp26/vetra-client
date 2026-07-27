@@ -981,9 +981,10 @@ describe("DirectedCallWebRtcAdapter", () => {
   it("retires the old peer before rebuilding, resolves configuration again, and restores audio", async () => {
     const harness = createHarness();
     const onRemoteStream = vi.fn();
+    const pendingConfiguration = deferred<RTCConfiguration>();
     const configurationSource = { getConfiguration: vi.fn()
       .mockResolvedValueOnce({ iceServers: [{ urls: "stun:first.example" }] })
-      .mockResolvedValueOnce({ iceServers: [{ urls: "stun:second.example" }] }) };
+      .mockReturnValueOnce(pendingConfiguration.promise) };
     const adapter = new DirectedCallWebRtcAdapter({
       dependencies: {
         getUserMedia: harness.getUserMedia,
@@ -999,7 +1000,14 @@ describe("DirectedCallWebRtcAdapter", () => {
     harness.pc.ontrack?.({ track: remoteTrack, streams: [remoteStream] } as unknown as RTCTrackEvent);
     expect(adapter.remoteMediaStream).toBe(remoteStream);
 
-    await adapter.rebuildPeerConnection();
+    const rebuildPromise = adapter.rebuildPeerConnection();
+    await vi.waitFor(() => expect(configurationSource.getConfiguration).toHaveBeenCalledTimes(2));
+    const concurrentOffer = adapter.prepareOffer();
+    await Promise.resolve();
+    expect(harness.createPeerConnection).toHaveBeenCalledTimes(1);
+    pendingConfiguration.resolve({ iceServers: [{ urls: "stun:second.example" }] });
+    await rebuildPromise;
+    await concurrentOffer;
 
     expect(harness.pc.close).toHaveBeenCalledTimes(1);
     expect(configurationSource.getConfiguration).toHaveBeenCalledTimes(2);

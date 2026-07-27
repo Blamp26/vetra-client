@@ -308,7 +308,7 @@ export class DirectedCallWebRtcAdapter {
   private remoteAudioStreamBound = false;
   private readonly readinessTrackCleanups = new Map<DirectedCallMediaStreamTrack, () => void>();
   private readonly localReadinessTracks = new Set<DirectedCallMediaStreamTrack>();
-  private peerCreation: { epoch: number; promise: Promise<void> } | null = null;
+  private peerCreation: { epoch: number; kind: "initial" | "rebuild"; promise: Promise<void> } | null = null;
   private initialMediaReadiness = initialMediaReadiness({
     transportConnected: false,
     localAudioSenderReady: false,
@@ -519,11 +519,16 @@ export class DirectedCallWebRtcAdapter {
   }
 
   async rebuildPeerConnection(): Promise<void> {
+    const existingCreation = this.peerCreation;
+    if (existingCreation) {
+      await existingCreation.promise;
+      if (existingCreation.kind === "rebuild") return;
+    }
+
     const previousLocalStream = this.localStream;
     if (!previousLocalStream) throw new DirectedCallWebRtcError("media_binding_failed");
 
     const epoch = ++this.epoch;
-    this.peerCreation = null;
     const previousPeerConnection = this.peerConnection;
     if (previousPeerConnection) {
       previousPeerConnection.onicecandidate = null;
@@ -548,13 +553,17 @@ export class DirectedCallWebRtcAdapter {
     this.offerPrepared = false;
     this.recomputeInitialMediaReadiness(epoch);
 
+    const creation = {
+      epoch,
+      kind: "rebuild" as const,
+      promise: this.createAudioPeer(epoch, previousLocalStream),
+    };
+    this.peerCreation = creation;
     try {
-      await this.createAudioPeer(epoch, previousLocalStream);
+      await creation.promise;
       this.assertCurrent(epoch);
-    } catch (error) {
-      if (error instanceof DirectedCallWebRtcStaleError) throw error;
-      if (error instanceof DirectedCallWebRtcError) throw error;
-      throw new DirectedCallWebRtcError("media_binding_failed");
+    } finally {
+      if (this.peerCreation === creation) this.peerCreation = null;
     }
   }
 
@@ -1367,6 +1376,7 @@ export class DirectedCallWebRtcAdapter {
 
     const creation = {
       epoch,
+      kind: "initial" as const,
       promise: this.createAudioPeer(epoch),
     };
     this.peerCreation = creation;

@@ -852,7 +852,13 @@ export class DirectedCallMediaCoordinator {
     ) return;
 
     if (event.kind === "request") {
-      if (projection.participant_role === "initiator" && !this.renegotiation && !this.iceRestart) {
+      if (
+        projection.participant_role === "initiator"
+        && !this.rebuildInFlight
+        && !this.recoveryIncident?.rebuildAttempted
+        && !this.renegotiation
+        && !this.iceRestart
+      ) {
         await this.startIceRestartOffer(projection.call_id);
       }
       return;
