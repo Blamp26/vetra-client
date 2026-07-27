@@ -187,6 +187,10 @@ function createRemoteStream(track: ReturnType<typeof createRemoteTrack>) {
   return {
     getTracks: () => tracks,
     addTrack: (nextTrack: typeof track) => tracks.push(nextTrack),
+    removeTrack: (trackToRemove: typeof track) => {
+      const index = tracks.indexOf(trackToRemove);
+      if (index >= 0) tracks.splice(index, 1);
+    },
   };
 }
 
@@ -972,6 +976,45 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.createPeerConnection).toHaveBeenCalledTimes(1);
     expect(harness.pc.localDescription).toEqual(offer);
     expect(peerConnection).toBe(harness.pc);
+  });
+
+  it("retires the old peer before rebuilding, resolves configuration again, and restores audio", async () => {
+    const harness = createHarness();
+    const onRemoteStream = vi.fn();
+    const configurationSource = { getConfiguration: vi.fn()
+      .mockResolvedValueOnce({ iceServers: [{ urls: "stun:first.example" }] })
+      .mockResolvedValueOnce({ iceServers: [{ urls: "stun:second.example" }] }) };
+    const adapter = new DirectedCallWebRtcAdapter({
+      dependencies: {
+        getUserMedia: harness.getUserMedia,
+        createPeerConnection: harness.createPeerConnection,
+        createRemoteStream: harness.createRemoteStream,
+      },
+      rtcConfigurationSource: configurationSource,
+      onRemoteStream,
+    });
+    await adapter.prepareOffer();
+    const remoteTrack = createRemoteTrack();
+    const remoteStream = createRemoteStream(remoteTrack);
+    harness.pc.ontrack?.({ track: remoteTrack, streams: [remoteStream] } as unknown as RTCTrackEvent);
+    expect(adapter.remoteMediaStream).toBe(remoteStream);
+
+    await adapter.rebuildPeerConnection();
+
+    expect(harness.pc.close).toHaveBeenCalledTimes(1);
+    expect(configurationSource.getConfiguration).toHaveBeenCalledTimes(2);
+    expect(harness.createPeerConnection).toHaveBeenCalledTimes(2);
+    expect((harness.createPeerConnection.mock.calls as any[])[0][0]).toEqual({ iceServers: [{ urls: "stun:first.example" }] });
+    expect((harness.createPeerConnection.mock.calls as any[])[1][0]).toEqual({ iceServers: [{ urls: "stun:second.example" }] });
+    expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(harness.pc.addTrack).toHaveBeenCalledTimes(2);
+    expect(remoteStream.getTracks()).toEqual([]);
+
+    const replacementRemoteTrack = createRemoteTrack();
+    const replacementRemoteStream = createRemoteStream(replacementRemoteTrack);
+    harness.pc.ontrack?.({ track: replacementRemoteTrack, streams: [replacementRemoteStream] } as unknown as RTCTrackEvent);
+    expect(adapter.remoteMediaStream).toBe(replacementRemoteStream);
+    expect(onRemoteStream).toHaveBeenCalledTimes(2);
   });
 
   it("queues and flushes restart candidates by transaction", async () => {

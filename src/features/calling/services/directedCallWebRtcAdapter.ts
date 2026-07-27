@@ -518,6 +518,46 @@ export class DirectedCallWebRtcAdapter {
     }
   }
 
+  async rebuildPeerConnection(): Promise<void> {
+    const previousLocalStream = this.localStream;
+    if (!previousLocalStream) throw new DirectedCallWebRtcError("media_binding_failed");
+
+    const epoch = ++this.epoch;
+    this.peerCreation = null;
+    const previousPeerConnection = this.peerConnection;
+    if (previousPeerConnection) {
+      previousPeerConnection.onicecandidate = null;
+      previousPeerConnection.onconnectionstatechange = null;
+      previousPeerConnection.oniceconnectionstatechange = null;
+      previousPeerConnection.onicegatheringstatechange = null;
+      previousPeerConnection.onsignalingstatechange = null;
+      previousPeerConnection.ontrack = null;
+      previousPeerConnection.close();
+    }
+    this.peerConnection = null;
+    const previousRemoteAudioTrack = this.remoteAudioTrack;
+    if (previousRemoteAudioTrack) this.remoteStream?.removeTrack?.(previousRemoteAudioTrack);
+    this.remoteAudioTrack = null;
+    this.remoteAudioStreamBound = false;
+    this.queuedCandidates.length = 0;
+    this.seenCandidates.clear();
+    this.clearReadinessTrackListeners();
+    this.screenShareTransceiver = null;
+    this.localScreenShareEnabled = false;
+    this.remoteScreenShareReceptionEnabled = false;
+    this.offerPrepared = false;
+    this.recomputeInitialMediaReadiness(epoch);
+
+    try {
+      await this.createAudioPeer(epoch, previousLocalStream);
+      this.assertCurrent(epoch);
+    } catch (error) {
+      if (error instanceof DirectedCallWebRtcStaleError) throw error;
+      if (error instanceof DirectedCallWebRtcError) throw error;
+      throw new DirectedCallWebRtcError("media_binding_failed");
+    }
+  }
+
   async prepareAnswer(): Promise<void> {
     const epoch = this.epoch;
     await this.ensureAudioPeer(epoch);
@@ -598,6 +638,22 @@ export class DirectedCallWebRtcAdapter {
     }
   }
 
+  async createPeerConnectionRebuildOffer(): Promise<RTCSessionDescriptionInit> {
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      const offer = await this.peerConnection!.createOffer();
+      this.assertCurrent(epoch);
+      await this.peerConnection!.setLocalDescription(offer);
+      this.assertCurrent(epoch);
+      return offer;
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
   async applyRenegotiationOffer(offer: RTCSessionDescriptionInit): Promise<void> {
     const epoch = this.epoch;
     await this.ensureAudioPeer(epoch);
@@ -650,6 +706,22 @@ export class DirectedCallWebRtcAdapter {
   }
 
   async createIceRestartAnswer(): Promise<RTCSessionDescriptionInit> {
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      const answer = await this.peerConnection!.createAnswer();
+      this.assertCurrent(epoch);
+      await this.peerConnection!.setLocalDescription(answer);
+      this.assertCurrent(epoch);
+      return answer;
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
+  async createPeerConnectionRebuildAnswer(): Promise<RTCSessionDescriptionInit> {
     const epoch = this.epoch;
     await this.ensureAudioPeer(epoch);
     this.assertCurrent(epoch);
@@ -1305,19 +1377,21 @@ export class DirectedCallWebRtcAdapter {
     }
   }
 
-  private async createAudioPeer(epoch: number): Promise<void> {
+  private async createAudioPeer(epoch: number, reusedLocalStream?: DirectedCallMediaStream): Promise<void> {
     this.assertCurrent(epoch);
     if (this.peerConnection && this.localStream) return;
-    let acquiredStream: DirectedCallMediaStream | null = null;
-    try {
-      acquiredStream = await this.dependencies.getUserMedia(this.getAudioConstraints());
-      this.assertCurrent(epoch);
-    } catch (error) {
-      if (error instanceof DirectedCallWebRtcStaleError || !this.isCurrent(epoch)) {
-        acquiredStream?.getTracks().forEach((track) => track.stop());
-        throw new DirectedCallWebRtcStaleError();
+    let acquiredStream: DirectedCallMediaStream | null = reusedLocalStream ?? null;
+    if (!acquiredStream) {
+      try {
+        acquiredStream = await this.dependencies.getUserMedia(this.getAudioConstraints());
+        this.assertCurrent(epoch);
+      } catch (error) {
+        if (error instanceof DirectedCallWebRtcStaleError || !this.isCurrent(epoch)) {
+          acquiredStream?.getTracks().forEach((track) => track.stop());
+          throw new DirectedCallWebRtcStaleError();
+        }
+        throw new DirectedCallWebRtcError(failureForMediaError(error));
       }
-      throw new DirectedCallWebRtcError(failureForMediaError(error));
     }
     this.localStream = acquiredStream;
     this.localStream.getTracks().forEach((track) => {
@@ -1472,7 +1546,7 @@ export class DirectedCallWebRtcAdapter {
         this.recomputeInitialMediaReadiness(epoch);
       }
     } catch {
-      if (this.localStream === acquiredStream) {
+      if (!reusedLocalStream && this.localStream === acquiredStream) {
         acquiredStream?.getTracks().forEach((track) => track.stop());
         this.localStream = null;
       }

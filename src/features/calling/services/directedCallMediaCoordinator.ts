@@ -46,7 +46,7 @@ export interface DirectedCallMediaCoordinatorSnapshot {
   localScreenShareStream: DirectedCallMediaStream | null;
   isLocalScreenShareActive: boolean;
   remoteScreenShareStream: DirectedCallMediaStream | null;
-  localIssue: "transport_recovery" | "restart_exhausted" | "audio_input_switch_failed" | DirectedCallWebRtcError["failureCode"] | null;
+  localIssue: "transport_recovery" | "restart_exhausted" | "rebuild_exhausted" | "rebuild_blocked_by_screen_share" | "audio_input_switch_failed" | DirectedCallWebRtcError["failureCode"] | null;
   peerConnectionState: RTCPeerConnectionState | null;
   isMuted: boolean;
   canToggleMute: boolean;
@@ -62,7 +62,9 @@ export interface DirectedCallMediaCoordinatorOptions {
   adapterFactory?: (options: DirectedCallWebRtcAdapterOptions) => DirectedCallWebRtcAdapter;
   audioConstraints?: () => MediaStreamConstraints;
   isGenerationCurrent?: (generation: string) => boolean;
-  onRecoveryResult?: (result: { kind: "restart_exhausted"; callId: string; generation: string }) => void;
+  onRecoveryResult?: (result:
+    | { kind: "rebuild_exhausted"; callId: string; generation: string }
+    | { kind: "rebuild_blocked_by_screen_share"; callId: string; generation: string }) => void;
 }
 
 type Listener = (snapshot: DirectedCallMediaCoordinatorSnapshot) => void;
@@ -87,6 +89,14 @@ type IceRestartTransaction = {
   id: string;
   phase: "creating_offer" | "offered" | "answering" | "applying_answer";
   remoteDescriptionReady: boolean;
+  rebuild?: boolean;
+};
+type RecoveryIncident = {
+  callId: string;
+  generation: string;
+  attempts: number;
+  activeAttempt: number | null;
+  rebuildAttempted: boolean;
 };
 const MAX_COMPLETED_RENEGOTIATIONS = 32;
 const MAX_COMPLETED_ICE_RESTARTS = 32;
@@ -94,6 +104,7 @@ const ICE_RECOVERY_GRACE_MS = 3_000;
 const ICE_RECOVERY_TIMEOUT_MS = 10_000;
 const ICE_RECOVERY_RETRY_DELAY_MS = 2_000;
 const MAX_ICE_RECOVERY_ATTEMPTS = 2;
+const PEER_CONNECTION_REBUILD_TIMEOUT_MS = 15_000;
 
 type SetupFailureReport = {
   callId: string;
@@ -211,8 +222,12 @@ export class DirectedCallMediaCoordinator {
   private recoveryGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private recoveryRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private recoveryTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-  private recoveryIncident: { callId: string; generation: string; attempts: number; activeAttempt: number | null } | null = null;
+  private recoveryIncident: RecoveryIncident | null = null;
   private recoveryState: RTCPeerConnectionState | "completed" | null = null;
+  private rebuildTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private rebuildReadyPromise: Promise<void> | null = null;
+  private rebuildInFlight = false;
+  private rebuildEpoch = 0;
 
   constructor(
     session: DirectedCallSession,
@@ -851,7 +866,7 @@ export class DirectedCallMediaCoordinator {
     await this.handleIceRestartAnswer(event, projection);
   }
 
-  private async startIceRestartOffer(callId: string): Promise<string | null> {
+  private async startIceRestartOffer(callId: string, rebuild = false): Promise<string | null> {
     const projection = this.snapshot.projection;
     if (
       this.disposed
@@ -871,12 +886,16 @@ export class DirectedCallMediaCoordinator {
       id,
       phase: "creating_offer",
       remoteDescriptionReady: false,
+      rebuild,
     };
     this.iceRestart = transaction;
     this.localCandidateTransaction = { kind: "ice_restart", id };
+    void this.flushLocalCandidates(callId, this.mediaAttemptEpoch);
     try {
-      const offer = await this.adapter.createIceRestartOffer();
-      if (!this.ownsIceRestart(transaction, id, callId, "creating_offer") || !offer.sdp) return null;
+      const offer = rebuild
+        ? await this.adapter.createPeerConnectionRebuildOffer?.()
+        : await this.adapter.createIceRestartOffer();
+      if (!this.ownsIceRestart(transaction, id, callId, "creating_offer") || !offer?.sdp) return null;
       transaction.phase = "offered";
       await this.signalTransport.sendIceRestartOffer(createDirectedCallUuid(), id, offer.sdp);
       if (!this.ownsIceRestart(transaction, id, callId, "offered")) return null;
@@ -892,6 +911,14 @@ export class DirectedCallMediaCoordinator {
     projection: StateProjection,
   ): Promise<void> {
     if (projection.participant_role !== "recipient" || this.renegotiation) return;
+    if (this.rebuildReadyPromise) {
+      try {
+        await this.rebuildReadyPromise;
+      } catch {
+        return;
+      }
+      if (this.disposed || !this.isCurrentCall(projection.call_id) || this.snapshot.projection?.state !== "active") return;
+    }
     if (this.completedIceRestarts.includes(event.ice_restart_id)) return;
     if (this.iceRestart?.id === event.ice_restart_id) return;
     if (this.iceRestart) this.supersedeIceRestart(this.iceRestart.id);
@@ -902,16 +929,20 @@ export class DirectedCallMediaCoordinator {
       id: event.ice_restart_id,
       phase: "answering",
       remoteDescriptionReady: false,
+      rebuild: this.rebuildInFlight,
     };
     this.iceRestart = transaction;
     this.localCandidateTransaction = { kind: "ice_restart", id: transaction.id };
+    void this.flushLocalCandidates(projection.call_id, this.mediaAttemptEpoch);
     try {
       await this.adapter.applyIceRestartOffer({ type: "offer", sdp: event.sdp }, transaction.id);
       if (!this.ownsIceRestart(transaction, transaction.id, projection.call_id, "answering")) return;
       transaction.remoteDescriptionReady = true;
       await this.flushRemoteIceRestartCandidates(transaction.id);
-      const answer = await this.adapter.createIceRestartAnswer();
-      if (!answer.sdp || !this.ownsIceRestart(transaction, transaction.id, projection.call_id, "answering")) return;
+      const answer = transaction.rebuild
+        ? await this.adapter.createPeerConnectionRebuildAnswer?.()
+        : await this.adapter.createIceRestartAnswer();
+      if (!answer?.sdp || !this.ownsIceRestart(transaction, transaction.id, projection.call_id, "answering")) return;
       await this.signalTransport.sendIceRestartAnswer(createDirectedCallUuid(), transaction.id, answer.sdp);
       if (this.ownsIceRestart(transaction, transaction.id, projection.call_id, "answering")) this.completeIceRestart(transaction.id);
     } catch (error) {
@@ -1239,6 +1270,10 @@ export class DirectedCallMediaCoordinator {
       while (this.queuedLocalCandidates.length > 0) {
         const entry = this.queuedLocalCandidates[0];
         if (entry.callId !== callId || entry.attempt !== attempt || !this.isCurrentCall(callId, attempt)) return;
+        if (this.rebuildInFlight && !this.localCandidateTransaction) return;
+        if (this.rebuildInFlight && !entry.renegotiationId && !entry.iceRestartId && this.localCandidateTransaction?.kind === "ice_restart") {
+          entry.iceRestartId = this.localCandidateTransaction.id;
+        }
         this.queuedLocalCandidates.shift();
         const key = candidateKey(entry.candidate, entry.renegotiationId ?? entry.iceRestartId);
         if (this.sentLocalCandidateKeys.has(key)) continue;
@@ -1424,7 +1459,7 @@ export class DirectedCallMediaCoordinator {
     if (!callId || this.disposed || !this.isGenerationCurrent(this.generation)) return;
     if (!this.recoveryIncident || this.recoveryIncident.callId !== callId || this.recoveryIncident.generation !== this.generation) {
       this.cancelRecoveryWork();
-      this.recoveryIncident = { callId, generation: this.generation, attempts: 0, activeAttempt: null };
+      this.recoveryIncident = { callId, generation: this.generation, attempts: 0, activeAttempt: null, rebuildAttempted: false };
     }
     this.recoveryState = "disconnected";
     if (this.recoveryIncident.activeAttempt !== null || this.recoveryGraceTimer || this.recoveryRetryTimer || this.recoveryTimeoutTimer) return;
@@ -1441,7 +1476,7 @@ export class DirectedCallMediaCoordinator {
     if (!callId || this.disposed || this.snapshot.projection?.state !== "active" || !this.isGenerationCurrent(this.generation)) return;
     if (!this.recoveryIncident || this.recoveryIncident.callId !== callId || this.recoveryIncident.generation !== this.generation) {
       this.cancelRecoveryWork();
-      this.recoveryIncident = { callId, generation: this.generation, attempts: 0, activeAttempt: null };
+      this.recoveryIncident = { callId, generation: this.generation, attempts: 0, activeAttempt: null, rebuildAttempted: false };
     }
     const incident = this.recoveryIncident;
     if (incident.activeAttempt !== null || this.recoveryRetryTimer || this.recoveryGraceTimer || incident.attempts >= MAX_ICE_RECOVERY_ATTEMPTS) return;
@@ -1462,7 +1497,7 @@ export class DirectedCallMediaCoordinator {
     });
   }
 
-  private finishIceRecoveryAttempt(incident: NonNullable<DirectedCallMediaCoordinator["recoveryIncident"]>, attempt: number): void {
+  private finishIceRecoveryAttempt(incident: RecoveryIncident, attempt: number): void {
     if (this.recoveryIncident !== incident || incident.activeAttempt !== attempt || this.disposed || !this.isCurrentCall(incident.callId)) return;
     if (this.recoveryTimeoutTimer) {
       clearTimeout(this.recoveryTimeoutTimer);
@@ -1481,11 +1516,90 @@ export class DirectedCallMediaCoordinator {
     this.localIssue = "restart_exhausted";
     this.recordMediaDiagnostic("failure", { callId: incident.callId, failureKind: "restart_exhausted" });
     this.setSnapshot({ ...this.snapshot, localIssue: this.localIssue });
-    this.onRecoveryResult?.({ kind: "restart_exhausted", callId: incident.callId, generation: incident.generation });
+    this.startPeerConnectionRebuild(incident);
+  }
+
+  private startPeerConnectionRebuild(incident: RecoveryIncident): void {
+    if (
+      incident.rebuildAttempted
+      || this.disposed
+      || this.recoveryIncident !== incident
+      || !this.isCurrentCall(incident.callId)
+      || this.snapshot.projection?.state !== "active"
+      || !this.isGenerationCurrent(this.generation)
+    ) return;
+    incident.rebuildAttempted = true;
+    if (
+      this.renegotiation
+      || this.adapter.getLocalScreenShareStream?.()
+      || this.adapter.getRemoteScreenShareStream?.()
+      || this.snapshot.localScreenShareStream
+      || this.snapshot.remoteScreenShareStream
+    ) {
+      this.localIssue = "rebuild_blocked_by_screen_share";
+      this.recordMediaDiagnostic("failure", { callId: incident.callId, failureKind: this.localIssue });
+      this.setSnapshot({ ...this.snapshot, localIssue: this.localIssue });
+      this.onRecoveryResult?.({ kind: "rebuild_blocked_by_screen_share", callId: incident.callId, generation: incident.generation });
+      return;
+    }
+
+    const rebuildEpoch = ++this.rebuildEpoch;
+    this.rebuildInFlight = true;
+    this.rebuildTimeoutTimer = setTimeout(() => {
+      this.finishPeerConnectionRebuild(rebuildEpoch);
+    }, PEER_CONNECTION_REBUILD_TIMEOUT_MS);
+    const ready = Promise.resolve().then(() => {
+      if (!this.adapter.rebuildPeerConnection) throw new DirectedCallWebRtcError("media_binding_failed");
+      return this.adapter.rebuildPeerConnection();
+    });
+    this.rebuildReadyPromise = ready;
+    void ready.then(async () => {
+      if (!this.ownsPeerConnectionRebuild(incident, rebuildEpoch)) return;
+      if (this.snapshot.participantRole === "initiator") {
+        const restartId = await this.startIceRestartOffer(incident.callId, true);
+        if (restartId === null) this.finishPeerConnectionRebuild(rebuildEpoch);
+      } else {
+        try {
+          await this.signalTransport.sendIceRestartRequest(createDirectedCallUuid());
+        } catch {
+          this.finishPeerConnectionRebuild(rebuildEpoch);
+        }
+      }
+    }).catch(() => {
+      this.finishPeerConnectionRebuild(rebuildEpoch);
+    }).finally(() => {
+      if (this.rebuildReadyPromise === ready) this.rebuildReadyPromise = null;
+    });
+  }
+
+  private ownsPeerConnectionRebuild(incident: RecoveryIncident, rebuildEpoch: number): boolean {
+    return !this.disposed
+      && this.rebuildInFlight
+      && this.rebuildEpoch === rebuildEpoch
+      && this.recoveryIncident === incident
+      && this.isCurrentCall(incident.callId)
+      && this.isGenerationCurrent(this.generation);
+  }
+
+  private finishPeerConnectionRebuild(rebuildEpoch: number): void {
+    if (!this.rebuildInFlight || this.rebuildEpoch !== rebuildEpoch || this.disposed || !this.snapshot.callId || !this.isCurrentCall(this.snapshot.callId)) return;
+    if (this.rebuildTimeoutTimer) clearTimeout(this.rebuildTimeoutTimer);
+    this.rebuildTimeoutTimer = null;
+    this.rebuildInFlight = false;
+    if (this.iceRestart) this.supersedeIceRestart(this.iceRestart.id);
+    const callId = this.snapshot.callId;
+    this.localIssue = "rebuild_exhausted";
+    this.recordMediaDiagnostic("failure", { callId, failureKind: this.localIssue });
+    this.setSnapshot({ ...this.snapshot, localIssue: this.localIssue });
+    this.onRecoveryResult?.({ kind: "rebuild_exhausted", callId, generation: this.generation });
   }
 
   private recoverFromIceIncident(): void {
     if (this.iceRestart) this.supersedeIceRestart(this.iceRestart.id);
+    if (this.rebuildTimeoutTimer) clearTimeout(this.rebuildTimeoutTimer);
+    this.rebuildTimeoutTimer = null;
+    this.rebuildInFlight = false;
+    this.rebuildEpoch += 1;
     this.cancelRecoveryWork();
     this.recoveryState = this.peerConnectionState;
     this.localIssue = null;
@@ -1499,6 +1613,11 @@ export class DirectedCallMediaCoordinator {
     this.recoveryGraceTimer = null;
     this.recoveryRetryTimer = null;
     this.recoveryTimeoutTimer = null;
+    if (this.rebuildTimeoutTimer) clearTimeout(this.rebuildTimeoutTimer);
+    this.rebuildTimeoutTimer = null;
+    this.rebuildInFlight = false;
+    this.rebuildEpoch += 1;
+    this.rebuildReadyPromise = null;
     this.recoveryIncident = null;
     this.recoveryState = null;
   }
