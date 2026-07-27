@@ -131,6 +131,76 @@ function displayStream(...tracks: any[]) {
   return { getTracks: () => tracks };
 }
 
+function createDistinctRebuildHarness() {
+  const base = createHarness();
+  const replacementAudioSender = {
+    track: base.track,
+    replaceTrack: vi.fn().mockResolvedValue(undefined),
+  };
+  const replacementScreenSender = {
+    track: null as typeof base.screenTrack | null,
+    replaceTrack: vi.fn(async (nextTrack: typeof base.screenTrack | null) => {
+      replacementScreenSender.track = nextTrack;
+    }),
+  };
+  const replacementScreenTransceiver = {
+    kind: "video" as const,
+    direction: "inactive" as RTCRtpTransceiverDirection,
+    currentDirection: null as RTCRtpTransceiverDirection | null,
+    mid: "1" as string | null,
+    sender: replacementScreenSender,
+    receiver: { track: null },
+    stop: vi.fn(),
+  };
+  const replacementAudioTransceiver = {
+    kind: "audio" as const,
+    direction: "sendrecv" as RTCRtpTransceiverDirection,
+  };
+  const replacementTransceivers: Array<typeof replacementAudioTransceiver | typeof replacementScreenTransceiver> = [replacementAudioTransceiver];
+  const replacement = {
+    localDescription: null as RTCSessionDescription | null,
+    remoteDescription: null as RTCSessionDescription | null,
+    connectionState: "new" as RTCPeerConnectionState,
+    iceConnectionState: "new" as RTCIceConnectionState,
+    iceGatheringState: "new" as RTCIceGatheringState,
+    onicecandidate: null as ((event: RTCPeerConnectionIceEvent) => void) | null,
+    ontrack: null as ((event: RTCTrackEvent) => void) | null,
+    onconnectionstatechange: null as (() => void) | null,
+    oniceconnectionstatechange: null as (() => void) | null,
+    onicegatheringstatechange: null as (() => void) | null,
+    onsignalingstatechange: null as (() => void) | null,
+    addTrack: vi.fn(),
+    addTransceiver: vi.fn(() => {
+      replacementTransceivers.push(replacementScreenTransceiver);
+      return replacementScreenTransceiver;
+    }),
+    getTransceivers: vi.fn(() => replacementTransceivers),
+    getSenders: vi.fn(() => [replacementAudioSender]),
+    createOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "replacement-offer" }),
+    createAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "replacement-answer" }),
+    setLocalDescription: vi.fn(async (description: RTCSessionDescriptionInit) => {
+      replacement.localDescription = description as RTCSessionDescription;
+    }),
+    setRemoteDescription: vi.fn(async (description: RTCSessionDescriptionInit) => {
+      replacement.remoteDescription = description as RTCSessionDescription;
+    }),
+    addIceCandidate: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn(),
+  };
+  const createPeerConnection = vi.fn()
+    .mockReturnValueOnce(base.pc)
+    .mockReturnValueOnce(replacement);
+  const adapter = new DirectedCallWebRtcAdapter({
+    dependencies: {
+      getUserMedia: base.getUserMedia,
+      getDisplayMedia: base.getDisplayMedia,
+      createPeerConnection,
+      createRemoteStream: base.createRemoteStream,
+    },
+  });
+  return { ...base, adapter, createPeerConnection, replacement, replacementScreenSender, replacementScreenTransceiver, replacementTransceivers };
+}
+
 async function flushMicrotasks() {
   await Promise.resolve();
   await Promise.resolve();
@@ -217,7 +287,7 @@ describe("DirectedCallWebRtcAdapter", () => {
   beforeEach(() => setCallDebugEnabled(true));
 
   it("retains a live local screen capture and restores its sender after rebuild", async () => {
-    const harness = createHarness();
+    const harness = createDistinctRebuildHarness();
     harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
     const adapter = harness.adapter;
 
@@ -227,10 +297,55 @@ describe("DirectedCallWebRtcAdapter", () => {
 
     expect(harness.getDisplayMedia).toHaveBeenCalledTimes(1);
     expect(adapter.getLocalScreenShareStream()).toBeTruthy();
+    expect(harness.replacement).not.toBe(harness.pc);
+    expect(harness.pc.close).toHaveBeenCalledOnce();
     expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(harness.screenTrack);
-    expect(harness.screenSender.track).toBe(harness.screenTrack);
-    expect(harness.screenTransceiver.direction).toBe("sendonly");
+    expect(harness.replacementScreenSender.replaceTrack).toHaveBeenCalledWith(harness.screenTrack);
+    expect(harness.replacementScreenSender.track).toBe(harness.screenTrack);
+    expect(harness.replacementScreenTransceiver.direction).toBe("sendonly");
+    expect(harness.replacementTransceivers.filter((transceiver) => transceiver.kind === "video")).toHaveLength(1);
     expect(harness.createPeerConnection).toHaveBeenCalledTimes(2);
+  });
+
+  it("retires the old PC and binds remote screen media to one replacement transceiver", async () => {
+    const harness = createDistinctRebuildHarness();
+    const adapter = harness.adapter;
+    await adapter.prepareOffer();
+    expect(adapter.setRemoteScreenShareReceptionEnabled(true)).toBe(true);
+    const oldOnTrack = harness.pc.ontrack;
+    const oldRemoteTrack = createRemoteTrack("video");
+    const oldRemoteStream = createRemoteStream(oldRemoteTrack);
+    harness.pc.ontrack?.({ track: oldRemoteTrack, streams: [oldRemoteStream], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
+    expect(adapter.getRemoteScreenShareStream()).toBe(oldRemoteStream);
+
+    await adapter.rebuildPeerConnection();
+    expect(harness.replacement).not.toBe(harness.pc);
+    expect(harness.pc.close).toHaveBeenCalledOnce();
+    expect(harness.replacement.addTransceiver).toHaveBeenCalledOnce();
+    expect(harness.replacementTransceivers.filter((transceiver) => transceiver.kind === "video")).toHaveLength(1);
+
+    const replacementRemoteTrack = createRemoteTrack("video");
+    harness.replacement.ontrack?.({ track: replacementRemoteTrack, streams: [], transceiver: harness.replacementScreenTransceiver } as unknown as RTCTrackEvent);
+    expect(adapter.getRemoteScreenShareStream()).toBe(oldRemoteStream);
+    expect(oldRemoteStream.getTracks()).toEqual([replacementRemoteTrack]);
+    oldOnTrack?.({ track: oldRemoteTrack, streams: [oldRemoteStream], transceiver: harness.screenTransceiver } as unknown as RTCTrackEvent);
+    expect(adapter.getRemoteScreenShareStream()).toBe(oldRemoteStream);
+    expect(oldRemoteStream.getTracks()).toEqual([replacementRemoteTrack]);
+  });
+
+  it("falls back to audio-only rebuild when the retained screen track has ended", async () => {
+    const harness = createDistinctRebuildHarness();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    await harness.adapter.startScreenShare();
+    harness.screenTrack.readyState = "ended";
+
+    await harness.adapter.rebuildPeerConnection();
+
+    expect(harness.getDisplayMedia).toHaveBeenCalledOnce();
+    expect(harness.adapter.getLocalScreenShareStream()).toBeNull();
+    expect(harness.replacement.addTransceiver).not.toHaveBeenCalled();
+    expect(harness.replacement.addTrack).toHaveBeenCalledOnce();
+    expect(harness.screenTrack.stop).toHaveBeenCalledOnce();
   });
   afterEach(() => {
     resetDirectedCallDiagnosticTimeline();

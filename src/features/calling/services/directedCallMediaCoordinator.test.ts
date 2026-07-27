@@ -1239,6 +1239,69 @@ describe("DirectedCallMediaCoordinator", () => {
     coordinator.dispose();
   });
 
+  it("serializes screen start behind rebuild and applies it once after recovery", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const rebuild = deferred<void>();
+    mockedMethod(adapter.rebuildPeerConnection).mockReturnValue(rebuild.promise);
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    startActive(coordinator, session);
+    connectionState("failed");
+    await vi.advanceTimersByTimeAsync(22_000);
+    const start = coordinator.startScreenShare();
+    expect(adapter.startScreenShare).not.toHaveBeenCalled();
+
+    rebuild.resolve();
+    await vi.waitFor(() => expect(adapter.createPeerConnectionRebuildOffer).toHaveBeenCalledTimes(1));
+    connectionState("connected");
+    await vi.waitFor(() => expect(adapter.startScreenShare).toHaveBeenCalledTimes(1));
+    await start;
+    expect(adapter.createRenegotiationOffer).toHaveBeenCalledTimes(1);
+    expect((adapter.createRenegotiationOffer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0])
+      .toBeGreaterThan((adapter.createPeerConnectionRebuildOffer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]);
+    coordinator.dispose();
+  });
+
+  it("serializes screen stop behind rebuild without touching stale authority", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const rebuild = deferred<void>();
+    mockedMethod(adapter.rebuildPeerConnection).mockReturnValue(rebuild.promise);
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    startActive(coordinator, session);
+    const start = coordinator.startScreenShare();
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledWith(callId, expect.any(String), "renegotiate_request", expect.objectContaining({ screen_share: true })));
+    await start;
+    const startId = (session.sendSignal as ReturnType<typeof vi.fn>).mock.calls[0][3].renegotiation_id as string;
+    session.emitSignal(renegotiationAnswer(startId, true));
+    await vi.waitFor(() => expect(adapter.applyRenegotiationAnswer).toHaveBeenCalledTimes(1));
+
+    connectionState("failed");
+    await vi.advanceTimersByTimeAsync(22_000);
+    const stop = coordinator.stopScreenShare();
+    expect(adapter.stopScreenShare).not.toHaveBeenCalled();
+    rebuild.resolve();
+    await vi.waitFor(() => expect(adapter.createPeerConnectionRebuildOffer).toHaveBeenCalledTimes(1));
+    connectionState("connected");
+    await vi.waitFor(() => expect(adapter.stopScreenShare).toHaveBeenCalledTimes(1));
+    await stop;
+    expect(adapter.stopScreenShare).toHaveBeenCalledOnce();
+    const renegotiationCalls = (adapter.createRenegotiationOffer as ReturnType<typeof vi.fn>).mock.invocationCallOrder;
+    expect(renegotiationCalls[renegotiationCalls.length - 1])
+      .toBeGreaterThan((adapter.createPeerConnectionRebuildOffer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]);
+    coordinator.dispose();
+  });
+
   it("cancels recovery timers on terminal call replacement, disposal, and generation invalidation", async () => {
     vi.useFakeTimers();
     const secondCallId = "44444444-4444-4444-8444-444444444444";
