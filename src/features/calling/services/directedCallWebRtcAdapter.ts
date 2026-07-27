@@ -530,6 +530,19 @@ export class DirectedCallWebRtcAdapter {
 
     const epoch = ++this.epoch;
     const previousPeerConnection = this.peerConnection;
+    const retainedLocalScreenTrack = this.localScreenShareTrack;
+    if (retainedLocalScreenTrack?.readyState === "ended") {
+      this.clearLocalScreenShare(false);
+    }
+    const previousRemoteScreenTrack = this.remoteScreenShareTrack;
+    if (previousRemoteScreenTrack && this.remoteScreenShareTrackEndedListener) {
+      previousRemoteScreenTrack.removeEventListener?.("ended", this.remoteScreenShareTrackEndedListener);
+      this.remoteScreenShareTrackEndedListener = null;
+    }
+    if (this.remoteScreenShareStream && previousRemoteScreenTrack) {
+      this.remoteScreenShareStream.removeTrack?.(previousRemoteScreenTrack);
+    }
+    this.remoteScreenShareTrack = null;
     if (previousPeerConnection) {
       previousPeerConnection.onicecandidate = null;
       previousPeerConnection.onconnectionstatechange = null;
@@ -548,8 +561,6 @@ export class DirectedCallWebRtcAdapter {
     this.seenCandidates.clear();
     this.clearReadinessTrackListeners();
     this.screenShareTransceiver = null;
-    this.localScreenShareEnabled = false;
-    this.remoteScreenShareReceptionEnabled = false;
     this.offerPrepared = false;
     this.recomputeInitialMediaReadiness(epoch);
 
@@ -680,13 +691,16 @@ export class DirectedCallWebRtcAdapter {
     }
   }
 
-  async applyIceRestartOffer(offer: RTCSessionDescriptionInit, transactionId?: string): Promise<void> {
+  async applyIceRestartOffer(offer: RTCSessionDescriptionInit, transactionId?: string, rebuild = false): Promise<void> {
     const epoch = this.epoch;
     await this.ensureAudioPeer(epoch);
     this.assertCurrent(epoch);
     try {
       await this.peerConnection!.setRemoteDescription(offer);
       this.assertCurrent(epoch);
+      if (rebuild) {
+        await this.adoptAuthoritativeScreenTransceiver(offer.sdp);
+      }
       await this.flushQueuedCandidates(epoch, transactionId);
     } catch {
       if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
@@ -1554,6 +1568,19 @@ export class DirectedCallWebRtcAdapter {
         this.assertCurrent(epoch);
         this.peerConnection.addTrack(track, this.localStream);
         this.recomputeInitialMediaReadiness(epoch);
+      }
+      if (this.localScreenShareTrack && this.localScreenShareTrack.readyState !== "ended") {
+        const screenTransceiver = this.ensureScreenShareTransceiver();
+        if (!screenTransceiver) throw new DirectedCallWebRtcError("media_binding_failed");
+        this.localScreenShareEnabled = true;
+        this.updateScreenShareTransceiverDirection();
+        await screenTransceiver.sender.replaceTrack(this.localScreenShareTrack);
+        this.assertCurrent(epoch);
+      } else if (this.localScreenShareTrack?.readyState === "ended") {
+        this.clearLocalScreenShare(false);
+      } else if (this.remoteScreenShareReceptionEnabled) {
+        if (!this.ensureScreenShareTransceiver()) throw new DirectedCallWebRtcError("media_binding_failed");
+        this.updateScreenShareTransceiverDirection();
       }
     } catch {
       if (!reusedLocalStream && this.localStream === acquiredStream) {

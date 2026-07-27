@@ -228,6 +228,7 @@ export class DirectedCallMediaCoordinator {
   private rebuildReadyPromise: Promise<void> | null = null;
   private rebuildInFlight = false;
   private rebuildEpoch = 0;
+  private pendingScreenShareRecoveryAction: { action: "start" | "stop"; fromBrowser: boolean; resolve: (result: boolean) => void } | null = null;
 
   constructor(
     session: DirectedCallSession,
@@ -323,6 +324,7 @@ export class DirectedCallMediaCoordinator {
 
   async startScreenShare(): Promise<boolean> {
     const projection = this.snapshot.projection;
+    if (this.rebuildInFlight) return this.queueScreenShareRecoveryAction("start", false);
     if (
       this.disposed
       || !projection
@@ -390,6 +392,7 @@ export class DirectedCallMediaCoordinator {
     if (this.stopScreenShareInFlight) return this.stopScreenShareInFlight;
     const projection = this.snapshot.projection;
     if (this.disposed || !projection || projection.state !== "active" || !this.isGenerationCurrent(this.generation)) return Promise.resolve(false);
+    if (this.rebuildInFlight) return this.queueScreenShareRecoveryAction("stop", fromBrowser);
     if (this.renegotiation || this.iceRestart) {
       if (fromBrowser) {
         this.pendingBrowserScreenStop = true;
@@ -941,7 +944,7 @@ export class DirectedCallMediaCoordinator {
     this.localCandidateTransaction = { kind: "ice_restart", id: transaction.id };
     void this.flushLocalCandidates(projection.call_id, this.mediaAttemptEpoch);
     try {
-      await this.adapter.applyIceRestartOffer({ type: "offer", sdp: event.sdp }, transaction.id);
+      await this.adapter.applyIceRestartOffer({ type: "offer", sdp: event.sdp }, transaction.id, transaction.rebuild);
       if (!this.ownsIceRestart(transaction, transaction.id, projection.call_id, "answering")) return;
       transaction.remoteDescriptionReady = true;
       await this.flushRemoteIceRestartCandidates(transaction.id);
@@ -1041,7 +1044,7 @@ export class DirectedCallMediaCoordinator {
 
   async requestRenegotiation(screenShare = false): Promise<string | null> {
     const projection = this.snapshot.projection;
-    if (this.disposed || !projection || projection.state !== "active" || this.renegotiation || this.iceRestart) return null;
+    if (this.disposed || !projection || projection.state !== "active" || this.rebuildInFlight || this.renegotiation || this.iceRestart) return null;
     const id = createDirectedCallUuid();
     this.renegotiation = {
       callId: projection.call_id,
@@ -1069,6 +1072,7 @@ export class DirectedCallMediaCoordinator {
   }
 
   private async handleRenegotiationRequest(signal: SignalEnvelope, projection: StateProjection): Promise<void> {
+    if (this.rebuildInFlight) return;
     const payload = signal.payload as RenegotiationRequestPayload;
     const id = payload.renegotiation_id;
     if (this.completedRenegotiations.includes(id)) return;
@@ -1535,20 +1539,6 @@ export class DirectedCallMediaCoordinator {
       || !this.isGenerationCurrent(this.generation)
     ) return;
     incident.rebuildAttempted = true;
-    if (
-      this.renegotiation
-      || this.adapter.getLocalScreenShareStream?.()
-      || this.adapter.getRemoteScreenShareStream?.()
-      || this.snapshot.localScreenShareStream
-      || this.snapshot.remoteScreenShareStream
-    ) {
-      this.localIssue = "rebuild_blocked_by_screen_share";
-      this.recordMediaDiagnostic("failure", { callId: incident.callId, failureKind: this.localIssue });
-      this.setSnapshot({ ...this.snapshot, localIssue: this.localIssue });
-      this.onRecoveryResult?.({ kind: "rebuild_blocked_by_screen_share", callId: incident.callId, generation: incident.generation });
-      return;
-    }
-
     const rebuildEpoch = ++this.rebuildEpoch;
     this.rebuildInFlight = true;
     this.rebuildTimeoutTimer = setTimeout(() => {
@@ -1592,6 +1582,7 @@ export class DirectedCallMediaCoordinator {
     if (this.rebuildTimeoutTimer) clearTimeout(this.rebuildTimeoutTimer);
     this.rebuildTimeoutTimer = null;
     this.rebuildInFlight = false;
+    this.cancelPendingScreenShareRecoveryAction();
     if (this.iceRestart) this.supersedeIceRestart(this.iceRestart.id);
     const callId = this.snapshot.callId;
     this.localIssue = "rebuild_exhausted";
@@ -1601,6 +1592,8 @@ export class DirectedCallMediaCoordinator {
   }
 
   private recoverFromIceIncident(): void {
+    const pendingScreenShareAction = this.pendingScreenShareRecoveryAction;
+    this.pendingScreenShareRecoveryAction = null;
     if (this.iceRestart) this.supersedeIceRestart(this.iceRestart.id);
     if (this.rebuildTimeoutTimer) clearTimeout(this.rebuildTimeoutTimer);
     this.rebuildTimeoutTimer = null;
@@ -1610,6 +1603,14 @@ export class DirectedCallMediaCoordinator {
     this.recoveryState = this.peerConnectionState;
     this.localIssue = null;
     this.setSnapshot({ ...this.snapshot, localIssue: null });
+    if (pendingScreenShareAction) {
+      queueMicrotask(() => {
+        const operation = pendingScreenShareAction.action === "start"
+          ? this.startScreenShare()
+          : this.stopScreenShareInternal(pendingScreenShareAction.fromBrowser);
+        void operation.then(pendingScreenShareAction.resolve, () => pendingScreenShareAction.resolve(false));
+      });
+    }
   }
 
   private cancelRecoveryWork(): void {
@@ -1624,8 +1625,23 @@ export class DirectedCallMediaCoordinator {
     this.rebuildInFlight = false;
     this.rebuildEpoch += 1;
     this.rebuildReadyPromise = null;
+    this.cancelPendingScreenShareRecoveryAction();
     this.recoveryIncident = null;
     this.recoveryState = null;
+  }
+
+  private queueScreenShareRecoveryAction(action: "start" | "stop", fromBrowser: boolean): Promise<boolean> {
+    if (this.disposed || this.snapshot.projection?.state !== "active" || !this.isGenerationCurrent(this.generation)) return Promise.resolve(false);
+    if (this.pendingScreenShareRecoveryAction) this.pendingScreenShareRecoveryAction.resolve(false);
+    return new Promise((resolve) => {
+      this.pendingScreenShareRecoveryAction = { action, fromBrowser, resolve };
+    });
+  }
+
+  private cancelPendingScreenShareRecoveryAction(): void {
+    const pending = this.pendingScreenShareRecoveryAction;
+    this.pendingScreenShareRecoveryAction = null;
+    pending?.resolve(false);
   }
 
   private recordPeerConnectionDiagnostics(): void {

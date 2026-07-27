@@ -215,6 +215,23 @@ function readinessHarness() {
 
 describe("DirectedCallWebRtcAdapter", () => {
   beforeEach(() => setCallDebugEnabled(true));
+
+  it("retains a live local screen capture and restores its sender after rebuild", async () => {
+    const harness = createHarness();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    const adapter = harness.adapter;
+
+    await adapter.startScreenShare();
+    expect(harness.getDisplayMedia).toHaveBeenCalledTimes(1);
+    await adapter.rebuildPeerConnection();
+
+    expect(harness.getDisplayMedia).toHaveBeenCalledTimes(1);
+    expect(adapter.getLocalScreenShareStream()).toBeTruthy();
+    expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(harness.screenTrack);
+    expect(harness.screenSender.track).toBe(harness.screenTrack);
+    expect(harness.screenTransceiver.direction).toBe("sendonly");
+    expect(harness.createPeerConnection).toHaveBeenCalledTimes(2);
+  });
   afterEach(() => {
     resetDirectedCallDiagnosticTimeline();
     setCallDebugEnabled(false);

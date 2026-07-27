@@ -1151,7 +1151,7 @@ describe("DirectedCallMediaCoordinator", () => {
     coordinator.dispose();
   });
 
-  it("blocks rebuild while screen sharing without changing screen ownership", async () => {
+  it("rebuilds while screen sharing without changing screen ownership", async () => {
     vi.useFakeTimers();
     const session = createSession();
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
@@ -1169,9 +1169,11 @@ describe("DirectedCallMediaCoordinator", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     await vi.advanceTimersByTimeAsync(2_000);
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(adapter.rebuildPeerConnection).not.toHaveBeenCalled();
+    expect(adapter.rebuildPeerConnection).toHaveBeenCalledTimes(1);
     expect(adapter.getLocalScreenShareStream?.()).toBe(screenStream);
-    expect(onRecoveryResult).toHaveBeenCalledWith({ kind: "rebuild_blocked_by_screen_share", callId, generation: "g1" });
+    expect(onRecoveryResult).toHaveBeenCalledWith({ kind: "rebuild_exhausted", callId, generation: "g1" });
+    connectionState("connected");
+    expect(coordinator.getSnapshot().localScreenShareStream).toBe(screenStream);
     coordinator.dispose();
   });
 
