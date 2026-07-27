@@ -48,6 +48,7 @@ function projection(
 function createSession() {
   const projectionListeners = new Set<(value: any) => void>();
   const signalListeners = new Set<(value: any) => void>();
+  const iceRestartListeners = new Set<(value: any) => void>();
   const syncListeners = new Set<() => void>();
   const stored: any[] = [];
   const session = {
@@ -64,9 +65,16 @@ function createSession() {
     emitSignal(value: any) {
       signalListeners.forEach((listener) => listener(value));
     },
+    emitIceRestart(value: any) {
+      iceRestartListeners.forEach((listener) => listener(value));
+    },
     subscribeToSignals: vi.fn((listener: (value: any) => void) => {
       signalListeners.add(listener);
       return () => signalListeners.delete(listener);
+    }),
+    subscribeToIceRestartSignals: vi.fn((listener: (value: any) => void) => {
+      iceRestartListeners.add(listener);
+      return () => iceRestartListeners.delete(listener);
     }),
     subscribeToSync: vi.fn((listener: () => void) => {
       syncListeners.add(listener);
@@ -77,7 +85,10 @@ function createSession() {
     },
     requestSync: vi.fn().mockResolvedValue(undefined),
     sendSignal: vi.fn(),
-  } as unknown as DirectedCallSession & { emit: (value: any) => void; emitSignal: (value: any) => void; emitSync: () => void };
+    sendIceRestartRequest: vi.fn().mockResolvedValue({ status: "ok" }),
+    sendIceRestartOffer: vi.fn().mockResolvedValue({ status: "ok" }),
+    sendIceRestartAnswer: vi.fn().mockResolvedValue({ status: "ok" }),
+  } as unknown as DirectedCallSession & { emit: (value: any) => void; emitSignal: (value: any) => void; emitIceRestart: (value: any) => void; emitSync: () => void };
   return session;
 }
 
@@ -100,6 +111,7 @@ type TestAdapter = DirectedCallWebRtcAdapter & {
   setReadiness(readiness: DirectedCallInitialMediaReadiness): void;
   emitLocalScreenShareEnded(): void;
   emitRemoteScreenShareForTest(stream: DirectedCallMediaStream | null): void;
+  emitLocalIceCandidate(candidate: RTCIceCandidateInit): void;
 };
 
 function mockedMethod(method: (...args: any[]) => any): ReturnType<typeof vi.fn> {
@@ -119,23 +131,32 @@ function createAdapter(options: DirectedCallWebRtcAdapterOptions = {}): TestAdap
   let localScreenShareEndedHandler: (() => void) | null = null;
   let remoteScreenShareChangedHandler: ((stream: DirectedCallMediaStream | null) => void) | null = null;
   let readinessCallback = options.onInitialMediaReadinessChange;
+  let iceCandidateCallback = options.onIceCandidate;
   const adapter = {
     get initialMediaReadinessSnapshot() { return readiness; },
     configure(next: DirectedCallWebRtcAdapterOptions) {
       readinessCallback = next.onInitialMediaReadinessChange;
+      iceCandidateCallback = next.onIceCandidate;
     },
     setReadiness(next: DirectedCallInitialMediaReadiness) {
       readiness = Object.freeze({ ...next });
       readinessCallback?.(readiness);
+    },
+    emitLocalIceCandidate(candidate: RTCIceCandidateInit) {
+      void iceCandidateCallback?.(candidate);
     },
     prepareOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "offer" }),
     prepareAnswer: vi.fn().mockResolvedValue(undefined),
     acceptOffer: vi.fn().mockResolvedValue({ type: "answer", sdp: "answer" }),
     acceptAnswer: vi.fn().mockResolvedValue(true),
     createRenegotiationOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "renegotiation-offer" }),
+    createIceRestartOffer: vi.fn().mockResolvedValue({ type: "offer", sdp: "ice-restart-offer" }),
     applyRenegotiationOffer: vi.fn().mockResolvedValue(undefined),
+    applyIceRestartOffer: vi.fn().mockResolvedValue(undefined),
     createRenegotiationAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "renegotiation-answer" }),
+    createIceRestartAnswer: vi.fn().mockResolvedValue({ type: "answer", sdp: "ice-restart-answer" }),
     applyRenegotiationAnswer: vi.fn().mockResolvedValue(undefined),
+    applyIceRestartAnswer: vi.fn().mockResolvedValue(undefined),
     getLocalScreenShareStream: vi.fn(() => localScreenShareStream),
     getRemoteScreenShareStream: vi.fn(() => remoteScreenShareStream),
     startScreenShare: vi.fn(async () => {
@@ -277,6 +298,11 @@ function iceCandidate(renegotiationId?: string, candidate = "candidate:one") {
       ...(renegotiationId ? { renegotiation_id: renegotiationId } : {}),
     },
   };
+}
+
+function iceRestartCandidate(iceRestartId: string, candidate = "candidate:restart") {
+  const signal = iceCandidate(undefined, candidate);
+  return { ...signal, payload: { ...signal.payload, ice_restart_id: iceRestartId } };
 }
 
 function deferred<T>() {
@@ -2745,5 +2771,154 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(newAdapter.dispose).not.toHaveBeenCalled();
     expect(oldAdapter.dispose).toHaveBeenCalledTimes(1);
     newCoordinator.dispose();
+  });
+
+  it("executes an offerer ICE restart, tags candidates, and preserves active projection", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    const restartId = await coordinator.requestIceRestart();
+
+    expect(restartId).toEqual(expect.any(String));
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(1);
+    expect(session.sendIceRestartOffer).toHaveBeenCalledWith(expect.objectContaining({ ice_restart_id: restartId }));
+
+    adapter.emitLocalIceCandidate({ candidate: "candidate:restart", sdpMid: "0", sdpMLineIndex: 0 });
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledWith(
+      callId,
+      expect.any(String),
+      "ice_candidate",
+      expect.objectContaining({ ice_restart_id: restartId }),
+    ));
+
+    session.emitSignal({ ...iceRestartCandidate(restartId!, "candidate:remote"), payload: { ...iceRestartCandidate(restartId!, "candidate:remote").payload } });
+    expect(adapter.addRemoteIceCandidate).not.toHaveBeenCalled();
+    session.emitIceRestart({ kind: "answer", protocol_version: 1, call_id: callId, signal_id: restartId, ice_restart_id: restartId, sdp: "restart-answer" });
+    await vi.waitFor(() => expect(adapter.applyIceRestartAnswer).toHaveBeenCalledWith({ type: "answer", sdp: "restart-answer" }, restartId));
+    await vi.waitFor(() => expect(adapter.addRemoteIceCandidate).toHaveBeenCalledWith(expect.objectContaining({ candidate: "candidate:remote" }), restartId));
+    expect(coordinator.getSnapshot().projection?.state).toBe("active");
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("routes answerer requests to the offerer and answers matching restart offers", async () => {
+    const initiatorSession = createSession();
+    const initiatorTransport = new DirectedCallSignalTransport(initiatorSession, { generation: "g1" });
+    const initiatorAdapter = createAdapter();
+    const initiator = new DirectedCallMediaCoordinator(initiatorSession, initiatorTransport, createLifecycle(), "g1", { adapterFactory: (options) => bindAdapter(options, initiatorAdapter) });
+    startActive(initiator, initiatorSession, "initiator");
+    await vi.waitFor(() => expect(initiatorAdapter.prepareOffer).toHaveBeenCalled());
+    initiatorSession.emitIceRestart({ kind: "request", protocol_version: 1, call_id: callId, signal_id: "99999999-9999-4999-8999-999999999999" });
+    await vi.waitFor(() => expect(initiatorAdapter.createIceRestartOffer).toHaveBeenCalledTimes(1));
+
+    const answererSession = createSession();
+    const answererTransport = new DirectedCallSignalTransport(answererSession, { generation: "g1" });
+    const answererAdapter = createAdapter();
+    const answerer = new DirectedCallMediaCoordinator(answererSession, answererTransport, createLifecycle(), "g1", { adapterFactory: (options) => bindAdapter(options, answererAdapter) });
+    startActive(answerer, answererSession, "recipient");
+    await vi.waitFor(() => expect(answererAdapter.prepareAnswer).toHaveBeenCalled());
+    const restartId = "77777777-7777-4777-8777-777777777777";
+    const requestId = await answerer.requestIceRestart();
+    expect(requestId).toEqual(expect.any(String));
+    expect(answererSession.sendIceRestartRequest).toHaveBeenCalledTimes(1);
+
+    answererSession.emitIceRestart({ kind: "offer", protocol_version: 1, call_id: callId, signal_id: requestId!, ice_restart_id: restartId, sdp: "restart-offer" });
+    answererSession.emitSignal(iceRestartCandidate(restartId, "candidate:queued"));
+    await vi.waitFor(() => expect(answererAdapter.createIceRestartAnswer).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(answererAdapter.addRemoteIceCandidate).toHaveBeenCalledWith(expect.objectContaining({ candidate: "candidate:queued" }), restartId));
+    expect(answererSession.sendIceRestartAnswer).toHaveBeenCalledWith(expect.objectContaining({ ice_restart_id: restartId }));
+
+    initiator.dispose();
+    answerer.dispose();
+  });
+
+  it("single-flights restart requests, serializes with screen share, and reports no setup failure", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+
+    const first = coordinator.requestIceRestart();
+    const second = coordinator.requestIceRestart();
+    await expect(second).resolves.toBeNull();
+    await first;
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(1);
+
+    coordinator.dispose();
+    const failingAdapter = createAdapter();
+    mockedMethod(failingAdapter.createIceRestartOffer).mockRejectedValueOnce(new DirectedCallWebRtcError("sdp_failed"));
+    const failingSession = createSession();
+    const failingTransport = new DirectedCallSignalTransport(failingSession, { generation: "g1" });
+    const failingLifecycle = createLifecycle();
+    const failingCoordinator = new DirectedCallMediaCoordinator(failingSession, failingTransport, failingLifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, failingAdapter) });
+    startActive(failingCoordinator, failingSession);
+    await vi.waitFor(() => expect(failingAdapter.prepareOffer).toHaveBeenCalled());
+    await expect(failingCoordinator.requestIceRestart()).resolves.toBeNull();
+    expect(failingLifecycle.setupFailed).not.toHaveBeenCalled();
+    expect(failingCoordinator.getSnapshot().projection?.state).toBe("active");
+    failingCoordinator.dispose();
+  });
+
+  it("supersedes an incomplete answerer transaction and invalidates disposed restart work", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    let resolveFirstOffer!: () => void;
+    mockedMethod(adapter.applyIceRestartOffer).mockImplementationOnce(() => new Promise<void>((resolve) => { resolveFirstOffer = resolve; }));
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    startActive(coordinator, session, "recipient");
+    await vi.waitFor(() => expect(adapter.prepareAnswer).toHaveBeenCalled());
+
+    const firstId = "77777777-7777-4777-8777-777777777777";
+    const secondId = "88888888-8888-4888-8888-888888888888";
+    session.emitIceRestart({ kind: "offer", protocol_version: 1, call_id: callId, signal_id: firstId, ice_restart_id: firstId, sdp: "first-offer" });
+    await vi.waitFor(() => expect(adapter.applyIceRestartOffer).toHaveBeenCalledTimes(1));
+    session.emitIceRestart({ kind: "offer", protocol_version: 1, call_id: callId, signal_id: secondId, ice_restart_id: secondId, sdp: "second-offer" });
+    await vi.waitFor(() => expect(adapter.applyIceRestartOffer).toHaveBeenCalledTimes(2));
+    resolveFirstOffer();
+    await vi.waitFor(() => expect(adapter.createIceRestartAnswer).toHaveBeenCalledTimes(1));
+    expect(adapter.createIceRestartAnswer).not.toHaveBeenCalledWith(firstId);
+    expect(session.sendIceRestartAnswer).toHaveBeenCalledWith(expect.objectContaining({ ice_restart_id: secondId }));
+    coordinator.dispose();
+
+    const pendingSession = createSession();
+    const pendingTransport = new DirectedCallSignalTransport(pendingSession, { generation: "g1" });
+    const pendingAdapter = createAdapter();
+    let resolvePendingOffer!: (offer: RTCSessionDescriptionInit) => void;
+    mockedMethod(pendingAdapter.createIceRestartOffer).mockImplementationOnce(() => new Promise((resolve) => { resolvePendingOffer = resolve; }));
+    const pendingCoordinator = new DirectedCallMediaCoordinator(pendingSession, pendingTransport, createLifecycle(), "g1", { adapterFactory: (options) => bindAdapter(options, pendingAdapter) });
+    startActive(pendingCoordinator, pendingSession);
+    await vi.waitFor(() => expect(pendingAdapter.prepareOffer).toHaveBeenCalled());
+    const operation = pendingCoordinator.requestIceRestart();
+    await vi.waitFor(() => expect(pendingAdapter.createIceRestartOffer).toHaveBeenCalled());
+    pendingCoordinator.dispose();
+    resolvePendingOffer({ type: "offer", sdp: "stale-offer" });
+    await expect(operation).resolves.toBeNull();
+    expect(pendingSession.sendIceRestartOffer).not.toHaveBeenCalled();
+  });
+
+  it("does not overlap an explicit restart with screen-share renegotiation", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+
+    const screenOperation = coordinator.requestRenegotiation(true);
+    await vi.waitFor(() => expect(adapter.createRenegotiationOffer).toHaveBeenCalled());
+    await expect(coordinator.requestIceRestart()).resolves.toBeNull();
+    expect(adapter.createIceRestartOffer).not.toHaveBeenCalled();
+    await screenOperation;
+    coordinator.dispose();
   });
 });

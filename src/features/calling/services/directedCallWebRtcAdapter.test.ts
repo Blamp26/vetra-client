@@ -960,6 +960,33 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
   });
 
+  it("executes an ICE restart offer on the existing peer connection", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    const peerConnection = harness.createPeerConnection.mock.results[0]?.value;
+
+    const offer = await harness.adapter.createIceRestartOffer();
+
+    expect(offer.sdp).toBe("offer");
+    expect(harness.pc.createOffer).toHaveBeenLastCalledWith({ iceRestart: true });
+    expect(harness.createPeerConnection).toHaveBeenCalledTimes(1);
+    expect(harness.pc.localDescription).toEqual(offer);
+    expect(peerConnection).toBe(harness.pc);
+  });
+
+  it("queues and flushes restart candidates by transaction", async () => {
+    const harness = createHarness();
+    await harness.adapter.prepareOffer();
+    const restartId = "77777777-7777-4777-8777-777777777777";
+    const candidate = { candidate: "candidate:restart", sdpMid: "0", sdpMLineIndex: 0 };
+
+    await harness.adapter.addRemoteIceCandidate(candidate, restartId);
+    expect(harness.pc.addIceCandidate).not.toHaveBeenCalled();
+    await harness.adapter.applyIceRestartAnswer({ type: "answer", sdp: "restart-answer" }, restartId);
+
+    expect(harness.pc.addIceCandidate).toHaveBeenCalledWith(candidate);
+  });
+
   it("detaches ICE and track callbacks and clears queued candidates on disposal", async () => {
     const harness = createHarness();
     await harness.adapter.prepareAnswer();

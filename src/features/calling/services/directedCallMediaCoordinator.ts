@@ -3,6 +3,8 @@ import {
   isUuid,
   type FailureCode,
   type IcePayload,
+  type IceRestartRelay,
+  type IceRestartSdpRelay,
   type ParticipantRole,
   type RenegotiationRequestPayload,
   type RenegotiationSdpPayload,
@@ -78,7 +80,15 @@ type RenegotiationTransaction = {
   remoteScreenReceptionWasEnabled: boolean;
   browserEndedDuringTransaction: boolean;
 };
+type IceRestartTransaction = {
+  callId: string;
+  generation: string;
+  id: string;
+  phase: "creating_offer" | "offered" | "answering" | "applying_answer";
+  remoteDescriptionReady: boolean;
+};
 const MAX_COMPLETED_RENEGOTIATIONS = 32;
+const MAX_COMPLETED_ICE_RESTARTS = 32;
 
 type SetupFailureReport = {
   callId: string;
@@ -116,18 +126,19 @@ function toRtcIceCandidate(payload: IcePayload): RTCIceCandidateInit {
   };
 }
 
-function toWireIceCandidate(candidate: RTCIceCandidateInit, renegotiationId?: string): IcePayload {
+function toWireIceCandidate(candidate: RTCIceCandidateInit, renegotiationId?: string, iceRestartId?: string): IcePayload {
   return {
     candidate: candidate.candidate ?? "",
     sdp_mid: candidate.sdpMid ?? null,
     sdp_mline_index: candidate.sdpMLineIndex ?? null,
     username_fragment: candidate.usernameFragment ?? null,
-    ...(renegotiationId ? { renegotiation_id: renegotiationId } : {}),
+    ...(renegotiationId ? { renegotiation_id: renegotiationId } : iceRestartId ? { ice_restart_id: iceRestartId } : {}),
   };
 }
 
-function candidateKey(candidate: RTCIceCandidateInit): string {
+function candidateKey(candidate: RTCIceCandidateInit, transactionId?: string): string {
   return JSON.stringify([
+    transactionId ?? null,
     candidate.candidate ?? "",
     candidate.sdpMid ?? null,
     candidate.sdpMLineIndex ?? null,
@@ -150,6 +161,7 @@ export class DirectedCallMediaCoordinator {
   private remoteScreenShareChangedCleanup: (() => void) | null = null;
   private unsubscribeProjection: (() => void) | null = null;
   private unsubscribeSignal: (() => void) | null = null;
+  private unsubscribeIceRestart: (() => void) | null = null;
   private snapshot: DirectedCallMediaCoordinatorSnapshot;
   private offer: RTCSessionDescriptionInit | null = null;
   private mediaStartInFlight = false;
@@ -171,7 +183,7 @@ export class DirectedCallMediaCoordinator {
   private localStream: DirectedCallMediaStream | null = null;
   private readonly localTrackCleanups = new Map<DirectedCallMediaStreamTrack, () => void>();
   private localStreamCleanup: (() => void) | null = null;
-  private readonly queuedLocalCandidates: Array<{ candidate: RTCIceCandidateInit; callId: string; attempt: number; renegotiationId?: string }> = [];
+  private readonly queuedLocalCandidates: Array<{ candidate: RTCIceCandidateInit; callId: string; attempt: number; renegotiationId?: string; iceRestartId?: string }> = [];
   private readonly sentLocalCandidateKeys = new Set<string>();
   private localCandidateFlushInFlight = false;
   private flushedLocalCandidateCount = 0;
@@ -185,6 +197,11 @@ export class DirectedCallMediaCoordinator {
   private localScreenShareCommitted = false;
   private pendingBrowserScreenStop = false;
   private stopScreenShareInFlight: Promise<boolean> | null = null;
+  private iceRestart: IceRestartTransaction | null = null;
+  private readonly completedIceRestarts: string[] = [];
+  private readonly queuedRemoteIceRestartCandidates = new Map<string, RTCIceCandidateInit[]>();
+  private localCandidateTransaction: { kind: "renegotiation" | "ice_restart"; id: string } | null = null;
+  private iceRestartRequestInFlight = false;
 
   constructor(
     session: DirectedCallSession,
@@ -241,6 +258,7 @@ export class DirectedCallMediaCoordinator {
     if (this.disposed || this.unsubscribeProjection) return;
     this.unsubscribeProjection = this.session.subscribeToProjections((projection) => this.applyProjection(projection));
     this.unsubscribeSignal = this.signalTransport.subscribe((signal) => this.handleSignal(signal));
+    this.unsubscribeIceRestart = this.signalTransport.subscribeToIceRestart((event) => { void this.handleIceRestart(event); });
     const unsubscribeSync = this.session.subscribeToSync?.(() => this.handleSync()) ?? (() => undefined);
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") void this.session.requestSync?.();
@@ -284,6 +302,7 @@ export class DirectedCallMediaCoordinator {
       || projection.state !== "active"
       || !this.isGenerationCurrent(this.generation)
       || this.renegotiation
+      || this.iceRestart
       || this.adapter.getLocalScreenShareStream?.()
       || this.localScreenShareCommitted
     ) return false;
@@ -344,10 +363,10 @@ export class DirectedCallMediaCoordinator {
     if (this.stopScreenShareInFlight) return this.stopScreenShareInFlight;
     const projection = this.snapshot.projection;
     if (this.disposed || !projection || projection.state !== "active" || !this.isGenerationCurrent(this.generation)) return Promise.resolve(false);
-    if (this.renegotiation) {
+    if (this.renegotiation || this.iceRestart) {
       if (fromBrowser) {
         this.pendingBrowserScreenStop = true;
-        this.renegotiation.browserEndedDuringTransaction = true;
+        if (this.renegotiation) this.renegotiation.browserEndedDuringTransaction = true;
       }
       return Promise.resolve(false);
     }
@@ -443,6 +462,11 @@ export class DirectedCallMediaCoordinator {
     this.invalidateMediaAttempt();
     this.signalTransport.unbindCall();
     this.renegotiation = null;
+    this.iceRestart = null;
+    this.queuedRemoteIceRestartCandidates.clear();
+    this.localCandidateTransaction = null;
+    this.completedIceRestarts.length = 0;
+    this.iceRestartRequestInFlight = false;
     this.completedRenegotiations.length = 0;
     this.remoteScreenShareCommitted = false;
     this.remoteScreenShareStream = null;
@@ -489,12 +513,19 @@ export class DirectedCallMediaCoordinator {
     this.setSnapshot({ ...this.snapshot, state: "disposing" });
     this.unsubscribeProjection?.();
     this.unsubscribeSignal?.();
+    this.unsubscribeIceRestart?.();
     this.unsubscribeProjection = null;
     this.unsubscribeSignal = null;
+    this.unsubscribeIceRestart = null;
     this.clearLocalMediaState();
     this.recordMediaDiagnostic("cleanup", { callId: this.snapshot.callId, reason: "coordinator_disposed" });
     this.signalTransport.dispose();
     this.renegotiation = null;
+    this.iceRestart = null;
+    this.queuedRemoteIceRestartCandidates.clear();
+    this.localCandidateTransaction = null;
+    this.completedIceRestarts.length = 0;
+    this.iceRestartRequestInFlight = false;
     this.completedRenegotiations.length = 0;
     this.localScreenShareEndedCleanup?.();
     this.localScreenShareEndedCleanup = null;
@@ -705,14 +736,31 @@ export class DirectedCallMediaCoordinator {
           this.maybeSendMediaReady(projection.call_id, attempt, this.adapterEpoch);
         }
       } else if (isIcePayload(signal)) {
-        const transactionId = signal.payload.renegotiation_id;
+        const restartId = signal.payload.ice_restart_id;
+        const transactionId = restartId ?? signal.payload.renegotiation_id;
         this.recordMediaDiagnostic("ice_received", { transactionId, candidateAction: "received" });
-        if (transactionId && !this.acceptsRenegotiationId(transactionId, projection.call_id)) {
+        if (restartId && !this.acceptsIceRestartId(restartId, projection.call_id)) {
+          this.recordMediaDiagnostic("ice_rejected", { transactionId, candidateAction: "rejected", candidateReason: "stale_or_unknown_ice_restart" });
+          return;
+        }
+        if (!restartId && transactionId && !this.acceptsRenegotiationId(transactionId, projection.call_id)) {
           this.recordMediaDiagnostic("ice_rejected", { transactionId, candidateAction: "rejected", candidateReason: "stale_or_unknown_renegotiation" });
           return;
         }
-        const buffered = !this.adapter.hasRemoteDescription;
-        const applied = await this.adapter.addRemoteIceCandidate(toRtcIceCandidate(signal.payload));
+        const buffered = restartId
+          ? !this.iceRestart?.remoteDescriptionReady
+          : !this.adapter.hasRemoteDescription;
+        if (restartId && buffered) {
+          const queued = this.queuedRemoteIceRestartCandidates.get(restartId) ?? [];
+          queued.push(toRtcIceCandidate(signal.payload));
+          this.queuedRemoteIceRestartCandidates.set(restartId, queued);
+          this.recordMediaDiagnostic("ice_buffered", { transactionId: restartId, candidateAction: "buffered" });
+          return;
+        }
+        const candidate = toRtcIceCandidate(signal.payload);
+        const applied = restartId
+          ? await this.adapter.addRemoteIceCandidate(candidate, restartId)
+          : await this.adapter.addRemoteIceCandidate(candidate);
         if (!applied) {
           this.recordMediaDiagnostic("ice_rejected", { transactionId, candidateAction: "rejected", candidateReason: "duplicate_or_stale_candidate" });
         } else {
@@ -721,14 +769,227 @@ export class DirectedCallMediaCoordinator {
       }
     } catch (error) {
       if (error instanceof DirectedCallWebRtcStaleError) return;
+      if (isIcePayload(signal) && signal.payload.ice_restart_id) {
+        const transaction = this.iceRestart;
+        if (transaction?.id === signal.payload.ice_restart_id) this.failIceRestart(transaction, error);
+        return;
+      }
       if (error instanceof DirectedCallWebRtcError) await this.reportSetupFailure(projection.call_id, error, attempt);
       else this.retireForTransport(projection.call_id, attempt);
     }
   }
 
+  async requestIceRestart(): Promise<string | null> {
+    const projection = this.snapshot.projection;
+    if (
+      this.disposed
+      || !projection
+      || projection.state !== "active"
+      || !this.isGenerationCurrent(this.generation)
+      || this.renegotiation
+      || this.iceRestart
+      || this.iceRestartRequestInFlight
+    ) return null;
+
+    if (projection.participant_role === "initiator") {
+      return this.startIceRestartOffer(projection.call_id);
+    }
+
+    const signalId = createDirectedCallUuid();
+    this.iceRestartRequestInFlight = true;
+    try {
+      await this.signalTransport.sendIceRestartRequest(signalId);
+      return signalId;
+    } catch {
+      return null;
+    } finally {
+      this.iceRestartRequestInFlight = false;
+    }
+  }
+
+  startIceRestart(): Promise<string | null> {
+    return this.requestIceRestart();
+  }
+
+  private async handleIceRestart(event: IceRestartRelay): Promise<void> {
+    const projection = this.snapshot.projection;
+    if (
+      this.disposed
+      || !projection
+      || projection.state !== "active"
+      || event.call_id !== projection.call_id
+      || !this.isGenerationCurrent(this.generation)
+    ) return;
+
+    if (event.kind === "request") {
+      if (projection.participant_role === "initiator" && !this.renegotiation && !this.iceRestart) {
+        await this.startIceRestartOffer(projection.call_id);
+      }
+      return;
+    }
+
+    if (event.kind === "offer") {
+      await this.handleIceRestartOffer(event, projection);
+      return;
+    }
+
+    await this.handleIceRestartAnswer(event, projection);
+  }
+
+  private async startIceRestartOffer(callId: string): Promise<string | null> {
+    const projection = this.snapshot.projection;
+    if (
+      this.disposed
+      || !projection
+      || projection.call_id !== callId
+      || projection.state !== "active"
+      || projection.participant_role !== "initiator"
+      || this.renegotiation
+      || this.iceRestart
+      || !this.isGenerationCurrent(this.generation)
+    ) return null;
+
+    const id = createDirectedCallUuid();
+    const transaction: IceRestartTransaction = {
+      callId,
+      generation: this.generation,
+      id,
+      phase: "creating_offer",
+      remoteDescriptionReady: false,
+    };
+    this.iceRestart = transaction;
+    this.localCandidateTransaction = { kind: "ice_restart", id };
+    try {
+      const offer = await this.adapter.createIceRestartOffer();
+      if (!this.ownsIceRestart(transaction, id, callId, "creating_offer") || !offer.sdp) return null;
+      transaction.phase = "offered";
+      await this.signalTransport.sendIceRestartOffer(createDirectedCallUuid(), id, offer.sdp);
+      if (!this.ownsIceRestart(transaction, id, callId, "offered")) return null;
+      return id;
+    } catch (error) {
+      this.failIceRestart(transaction, error);
+      return null;
+    }
+  }
+
+  private async handleIceRestartOffer(
+    event: IceRestartSdpRelay,
+    projection: StateProjection,
+  ): Promise<void> {
+    if (projection.participant_role !== "recipient" || this.renegotiation) return;
+    if (this.completedIceRestarts.includes(event.ice_restart_id)) return;
+    if (this.iceRestart?.id === event.ice_restart_id) return;
+    if (this.iceRestart) this.supersedeIceRestart(this.iceRestart.id);
+
+    const transaction: IceRestartTransaction = {
+      callId: projection.call_id,
+      generation: this.generation,
+      id: event.ice_restart_id,
+      phase: "answering",
+      remoteDescriptionReady: false,
+    };
+    this.iceRestart = transaction;
+    this.localCandidateTransaction = { kind: "ice_restart", id: transaction.id };
+    try {
+      await this.adapter.applyIceRestartOffer({ type: "offer", sdp: event.sdp }, transaction.id);
+      if (!this.ownsIceRestart(transaction, transaction.id, projection.call_id, "answering")) return;
+      transaction.remoteDescriptionReady = true;
+      await this.flushRemoteIceRestartCandidates(transaction.id);
+      const answer = await this.adapter.createIceRestartAnswer();
+      if (!answer.sdp || !this.ownsIceRestart(transaction, transaction.id, projection.call_id, "answering")) return;
+      await this.signalTransport.sendIceRestartAnswer(createDirectedCallUuid(), transaction.id, answer.sdp);
+      if (this.ownsIceRestart(transaction, transaction.id, projection.call_id, "answering")) this.completeIceRestart(transaction.id);
+    } catch (error) {
+      this.failIceRestart(transaction, error);
+    }
+  }
+
+  private async handleIceRestartAnswer(
+    event: IceRestartSdpRelay,
+    projection: StateProjection,
+  ): Promise<void> {
+    const transaction = this.iceRestart;
+    if (
+      projection.participant_role !== "initiator"
+      || !transaction
+      || transaction.id !== event.ice_restart_id
+      || transaction.phase !== "offered"
+      || this.completedIceRestarts.includes(event.ice_restart_id)
+    ) return;
+    transaction.phase = "applying_answer";
+    try {
+      await this.adapter.applyIceRestartAnswer({ type: "answer", sdp: event.sdp }, transaction.id);
+      if (!this.ownsIceRestart(transaction, transaction.id, projection.call_id, "applying_answer")) return;
+      transaction.remoteDescriptionReady = true;
+      await this.flushRemoteIceRestartCandidates(transaction.id);
+      if (this.ownsIceRestart(transaction, transaction.id, projection.call_id, "applying_answer")) this.completeIceRestart(transaction.id);
+    } catch (error) {
+      this.failIceRestart(transaction, error);
+    }
+  }
+
+  private async flushRemoteIceRestartCandidates(id: string): Promise<void> {
+    const candidates = this.queuedRemoteIceRestartCandidates.get(id) ?? [];
+    this.queuedRemoteIceRestartCandidates.delete(id);
+    for (const candidate of candidates) {
+      if (!this.iceRestart || this.iceRestart.id !== id) return;
+      await this.adapter.addRemoteIceCandidate(candidate, id);
+    }
+  }
+
+  private acceptsIceRestartId(id: string, callId: string): boolean {
+    return !this.disposed
+      && this.isGenerationCurrent(this.generation)
+      && this.snapshot.callId === callId
+      && this.iceRestart?.id === id
+      && this.iceRestart.generation === this.generation
+      && !this.completedIceRestarts.includes(id);
+  }
+
+  private ownsIceRestart(transaction: IceRestartTransaction, id: string, callId: string, phase: IceRestartTransaction["phase"]): boolean {
+    return this.acceptsIceRestartId(id, callId)
+      && this.iceRestart === transaction
+      && transaction.phase === phase;
+  }
+
+  private completeIceRestart(id: string): void {
+    if (!this.iceRestart || this.iceRestart.id !== id) return;
+    this.completedIceRestarts.push(id);
+    if (this.completedIceRestarts.length > MAX_COMPLETED_ICE_RESTARTS) this.completedIceRestarts.shift();
+    this.queuedRemoteIceRestartCandidates.delete(id);
+    this.iceRestart = null;
+  }
+
+  private supersedeIceRestart(id: string): void {
+    if (!this.iceRestart || this.iceRestart.id !== id) return;
+    this.completedIceRestarts.push(id);
+    if (this.completedIceRestarts.length > MAX_COMPLETED_ICE_RESTARTS) this.completedIceRestarts.shift();
+    this.queuedRemoteIceRestartCandidates.delete(id);
+    this.queuedLocalCandidates.splice(0, this.queuedLocalCandidates.length, ...this.queuedLocalCandidates.filter((entry) => entry.iceRestartId !== id));
+    this.iceRestart = null;
+  }
+
+  private clearIceRestart(id: string): void {
+    if (this.iceRestart?.id !== id) return;
+    this.iceRestart = null;
+    this.queuedRemoteIceRestartCandidates.delete(id);
+    this.queuedLocalCandidates.splice(0, this.queuedLocalCandidates.length, ...this.queuedLocalCandidates.filter((entry) => entry.iceRestartId !== id));
+    if (this.localCandidateTransaction?.kind === "ice_restart" && this.localCandidateTransaction.id === id) {
+      this.localCandidateTransaction = null;
+    }
+  }
+
+  private failIceRestart(transaction: IceRestartTransaction, error: unknown): void {
+    if (error instanceof DirectedCallWebRtcStaleError || !this.ownsIceRestart(transaction, transaction.id, transaction.callId, transaction.phase)) return;
+    const failureCode = error instanceof DirectedCallWebRtcError ? error.failureCode : "sdp_failed";
+    this.recordMediaDiagnostic("failure", { callId: transaction.callId, failureKind: failureCode, transactionId: transaction.id });
+    this.setSnapshot({ ...this.snapshot, localIssue: failureCode });
+    this.clearIceRestart(transaction.id);
+  }
+
   async requestRenegotiation(screenShare = false): Promise<string | null> {
     const projection = this.snapshot.projection;
-    if (this.disposed || !projection || projection.state !== "active" || this.renegotiation) return null;
+    if (this.disposed || !projection || projection.state !== "active" || this.renegotiation || this.iceRestart) return null;
     const id = createDirectedCallUuid();
     this.renegotiation = {
       callId: projection.call_id,
@@ -786,6 +1047,7 @@ export class DirectedCallMediaCoordinator {
   private async createAndSendRenegotiationOffer(callId: string, id: string, screenShare: boolean): Promise<void> {
     if (!this.renegotiation || this.renegotiation.id !== id || this.renegotiation.phase !== "requested") return;
     this.renegotiation.phase = "creating_offer";
+    this.localCandidateTransaction = { kind: "renegotiation", id };
     try {
       const offer = await this.adapter.createRenegotiationOffer();
       if (!offer.sdp || !this.acceptsRenegotiationId(id, callId)) return;
@@ -825,6 +1087,7 @@ export class DirectedCallMediaCoordinator {
     if (this.renegotiation.screenAction === "stop" && !this.renegotiation.localScreenShareStarted && !this.prepareRemoteScreenStop(id, projection.call_id)) return;
     this.renegotiation.phase = "answering";
     const transaction = this.renegotiation;
+    this.localCandidateTransaction = { kind: "renegotiation", id };
     try {
       await this.adapter.applyRenegotiationOffer({ type: "offer", sdp: payload.sdp });
       if (!this.ownsRenegotiation(transaction, id, projection.call_id, "answering")) return;
@@ -942,9 +1205,12 @@ export class DirectedCallMediaCoordinator {
     const callId = this.snapshot.callId;
     const attempt = this.mediaAttemptEpoch;
     if (!callId || !this.isCurrentCall(callId, attempt)) return;
-    const key = candidateKey(candidate);
-    if (this.sentLocalCandidateKeys.has(key) || this.queuedLocalCandidates.some((entry) => candidateKey(entry.candidate) === key)) return;
-    this.queuedLocalCandidates.push({ candidate, callId, attempt, renegotiationId: this.renegotiation?.callId === callId ? this.renegotiation.id : undefined });
+    const localTransaction = this.localCandidateTransaction;
+    const renegotiationId = localTransaction?.kind === "renegotiation" ? localTransaction.id : undefined;
+    const iceRestartId = localTransaction?.kind === "ice_restart" ? localTransaction.id : undefined;
+    const key = candidateKey(candidate, renegotiationId ?? iceRestartId);
+    if (this.sentLocalCandidateKeys.has(key) || this.queuedLocalCandidates.some((entry) => candidateKey(entry.candidate, entry.renegotiationId ?? entry.iceRestartId) === key)) return;
+    this.queuedLocalCandidates.push({ candidate, callId, attempt, renegotiationId, iceRestartId });
     this.recordPeerConnectionDiagnostics();
     void this.flushLocalCandidates(callId, attempt);
   }
@@ -959,11 +1225,11 @@ export class DirectedCallMediaCoordinator {
         const entry = this.queuedLocalCandidates[0];
         if (entry.callId !== callId || entry.attempt !== attempt || !this.isCurrentCall(callId, attempt)) return;
         this.queuedLocalCandidates.shift();
-        const key = candidateKey(entry.candidate);
+        const key = candidateKey(entry.candidate, entry.renegotiationId ?? entry.iceRestartId);
         if (this.sentLocalCandidateKeys.has(key)) continue;
         this.sentLocalCandidateKeys.add(key);
         try {
-          await this.signalTransport.send(createDirectedCallUuid(), "ice_candidate", toWireIceCandidate(entry.candidate, entry.renegotiationId));
+          await this.signalTransport.send(createDirectedCallUuid(), "ice_candidate", toWireIceCandidate(entry.candidate, entry.renegotiationId, entry.iceRestartId));
           if (!this.isCurrentCall(callId, attempt)) return;
           this.flushedLocalCandidateCount += 1;
           this.recordMediaDiagnostic("ice_sent", { transactionId: entry.renegotiationId, candidateAction: "sent", candidateIndex: this.flushedLocalCandidateCount });
@@ -1164,6 +1430,7 @@ export class DirectedCallMediaCoordinator {
 
   private invalidateMediaAttempt(): void {
     if (this.renegotiation) this.clearRenegotiation(this.renegotiation.id);
+    if (this.iceRestart) this.clearIceRestart(this.iceRestart.id);
     this.mediaAttemptEpoch += 1;
     this.mediaAttemptActive = false;
     this.offer = null;
@@ -1173,6 +1440,8 @@ export class DirectedCallMediaCoordinator {
     this.mediaReadyInFlight = false;
     this.signalTransport.invalidate();
     this.queuedLocalCandidates.length = 0;
+    this.queuedRemoteIceRestartCandidates.clear();
+    this.localCandidateTransaction = null;
     this.sentLocalCandidateKeys.clear();
     this.localCandidateFlushInFlight = false;
     this.flushedLocalCandidateCount = 0;

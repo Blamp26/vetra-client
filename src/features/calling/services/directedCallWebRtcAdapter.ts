@@ -84,7 +84,7 @@ interface PeerConnectionLike {
     track: DirectedCallMediaStreamTrack | null;
     replaceTrack(track: DirectedCallMediaStreamTrack | null): Promise<void>;
   }>;
-  createOffer(): Promise<RTCSessionDescriptionInit>;
+  createOffer(options?: RTCOfferOptions): Promise<RTCSessionDescriptionInit>;
   createAnswer(): Promise<RTCSessionDescriptionInit>;
   setLocalDescription(description: RTCSessionDescriptionInit): Promise<void>;
   setRemoteDescription(description: RTCSessionDescriptionInit): Promise<void>;
@@ -233,8 +233,9 @@ function failureForMediaError(error: unknown): DirectedCallWebRtcFailureCode {
   return "microphone_unavailable";
 }
 
-function candidateKey(candidate: RTCIceCandidateInit): string {
+function candidateKey(candidate: RTCIceCandidateInit, transactionId?: string): string {
   return JSON.stringify([
+    transactionId ?? null,
     candidate.candidate,
     candidate.sdpMid ?? null,
     candidate.sdpMLineIndex ?? null,
@@ -298,7 +299,7 @@ export class DirectedCallWebRtcAdapter {
   private readonly onPeerConnectionDiagnostics?: (diagnostics: DirectedCallPeerConnectionDiagnostics) => void;
   private readonly onDiagnostic?: DirectedCallWebRtcAdapterOptions["onDiagnostic"];
   private readonly getAudioConstraints: () => MediaStreamConstraints;
-  private readonly queuedCandidates: RTCIceCandidateInit[] = [];
+  private readonly queuedCandidates: Array<{ candidate: RTCIceCandidateInit; transactionId?: string }> = [];
   private readonly seenCandidates = new Set<string>();
   private peerConnection: PeerConnectionLike | null = null;
   private localStream: DirectedCallMediaStream | null = null;
@@ -581,6 +582,22 @@ export class DirectedCallWebRtcAdapter {
     }
   }
 
+  async createIceRestartOffer(): Promise<RTCSessionDescriptionInit> {
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      const offer = await this.peerConnection!.createOffer({ iceRestart: true });
+      this.assertCurrent(epoch);
+      await this.peerConnection!.setLocalDescription(offer);
+      this.assertCurrent(epoch);
+      return offer;
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
   async applyRenegotiationOffer(offer: RTCSessionDescriptionInit): Promise<void> {
     const epoch = this.epoch;
     await this.ensureAudioPeer(epoch);
@@ -592,6 +609,20 @@ export class DirectedCallWebRtcAdapter {
       this.emitVideoTransceiverDiagnostics("after_set_remote_offer", "after_set_remote_offer", offer.sdp);
       this.emitTransceiverDiagnostic("peer_connection", undefined, offer.sdp);
       await this.flushQueuedCandidates(epoch);
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
+  async applyIceRestartOffer(offer: RTCSessionDescriptionInit, transactionId?: string): Promise<void> {
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      await this.peerConnection!.setRemoteDescription(offer);
+      this.assertCurrent(epoch);
+      await this.flushQueuedCandidates(epoch, transactionId);
     } catch {
       if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
       throw new DirectedCallWebRtcError("sdp_failed");
@@ -618,6 +649,22 @@ export class DirectedCallWebRtcAdapter {
     }
   }
 
+  async createIceRestartAnswer(): Promise<RTCSessionDescriptionInit> {
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      const answer = await this.peerConnection!.createAnswer();
+      this.assertCurrent(epoch);
+      await this.peerConnection!.setLocalDescription(answer);
+      this.assertCurrent(epoch);
+      return answer;
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
   async applyRenegotiationAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
     const epoch = this.epoch;
     await this.ensureAudioPeer(epoch);
@@ -634,12 +681,27 @@ export class DirectedCallWebRtcAdapter {
     }
   }
 
-  async addRemoteIceCandidate(candidate: RTCIceCandidateInit): Promise<boolean> {
+  async applyIceRestartAnswer(answer: RTCSessionDescriptionInit, transactionId?: string): Promise<void> {
     const epoch = this.epoch;
-    if (!this.isCurrent(epoch) || this.seenCandidates.has(candidateKey(candidate))) return false;
-    this.seenCandidates.add(candidateKey(candidate));
+    await this.ensureAudioPeer(epoch);
+    this.assertCurrent(epoch);
+    try {
+      await this.peerConnection!.setRemoteDescription(answer);
+      this.assertCurrent(epoch);
+      await this.flushQueuedCandidates(epoch, transactionId);
+    } catch {
+      if (!this.isCurrent(epoch)) throw new DirectedCallWebRtcStaleError();
+      throw new DirectedCallWebRtcError("sdp_failed");
+    }
+  }
+
+  async addRemoteIceCandidate(candidate: RTCIceCandidateInit, transactionId?: string): Promise<boolean> {
+    const epoch = this.epoch;
+    const key = candidateKey(candidate, transactionId);
+    if (!this.isCurrent(epoch) || this.seenCandidates.has(key)) return false;
+    this.seenCandidates.add(key);
     if (!this.peerConnection || !this.peerConnection.remoteDescription) {
-      this.queuedCandidates.push(candidate);
+      this.queuedCandidates.push({ candidate, transactionId });
       return true;
     }
     try {
@@ -1435,9 +1497,10 @@ export class DirectedCallWebRtcAdapter {
     }
   }
 
-  private async flushQueuedCandidates(epoch: number): Promise<void> {
-    const queued = this.queuedCandidates.splice(0);
-    for (const candidate of queued) {
+  private async flushQueuedCandidates(epoch: number, transactionId?: string): Promise<void> {
+    const queued = this.queuedCandidates.filter((entry) => entry.transactionId === transactionId);
+    this.queuedCandidates.splice(0, this.queuedCandidates.length, ...this.queuedCandidates.filter((entry) => entry.transactionId !== transactionId));
+    for (const { candidate } of queued) {
       try {
         await this.peerConnection!.addIceCandidate(candidate);
         this.assertCurrent(epoch);
