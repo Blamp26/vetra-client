@@ -108,7 +108,7 @@ export interface DirectedCallWebRtcAdapterOptions {
   onRemoteStream?: (stream: DirectedCallMediaStream) => void;
   onRemoteScreenShareChanged?: (stream: DirectedCallMediaStream | null) => void;
   onInitialMediaReadinessChange?: (readiness: DirectedCallInitialMediaReadiness) => void;
-  onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
+  onPeerConnectionState?: (state: RTCPeerConnectionState | "completed") => void;
   onPeerConnectionDiagnostics?: (diagnostics: DirectedCallPeerConnectionDiagnostics) => void;
   onDiagnostic?: (event: "peer_connection" | "remote_video_ontrack" | "remote_screen_stream_created" | "remote_screen_stream_updated" | "remote_screen_stream_cleared", details: DirectedCallWebRtcDiagnosticDetails) => void;
 }
@@ -295,7 +295,7 @@ export class DirectedCallWebRtcAdapter {
   private readonly onRemoteStream?: (stream: DirectedCallMediaStream) => void;
   private readonly onRemoteScreenShareChange?: DirectedCallRemoteScreenShareChangedHandler;
   private readonly onInitialMediaReadinessChange?: (readiness: DirectedCallInitialMediaReadiness) => void;
-  private readonly onPeerConnectionState?: (state: RTCPeerConnectionState) => void;
+  private readonly onPeerConnectionState?: (state: RTCPeerConnectionState | "completed") => void;
   private readonly onPeerConnectionDiagnostics?: (diagnostics: DirectedCallPeerConnectionDiagnostics) => void;
   private readonly onDiagnostic?: DirectedCallWebRtcAdapterOptions["onDiagnostic"];
   private readonly getAudioConstraints: () => MediaStreamConstraints;
@@ -1360,6 +1360,7 @@ export class DirectedCallWebRtcAdapter {
       };
       const onPeerStateChange = () => {
         if (this.isCurrent(epoch)) {
+          if (this.peerConnection?.iceConnectionState === "completed") this.onPeerConnectionState?.("completed");
           this.emitPeerConnectionDiagnostics();
           this.recomputeInitialMediaReadiness(epoch);
         }

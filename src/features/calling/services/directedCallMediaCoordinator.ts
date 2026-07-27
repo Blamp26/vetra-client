@@ -46,7 +46,7 @@ export interface DirectedCallMediaCoordinatorSnapshot {
   localScreenShareStream: DirectedCallMediaStream | null;
   isLocalScreenShareActive: boolean;
   remoteScreenShareStream: DirectedCallMediaStream | null;
-  localIssue: "transport_recovery" | "audio_input_switch_failed" | DirectedCallWebRtcError["failureCode"] | null;
+  localIssue: "transport_recovery" | "restart_exhausted" | "audio_input_switch_failed" | DirectedCallWebRtcError["failureCode"] | null;
   peerConnectionState: RTCPeerConnectionState | null;
   isMuted: boolean;
   canToggleMute: boolean;
@@ -62,6 +62,7 @@ export interface DirectedCallMediaCoordinatorOptions {
   adapterFactory?: (options: DirectedCallWebRtcAdapterOptions) => DirectedCallWebRtcAdapter;
   audioConstraints?: () => MediaStreamConstraints;
   isGenerationCurrent?: (generation: string) => boolean;
+  onRecoveryResult?: (result: { kind: "restart_exhausted"; callId: string; generation: string }) => void;
 }
 
 type Listener = (snapshot: DirectedCallMediaCoordinatorSnapshot) => void;
@@ -89,6 +90,10 @@ type IceRestartTransaction = {
 };
 const MAX_COMPLETED_RENEGOTIATIONS = 32;
 const MAX_COMPLETED_ICE_RESTARTS = 32;
+const ICE_RECOVERY_GRACE_MS = 3_000;
+const ICE_RECOVERY_TIMEOUT_MS = 10_000;
+const ICE_RECOVERY_RETRY_DELAY_MS = 2_000;
+const MAX_ICE_RECOVERY_ATTEMPTS = 2;
 
 type SetupFailureReport = {
   callId: string;
@@ -156,6 +161,7 @@ export class DirectedCallMediaCoordinator {
   private readonly isGenerationCurrent: (generation: string) => boolean;
   private readonly adapterFactory: (options: DirectedCallWebRtcAdapterOptions) => DirectedCallWebRtcAdapter;
   private readonly audioConstraints?: () => MediaStreamConstraints;
+  private readonly onRecoveryResult?: DirectedCallMediaCoordinatorOptions["onRecoveryResult"];
   private adapter: DirectedCallWebRtcAdapter;
   private localScreenShareEndedCleanup: (() => void) | null = null;
   private remoteScreenShareChangedCleanup: (() => void) | null = null;
@@ -202,6 +208,11 @@ export class DirectedCallMediaCoordinator {
   private readonly queuedRemoteIceRestartCandidates = new Map<string, RTCIceCandidateInit[]>();
   private localCandidateTransaction: { kind: "renegotiation" | "ice_restart"; id: string } | null = null;
   private iceRestartRequestInFlight = false;
+  private recoveryGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryIncident: { callId: string; generation: string; attempts: number; activeAttempt: number | null } | null = null;
+  private recoveryState: RTCPeerConnectionState | "completed" | null = null;
 
   constructor(
     session: DirectedCallSession,
@@ -218,6 +229,7 @@ export class DirectedCallMediaCoordinator {
     this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false };
     this.adapterFactory = options.adapterFactory ?? ((adapterOptions) => new DirectedCallWebRtcAdapter(adapterOptions));
     this.audioConstraints = options.audioConstraints;
+    this.onRecoveryResult = options.onRecoveryResult;
     this.adapter = this.createAdapter();
   }
 
@@ -459,6 +471,7 @@ export class DirectedCallMediaCoordinator {
   private resetCallState(callId: string): void {
     this.lastTerminalCallId = callId;
     this.retireSetupFailureReport();
+    this.cancelRecoveryWork();
     this.invalidateMediaAttempt();
     this.signalTransport.unbindCall();
     this.renegotiation = null;
@@ -507,6 +520,7 @@ export class DirectedCallMediaCoordinator {
   dispose(): void {
     if (this.disposed) return;
     this.retireSetupFailureReport();
+    this.cancelRecoveryWork();
     this.invalidateMediaAttempt();
     this.disposed = true;
     this.recordMediaDiagnostic("cleanup", { reason: "coordinator_dispose" });
@@ -568,6 +582,7 @@ export class DirectedCallMediaCoordinator {
       }
       this.recordMediaDiagnostic("media_phase", { callId: projection.call_id, reason: "fresh_media_session" });
     } else if (this.snapshot.callId !== projection.call_id) {
+      this.cancelRecoveryWork();
       return;
     }
 
@@ -1384,21 +1399,108 @@ export class DirectedCallMediaCoordinator {
     this.setupFailureReport = null;
   }
 
-  private handlePeerConnectionState(state: RTCPeerConnectionState, adapterEpoch = this.adapterEpoch): void {
+  private handlePeerConnectionState(state: RTCPeerConnectionState | "completed", adapterEpoch = this.adapterEpoch): void {
     if (this.disposed || adapterEpoch !== this.adapterEpoch) return;
-    this.peerConnectionState = state;
+    this.peerConnectionState = state === "completed" ? "connected" : state;
     this.recordMediaDiagnostic("peer_connection", { callId: this.snapshot.callId, peerConnection: state });
-    if (["failed", "closed", "disconnected"].includes(state) && this.snapshot.projection?.state === "active") {
-      this.retireForTransport(this.snapshot.callId, this.mediaAttemptEpoch, state);
-      return;
+    if ((state === "connected" || state === "completed") && this.snapshot.projection?.state === "active") this.recoverFromIceIncident();
+    else if (state === "disconnected" && this.snapshot.projection?.state === "active") this.scheduleIceRecoveryGrace();
+    else if (state === "failed" && this.snapshot.projection?.state === "active") this.startIceRecoveryAttempt();
+    else if (state === "closed") {
+      this.cancelRecoveryWork();
+      this.recoveryState = state;
     }
-    this.setSnapshot({ ...this.snapshot, peerConnectionState: state });
+    this.setSnapshot({ ...this.snapshot, peerConnectionState: this.peerConnectionState });
   }
 
   private handlePeerConnectionDiagnostics(diagnostics: DirectedCallPeerConnectionDiagnostics, adapterEpoch = this.adapterEpoch): void {
     if (this.disposed || adapterEpoch !== this.adapterEpoch) return;
     this.peerConnectionDiagnostics = diagnostics;
     this.recordPeerConnectionDiagnostics();
+  }
+
+  private scheduleIceRecoveryGrace(): void {
+    const callId = this.snapshot.callId;
+    if (!callId || this.disposed || !this.isGenerationCurrent(this.generation)) return;
+    if (!this.recoveryIncident || this.recoveryIncident.callId !== callId || this.recoveryIncident.generation !== this.generation) {
+      this.cancelRecoveryWork();
+      this.recoveryIncident = { callId, generation: this.generation, attempts: 0, activeAttempt: null };
+    }
+    this.recoveryState = "disconnected";
+    if (this.recoveryIncident.activeAttempt !== null || this.recoveryGraceTimer || this.recoveryRetryTimer || this.recoveryTimeoutTimer) return;
+    const incident = this.recoveryIncident;
+    this.recoveryGraceTimer = setTimeout(() => {
+      this.recoveryGraceTimer = null;
+      if (this.recoveryIncident !== incident || this.recoveryState !== "disconnected" || !this.isCurrentCall(incident.callId)) return;
+      this.startIceRecoveryAttempt();
+    }, ICE_RECOVERY_GRACE_MS);
+  }
+
+  private startIceRecoveryAttempt(): void {
+    const callId = this.snapshot.callId;
+    if (!callId || this.disposed || this.snapshot.projection?.state !== "active" || !this.isGenerationCurrent(this.generation)) return;
+    if (!this.recoveryIncident || this.recoveryIncident.callId !== callId || this.recoveryIncident.generation !== this.generation) {
+      this.cancelRecoveryWork();
+      this.recoveryIncident = { callId, generation: this.generation, attempts: 0, activeAttempt: null };
+    }
+    const incident = this.recoveryIncident;
+    if (incident.activeAttempt !== null || this.recoveryRetryTimer || this.recoveryGraceTimer || incident.attempts >= MAX_ICE_RECOVERY_ATTEMPTS) return;
+    const attempt = ++incident.attempts;
+    incident.activeAttempt = attempt;
+    this.recoveryState = this.peerConnectionState;
+    this.localIssue = "transport_recovery";
+    this.recordMediaDiagnostic("failure", { callId, failureKind: "ice_restart_attempt", reason: `attempt_${attempt}` });
+    this.setSnapshot({ ...this.snapshot, localIssue: this.localIssue });
+    this.recoveryTimeoutTimer = setTimeout(() => {
+      this.recoveryTimeoutTimer = null;
+      this.finishIceRecoveryAttempt(incident, attempt);
+    }, ICE_RECOVERY_TIMEOUT_MS);
+    void this.requestIceRestart().then((restartId) => {
+      if (restartId === null) this.finishIceRecoveryAttempt(incident, attempt);
+    }).catch(() => {
+      this.finishIceRecoveryAttempt(incident, attempt);
+    });
+  }
+
+  private finishIceRecoveryAttempt(incident: NonNullable<DirectedCallMediaCoordinator["recoveryIncident"]>, attempt: number): void {
+    if (this.recoveryIncident !== incident || incident.activeAttempt !== attempt || this.disposed || !this.isCurrentCall(incident.callId)) return;
+    if (this.recoveryTimeoutTimer) {
+      clearTimeout(this.recoveryTimeoutTimer);
+      this.recoveryTimeoutTimer = null;
+    }
+    if (this.iceRestart) this.supersedeIceRestart(this.iceRestart.id);
+    incident.activeAttempt = null;
+    if (this.recoveryState === "connected" || this.recoveryState === "completed") return;
+    if (incident.attempts < MAX_ICE_RECOVERY_ATTEMPTS) {
+      this.recoveryRetryTimer = setTimeout(() => {
+        this.recoveryRetryTimer = null;
+        if (this.recoveryIncident === incident && (this.recoveryState === "disconnected" || this.recoveryState === "failed")) this.startIceRecoveryAttempt();
+      }, ICE_RECOVERY_RETRY_DELAY_MS);
+      return;
+    }
+    this.localIssue = "restart_exhausted";
+    this.recordMediaDiagnostic("failure", { callId: incident.callId, failureKind: "restart_exhausted" });
+    this.setSnapshot({ ...this.snapshot, localIssue: this.localIssue });
+    this.onRecoveryResult?.({ kind: "restart_exhausted", callId: incident.callId, generation: incident.generation });
+  }
+
+  private recoverFromIceIncident(): void {
+    if (this.iceRestart) this.supersedeIceRestart(this.iceRestart.id);
+    this.cancelRecoveryWork();
+    this.recoveryState = this.peerConnectionState;
+    this.localIssue = null;
+    this.setSnapshot({ ...this.snapshot, localIssue: null });
+  }
+
+  private cancelRecoveryWork(): void {
+    if (this.recoveryGraceTimer) clearTimeout(this.recoveryGraceTimer);
+    if (this.recoveryRetryTimer) clearTimeout(this.recoveryRetryTimer);
+    if (this.recoveryTimeoutTimer) clearTimeout(this.recoveryTimeoutTimer);
+    this.recoveryGraceTimer = null;
+    this.recoveryRetryTimer = null;
+    this.recoveryTimeoutTimer = null;
+    this.recoveryIncident = null;
+    this.recoveryState = null;
   }
 
   private recordPeerConnectionDiagnostics(): void {

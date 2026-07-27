@@ -317,7 +317,7 @@ function deferred<T>() {
 
 describe("DirectedCallMediaCoordinator", () => {
   beforeEach(() => setCallDebugEnabled(false));
-  afterEach(() => { resetDirectedCallDiagnosticTimeline(); resetDirectedCallDiagnosticsProbe(); setCallDebugEnabled(false); });
+  afterEach(() => { vi.useRealTimers(); resetDirectedCallDiagnosticTimeline(); resetDirectedCallDiagnosticsProbe(); setCallDebugEnabled(false); });
 
   it("records a real coordinator event after enabling diagnostics on an existing runtime", async () => {
     const session = createSession();
@@ -960,8 +960,136 @@ describe("DirectedCallMediaCoordinator", () => {
     session.emit(projection("active"));
     connectionState("failed");
 
-    expect(coordinator.getSnapshot()).toMatchObject({ state: "failed", localIssue: "transport_recovery", projection: projection("active") });
+    expect(coordinator.getSnapshot()).toMatchObject({ state: "signaling_ready", localIssue: "transport_recovery", projection: projection("active"), peerConnectionState: "failed" });
+    expect(adapter.dispose).not.toHaveBeenCalled();
     expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+  });
+
+  it("waits through a transient disconnect and cancels recovery when connected", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    startActive(coordinator, session);
+    connectionState("disconnected");
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(adapter.createIceRestartOffer).not.toHaveBeenCalled();
+    connectionState("connected");
+    await vi.advanceTimersByTimeAsync(3_001);
+    expect(adapter.createIceRestartOffer).not.toHaveBeenCalled();
+    expect(coordinator.getSnapshot().localIssue).toBeNull();
+    coordinator.dispose();
+  });
+
+  it("starts one offerer restart after grace and suppresses duplicate state events", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    startActive(coordinator, session);
+    connectionState("disconnected");
+    connectionState("disconnected");
+    await vi.advanceTimersByTimeAsync(3_000);
+    await Promise.resolve();
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(1);
+    expect(session.sendIceRestartOffer).toHaveBeenCalledTimes(1);
+    coordinator.dispose();
+  });
+
+  it("starts failed recovery immediately and keeps answerer request separate from offer creation", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    startActive(coordinator, session, "recipient");
+    connectionState("failed");
+    await Promise.resolve();
+    expect(session.sendIceRestartRequest).toHaveBeenCalledTimes(1);
+    expect(adapter.createIceRestartOffer).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("recovers successfully, then gives the incident a fresh budget", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    startActive(coordinator, session);
+    connectionState("failed");
+    await Promise.resolve();
+    connectionState("completed");
+    await vi.advanceTimersByTimeAsync(20_000);
+    connectionState("failed");
+    await Promise.resolve();
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(2);
+    expect(coordinator.getSnapshot().localIssue).toBe("transport_recovery");
+    coordinator.dispose();
+  });
+
+  it("waits before the second attempt and emits only a safe exhaustion result", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    const onRecoveryResult = vi.fn();
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const lifecycle = createLifecycle();
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      onRecoveryResult,
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    startActive(coordinator, session);
+    connectionState("failed");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    expect(adapter.createIceRestartOffer).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(onRecoveryResult).toHaveBeenCalledWith({ kind: "restart_exhausted", callId, generation: "g1" });
+    expect(coordinator.getSnapshot().localIssue).toBe("restart_exhausted");
+    expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    coordinator.dispose();
+  });
+
+  it("cancels recovery timers on terminal call replacement, disposal, and generation invalidation", async () => {
+    vi.useFakeTimers();
+    const secondCallId = "44444444-4444-4444-8444-444444444444";
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let currentGeneration = true;
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      isGenerationCurrent: () => currentGeneration,
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    startActive(coordinator, session);
+    connectionState("disconnected");
+    session.emit(projection("ended"));
+    session.emit(projection("accepted", secondCallId));
+    currentGeneration = false;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(adapter.createIceRestartOffer).not.toHaveBeenCalled();
+    coordinator.dispose();
   });
 
   it("does not report setup failure from a stale media attempt", async () => {
