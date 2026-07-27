@@ -852,11 +852,19 @@ export class DirectedCallWebRtcAdapter {
 
   private async startScreenShareOperation(epoch: number, screenShareEpoch: number): Promise<boolean> {
     let stream: DirectedCallMediaStream | null = null;
+    let displayMediaPromise: Promise<DirectedCallMediaStream> | null = null;
     try {
+      // Start capture before waiting for async RTC configuration. This preserves the
+      // pre-TURN-fetch screen-share lifecycle while peer setup continues in parallel.
+      displayMediaPromise = this.dependencies.getDisplayMedia!({ video: true, audio: false });
       await this.ensureAudioPeer(epoch);
-      if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) return false;
+      if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) {
+        stream = await displayMediaPromise;
+        stream.getTracks().forEach((track) => track.stop());
+        return false;
+      }
 
-      stream = await this.dependencies.getDisplayMedia!({ video: true, audio: false });
+      stream = await displayMediaPromise;
       if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) {
         stream.getTracks().forEach((track) => track.stop());
         return false;
@@ -902,6 +910,14 @@ export class DirectedCallWebRtcAdapter {
     } catch (error) {
       this.localScreenShareEnabled = false;
       this.updateScreenShareTransceiverDirection();
+      // If peer setup became stale or failed before the capture promise was
+      // consumed, still stop a late stream when the browser resolves it.
+      if (!stream && displayMediaPromise) {
+        await displayMediaPromise.then(
+          (lateStream) => lateStream.getTracks().forEach((track) => track.stop()),
+          () => undefined,
+        );
+      }
       stream?.getTracks().forEach((candidate) => candidate.stop());
       if (error instanceof DirectedCallWebRtcStaleError || !this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) return false;
       return false;
