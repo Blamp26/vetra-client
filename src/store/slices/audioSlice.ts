@@ -1,5 +1,6 @@
 import type { StateCreator } from "zustand";
 import { storage } from "@/shared/utils/storage";
+import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
 
 export interface AudioSlice {
   micEnabled: boolean;
@@ -10,9 +11,6 @@ export interface AudioSlice {
   callUserVolumes: Record<string, number>;
   mutedCallUserIds: Record<string, true>;
   
-  // Device Selection
-  selectedInputDeviceId: string;
-  selectedOutputDeviceId: string;
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
@@ -24,8 +22,6 @@ export interface AudioSlice {
   setOutputVolume: (volume: number) => void;
   setCallUserVolume: (userKey: string, volume: number) => void;
   setCallUserMuted: (userKey: string, muted: boolean) => void;
-  setInputDevice: (deviceId: string) => void;
-  setOutputDevice: (deviceId: string) => void;
   setNoiseSuppression: (enabled: boolean) => void;
   setEchoCancellation: (enabled: boolean) => void;
   setAutoGainControl: (enabled: boolean) => void;
@@ -52,8 +48,6 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
   callUserVolumes: {},
   mutedCallUserIds: {},
   
-  selectedInputDeviceId: 'default',
-  selectedOutputDeviceId: 'default',
   noiseSuppression: true,
   echoCancellation: true,
   autoGainControl: true,
@@ -139,8 +133,6 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
     else delete next[userKey];
     return { mutedCallUserIds: next };
   }),
-  setInputDevice: (deviceId: string) => set({ selectedInputDeviceId: deviceId }),
-  setOutputDevice: (deviceId: string) => set({ selectedOutputDeviceId: deviceId }),
   setNoiseSuppression: (enabled: boolean) => set({ noiseSuppression: enabled }),
   setEchoCancellation: (enabled: boolean) => set({ echoCancellation: enabled }),
   setAutoGainControl: (enabled: boolean) => set({ autoGainControl: enabled }),
@@ -171,18 +163,15 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
       const inputs = devices.filter((device) => device.kind === "audioinput");
       const outputs = devices.filter((device) => device.kind === "audiooutput");
       const labelsAvailable = devices.some((device) => device.label.trim().length > 0);
-      const { selectedInputDeviceId, selectedOutputDeviceId } = get();
-      const inputDeviceFallback = selectedInputDeviceId !== "default"
-        && !inputs.some((device) => device.deviceId === selectedInputDeviceId);
-      const outputDeviceFallback = selectedOutputDeviceId !== "default"
-        && !outputs.some((device) => device.deviceId === selectedOutputDeviceId);
+      const { inputDeviceId, outputDeviceId } = mediaSettingsStore.getSnapshot().preferences;
+      const inputDeviceFallback = inputDeviceId !== "default"
+        && !inputs.some((device) => device.deviceId === inputDeviceId);
+      const outputDeviceFallback = outputDeviceId !== "default"
+        && !outputs.some((device) => device.deviceId === outputDeviceId);
 
-      set({
-        availableInputDevices: inputs,
-        availableOutputDevices: outputs,
-        ...(inputDeviceFallback ? { selectedInputDeviceId: "default" } : {}),
-        ...(outputDeviceFallback ? { selectedOutputDeviceId: "default" } : {}),
-      });
+      set({ availableInputDevices: inputs, availableOutputDevices: outputs });
+      if (inputDeviceFallback) mediaSettingsStore.setInputDeviceId("default");
+      if (outputDeviceFallback) mediaSettingsStore.setOutputDeviceId("default");
 
       return {
         permissionState,

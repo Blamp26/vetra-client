@@ -12,6 +12,7 @@ import { Avatar } from '@/shared/components/Avatar';
 import { X } from 'lucide-react';
 import { themeLabels, type Theme } from "@/themes";
 import { buildMicrophoneConstraints } from "@/shared/utils/audioConstraints";
+import { mediaSettingsStore, useMediaSettings } from "@/shared/utils/mediaSettings";
 import {
   getNotificationPermissionStatus,
   requestNotificationPermission,
@@ -19,16 +20,12 @@ import {
 } from '@/services/notifications';
 
 function VoiceAudioSettings() {
-  const { 
+  const {
     availableInputDevices, 
     availableOutputDevices, 
-    selectedInputDeviceId, 
-    selectedOutputDeviceId,
     noiseSuppression,
     echoCancellation,
     autoGainControl,
-    setInputDevice,
-    setOutputDevice,
     setNoiseSuppression,
     setEchoCancellation,
     setAutoGainControl,
@@ -36,18 +33,16 @@ function VoiceAudioSettings() {
   } = useAppStore((s: RootState) => ({
     availableInputDevices: s.availableInputDevices,
     availableOutputDevices: s.availableOutputDevices,
-    selectedInputDeviceId: s.selectedInputDeviceId,
-    selectedOutputDeviceId: s.selectedOutputDeviceId,
     noiseSuppression: s.noiseSuppression,
     echoCancellation: s.echoCancellation,
     autoGainControl: s.autoGainControl,
-    setInputDevice: s.setInputDevice,
-    setOutputDevice: s.setOutputDevice,
     setNoiseSuppression: s.setNoiseSuppression,
     setEchoCancellation: s.setEchoCancellation,
     setAutoGainControl: s.setAutoGainControl,
     refreshDevices: s.refreshDevices
   }));
+  const { preferences } = useMediaSettings();
+  const { inputDeviceId, outputDeviceId } = preferences;
 
   const [micLevel, setMicLevel] = useState(0);
   const [audioFeedback, setAudioFeedback] = useState<{
@@ -137,7 +132,7 @@ function VoiceAudioSettings() {
 
     try {
       const constraints = buildMicrophoneConstraints({
-        selectedInputDeviceId,
+        inputDeviceId,
         noiseSuppression,
         echoCancellation,
         autoGainControl,
@@ -200,7 +195,7 @@ function VoiceAudioSettings() {
     isMicTestActive,
     noiseSuppression,
     refreshDevices,
-    selectedInputDeviceId,
+    inputDeviceId,
     stopMicTest,
   ]);
 
@@ -215,9 +210,9 @@ function VoiceAudioSettings() {
           </div>
           <select 
             id="settings-audio-input"
-            value={selectedInputDeviceId}
+            value={inputDeviceId}
             aria-label="Microphone"
-            onChange={(e) => setInputDevice(e.target.value)}
+            onChange={(e) => mediaSettingsStore.setInputDeviceId(e.target.value)}
             className="vt-select"
           >
             <option value="default">System default microphone</option>
@@ -275,8 +270,8 @@ function VoiceAudioSettings() {
           <select 
             id="settings-audio-output"
             aria-label="Speakers"
-            value={outputRoutingSupported ? selectedOutputDeviceId : "default"}
-            onChange={(e) => setOutputDevice(e.target.value)}
+            value={outputRoutingSupported ? outputDeviceId : "default"}
+            onChange={(e) => mediaSettingsStore.setOutputDeviceId(e.target.value)}
             disabled={!outputRoutingSupported}
             className="vt-select"
           >

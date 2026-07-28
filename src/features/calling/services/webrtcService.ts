@@ -1,5 +1,7 @@
 import { Channel } from 'phoenix';
 import { getState } from '@/store';
+import { mediaSettingsStore } from '@/shared/utils/mediaSettings';
+import { buildMicrophoneConstraints } from '@/shared/utils/audioConstraints';
 import type { ResourceRef } from '@/shared/types';
 import type { CallIceCandidatePayload, RenegotiationSignalPayload } from '../hooks/useCall.types';
 import { debugCall, isCallDebugEnabled } from '../utils/callDebug';
@@ -1398,17 +1400,12 @@ export class WebRTCService {
 
     private async createPeerConnection(generation: number): Promise<void> {
         const state = getState();
-        const inputId = state.selectedInputDeviceId || 'default';
-
-        const acquiredStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                deviceId: inputId !== 'default' ? { exact: inputId } : undefined,
-                noiseSuppression: state.noiseSuppression,
-                echoCancellation: state.echoCancellation,
-                autoGainControl: state.autoGainControl,
-            },
-            video: false,
-        });
+        const acquiredStream = await navigator.mediaDevices.getUserMedia(buildMicrophoneConstraints({
+            inputDeviceId: mediaSettingsStore.getSnapshot().preferences.inputDeviceId,
+            noiseSuppression: state.noiseSuppression,
+            echoCancellation: state.echoCancellation,
+            autoGainControl: state.autoGainControl,
+        }));
         if (generation !== this.lifecycleGeneration) {
             acquiredStream.getTracks().forEach(track => track.stop());
             throw new Error('Call initialization was cancelled');

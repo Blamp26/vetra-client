@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAudioSlice } from "./audioSlice";
+import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
 
 describe("createAudioSlice", () => {
   it("uses the expected defaults for microphone preferences", () => {
@@ -13,8 +14,8 @@ describe("createAudioSlice", () => {
 
     const slice = createAudioSlice(set as any, () => state as any, {} as any);
 
-    expect(slice.selectedInputDeviceId).toBe("default");
-    expect(slice.selectedOutputDeviceId).toBe("default");
+    expect(slice).not.toHaveProperty("selectedInputDeviceId");
+    expect(slice).not.toHaveProperty("selectedOutputDeviceId");
     expect(slice.noiseSuppression).toBe(true);
     expect(slice.echoCancellation).toBe(true);
     expect(slice.autoGainControl).toBe(true);
@@ -42,10 +43,9 @@ describe("createAudioSlice", () => {
   });
 
   it("falls back missing saved devices to the system defaults after enumeration", async () => {
-    let state: any = {
-      selectedInputDeviceId: "missing-input",
-      selectedOutputDeviceId: "missing-output",
-    };
+    mediaSettingsStore.setInputDeviceId("missing-input");
+    mediaSettingsStore.setOutputDeviceId("missing-output");
+    let state: any = {};
     const set = vi.fn((updater: any) => {
       state = typeof updater === "function" ? { ...state, ...updater(state) } : { ...state, ...updater };
     });
@@ -62,7 +62,7 @@ describe("createAudioSlice", () => {
       inputDeviceFallback: true,
       outputDeviceFallback: true,
     });
-    expect(state.selectedInputDeviceId).toBe("default");
-    expect(state.selectedOutputDeviceId).toBe("default");
+    expect(mediaSettingsStore.getSnapshot().preferences.inputDeviceId).toBe("default");
+    expect(mediaSettingsStore.getSnapshot().preferences.outputDeviceId).toBe("default");
   });
 });

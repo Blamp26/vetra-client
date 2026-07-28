@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Channel } from 'phoenix';
 
-const { mockAppState } = vi.hoisted(() => ({
+const { mockAppState, mockMediaPreferences } = vi.hoisted(() => ({
     mockAppState: {
-        selectedInputDeviceId: 'default',
         noiseSuppression: true,
         echoCancellation: true,
         autoGainControl: true,
     },
+    mockMediaPreferences: { inputDeviceId: 'default', outputDeviceId: 'default' },
 }));
 
 vi.mock('@/store', () => ({
     getState: () => mockAppState,
+}));
+
+vi.mock('@/shared/utils/mediaSettings', () => ({
+    mediaSettingsStore: { getSnapshot: () => ({ preferences: mockMediaPreferences, hydrated: true }) },
 }));
 
 const { getTurnCredentialsMock } = vi.hoisted(() => ({
@@ -207,7 +211,7 @@ beforeEach(() => {
     getTurnCredentialsMock.mockRejectedValue(new Error('TURN unavailable'));
     vi.unstubAllEnvs();
     localStorage.removeItem('vetra.debug.calls');
-    mockAppState.selectedInputDeviceId = 'default';
+    mockMediaPreferences.inputDeviceId = 'default';
     mockAppState.noiseSuppression = true;
     mockAppState.echoCancellation = true;
     mockAppState.autoGainControl = true;
@@ -396,7 +400,7 @@ describe('WebRTCService', () => {
         });
 
         it('passes selected device and requested audio processing constraints into getUserMedia', async () => {
-            mockAppState.selectedInputDeviceId = 'mic-123';
+            mockMediaPreferences.inputDeviceId = 'mic-123';
             mockAppState.noiseSuppression = false;
             mockAppState.echoCancellation = true;
             mockAppState.autoGainControl = false;

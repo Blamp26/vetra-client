@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { User } from "@/shared/types";
 import { getState, useAppStore, type RootState } from "@/store";
 import { buildMicrophoneConstraints } from "@/shared/utils/audioConstraints";
+import { mediaSettingsStore, useMediaSettings } from "@/shared/utils/mediaSettings";
 import type { SocketManager } from "@/services/socket";
 import { DirectedCallSession } from "../services/directedCallSession";
 import { DirectedCallLifecycleController } from "../services/directedCallLifecycleController";
@@ -104,7 +105,7 @@ export function CallRuntimeBoundary({
   const [persistentRuntime, setPersistentRuntime] = useState<PersistentRuntime | null>(null);
   const [directedCallDiagnosticsEnabled, setDirectedCallDiagnosticsEnabled] = useState(isCallDebugEnabled);
   const [directedCallEventTimeline, setDirectedCallEventTimeline] = useState(() => getDirectedCallDiagnosticTimeline());
-  const selectedInputDeviceId = useAppStore((state: RootState) => state.selectedInputDeviceId);
+  const { preferences: mediaPreferences } = useMediaSettings();
   const noiseSuppression = useAppStore((state: RootState) => state.noiseSuppression);
   const echoCancellation = useAppStore((state: RootState) => state.echoCancellation);
   const autoGainControl = useAppStore((state: RootState) => state.autoGainControl);
@@ -139,12 +140,12 @@ export function CallRuntimeBoundary({
   useEffect(() => {
     if (!persistentRuntime) return;
     void persistentRuntime.services.media.switchAudioInput(buildMicrophoneConstraints({
-      selectedInputDeviceId,
+      inputDeviceId: mediaPreferences.inputDeviceId,
       noiseSuppression,
       echoCancellation,
       autoGainControl,
     }));
-  }, [autoGainControl, echoCancellation, noiseSuppression, persistentRuntime, selectedInputDeviceId]);
+  }, [autoGainControl, echoCancellation, mediaPreferences.inputDeviceId, noiseSuppression, persistentRuntime]);
 
   useEffect(() => {
     const effectGeneration = ++effectGenerationRef.current;
@@ -196,7 +197,15 @@ export function CallRuntimeBoundary({
           controller,
           `${effectGeneration}:${deviceId}`,
           {
-            audioConstraints: () => buildMicrophoneConstraints(getState()),
+            audioConstraints: () => {
+              const state = getState();
+              return buildMicrophoneConstraints({
+                inputDeviceId: mediaSettingsStore.getSnapshot().preferences.inputDeviceId,
+                noiseSuppression: state.noiseSuppression,
+                echoCancellation: state.echoCancellation,
+                autoGainControl: state.autoGainControl,
+              });
+            },
             isGenerationCurrent: (generation) => generation.startsWith(`${effectGeneration}:`),
           },
         );

@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CallAuthorityOwnership } from "../services/callAuthorityOwnership";
 import type { User } from "@/shared/types";
+import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
 
 const mocks = vi.hoisted(() => ({
   startupFailure: null as Error | null,
@@ -127,6 +128,7 @@ describe("CallRuntimeBoundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.startupFailure = null;
+    mediaSettingsStore.reset();
   });
 
   it("fails closed for a disabled runtime without persistent or legacy services", async () => {
@@ -145,6 +147,39 @@ describe("CallRuntimeBoundary", () => {
     expect(mocks.Presentation).toHaveBeenCalledTimes(1);
     expect(mocks.SignalTransport).toHaveBeenCalledTimes(1);
     expect(mocks.MediaCoordinator).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces active-call input once for a changed shared preference and cleans up on disposal", async () => {
+    const ownership = makeOwnership("owner");
+    const view = renderBoundary("persistent", ownership);
+    await waitFor(() => expect(mocks.Session).toHaveBeenCalledTimes(1));
+
+    const media = mocks.MediaCoordinator.mock.results[0]?.value as {
+      switchAudioInput: ReturnType<typeof vi.fn>;
+    };
+    await waitFor(() => expect(media.switchAudioInput).toHaveBeenCalled());
+    media.switchAudioInput.mockClear();
+
+    mediaSettingsStore.setInputDeviceId("new-mic");
+    await waitFor(() => expect(media.switchAudioInput).toHaveBeenCalledTimes(1));
+    expect(media.switchAudioInput).toHaveBeenCalledWith({
+      audio: {
+        deviceId: { exact: "new-mic" },
+        noiseSuppression: true,
+        echoCancellation: true,
+        autoGainControl: true,
+      },
+      video: false,
+    });
+
+    mediaSettingsStore.setInputDeviceId("new-mic");
+    await Promise.resolve();
+    expect(media.switchAudioInput).toHaveBeenCalledTimes(1);
+
+    view.unmount();
+    mediaSettingsStore.setInputDeviceId("later-mic");
+    await Promise.resolve();
+    expect(media.switchAudioInput).toHaveBeenCalledTimes(1);
   });
 
   it("starts the persistent runtime when a waiting non-owner later becomes owner", async () => {

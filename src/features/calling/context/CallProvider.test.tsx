@@ -4,18 +4,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CallProvider } from "./CallProvider";
 import { useCallContext } from "./useCallContext";
 
-const { useAppStoreMock, useCallMock, audioMounts, audioUnmounts } = vi.hoisted(
+const { useAppStoreMock, useCallMock, audioMounts, audioUnmounts, mediaPreferences, setOutputDeviceIdMock } = vi.hoisted(
   () => ({
     useAppStoreMock: vi.fn(),
     useCallMock: vi.fn(),
     audioMounts: { current: 0 },
     audioUnmounts: { current: 0 },
+    mediaPreferences: { inputDeviceId: "default", outputDeviceId: "default" },
+    setOutputDeviceIdMock: vi.fn(),
   }),
 );
 
 vi.mock("@/store", () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
     useAppStoreMock(selector),
+}));
+
+vi.mock("@/shared/utils/mediaSettings", () => ({
+  useMediaSettings: () => ({ preferences: mediaPreferences, hydrated: true }),
+  mediaSettingsStore: { setOutputDeviceId: setOutputDeviceIdMock },
 }));
 
 vi.mock("@/features/calling/hooks/useCall", () => ({
@@ -26,7 +33,7 @@ vi.mock("@/features/calling/components/CallAudioRenderer/CallAudioRenderer", asy
   const React = await vi.importActual<typeof import("react")>("react");
 
   return {
-    CallAudioRenderer: ({ remoteStream }: { remoteStream: MediaStream | null }) => {
+    CallAudioRenderer: ({ remoteStream, onOutputDeviceFallback }: { remoteStream: MediaStream | null; onOutputDeviceFallback?: (id: string) => void }) => {
       React.useEffect(() => {
         audioMounts.current += 1;
         return () => {
@@ -35,9 +42,12 @@ vi.mock("@/features/calling/components/CallAudioRenderer/CallAudioRenderer", asy
       }, []);
 
       return (
-        <div data-testid="provider-audio">
-          {remoteStream ? "remote-stream-present" : "remote-stream-empty"}
-        </div>
+        <>
+          <div data-testid="provider-audio">
+            {remoteStream ? "remote-stream-present" : "remote-stream-empty"}
+          </div>
+          <div data-testid="output-fallback" onClick={() => onOutputDeviceFallback?.("missing-speaker")}>fallback</div>
+        </>
       );
     },
   };
@@ -108,11 +118,10 @@ describe("CallProvider", () => {
     useCallMock.mockReturnValue(makeCallState());
     audioMounts.current = 0;
     audioUnmounts.current = 0;
+    mediaPreferences.outputDeviceId = "default";
+    setOutputDeviceIdMock.mockReset();
     useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
-      selector({
-        selectedOutputDeviceId: "default",
-        setOutputDevice: vi.fn(),
-      }),
+      selector({}),
     );
   });
 
@@ -156,5 +165,16 @@ describe("CallProvider", () => {
     expect(useCallMock).toHaveBeenCalledTimes(1);
     expect(audioMounts.current).toBe(1);
     expect(audioUnmounts.current).toBe(0);
+  });
+
+  it("writes the shared output preference when legacy output falls back", () => {
+    render(
+      <CallProvider currentUserId={1}>
+        <div />
+      </CallProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("output-fallback"));
+    expect(setOutputDeviceIdMock).toHaveBeenCalledWith("default");
   });
 });

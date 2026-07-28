@@ -1,5 +1,6 @@
 import { createContext, useCallback, useRef, type ReactNode } from "react";
 import { useAppStore } from "@/store";
+import { mediaSettingsStore, useMediaSettings } from "@/shared/utils/mediaSettings";
 import { CallAudioRenderer } from "@/features/calling/components/CallAudioRenderer/CallAudioRenderer";
 import { useCall } from "@/features/calling/hooks/useCall";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
@@ -14,17 +15,17 @@ interface CallProviderProps {
 
 export function CallProvider({ currentUserId, children }: CallProviderProps) {
   const call = useCall(currentUserId);
-  const selectedOutputDeviceId = useAppStore((s) => s.selectedOutputDeviceId);
+  const { preferences } = useMediaSettings();
+  const selectedOutputDeviceId = preferences.outputDeviceId;
   const soundEnabled = useAppStore((s) => s.soundEnabled);
   const outputVolume = useAppStore((s) => s.outputVolume);
   const callUserVolumes = useAppStore((s) => s.callUserVolumes);
   const mutedCallUserIds = useAppStore((s) => s.mutedCallUserIds);
-  const setOutputDevice = useAppStore((s) => s.setOutputDevice);
   const lastOutputDeviceFallbackRef = useRef<string | null>(null);
 
   const handleOutputDeviceFallback = useCallback(
     (missingDeviceId?: string) => {
-      setOutputDevice("default");
+      mediaSettingsStore.setOutputDeviceId("default");
       if (typeof window === "undefined") return;
       if (
         missingDeviceId &&
@@ -44,7 +45,7 @@ export function CallProvider({ currentUserId, children }: CallProviderProps) {
         }),
       );
     },
-    [setOutputDevice],
+    [],
   );
 
   return (

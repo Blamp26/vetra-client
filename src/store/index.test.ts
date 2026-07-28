@@ -103,8 +103,6 @@ describe('store startup', () => {
 
     expect(persistedPayload().state).toEqual({
       theme: 'light',
-      selectedInputDeviceId: 'default',
-      selectedOutputDeviceId: 'default',
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: true,
@@ -120,35 +118,38 @@ describe('store startup', () => {
     getHistoryMock.mockResolvedValue([historyEntry]);
     const sourceStore = await import('./index');
     sourceStore.getState().setTheme('dark');
-    sourceStore.getState().setInputDevice('input-device');
-    sourceStore.getState().setOutputDevice('output-device');
+    const mediaSettings = await import('@/shared/utils/mediaSettings');
+    mediaSettings.mediaSettingsStore.setInputDeviceId('input-device');
+    mediaSettings.mediaSettingsStore.setOutputDeviceId('output-device');
     sourceStore.getState().setNoiseSuppression(false);
     sourceStore.getState().setEchoCancellation(false);
     sourceStore.getState().setAutoGainControl(false);
     await sourceStore.getState().refreshDirectedCallHistory();
 
     const persisted = testStorage.getItem('vetra-storage');
+    const persistedMediaSettings = testStorage.getItem('vetra-media-settings');
     expect(persisted).not.toBeNull();
+    expect(persistedMediaSettings).not.toBeNull();
 
     vi.resetModules();
-    installStorage({ 'vetra-storage': persisted! });
+    installStorage({ 'vetra-storage': persisted!, 'vetra-media-settings': persistedMediaSettings! });
     const hydratedStore = await import('./index');
     const state = hydratedStore.getState();
 
     expect({
       theme: state.theme,
-      selectedInputDeviceId: state.selectedInputDeviceId,
-      selectedOutputDeviceId: state.selectedOutputDeviceId,
       noiseSuppression: state.noiseSuppression,
       echoCancellation: state.echoCancellation,
       autoGainControl: state.autoGainControl,
     }).toEqual({
       theme: 'dark',
-      selectedInputDeviceId: 'input-device',
-      selectedOutputDeviceId: 'output-device',
       noiseSuppression: false,
       echoCancellation: false,
       autoGainControl: false,
+    });
+    expect((await import('@/shared/utils/mediaSettings')).mediaSettingsStore.getSnapshot().preferences).toEqual({
+      inputDeviceId: 'input-device',
+      outputDeviceId: 'output-device',
     });
     expect(state.directedCallHistoryEntriesByCallId).toEqual({});
     expect(state.directedCallHistoryOrderedCallIds).toEqual([]);

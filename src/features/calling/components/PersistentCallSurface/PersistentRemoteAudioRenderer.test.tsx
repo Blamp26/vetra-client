@@ -3,15 +3,19 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const storeState = vi.hoisted(() => ({
-  selectedOutputDeviceId: "speakers-1",
   soundEnabled: true,
   outputVolume: 1,
   callUserVolumes: {} as Record<string, number>,
   mutedCallUserIds: {} as Record<string, boolean>,
+  mediaPreferences: { inputDeviceId: "default", outputDeviceId: "speakers-1" },
 }));
 
 vi.mock("@/store", () => ({
   useAppStore: (selector: (state: typeof storeState) => unknown) => selector(storeState),
+}));
+
+vi.mock("@/shared/utils/mediaSettings", () => ({
+  useMediaSettings: () => ({ preferences: storeState.mediaPreferences, hydrated: true }),
 }));
 
 import { PersistentRemoteAudioRenderer } from "./PersistentRemoteAudioRenderer";
@@ -19,7 +23,7 @@ import { PersistentRemoteAudioRenderer } from "./PersistentRemoteAudioRenderer";
 describe("PersistentRemoteAudioRenderer output routing", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    storeState.selectedOutputDeviceId = "speakers-1";
+    storeState.mediaPreferences.outputDeviceId = "speakers-1";
     storeState.soundEnabled = true;
     storeState.outputVolume = 1;
     storeState.callUserVolumes = {};
@@ -36,7 +40,7 @@ describe("PersistentRemoteAudioRenderer output routing", () => {
     const { rerender } = render(<PersistentRemoteAudioRenderer stream={{} as MediaStream} />);
     await waitFor(() => expect(setSinkId).toHaveBeenCalledWith("speakers-1"));
 
-    storeState.selectedOutputDeviceId = "default";
+    storeState.mediaPreferences.outputDeviceId = "default";
     rerender(<PersistentRemoteAudioRenderer stream={{} as MediaStream} />);
     await waitFor(() => expect(setSinkId).toHaveBeenCalledWith("default"));
   });

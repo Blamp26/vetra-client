@@ -218,8 +218,6 @@ function makeState() {
     serverChannels: {},
     searchResults: { users: [], servers: [] },
     setActiveChat: setActiveChatMock,
-    selectedOutputDeviceId: "default",
-    setOutputDevice: vi.fn(),
     openModal: vi.fn(),
   };
 }

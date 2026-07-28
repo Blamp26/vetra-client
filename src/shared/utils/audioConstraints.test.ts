@@ -4,7 +4,7 @@ import { buildMicrophoneConstraints } from "./audioConstraints";
 describe("buildMicrophoneConstraints", () => {
   it("uses an exact selected microphone and all processing preferences", () => {
     expect(buildMicrophoneConstraints({
-      selectedInputDeviceId: "fifine-input",
+      inputDeviceId: "fifine-input",
       noiseSuppression: false,
       echoCancellation: true,
       autoGainControl: false,
@@ -21,7 +21,7 @@ describe("buildMicrophoneConstraints", () => {
 
   it("omits an exact device constraint for the system default", () => {
     expect(buildMicrophoneConstraints({
-      selectedInputDeviceId: "default",
+      inputDeviceId: "default",
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: true,

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useAppStore, type RootState } from "@/store";
+import { useMediaSettings } from "@/shared/utils/mediaSettings";
 import { recordDirectedCallDiagnostic } from "../../services/directedCallDiagnostics";
 
 export type PersistentAudioPlaybackState = "playing" | "autoplay_unavailable";
@@ -17,7 +18,8 @@ export function PersistentRemoteAudioRenderer({
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastPlaybackRef = useRef<{ stream: MediaStream | null; request: number } | null>(null);
-  const selectedOutputDeviceId = useAppStore((state: RootState) => state.selectedOutputDeviceId);
+  const { preferences } = useMediaSettings();
+  const selectedOutputDeviceId = preferences.outputDeviceId;
   const soundEnabled = useAppStore((state: RootState) => state.soundEnabled);
   const outputVolume = useAppStore((state: RootState) => state.outputVolume);
   const callUserVolume = useAppStore((state: RootState) => peerAudioPreferenceKey ? state.callUserVolumes?.[peerAudioPreferenceKey] : undefined);

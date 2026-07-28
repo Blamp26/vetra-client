@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 const { useAppStoreMock } = vi.hoisted(() => ({
@@ -46,6 +46,7 @@ vi.mock("@/services/notifications", () => ({
 }));
 
 import { SettingsPage } from "./SettingsPage";
+import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
 
 class MockAudioContext {
   createAnalyser() {
@@ -71,7 +72,9 @@ describe("SettingsPage audio settings", () => {
   let storeState: any;
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+    mediaSettingsStore.reset();
     getNotificationPermissionStatusMock.mockResolvedValue("granted");
     requestNotificationPermissionMock.mockResolvedValue(true);
 
@@ -100,15 +103,17 @@ describe("SettingsPage audio settings", () => {
       logout: vi.fn(),
       theme: "light",
       setTheme: vi.fn(),
-      availableInputDevices: [{ deviceId: "default", label: "Default Mic" }],
-      availableOutputDevices: [{ deviceId: "default", label: "Default Speaker" }],
-      selectedInputDeviceId: "default",
-      selectedOutputDeviceId: "default",
+      availableInputDevices: [
+        { deviceId: "default", label: "Default Mic" },
+        { deviceId: "mic-1", label: "Desk Mic" },
+      ],
+      availableOutputDevices: [
+        { deviceId: "default", label: "Default Speaker" },
+        { deviceId: "speaker-1", label: "Desk Speakers" },
+      ],
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: true,
-      setInputDevice: vi.fn(),
-      setOutputDevice: vi.fn(),
       setNoiseSuppression: vi.fn(),
       setEchoCancellation: vi.fn(),
       setAutoGainControl: vi.fn(),
@@ -123,6 +128,34 @@ describe("SettingsPage audio settings", () => {
     useAppStoreMock.mockImplementation((selector: (state: typeof storeState) => unknown) =>
       selector(storeState),
     );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (HTMLMediaElement.prototype as unknown as { setSinkId?: unknown }).setSinkId;
+  });
+
+  it("reads and updates device selections through mediaSettingsStore", () => {
+    const setInputDeviceId = vi.spyOn(mediaSettingsStore, "setInputDeviceId");
+    const setOutputDeviceId = vi.spyOn(mediaSettingsStore, "setOutputDeviceId");
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", { configurable: true, value: vi.fn().mockResolvedValue(undefined) });
+    render(<SettingsPage onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
+
+    expect(screen.getByRole("combobox", { name: "Microphone" })).toHaveValue("default");
+    expect(screen.getByRole("combobox", { name: "Speakers" })).toHaveValue("default");
+    expect(screen.getByRole("option", { name: "Desk Mic" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Desk Speakers" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Noise suppression")).toBeChecked();
+
+    act(() => {
+      fireEvent.change(screen.getByRole("combobox", { name: "Microphone" }), { target: { value: "mic-1" } });
+      fireEvent.change(screen.getByRole("combobox", { name: "Speakers" }), { target: { value: "speaker-1" } });
+    });
+
+    expect(setInputDeviceId).toHaveBeenCalledWith("mic-1");
+    expect(setOutputDeviceId).toHaveBeenCalledWith("speaker-1");
+    expect(mediaSettingsStore.getSnapshot().preferences).toEqual({ inputDeviceId: "mic-1", outputDeviceId: "speaker-1" });
   });
 
   it("exposes vertical settings tabs with a single initially focusable selection", () => {

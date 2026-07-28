@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Channel } from 'phoenix';
 
-const { mockAppState } = vi.hoisted(() => ({
+const { mockAppState, mockMediaPreferences } = vi.hoisted(() => ({
     mockAppState: {
-        selectedInputDeviceId: 'default',
         noiseSuppression: true,
         echoCancellation: true,
         autoGainControl: true,
     },
+    mockMediaPreferences: { inputDeviceId: 'default', outputDeviceId: 'default' },
 }));
 
 vi.mock('@/store', () => ({
     getState: () => mockAppState,
+}));
+
+vi.mock('@/shared/utils/mediaSettings', () => ({
+    mediaSettingsStore: { getSnapshot: () => ({ preferences: mockMediaPreferences, hydrated: true }) },
 }));
 
 import { WebRTCService } from './webrtcService';

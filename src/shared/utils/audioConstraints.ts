@@ -1,12 +1,12 @@
 export interface AudioPreferencesSnapshot {
-  selectedInputDeviceId: string;
+  inputDeviceId: string;
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
 }
 
 export const DEFAULT_AUDIO_PREFERENCES: AudioPreferencesSnapshot = {
-  selectedInputDeviceId: "default",
+  inputDeviceId: "default",
   noiseSuppression: true,
   echoCancellation: true,
   autoGainControl: true,
@@ -21,8 +21,8 @@ export function buildMicrophoneConstraints(
     autoGainControl: preferences.autoGainControl,
   };
 
-  if (preferences.selectedInputDeviceId !== "default") {
-    audio.deviceId = { exact: preferences.selectedInputDeviceId };
+  if (preferences.inputDeviceId !== "default") {
+    audio.deviceId = { exact: preferences.inputDeviceId };
   }
 
   return { audio, video: false };
