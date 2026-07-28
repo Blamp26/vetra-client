@@ -89,6 +89,26 @@ describe("PersistentCallSurface", () => {
     await waitFor(() => expect(setOutputDeviceId).toHaveBeenCalledWith("default"));
   });
 
+  it("does not persist or notify when persistent default routing fails", async () => {
+    const setSinkId = vi.fn().mockRejectedValue(new DOMException("missing output", "NotFoundError"));
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", { configurable: true, value: setSinkId });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    const setOutputDeviceId = vi.spyOn(mediaSettingsStore, "setOutputDeviceId");
+    mediaSettingsStore.setOutputDeviceId("speakers-1");
+    setOutputDeviceId.mockClear();
+    const dispatchEvent = vi.spyOn(window, "dispatchEvent");
+    const remoteAudioStream = {} as MediaStream;
+
+    renderSurface({ mediaOverrides: { getSnapshot: () => ({ state: "signaling_ready", remoteAudioStream, localIssue: null, isMuted: false, canToggleMute: true, peerConnectionState: "connected" }) } });
+
+    await waitFor(() => expect(setSinkId).toHaveBeenCalledTimes(2));
+    expect(setSinkId).toHaveBeenNthCalledWith(1, "speakers-1");
+    expect(setSinkId).toHaveBeenNthCalledWith(2, "default");
+    expect(setOutputDeviceId.mock.calls.map(([deviceId]) => deviceId)).not.toContain("default");
+    expect(mediaSettingsStore.getSnapshot().preferences.outputDeviceId).toBe("speakers-1");
+    expect(dispatchEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: "vetra:toast" }));
+  });
+
   it("renders exactly one correlated incoming modal and no modal for outgoing presentation", () => {
     const incomingModal = {
       visible: true,

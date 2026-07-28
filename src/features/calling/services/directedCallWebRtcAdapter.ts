@@ -6,6 +6,7 @@ import {
 } from "./iceServerConfig";
 import { buildMicrophoneConstraints, DEFAULT_AUDIO_PREFERENCES } from "@/shared/utils/audioConstraints";
 import { isCallDebugEnabled } from "../utils/callDebug";
+import { classifyMicrophoneError, type CallMediaErrorCode } from "../utils/callMediaErrors";
 
 export type DirectedCallWebRtcFailureCode =
   | "permission_denied"
@@ -17,11 +18,13 @@ export type DirectedCallWebRtcFailureCode =
 
 export class DirectedCallWebRtcError extends Error {
   readonly failureCode: DirectedCallWebRtcFailureCode;
+  readonly mediaErrorCode: CallMediaErrorCode | null;
 
-  constructor(failureCode: DirectedCallWebRtcFailureCode) {
+  constructor(failureCode: DirectedCallWebRtcFailureCode, mediaErrorCode: CallMediaErrorCode | null = null) {
     super(failureCode);
     this.name = "DirectedCallWebRtcError";
     this.failureCode = failureCode;
+    this.mediaErrorCode = mediaErrorCode;
   }
 }
 
@@ -226,11 +229,12 @@ function defaultDependencies(): DirectedCallWebRtcAdapterDependencies {
   };
 }
 
-function failureForMediaError(error: unknown): DirectedCallWebRtcFailureCode {
-  const name = error instanceof DOMException ? error.name : "";
-  if (name === "NotAllowedError" || name === "SecurityError") return "permission_denied";
-  if (name === "NotFoundError" || name === "OverconstrainedError") return "microphone_unavailable";
-  return "microphone_unavailable";
+function failureForMediaError(error: unknown, constraints: MediaStreamConstraints): { failureCode: DirectedCallWebRtcFailureCode; mediaErrorCode: CallMediaErrorCode } {
+  const mediaErrorCode = classifyMicrophoneError(error, constraints);
+  return {
+    failureCode: mediaErrorCode === "microphone_permission_denied" ? "permission_denied" : "microphone_unavailable",
+    mediaErrorCode,
+  };
 }
 
 function candidateKey(candidate: RTCIceCandidateInit, transactionId?: string): string {
@@ -1431,7 +1435,8 @@ export class DirectedCallWebRtcAdapter {
           acquiredStream?.getTracks().forEach((track) => track.stop());
           throw new DirectedCallWebRtcStaleError();
         }
-        throw new DirectedCallWebRtcError(failureForMediaError(error));
+        const failure = failureForMediaError(error, this.getAudioConstraints());
+        throw new DirectedCallWebRtcError(failure.failureCode, failure.mediaErrorCode);
       }
     }
     this.localStream = acquiredStream;

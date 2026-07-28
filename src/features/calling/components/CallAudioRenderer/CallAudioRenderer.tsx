@@ -78,15 +78,14 @@ export function CallAudioRenderer({
           errorName: error instanceof Error ? error.name : undefined,
         });
 
-        if (sinkId !== 'default' && lastFallbackDeviceIdRef.current !== sinkId) {
-          lastFallbackDeviceIdRef.current = sinkId;
-          onOutputDeviceFallback?.(sinkId);
-        }
-
         if (sinkId !== 'default') {
           try {
             await audio.setSinkId('default');
             if (!cancelled) {
+              if (lastFallbackDeviceIdRef.current !== sinkId) {
+                lastFallbackDeviceIdRef.current = sinkId;
+                onOutputDeviceFallback?.(sinkId);
+              }
               lastSinkWarningKeyRef.current = null;
             }
           } catch (fallbackError) {

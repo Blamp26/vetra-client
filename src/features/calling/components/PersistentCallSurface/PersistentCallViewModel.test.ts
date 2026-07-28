@@ -53,6 +53,28 @@ describe("persistent call presentation adapter", () => {
     expect(model.diagnostics.connectionState).toBe("connected");
   });
 
+  it("preserves the shared specific microphone wording for persistent media errors", () => {
+    const model = persistentActiveCallDockModel({
+      ...call({ ...basePresentation, phase: "active" }),
+      media: { peerConnectionState: "failed", localIssue: "media_binding_failed", mediaErrorCode: "microphone_permission_denied", canRetryMedia: true },
+      retryMedia: vi.fn().mockResolvedValue(true),
+    } as any, { id: 1, public_id: "me", display_name: "Me" } as any, null, 0);
+
+    expect(model.callIssue?.message).toBe("Microphone permission is blocked. Allow microphone access in browser or system settings, then try again.");
+    expect(model.canRetryMedia).toBe(true);
+  });
+
+  it("does not expose media retry for presentation errors", () => {
+    const model = persistentActiveCallDockModel({
+      ...call({ ...basePresentation, phase: "active", callIssue: { kind: "transport", message: "Call action failed" } }),
+      media: { peerConnectionState: "connected", localIssue: null, mediaErrorCode: null, canRetryMedia: false },
+      retryMedia: vi.fn().mockResolvedValue(true),
+    } as any, { id: 1, public_id: "me", display_name: "Me" } as any, null, 0);
+
+    expect(model.callIssue?.message).toBe("Call action failed");
+    expect(model.canRetryMedia).toBe(false);
+  });
+
   it("carries persistent screen capability, state, streams, and coordinator actions", async () => {
     const startScreenShare = vi.fn().mockResolvedValue(true);
     const stopScreenShare = vi.fn().mockResolvedValue(true);

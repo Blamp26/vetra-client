@@ -126,13 +126,13 @@ export function PersistentRemoteAudioRenderer({
           && lastFallbackRef.current.request === context.request;
         if (alreadyReported) return true;
 
-        lastFallbackRef.current = { deviceId, ...context };
-        suppressedDefaultRef.current = { deviceId, ...context };
-        onOutputDeviceFallback?.(deviceId);
-
         try {
           await setSinkId.call(audio, "default");
-          return isCurrentRouting(token, deviceId, context);
+          if (!isCurrentRouting(token, deviceId, context)) return false;
+          lastFallbackRef.current = { deviceId, ...context };
+          suppressedDefaultRef.current = { deviceId, ...context };
+          onOutputDeviceFallback?.(deviceId);
+          return true;
         } catch {
           if (isCurrentRouting(token, deviceId, context)) {
             recordDirectedCallDiagnostic("failure", { failureKind: "audio_output_unavailable" });

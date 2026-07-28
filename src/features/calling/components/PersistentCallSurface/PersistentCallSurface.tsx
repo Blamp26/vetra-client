@@ -24,6 +24,15 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
   }, []);
   const onOutputDeviceFallback = useCallback(() => {
     mediaSettingsStore.setOutputDeviceId("default");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("vetra:toast", {
+        detail: {
+          title: "Audio output switched to default",
+          body: "Your previous output device is unavailable, so call audio is using the system default device.",
+          durationMs: 4000,
+        },
+      }));
+    }
   }, []);
   useEffect(() => {
     setAudioPlaybackUnavailable(false);

@@ -85,7 +85,8 @@ describe("PersistentRemoteAudioRenderer output routing", () => {
       />,
     );
 
-    await waitFor(() => expect(onOutputDeviceFallback).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setSinkId).toHaveBeenCalledTimes(2));
+    expect(onOutputDeviceFallback).not.toHaveBeenCalled();
     expect(setSinkId).toHaveBeenCalledTimes(2);
   });
 
@@ -118,7 +119,8 @@ describe("PersistentRemoteAudioRenderer output routing", () => {
       />,
     );
 
-    await waitFor(() => expect(onOutputDeviceFallback).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setSinkId).toHaveBeenCalledTimes(2));
+    expect(onOutputDeviceFallback).not.toHaveBeenCalled();
     await waitFor(() => expect(setSinkId).toHaveBeenCalledTimes(2));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(setSinkId).toHaveBeenCalledTimes(2);

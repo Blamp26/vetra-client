@@ -396,7 +396,7 @@ describe("SettingsPage audio settings", () => {
 
     const feedback = await screen.findByTestId("settings-audio-feedback");
     expect(feedback).toHaveTextContent(
-      /microphone permission denied/i,
+      /microphone permission is blocked/i,
     );
     expect(feedback).toHaveRole("alert");
   });

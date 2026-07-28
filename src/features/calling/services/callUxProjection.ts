@@ -1,5 +1,6 @@
 import type { DirectedCallMediaCoordinatorSnapshot } from "./directedCallMediaCoordinator";
 import type { PersistentPresentationSnapshot } from "./directedCallPresentationModel";
+import type { CallMediaErrorCode } from "../utils/callMediaErrors";
 
 export type CallFailureReason =
   | "permission_denied"
@@ -8,6 +9,7 @@ export type CallFailureReason =
   | "sdp_failed"
   | "ice_failed"
   | "media_binding_failed"
+  | "audio_input_switch_failed"
   | "rebuild_exhausted";
 
 export type CallEndReason =
@@ -32,7 +34,7 @@ export type CallUxStatus =
   | ({ kind: "connecting" } & EstablishedCallContext)
   | ({ kind: "connected" } & EstablishedCallContext)
   | ({ kind: "reconnecting"; recovery: { strategy: "ice_restart"; attempt: 1 | 2 } | { strategy: "peer_rebuild"; attempt: 1 } } & EstablishedCallContext)
-  | ({ kind: "failed"; reason: CallFailureReason } & EstablishedCallContext)
+  | ({ kind: "failed"; reason: CallFailureReason; mediaErrorCode?: CallMediaErrorCode } & EstablishedCallContext)
   | ({ kind: "ended"; reason: CallEndReason } & EstablishedCallContext);
 
 export type CallUxSnapshot = { status: CallUxStatus; actionBusy: boolean };
@@ -47,7 +49,7 @@ const TERMINAL_REASONS = new Set<CallEndReason>([
   "unavailable", "undelivered", "busy", "declined", "cancelled", "no_answer", "connection_failed", "ended",
 ]);
 const FAILURE_REASONS = new Set<CallFailureReason>([
-  "permission_denied", "microphone_unavailable", "peer_connection_failed", "sdp_failed", "ice_failed", "media_binding_failed", "rebuild_exhausted",
+  "permission_denied", "microphone_unavailable", "peer_connection_failed", "sdp_failed", "ice_failed", "media_binding_failed", "audio_input_switch_failed", "rebuild_exhausted",
 ]);
 
 function contextFor(snapshot: PersistentPresentationSnapshot): EstablishedCallContext | null {
@@ -65,6 +67,11 @@ function terminalReason(snapshot: PersistentPresentationSnapshot): CallEndReason
 }
 
 function failureReason(snapshot: DirectedCallMediaCoordinatorSnapshot): CallFailureReason | null {
+  if (snapshot.mediaErrorCode && snapshot.mediaErrorCode !== "audio_output_unavailable") {
+    return snapshot.localIssue && FAILURE_REASONS.has(snapshot.localIssue as CallFailureReason)
+      ? snapshot.localIssue as CallFailureReason
+      : "media_binding_failed";
+  }
   return snapshot.localIssue && FAILURE_REASONS.has(snapshot.localIssue as CallFailureReason)
     ? snapshot.localIssue as CallFailureReason
     : null;
@@ -197,7 +204,7 @@ export class CallUxProjection {
       || (context.direction === "outgoing" && ["dispatching", "delivered"].includes(presentation.canonicalState ?? ""));
     const failure = this.media && this.media.callId === context.callId ? failureReason(this.media) : null;
     if (failure) {
-      this.publish({ status: { kind: "failed", reason: failure, ...context }, actionBusy });
+      this.publish({ status: { kind: "failed", reason: failure, mediaErrorCode: this.media?.mediaErrorCode ?? undefined, ...context }, actionBusy });
       return;
     }
     if (this.latchedRebuildExhausted && this.terminalCallId !== context.callId) {

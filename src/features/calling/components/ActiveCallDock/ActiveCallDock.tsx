@@ -4,6 +4,7 @@ import type * as React from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { HeadphoneOff, Headphones, Maximize, Mic, MicOff, Minimize, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
+import { Button } from "@/shared/components/Button";
 import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
 import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
@@ -63,6 +64,7 @@ interface ActiveCallDockProps {
   onStopScreenShare: () => void;
   onWatchRemoteScreen: () => Promise<void>;
   onHangUp: () => void;
+  onRetryMedia?: () => void;
 }
 
 function StreamVideo({
@@ -131,6 +133,7 @@ export function ActiveCallDock({
   onStopScreenShare,
   onWatchRemoteScreen,
   onHangUp,
+  onRetryMedia,
 }: ActiveCallDockProps) {
   const callUserVolumes = useAppStore((s) => s.callUserVolumes) ?? {};
   const mutedCallUserIds = useAppStore((s) => s.mutedCallUserIds) ?? {};
@@ -450,6 +453,7 @@ export function ActiveCallDock({
         {displayIssue && (
           <div className="voice-call-issue absolute left-4 right-4 top-9 z-10 rounded-md bg-destructive/10 px-3 py-1.5 text-xs text-foreground" data-testid="call-issue-banner">
             {displayIssue.message}
+            {onRetryMedia && <Button size="compact" variant="secondary" className="ml-2" onClick={onRetryMedia}>Try again</Button>}
           </div>
         )}
 
@@ -511,7 +515,8 @@ export function ActiveCallDock({
 
           {displayIssue && (
             <div className="absolute left-4 right-4 top-9 z-10 rounded-md bg-destructive/10 px-3 py-1.5 text-xs text-foreground" data-testid="call-issue-banner">
-              {displayIssue.message}
+            {displayIssue.message}
+            {onRetryMedia && <Button size="compact" variant="secondary" className="ml-2" onClick={onRetryMedia}>Try again</Button>}
             </div>
           )}
 
@@ -601,7 +606,7 @@ export function ActiveCallDock({
       data-testid="active-call-dock"
       aria-label="Active call dock"
     >
-      {displayIssue && <div className="m-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm" data-testid="call-issue-banner">{displayIssue.message}</div>}
+      {displayIssue && <div className="m-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm" data-testid="call-issue-banner">{displayIssue.message}{onRetryMedia && <Button size="compact" variant="secondary" className="ml-2" onClick={onRetryMedia}>Try again</Button>}</div>}
       <div
         ref={(element) => { stageRef.current = element; }}
         className={cn("screen-share-stage group relative min-h-0 flex-1 overflow-hidden bg-black", isFullscreen && "screen-share-stage--fullscreen fullscreen-share-layout flex flex-col")}

@@ -626,7 +626,34 @@ describe('useCall', () => {
             });
 
             expect(result.current.status).toBe('idle');
-            expect(result.current.callIssue?.message).toBe('Microphone permission denied.');
+            expect(result.current.callIssue?.message).toBe('Microphone permission is blocked. Allow microphone access in browser or system settings, then try again.');
+        });
+
+        it.each([
+            ['permission denied', 'Microphone permission is blocked. Allow microphone access in browser or system settings, then try again.'],
+            ['device not found', 'No microphone is available. Connect or enable a microphone, then try again.'],
+        ])('uses shared classification for generic legacy errors: %s', async (message, expected) => {
+            MockWebRTCService.mockImplementationOnce(function (this: any) {
+                this.startCall = vi.fn().mockRejectedValue(new Error(message));
+                this.dispose = vi.fn();
+                this.setCallId = vi.fn();
+                this.getSignalingCallId = vi.fn(() => 'fallback-call-id');
+                this.toggleLocalMuted = vi.fn(() => false);
+                this.getDiagnosticsSnapshot = vi.fn().mockReturnValue({
+                    connectionState: 'unknown',
+                    iceConnectionState: 'unknown',
+                    iceGatheringState: 'unknown',
+                    signalingState: 'unknown',
+                    selectedCandidatePair: null,
+                });
+                return this;
+            });
+
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => { result.current.startCall(2); });
+            await act(async () => { await Promise.resolve(); });
+
+            expect(result.current.callIssue?.message).toBe(expected);
         });
     });
 

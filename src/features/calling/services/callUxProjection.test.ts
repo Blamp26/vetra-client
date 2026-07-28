@@ -32,8 +32,8 @@ function presentation(options: {
   } as any;
 }
 
-function media(recovery: any = null, localIssue: any = null, id = callId, currentGeneration = generation) {
-  return { callId: id, generation: currentGeneration, recovery, localIssue } as any;
+function media(recovery: any = null, localIssue: any = null, id = callId, currentGeneration = generation, mediaErrorCode: any = null) {
+  return { callId: id, generation: currentGeneration, recovery, localIssue, mediaErrorCode } as any;
 }
 
 function readyProjection() {
@@ -113,5 +113,18 @@ describe("CallUxProjection", () => {
     expect(projection.getSnapshot().status).toMatchObject({ kind: "idle" });
     projection.handle({ type: "presentation_snapshot", snapshot: presentation({ callId: "call-2", state: "active", phase: "active", stateVersion: 1 }) });
     expect(projection.getSnapshot().status).toMatchObject({ kind: "connected", callId: "call-2" });
+  });
+
+  it.each([
+    ["permission_denied", "permission_denied", "microphone_permission_denied"],
+    ["microphone_unavailable", "microphone_unavailable", "microphone_unavailable"],
+    ["selected microphone", "microphone_unavailable", "selected_input_unavailable"],
+    ["initialization", "media_binding_failed", "media_initialization_failed"],
+    ["input switch", "audio_input_switch_failed", "audio_input_switch_failed"],
+  ])("preserves the %s media error code through projection", (_label, localIssue, mediaErrorCode) => {
+    const projection = readyProjection();
+    projection.handle({ type: "presentation_snapshot", snapshot: presentation({ state: "active", phase: "active", stateVersion: 1 }) });
+    projection.handle({ type: "media_snapshot", snapshot: media(null, localIssue, callId, generation, mediaErrorCode) });
+    expect(projection.getSnapshot().status).toMatchObject({ kind: "failed", mediaErrorCode });
   });
 });

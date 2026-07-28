@@ -13,6 +13,8 @@ import type {
     UseCallReturn,
 } from './useCall.types';
 import { debugCall } from '../utils/callDebug';
+import { mediaSettingsStore } from '@/shared/utils/mediaSettings';
+import { callMediaErrorMessage, classifyMicrophoneError } from '../utils/callMediaErrors';
 
 const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
     connectionState: 'unknown',
@@ -69,42 +71,6 @@ function getErrorMessage(error: unknown): string {
     return String(error ?? 'unknown error');
 }
 
-function getErrorName(error: unknown): string {
-    if (error instanceof DOMException || error instanceof Error) {
-        return error.name;
-    }
-
-    return '';
-}
-
-function isPermissionDeniedError(error: unknown): boolean {
-    const name = getErrorName(error);
-    const message = getErrorMessage(error).toLowerCase();
-
-    return (
-        name === 'NotAllowedError' ||
-        name === 'SecurityError' ||
-        message.includes('permission denied') ||
-        message.includes('permission dismissed') ||
-        message.includes('denied permission')
-    );
-}
-
-function isUnavailableDeviceError(error: unknown): boolean {
-    const name = getErrorName(error);
-    const message = getErrorMessage(error).toLowerCase();
-
-    return (
-        name === 'NotFoundError' ||
-        name === 'OverconstrainedError' ||
-        message.includes('no mic') ||
-        message.includes('device not found') ||
-        message.includes('requested device not found') ||
-        message.includes('could not start audio source') ||
-        message.includes('not available')
-    );
-}
-
 function isTimedOutError(error: unknown): boolean {
     return getErrorMessage(error).toLowerCase().includes('timed out');
 }
@@ -130,6 +96,13 @@ function buildCallIssue(message: string, tone: CallIssue['tone'] = 'error'): Cal
     return { tone, message };
 }
 
+function currentMicrophoneClassificationConstraints(): MediaStreamConstraints {
+    const inputDeviceId = mediaSettingsStore.getSnapshot().preferences.inputDeviceId;
+    return inputDeviceId === 'default'
+        ? { audio: true, video: false }
+        : { audio: { deviceId: { exact: inputDeviceId } }, video: false };
+}
+
 function mapStartCallIssue(error: unknown): CallIssue {
     if (isRemoteCallServiceNotReadyError(error)) {
         return buildCallIssue('User is not ready to receive calls yet. Try again in a moment.');
@@ -139,12 +112,9 @@ function mapStartCallIssue(error: unknown): CallIssue {
         return buildCallIssue('Call could not start because one side is already in a call.');
     }
 
-    if (isPermissionDeniedError(error)) {
-        return buildCallIssue('Microphone permission denied.');
-    }
-
-    if (isUnavailableDeviceError(error)) {
-        return buildCallIssue('Microphone unavailable.');
+    if (error instanceof DOMException || error instanceof TypeError) {
+        const code = classifyMicrophoneError(error, currentMicrophoneClassificationConstraints());
+        return buildCallIssue(callMediaErrorMessage(code));
     }
 
     if (isUnavailableRemoteError(error)) {
@@ -155,20 +125,26 @@ function mapStartCallIssue(error: unknown): CallIssue {
         return buildCallIssue('Call timed out. No answer.');
     }
 
+    if (error instanceof Error || error instanceof DOMException) {
+        const code = classifyMicrophoneError(error, currentMicrophoneClassificationConstraints());
+        return buildCallIssue(callMediaErrorMessage(code));
+    }
+
     return buildCallIssue('Call failed. Please try again.');
 }
 
 function mapAcceptCallIssue(error: unknown): CallIssue {
-    if (isPermissionDeniedError(error)) {
-        return buildCallIssue('Microphone permission denied.');
+    if (error instanceof DOMException || error instanceof TypeError) {
+        const code = classifyMicrophoneError(error, currentMicrophoneClassificationConstraints());
+        return buildCallIssue(callMediaErrorMessage(code));
     }
-
-    if (isUnavailableDeviceError(error)) {
-        return buildCallIssue('Microphone unavailable.');
-    }
-
     if (isTimedOutError(error)) {
         return buildCallIssue('Connecting timed out. Please try again.');
+    }
+
+    if (error instanceof Error || error instanceof DOMException) {
+        const code = classifyMicrophoneError(error, currentMicrophoneClassificationConstraints());
+        return buildCallIssue(callMediaErrorMessage(code));
     }
 
     return buildCallIssue('Could not connect the call.');
@@ -181,7 +157,7 @@ function mapScreenShareIssue(error: unknown): CallIssue {
         return buildCallIssue('Screen sharing is not supported in this browser.');
     }
 
-    if (isPermissionDeniedError(error)) {
+    if (classifyMicrophoneError(error, { audio: false, video: true }) === 'microphone_permission_denied') {
         return buildCallIssue('Screen share permission denied.');
     }
 

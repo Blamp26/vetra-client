@@ -27,3 +27,5 @@ dist-ssr
 .env.load
 .env.load.local
 load-results/
+# Generated Impeccable critique reports
+.impeccable/critique/

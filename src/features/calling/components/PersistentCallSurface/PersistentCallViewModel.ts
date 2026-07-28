@@ -4,6 +4,7 @@ import type { User } from "@/shared/types";
 import type { PersistentCallRuntimeValue } from "../../context/PersistentCallContext";
 import type { PersistentPresentationSnapshot } from "../../services/directedCallPresentationModel";
 import type { DirectedCallMediaStream } from "../../services/directedCallWebRtcAdapter";
+import { callMediaErrorMessage, type CallMediaErrorCode } from "../../utils/callMediaErrors";
 
 export type PersistentCallDirection = "incoming" | "outgoing" | null;
 
@@ -19,6 +20,8 @@ export interface PersistentSidebarCallModel {
   canToggleMute: boolean;
   canToggleDeafen: boolean;
   callIssue: CallIssue | null;
+  canRetryMedia: boolean;
+  retryMedia: () => Promise<boolean>;
   isIncomingActionPending: boolean;
   canCancel: boolean;
   canHangup: boolean;
@@ -37,6 +40,8 @@ export interface PersistentActiveCallDockModel {
   canToggleMute: boolean;
   canToggleDeafen: boolean;
   callIssue: CallIssue | null;
+  canRetryMedia: boolean;
+  retryMedia: () => Promise<boolean>;
   diagnostics: CallDiagnostics;
   screenShareAvailable: boolean;
   isScreenSharing: boolean;
@@ -54,7 +59,9 @@ function toCallIssue(snapshot: PersistentPresentationSnapshot): CallIssue | null
 function runtimeCallIssue(call: PersistentCallRuntimeValue): CallIssue | null {
   return toCallIssue(call.presentation) ?? (call.media.localIssue ? {
     tone: "error",
-    message: call.media.localIssue === "transport_recovery"
+    message: call.media.mediaErrorCode
+      ? callMediaErrorMessage(call.media.mediaErrorCode as CallMediaErrorCode)
+      : call.media.localIssue === "transport_recovery"
       ? "The call setup was interrupted. Try again."
       : call.media.localIssue === "audio_input_switch_failed"
         ? "Couldn’t switch microphone. The previous microphone is still active."
@@ -124,9 +131,11 @@ export function persistentCallSidebarModel(call: PersistentCallRuntimeValue, sec
     canToggleMute: call.canToggleMute,
     canToggleDeafen: call.canToggleDeafen,
     callIssue: runtimeCallIssue(call),
+    canRetryMedia: call.media.canRetryMedia,
     isIncomingActionPending: incoming && Boolean(presentation.pendingAction),
     canCancel: !incoming && presentation.canCancel,
     canHangup: presentation.canHangup,
+    retryMedia: call.retryMedia,
   };
 }
 
@@ -155,6 +164,7 @@ export function persistentActiveCallDockModel(call: PersistentCallRuntimeValue, 
     canToggleMute: call.canToggleMute,
     canToggleDeafen: call.canToggleDeafen,
     callIssue: runtimeCallIssue(call),
+    canRetryMedia: call.media.canRetryMedia,
     screenShareAvailable: call.screenShareAvailable,
     isScreenSharing: call.isScreenSharing,
     localScreenShareStream: call.localScreenShareStream,
@@ -162,6 +172,7 @@ export function persistentActiveCallDockModel(call: PersistentCallRuntimeValue, 
     remoteScreenShareStream: call.remoteScreenShareStream,
     startScreenShare: call.startScreenShare,
     stopScreenShare: call.stopScreenShare,
+    retryMedia: call.retryMedia,
     diagnostics: {
       connectionState: call.media.peerConnectionState ?? "unknown",
       iceConnectionState: "unknown",

@@ -287,6 +287,26 @@ describe('CallAudioRenderer', () => {
     });
   });
 
+  it('does not report fallback when the system default route also fails', async () => {
+    const onOutputDeviceFallback = vi.fn();
+    setSinkIdMock
+      .mockRejectedValueOnce(new DOMException('missing selected', 'NotFoundError'))
+      .mockRejectedValueOnce(new DOMException('missing default', 'NotFoundError'));
+
+    render(
+      <CallAudioRenderer
+        remoteStream={null}
+        selectedOutputDeviceId="speaker-123"
+        soundEnabled
+        outputVolume={1}
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />,
+    );
+
+    await waitFor(() => expect(setSinkIdMock).toHaveBeenCalledWith('default'));
+    expect(onOutputDeviceFallback).not.toHaveBeenCalled();
+  });
+
   it('handles setSinkId SecurityError without warning spam or fallback reset', async () => {
     const onOutputDeviceFallback = vi.fn();
     setSinkIdMock.mockRejectedValueOnce(
@@ -362,7 +382,7 @@ describe('CallAudioRenderer', () => {
     );
 
     await waitFor(() => {
-      expect(onOutputDeviceFallback).toHaveBeenCalledWith('speaker-123');
+      expect(onOutputDeviceFallback).not.toHaveBeenCalled();
       expect(setSinkIdMock).toHaveBeenNthCalledWith(1, 'speaker-123');
       expect(setSinkIdMock).toHaveBeenNthCalledWith(2, 'default');
     });

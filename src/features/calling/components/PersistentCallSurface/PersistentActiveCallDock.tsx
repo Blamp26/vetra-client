@@ -40,6 +40,7 @@ export function PersistentActiveCallDock({ currentUser, remoteUser }: { currentU
       onStopScreenShare={() => { void model.stopScreenShare(); }}
       onWatchRemoteScreen={async () => undefined}
       onHangUp={() => { void call.hangup(); }}
+      onRetryMedia={model.canRetryMedia ? () => { void call.retryMedia(); } : undefined}
     />
   );
 }

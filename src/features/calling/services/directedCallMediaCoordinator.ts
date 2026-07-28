@@ -11,6 +11,7 @@ import {
   type SignalEnvelope,
   type StateProjection,
 } from "../protocol/directedCallProtocol";
+import type { CallMediaErrorCode } from "../utils/callMediaErrors";
 import { createDirectedCallUuid } from "./directedCallDevice";
 import { DirectedCallSignalTransport } from "./directedCallSignalTransport";
 import {
@@ -53,6 +54,8 @@ export interface DirectedCallMediaCoordinatorSnapshot {
   isLocalScreenShareActive: boolean;
   remoteScreenShareStream: DirectedCallMediaStream | null;
   localIssue: "transport_recovery" | "restart_exhausted" | "rebuild_exhausted" | "rebuild_blocked_by_screen_share" | "audio_input_switch_failed" | DirectedCallWebRtcError["failureCode"] | null;
+  mediaErrorCode: CallMediaErrorCode | null;
+  canRetryMedia: boolean;
   peerConnectionState: RTCPeerConnectionState | null;
   isMuted: boolean;
   canToggleMute: boolean;
@@ -115,6 +118,7 @@ const ICE_RECOVERY_TIMEOUT_MS = 10_000;
 const ICE_RECOVERY_RETRY_DELAY_MS = 2_000;
 const MAX_ICE_RECOVERY_ATTEMPTS = 2;
 const PEER_CONNECTION_REBUILD_TIMEOUT_MS = 15_000;
+const MEDIA_RETRY_READINESS_TIMEOUT_MS = 5_000;
 
 type SetupFailureReport = {
   callId: string;
@@ -240,6 +244,9 @@ export class DirectedCallMediaCoordinator {
   private rebuildInFlight = false;
   private rebuildEpoch = 0;
   private pendingScreenShareRecoveryAction: { action: "start" | "stop"; fromBrowser: boolean; resolve: (result: boolean) => void } | null = null;
+  private mediaRetryInFlight: Promise<boolean> | null = null;
+  private mediaRetryReadinessCheck: (() => void) | null = null;
+  private mediaRetryTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     session: DirectedCallSession,
@@ -253,7 +260,7 @@ export class DirectedCallMediaCoordinator {
     this.lifecycle = lifecycle;
     this.generation = generation;
     this.isGenerationCurrent = options.isGenerationCurrent ?? ((current) => current === this.generation);
-    this.snapshot = this.audioSnapshot({ state: "idle", callId: null, participantRole: null, projection: null, generation, recovery: null, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false });
+    this.snapshot = this.audioSnapshot({ state: "idle", callId: null, participantRole: null, projection: null, generation, recovery: null, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, mediaErrorCode: null, canRetryMedia: false, peerConnectionState: null, isMuted: false, canToggleMute: false });
     this.adapterFactory = options.adapterFactory ?? ((adapterOptions) => new DirectedCallWebRtcAdapter(adapterOptions));
     this.audioConstraints = options.audioConstraints;
     this.onRecoveryResult = options.onRecoveryResult;
@@ -278,6 +285,7 @@ export class DirectedCallMediaCoordinator {
       },
       onInitialMediaReadinessChange: () => {
         this.maybeSendMediaReady(this.snapshot.callId, this.mediaAttemptEpoch, adapterEpoch);
+        this.mediaRetryReadinessCheck?.();
       },
       onPeerConnectionState: (state) => this.handlePeerConnectionState(state, adapterEpoch),
       onPeerConnectionDiagnostics: (diagnostics) => this.handlePeerConnectionDiagnostics(diagnostics, adapterEpoch),
@@ -498,6 +506,7 @@ export class DirectedCallMediaCoordinator {
   }
 
   private resetCallState(callId: string): void {
+    this.mediaRetryReadinessCheck?.();
     this.lastTerminalCallId = callId;
     this.retireSetupFailureReport();
     this.cancelRecoveryWork();
@@ -542,6 +551,8 @@ export class DirectedCallMediaCoordinator {
       isLocalScreenShareActive: false,
       remoteScreenShareStream: null,
       localIssue: null,
+      mediaErrorCode: null,
+      canRetryMedia: false,
       peerConnectionState: null,
       isMuted: false,
       canToggleMute: false,
@@ -550,6 +561,7 @@ export class DirectedCallMediaCoordinator {
 
   dispose(): void {
     if (this.disposed) return;
+    this.mediaRetryReadinessCheck?.();
     this.retireSetupFailureReport();
     this.cancelRecoveryWork();
     this.invalidateMediaAttempt();
@@ -586,7 +598,7 @@ export class DirectedCallMediaCoordinator {
     this.offer = null;
     this.remoteAudioStream = null;
     this.localIssue = null;
-    this.setSnapshot(this.audioSnapshot({ state: "disposed", callId: null, participantRole: null, projection: null, generation: this.generation, recovery: null, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false }));
+    this.setSnapshot(this.audioSnapshot({ state: "disposed", callId: null, participantRole: null, projection: null, generation: this.generation, recovery: null, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, mediaErrorCode: null, canRetryMedia: false, peerConnectionState: null, isMuted: false, canToggleMute: false }));
     this.listeners.clear();
   }
 
@@ -636,6 +648,8 @@ export class DirectedCallMediaCoordinator {
         projection,
         state: "failed",
         localIssue: this.setupFailureReport.failureCode,
+        mediaErrorCode: this.snapshot.mediaErrorCode,
+        canRetryMedia: this.canRetryMedia(this.snapshot.mediaErrorCode),
       });
       this.maybeSendSetupFailure(projection.call_id, this.setupFailureReport.epoch);
       return;
@@ -651,6 +665,8 @@ export class DirectedCallMediaCoordinator {
         projection,
         state: "failed",
         localIssue: this.localIssue ?? "transport_recovery",
+        mediaErrorCode: this.snapshot.mediaErrorCode,
+        canRetryMedia: false,
       });
       return;
     }
@@ -668,7 +684,7 @@ export class DirectedCallMediaCoordinator {
     const localScreenShareStream = projection.state === "active"
       ? (this.adapter.getLocalScreenShareStream?.() ?? null)
       : null;
-    this.setSnapshot(this.audioSnapshot({ state, callId: projection.call_id, participantRole: projection.participant_role, projection, generation: this.generation, recovery: this.snapshot.recovery, remoteAudioStream: this.remoteAudioStream, localScreenShareStream, isLocalScreenShareActive: projection.state === "active" && this.localScreenShareActive, remoteScreenShareStream: this.remoteScreenShareStream, localIssue: this.localIssue, peerConnectionState: this.peerConnectionState, isMuted: this.snapshot.isMuted, canToggleMute: this.snapshot.canToggleMute }));
+    this.setSnapshot(this.audioSnapshot({ state, callId: projection.call_id, participantRole: projection.participant_role, projection, generation: this.generation, recovery: this.snapshot.recovery, remoteAudioStream: this.remoteAudioStream, localScreenShareStream, isLocalScreenShareActive: projection.state === "active" && this.localScreenShareActive, remoteScreenShareStream: this.remoteScreenShareStream, localIssue: this.localIssue, mediaErrorCode: null, canRetryMedia: false, peerConnectionState: this.peerConnectionState, isMuted: this.snapshot.isMuted, canToggleMute: this.snapshot.canToggleMute }));
 
     if (projection.state === "accepted") void this.startMedia(projection);
     if (projection.state === "connecting") {
@@ -1052,7 +1068,8 @@ export class DirectedCallMediaCoordinator {
     if (error instanceof DirectedCallWebRtcStaleError || !this.ownsIceRestart(transaction, transaction.id, transaction.callId, transaction.phase)) return;
     const failureCode = error instanceof DirectedCallWebRtcError ? error.failureCode : "sdp_failed";
     this.recordMediaDiagnostic("failure", { callId: transaction.callId, failureKind: failureCode, transactionId: transaction.id });
-    this.setSnapshot({ ...this.snapshot, localIssue: failureCode });
+    const mediaErrorCode = error instanceof DirectedCallWebRtcError ? error.mediaErrorCode : null;
+    this.setSnapshot({ ...this.snapshot, localIssue: failureCode, mediaErrorCode, canRetryMedia: this.canRetryMedia(mediaErrorCode) });
     this.clearIceRestart(transaction.id);
   }
 
@@ -1374,8 +1391,9 @@ export class DirectedCallMediaCoordinator {
     };
     this.setupFailureReport = report;
     this.localIssue = failureCode;
+    const mediaErrorCode = error instanceof DirectedCallWebRtcError ? error.mediaErrorCode : "media_initialization_failed";
     this.recordMediaDiagnostic("failure", { callId, failureKind: failureCode });
-    this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: failureCode });
+    this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: failureCode, mediaErrorCode, canRetryMedia: this.canRetryMedia(mediaErrorCode) });
 
     // Cleanup is deliberately complete before any server-report Promise is created.
     this.invalidateMediaAttempt();
@@ -1683,10 +1701,11 @@ export class DirectedCallMediaCoordinator {
     this.invalidateMediaAttempt();
     this.remoteScreenShareStream = null;
     this.recordMediaDiagnostic("failure", { callId, failureKind: this.localIssue });
-    this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: this.localIssue, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, peerConnectionState });
+    this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: this.localIssue, mediaErrorCode: null, canRetryMedia: false, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, peerConnectionState });
   }
 
   private invalidateMediaAttempt(): void {
+    this.mediaRetryReadinessCheck?.();
     if (this.renegotiation) this.clearRenegotiation(this.renegotiation.id);
     if (this.iceRestart) this.clearIceRestart(this.iceRestart.id);
     this.mediaAttemptEpoch += 1;
@@ -1755,13 +1774,82 @@ export class DirectedCallMediaCoordinator {
     if (this.disposed || !this.mediaAttemptActive) return false;
     if (!switched) {
       this.localIssue = "audio_input_switch_failed";
-      this.setSnapshot({ ...this.snapshot, localIssue: this.localIssue });
+      this.setSnapshot({ ...this.snapshot, localIssue: this.localIssue, mediaErrorCode: "audio_input_switch_failed", canRetryMedia: this.canRetryMedia("audio_input_switch_failed") });
       return false;
     }
     this.localIssue = null;
     this.syncLocalMediaState(this.snapshot.callId, this.mediaAttemptEpoch);
-    this.setSnapshot({ ...this.snapshot, localIssue: null });
+    this.setSnapshot({ ...this.snapshot, localIssue: null, mediaErrorCode: null, canRetryMedia: false });
     return true;
+  }
+
+  async retryMedia(): Promise<boolean> {
+    if (this.mediaRetryInFlight) return this.mediaRetryInFlight;
+    const projection = this.snapshot.projection;
+    const callId = this.snapshot.callId;
+    const mediaErrorCode = this.snapshot.mediaErrorCode;
+    if (this.disposed || !projection || !callId || !this.localIssue || !this.snapshot.canRetryMedia) return false;
+
+    if (mediaErrorCode === "audio_input_switch_failed") {
+      const retry = this.switchAudioInput(this.audioConstraints?.() ?? { audio: true, video: false });
+      this.mediaRetryInFlight = retry;
+      void retry.finally(() => { if (this.mediaRetryInFlight === retry) this.mediaRetryInFlight = null; });
+      return retry;
+    }
+
+    const attempt = ++this.mediaAttemptEpoch;
+    const adapterEpochBeforeRetry = this.adapterEpoch;
+    this.mediaAttemptActive = true;
+    this.mediaStartInFlight = false;
+    this.mediaStarted = true;
+    this.retireSetupFailureReport();
+    this.adapter.dispose();
+    this.adapter = this.createAdapter();
+    this.offer = null;
+    this.offerSent = false;
+    this.beginConnectingSent = false;
+    this.mediaReadySent = false;
+    this.setSnapshot(this.audioSnapshot({ ...this.snapshot, state: projection.state === "accepted" ? "accepted" : "signaling_ready", canRetryMedia: true, remoteAudioStream: null, peerConnectionState: null }));
+    const retry = (async () => {
+      await this.startMedia(projection);
+      if (!this.isCurrentCall(callId, attempt) || this.adapterEpoch === adapterEpochBeforeRetry) return false;
+      const recovered = await this.waitForMediaReadiness(callId, attempt, this.adapterEpoch);
+      if (!recovered || !this.isCurrentCall(callId, attempt)) return false;
+      this.localIssue = null;
+      this.setSnapshot({ ...this.snapshot, localIssue: null, mediaErrorCode: null, canRetryMedia: false });
+      return true;
+    })();
+    this.mediaRetryInFlight = retry;
+    void retry.finally(() => { if (this.mediaRetryInFlight === retry) this.mediaRetryInFlight = null; });
+    return retry;
+  }
+
+  private canRetryMedia(code: CallMediaErrorCode | null): boolean {
+    const projection = this.snapshot.projection;
+    if (!code || code === "audio_output_unavailable" || !projection) return false;
+    if (code === "audio_input_switch_failed") return projection.state === "active" && this.mediaAttemptActive;
+    return projection.participant_role === "initiator" && ["accepted", "connecting"].includes(projection.state);
+  }
+
+  private waitForMediaReadiness(callId: string, attempt: number, adapterEpoch: number): Promise<boolean> {
+    if (this.adapter.initialMediaReadinessSnapshot.ready) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result: boolean) => {
+        if (settled) return;
+        settled = true;
+        if (this.mediaRetryTimeout) clearTimeout(this.mediaRetryTimeout);
+        if (this.mediaRetryReadinessCheck === check) this.mediaRetryReadinessCheck = null;
+        resolve(result);
+      };
+      const check = () => {
+        if (!this.isCurrentCall(callId, attempt) || this.adapterEpoch !== adapterEpoch) return finish(false);
+        if (this.adapter.initialMediaReadinessSnapshot.ready) finish(true);
+      };
+      this.mediaRetryReadinessCheck = check;
+      this.mediaRetryTimeout = setTimeout(() => finish(false), MEDIA_RETRY_READINESS_TIMEOUT_MS);
+      check();
+    });
   }
 
   private syncLocalMediaState(callId: string | null, attempt: number): void {

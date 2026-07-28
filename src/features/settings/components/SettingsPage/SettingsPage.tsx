@@ -14,6 +14,7 @@ import { themeLabels, type Theme } from "@/themes";
 import { buildMicrophoneConstraints } from "@/shared/utils/audioConstraints";
 import { mediaSettingsStore, useMediaSettings } from "@/shared/utils/mediaSettings";
 import { subscribeMediaDeviceRefresh } from "@/shared/utils/mediaDeviceObserver";
+import { callMediaErrorMessage, classifyMicrophoneError } from "@/features/calling/utils/callMediaErrors";
 import {
   getNotificationPermissionStatus,
   requestNotificationPermission,
@@ -76,7 +77,7 @@ function VoiceAudioSettings() {
     if (result.permissionState === "denied") {
       setAudioFeedback({
         tone: "error",
-        message: "Microphone permission denied. Allow microphone access in your browser or system settings to test input devices.",
+        message: callMediaErrorMessage("microphone_permission_denied"),
       });
       return;
     }
@@ -84,7 +85,7 @@ function VoiceAudioSettings() {
     if (result.inputCount === 0) {
       setAudioFeedback({
         tone: "error",
-        message: "No input devices found. Connect a microphone or verify that your OS is exposing one to the browser.",
+        message: callMediaErrorMessage("microphone_unavailable"),
       });
       return;
     }
@@ -133,13 +134,13 @@ function VoiceAudioSettings() {
       return;
     }
 
-    try {
-      const constraints = buildMicrophoneConstraints({
+    const constraints = buildMicrophoneConstraints({
         inputDeviceId,
         noiseSuppression,
         echoCancellation,
         autoGainControl,
       });
+    try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const audioContext = new (window.AudioContext || (window as Window & typeof globalThis & {
         webkitAudioContext?: typeof AudioContext;
@@ -170,25 +171,10 @@ function VoiceAudioSettings() {
       setAudioFeedback(null);
     } catch (err) {
       stopMicTest();
-      if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "SecurityError")) {
-        setAudioFeedback({
-          tone: "error",
-          message: "Microphone permission denied. Allow microphone access to test your input device.",
-        });
-        return;
-      }
-
-      if (err instanceof DOMException && (err.name === "NotFoundError" || err.name === "OverconstrainedError")) {
-        setAudioFeedback({
-          tone: "error",
-          message: "The selected microphone is unavailable. Choose another input device and try again.",
-        });
-        return;
-      }
-
+      const code = classifyMicrophoneError(err, constraints);
       setAudioFeedback({
         tone: "error",
-        message: "Microphone test could not start in this browser or device environment.",
+        message: callMediaErrorMessage(code),
       });
     }
   }, [

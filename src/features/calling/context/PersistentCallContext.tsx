@@ -58,6 +58,7 @@ export interface PersistentCallRuntimeValue {
   cancel: () => Promise<PresentationActionResult>;
   hangup: () => Promise<PresentationActionResult>;
   retry: () => Promise<PresentationActionResult>;
+  retryMedia: () => Promise<boolean>;
   isMuted: boolean;
   muted: boolean;
   deafened: boolean;
@@ -114,6 +115,7 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
     cancel: () => runtime.presentation.cancelCall(),
     hangup: () => runtime.presentation.hangup(),
     retry: () => runtime.presentation.retryPendingAction(),
+    retryMedia: () => runtime.media.retryMedia(),
     isMuted: media.isMuted,
     muted: media.muted,
     deafened: media.deafened,

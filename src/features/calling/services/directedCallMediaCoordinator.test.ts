@@ -326,7 +326,9 @@ describe("DirectedCallMediaCoordinator", () => {
     const session = createSession();
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
     const coordinator = createCoordinator(session, transport);
-    startActive(coordinator, session);
+    coordinator.start();
+    session.emit(projection("accepted"));
+    session.emit(projection("active"));
 
     setCallDebugEnabled(true);
     resetDirectedCallDiagnosticsProbe();
@@ -995,7 +997,8 @@ describe("DirectedCallMediaCoordinator", () => {
     const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
       adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
     });
-    startActive(coordinator, session);
+    coordinator.start();
+    session.emit(projection("accepted"));
     connectionState("disconnected");
     await vi.advanceTimersByTimeAsync(2_999);
     expect(adapter.createIceRestartOffer).not.toHaveBeenCalled();
@@ -3404,6 +3407,63 @@ describe("DirectedCallMediaCoordinator", () => {
     await expect(coordinator.requestIceRestart()).resolves.toBeNull();
     expect(adapter.createIceRestartOffer).not.toHaveBeenCalled();
     await screenOperation;
+    coordinator.dispose();
+  });
+
+  it("retries failed media for the same call and ignores stale retry completion", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const first = createAdapter();
+    mockedMethod(first.prepareOffer).mockRejectedValueOnce(new DirectedCallWebRtcError("microphone_unavailable", "microphone_unavailable"));
+    const second = createAdapter();
+    const adapters = [first, second];
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapters.shift() ?? createAdapter()),
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(first.prepareOffer).toHaveBeenCalled());
+    expect(coordinator.getSnapshot()).toMatchObject({ localIssue: "microphone_unavailable", mediaErrorCode: "microphone_unavailable" });
+    const retry = coordinator.retryMedia();
+    await vi.waitFor(() => expect(second.prepareOffer).toHaveBeenCalled());
+    second.setReadiness(readySnapshot);
+    await expect(retry).resolves.toBe(true);
+    expect(second.prepareOffer).toHaveBeenCalled();
+    expect(coordinator.getSnapshot()).toMatchObject({ localIssue: null, mediaErrorCode: null });
+    coordinator.dispose();
+
+    const staleSession = createSession();
+    const staleTransport = new DirectedCallSignalTransport(staleSession, { generation: "g1" });
+    const staleAdapter = createAdapter();
+    const staleRetryAdapter = createAdapter();
+    mockedMethod(staleAdapter.prepareOffer).mockRejectedValueOnce(new DirectedCallWebRtcError("microphone_unavailable", "microphone_unavailable"));
+    let resolveOffer!: (offer: RTCSessionDescriptionInit) => void;
+    mockedMethod(staleRetryAdapter.prepareOffer).mockImplementationOnce(() => new Promise((resolve) => { resolveOffer = resolve; }));
+    const staleAdapters = [staleAdapter, staleRetryAdapter];
+    const staleCoordinator = new DirectedCallMediaCoordinator(staleSession, staleTransport, createLifecycle(), "g1", { adapterFactory: (options) => bindAdapter(options, staleAdapters.shift() ?? createAdapter()) });
+    staleCoordinator.start();
+    staleSession.emit(projection("accepted"));
+    await vi.waitFor(() => expect(staleAdapter.prepareOffer).toHaveBeenCalled());
+    await vi.waitFor(() => expect(staleCoordinator.getSnapshot().localIssue).toBe("microphone_unavailable"));
+    const staleRetry = staleCoordinator.retryMedia();
+    staleCoordinator.dispose();
+    resolveOffer({ type: "offer", sdp: "stale" });
+    await expect(staleRetry).resolves.toBe(false);
+    expect(staleCoordinator.getSnapshot().state).toBe("disposed");
+  });
+
+  it("does not expose or claim retry support for recipient setup without a new offer", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    mockedMethod(adapter.prepareAnswer).mockRejectedValueOnce(new DirectedCallWebRtcError("microphone_unavailable", "microphone_unavailable"));
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", { adapterFactory: (options) => bindAdapter(options, adapter) });
+    coordinator.start();
+    session.emit(projection("accepted", callId, "recipient"));
+    await vi.waitFor(() => expect(adapter.prepareAnswer).toHaveBeenCalled());
+    expect(coordinator.getSnapshot()).toMatchObject({ mediaErrorCode: "microphone_unavailable", canRetryMedia: false });
+    await expect(coordinator.retryMedia()).resolves.toBe(false);
+    expect(coordinator.getSnapshot()).toMatchObject({ mediaErrorCode: "microphone_unavailable", canRetryMedia: false });
     coordinator.dispose();
   });
 });
