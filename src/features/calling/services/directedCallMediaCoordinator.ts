@@ -1446,6 +1446,15 @@ export class DirectedCallMediaCoordinator {
           this.recordMediaDiagnostic("ice_sent", { transactionId: entry.renegotiationId, candidateAction: "sent", candidateIndex: this.flushedLocalCandidateCount });
           this.recordPeerConnectionDiagnostics();
         } catch {
+          if (
+            this.snapshot.projection?.state === "active"
+            && this.peerConnectionState === "connected"
+            && !entry.iceRestartId
+            && !entry.renegotiationId
+          ) {
+            this.recordMediaDiagnostic("failure", { callId, failureKind: "ice_candidate_send_failed_nonfatal", reason: "active_connection_preserved" });
+            continue;
+          }
           this.retireForTransport(callId, attempt, "ice_candidate_send_failed");
           return;
         }

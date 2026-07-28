@@ -611,6 +611,107 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(coordinator.getSnapshot().localIssue).toBe("transport_recovery");
   });
 
+  it("drops a failed late ICE candidate while preserving the connected active call", async () => {
+    setCallDebugEnabled(true);
+    resetDirectedCallDiagnosticTimeline();
+    const session = createSession();
+    (session.sendSignal as any).mockImplementation(async (...args: any[]) => {
+      if (args[2] === "ice_candidate" && args[3].candidate === "candidate:failed-late") throw new Error("candidate relay unavailable");
+    });
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let onIceCandidate!: (candidate: RTCIceCandidateInit) => void;
+    let onRemoteStream!: (stream: DirectedCallMediaStream) => void;
+    let onPeerConnectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => {
+        onIceCandidate = options.onIceCandidate!;
+        onRemoteStream = options.onRemoteStream!;
+        onPeerConnectionState = options.onPeerConnectionState!;
+        return bindAdapter(options, adapter);
+      },
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    session.emit(projection("connecting"));
+    session.emit(projection("active"));
+    const remoteStream = createStream([createTrack()]);
+    onRemoteStream(remoteStream);
+    onPeerConnectionState("connected");
+    const activeSnapshot = coordinator.getSnapshot();
+
+    onIceCandidate({ candidate: "candidate:failed-late", sdpMid: "0", sdpMLineIndex: 0 });
+    onIceCandidate({ candidate: "candidate:remaining", sdpMid: "0", sdpMLineIndex: 0 });
+    await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledWith(
+      callId,
+      expect.any(String),
+      "ice_candidate",
+      expect.objectContaining({ candidate: "candidate:remaining" }),
+    ));
+
+    expect(adapter.dispose).not.toHaveBeenCalled();
+    expect(coordinator.getSnapshot()).toMatchObject({
+      projection: activeSnapshot.projection,
+      state: activeSnapshot.state,
+      remoteAudioStream: remoteStream,
+      peerConnectionState: "connected",
+    });
+    expect((session.sendSignal as any).mock.calls.filter((call: any[]) => call[2] === "ice_candidate")).toHaveLength(2);
+    expect(getDirectedCallDiagnosticTimeline().some((entry) => entry.line.includes("failure_kind=ice_candidate_send_failed_nonfatal reason=active_connection_preserved"))).toBe(true);
+    expect(getDirectedCallDiagnosticTimeline().some((entry) => entry.line.includes("failure_kind=transport_recovery reason=ice_candidate_send_failed"))).toBe(false);
+    expect(getDirectedCallDiagnosticTimeline().every((entry) => !entry.line.includes("candidate relay unavailable"))).toBe(true);
+  });
+
+  it("keeps ICE candidate send failures terminal during setup and scoped to transactions", async () => {
+    setCallDebugEnabled(true);
+    resetDirectedCallDiagnosticTimeline();
+    const setupSession = createSession();
+    (setupSession.sendSignal as any).mockImplementation(async (...args: any[]) => {
+      if (args[2] === "ice_candidate") throw new Error("setup relay unavailable");
+    });
+    const setupTransport = new DirectedCallSignalTransport(setupSession, { generation: "g1" });
+    const setupAdapter = createAdapter();
+    let setupCandidate!: (candidate: RTCIceCandidateInit) => void;
+    const setupCoordinator = new DirectedCallMediaCoordinator(setupSession, setupTransport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { setupCandidate = options.onIceCandidate!; return bindAdapter(options, setupAdapter); },
+    });
+    setupCoordinator.start();
+    setupSession.emit(projection("accepted"));
+    await vi.waitFor(() => expect(setupAdapter.prepareOffer).toHaveBeenCalled());
+    setupSession.emit(projection("connecting"));
+    setupCandidate({ candidate: "candidate:setup", sdpMid: "0", sdpMLineIndex: 0 });
+    await vi.waitFor(() => expect(setupAdapter.dispose).toHaveBeenCalled());
+    expectTransportRetirement("ice_candidate_send_failed", "setup relay unavailable");
+
+    resetDirectedCallDiagnosticTimeline();
+    const scopedSession = createSession();
+    (scopedSession.sendSignal as any).mockImplementation(async (...args: any[]) => {
+      if (args[2] === "ice_candidate") throw new Error("scoped relay unavailable");
+    });
+    const scopedTransport = new DirectedCallSignalTransport(scopedSession, { generation: "g1" });
+    const scopedAdapter = createAdapter();
+    let scopedCandidate!: (candidate: RTCIceCandidateInit) => void;
+    let scopedConnectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const scopedCoordinator = new DirectedCallMediaCoordinator(scopedSession, scopedTransport, createLifecycle(), "g1", {
+      adapterFactory: (options) => {
+        scopedCandidate = options.onIceCandidate!;
+        scopedConnectionState = options.onPeerConnectionState!;
+        return bindAdapter(options, scopedAdapter);
+      },
+    });
+    scopedCoordinator.start();
+    scopedSession.emit(projection("accepted"));
+    await vi.waitFor(() => expect(scopedAdapter.prepareOffer).toHaveBeenCalled());
+    scopedSession.emit(projection("active"));
+    scopedConnectionState("connected");
+    const id = await scopedCoordinator.requestRenegotiation();
+    expect(id).toEqual(expect.any(String));
+    scopedCandidate({ candidate: "candidate:scoped", sdpMid: "0", sdpMLineIndex: 0 });
+    await vi.waitFor(() => expect(scopedAdapter.dispose).toHaveBeenCalled());
+    expectTransportRetirement("ice_candidate_send_failed", "scoped relay unavailable");
+  });
+
   it("discards local ICE callbacks after terminal disposal", async () => {
     const session = createSession();
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
