@@ -13,6 +13,7 @@ import { X } from 'lucide-react';
 import { themeLabels, type Theme } from "@/themes";
 import { buildMicrophoneConstraints } from "@/shared/utils/audioConstraints";
 import { mediaSettingsStore, useMediaSettings } from "@/shared/utils/mediaSettings";
+import { subscribeMediaDeviceRefresh } from "@/shared/utils/mediaDeviceObserver";
 import {
   getNotificationPermissionStatus,
   requestNotificationPermission,
@@ -110,15 +111,17 @@ function VoiceAudioSettings() {
   useEffect(() => {
     let disposed = false;
     const refresh = () => {
-      void refreshDevices().then((result) => {
+      void refreshDevices({ source: "settings" }).then((result) => {
         if (!disposed) applyDeviceRefreshFeedback(result);
       });
     };
     refresh();
-    navigator.mediaDevices?.addEventListener?.("devicechange", refresh);
+    const unsubscribe = subscribeMediaDeviceRefresh((result) => {
+      if (!disposed) applyDeviceRefreshFeedback(result);
+    });
     return () => {
       disposed = true;
-      navigator.mediaDevices?.removeEventListener?.("devicechange", refresh);
+      unsubscribe();
     };
   }, [applyDeviceRefreshFeedback, refreshDevices]);
 
@@ -162,7 +165,7 @@ function VoiceAudioSettings() {
       };
       updateLevel();
 
-      const result = await refreshDevices();
+      const result = await refreshDevices({ source: "permission" });
       applyDeviceRefreshFeedback(result);
       setAudioFeedback(null);
     } catch (err) {

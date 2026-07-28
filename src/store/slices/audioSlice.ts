@@ -2,6 +2,104 @@ import type { StateCreator } from "zustand";
 import { storage } from "@/shared/utils/storage";
 import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
 
+export type AudioDeviceRefreshSource =
+  | "initial"
+  | "settings"
+  | "permission"
+  | "devicechange";
+
+export type AudioDeviceRefreshOptions = {
+  requestPermission?: boolean;
+  source?: AudioDeviceRefreshSource;
+  observerScope?: AudioDeviceObserverScope;
+};
+
+export type AudioDeviceObserverScope = symbol;
+
+export type AudioDeviceRefreshResult = {
+  permissionState: "granted" | "denied" | "not-requested" | "unavailable";
+  labelsAvailable: boolean;
+  inputCount: number;
+  outputCount: number;
+  inputDeviceFallback: boolean;
+  outputDeviceFallback: boolean;
+  committed: boolean;
+};
+
+type RefreshRequest = {
+  generation: number;
+  options?: AudioDeviceRefreshOptions;
+  execute: (generation: number) => Promise<AudioDeviceRefreshResult>;
+  resolve: (result: AudioDeviceRefreshResult) => void;
+};
+
+let nextRefreshGeneration = 0;
+let activeRefresh = false;
+const pendingRefreshes: RefreshRequest[] = [];
+const invalidatedObserverScopes = new Set<AudioDeviceObserverScope>();
+
+function emptyRefreshResult(overrides: Partial<AudioDeviceRefreshResult> = {}): AudioDeviceRefreshResult {
+  return {
+    permissionState: "not-requested",
+    labelsAvailable: false,
+    inputCount: 0,
+    outputCount: 0,
+    inputDeviceFallback: false,
+    outputDeviceFallback: false,
+    committed: false,
+    ...overrides,
+  };
+}
+
+function isPassiveRefresh(options?: AudioDeviceRefreshOptions): boolean {
+  return !options?.requestPermission;
+}
+
+function processRefreshQueue(): void {
+  if (activeRefresh || pendingRefreshes.length === 0) return;
+  const request = pendingRefreshes.shift()!;
+  activeRefresh = true;
+  void request.execute(request.generation)
+    .then((result) => request.resolve(result))
+    .catch(() => request.resolve(emptyRefreshResult()))
+    .finally(() => {
+      activeRefresh = false;
+      processRefreshQueue();
+    });
+}
+
+function enqueueRefresh(
+  options: AudioDeviceRefreshOptions | undefined,
+  execute: (generation: number) => Promise<AudioDeviceRefreshResult>,
+): Promise<AudioDeviceRefreshResult> {
+  return new Promise((resolve) => {
+    const request: RefreshRequest = {
+      generation: ++nextRefreshGeneration,
+      options,
+      execute,
+      resolve,
+    };
+    const lastPending = pendingRefreshes[pendingRefreshes.length - 1];
+    if (isPassiveRefresh(options) && lastPending && isPassiveRefresh(lastPending.options)) {
+      lastPending.resolve(emptyRefreshResult());
+      pendingRefreshes[pendingRefreshes.length - 1] = request;
+    } else {
+      pendingRefreshes.push(request);
+    }
+    processRefreshQueue();
+  });
+}
+
+export function invalidateAudioDeviceRefreshes(scope: AudioDeviceObserverScope): void {
+  invalidatedObserverScopes.add(scope);
+  for (let index = pendingRefreshes.length - 1; index >= 0; index -= 1) {
+    const request = pendingRefreshes[index];
+    if (request.options?.observerScope !== scope) continue;
+    pendingRefreshes.splice(index, 1);
+    request.resolve(emptyRefreshResult());
+  }
+}
+
 export interface AudioSlice {
   micEnabled: boolean;
   soundEnabled: boolean;
@@ -25,16 +123,7 @@ export interface AudioSlice {
   setNoiseSuppression: (enabled: boolean) => void;
   setEchoCancellation: (enabled: boolean) => void;
   setAutoGainControl: (enabled: boolean) => void;
-  refreshDevices: (options?: {
-    requestPermission?: boolean;
-  }) => Promise<{
-    permissionState: "granted" | "denied" | "not-requested" | "unavailable";
-    labelsAvailable: boolean;
-    inputCount: number;
-    outputCount: number;
-    inputDeviceFallback: boolean;
-    outputDeviceFallback: boolean;
-  }>;
+  refreshDevices: (options?: AudioDeviceRefreshOptions) => Promise<AudioDeviceRefreshResult>;
 }
 
 const CASCADE_TOAST_KEY = "vetra_cascade_toast_shown";
@@ -137,17 +226,13 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
   setEchoCancellation: (enabled: boolean) => set({ echoCancellation: enabled }),
   setAutoGainControl: (enabled: boolean) => set({ autoGainControl: enabled }),
 
-  refreshDevices: async (options) => {
+  refreshDevices: (options) => enqueueRefresh(options, async (refreshGeneration) => {
+    const observerScope = options?.observerScope;
     const mediaDevices = navigator.mediaDevices;
     if (!mediaDevices?.enumerateDevices) {
-      return {
+      return emptyRefreshResult({
         permissionState: "unavailable" as const,
-        labelsAvailable: false,
-        inputCount: 0,
-        outputCount: 0,
-        inputDeviceFallback: false,
-        outputDeviceFallback: false,
-      };
+      });
     }
 
     let permissionState: "granted" | "denied" | "not-requested" | "unavailable" = "not-requested";
@@ -169,9 +254,32 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
       const outputDeviceFallback = outputDeviceId !== "default"
         && !outputs.some((device) => device.deviceId === outputDeviceId);
 
-      set({ availableInputDevices: inputs, availableOutputDevices: outputs });
-      if (inputDeviceFallback) mediaSettingsStore.setInputDeviceId("default");
-      if (outputDeviceFallback) mediaSettingsStore.setOutputDeviceId("default");
+      if (observerScope && invalidatedObserverScopes.has(observerScope)) {
+        return emptyRefreshResult({
+          permissionState,
+          labelsAvailable,
+          inputCount: inputs.length,
+          outputCount: outputs.length,
+          inputDeviceFallback,
+          outputDeviceFallback,
+        });
+      }
+
+      const isCurrentPassive = isPassiveRefresh(options) && nextRefreshGeneration === refreshGeneration;
+      if (isCurrentPassive || !isPassiveRefresh(options)) {
+        set({ availableInputDevices: inputs, availableOutputDevices: outputs });
+        if (inputDeviceFallback) mediaSettingsStore.setInputDeviceId("default");
+        if (outputDeviceFallback) mediaSettingsStore.setOutputDeviceId("default");
+      } else {
+        return emptyRefreshResult({
+          permissionState,
+          labelsAvailable,
+          inputCount: inputs.length,
+          outputCount: outputs.length,
+          inputDeviceFallback,
+          outputDeviceFallback,
+        });
+      }
 
       return {
         permissionState,
@@ -180,13 +288,10 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
         outputCount: outputs.length,
         inputDeviceFallback,
         outputDeviceFallback,
+        committed: true,
       };
     } catch (err) {
       console.error("Failed to enumerate audio devices:", err);
-      set({
-        availableInputDevices: [],
-        availableOutputDevices: [],
-      });
 
       if (
         err instanceof DOMException &&
@@ -197,6 +302,20 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
         permissionState = "unavailable";
       }
 
+      if (observerScope && invalidatedObserverScopes.has(observerScope)) {
+        return emptyRefreshResult({ permissionState });
+      }
+
+      const isCurrentPassive = isPassiveRefresh(options) && nextRefreshGeneration === refreshGeneration;
+      if (isCurrentPassive || !isPassiveRefresh(options)) {
+        set({
+          availableInputDevices: [],
+          availableOutputDevices: [],
+        });
+      } else {
+        return emptyRefreshResult({ permissionState });
+      }
+
       return {
         permissionState,
         labelsAvailable: false,
@@ -204,7 +323,8 @@ export const createAudioSlice: StateCreator<any, [], [], AudioSlice> = (set, get
         outputCount: 0,
         inputDeviceFallback: false,
         outputDeviceFallback: false,
+        committed: true,
       };
     }
-  },
+  }),
 });

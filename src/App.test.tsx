@@ -6,12 +6,16 @@ const {
   useAppStoreMock,
   setActiveChatMock,
   useCallMock,
+  getStateMock,
+  startObserverMock,
   audioMounts,
   audioUnmounts,
 } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
   setActiveChatMock: vi.fn(),
   useCallMock: vi.fn(),
+  getStateMock: vi.fn(() => ({ refreshDevices: vi.fn().mockResolvedValue({ committed: false }) })),
+  startObserverMock: vi.fn(() => vi.fn()),
   audioMounts: { current: 0 },
   audioUnmounts: { current: 0 },
 }));
@@ -47,6 +51,11 @@ function makeCallState(overrides = {}) {
 vi.mock("@/store", () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
     useAppStoreMock(selector),
+  getState: () => getStateMock(),
+}));
+
+vi.mock("@/shared/utils/mediaDeviceObserver", () => ({
+  startMediaDeviceObserver: () => startObserverMock(),
 }));
 
 vi.mock("./features/calling/context/CallRuntimeBoundary", async () => {
@@ -227,6 +236,7 @@ describe("App hash sync", () => {
     useAppStoreMock.mockReset();
     setActiveChatMock.mockReset();
     useCallMock.mockReset();
+    startObserverMock.mockReset().mockImplementation(() => vi.fn());
     useCallMock.mockReturnValue(makeCallState());
     audioMounts.current = 0;
     audioUnmounts.current = 0;
@@ -239,6 +249,18 @@ describe("App hash sync", () => {
           callback({ name }),
       },
     });
+  });
+
+  it("starts the device observer only for the authenticated app and cleans it up", () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+
+    const view = render(<App />);
+
+    expect(startObserverMock).toHaveBeenCalledOnce();
+    const cleanup = startObserverMock.mock.results[0]?.value as ReturnType<typeof vi.fn>;
+    view.unmount();
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it("renders the conversation EmptyPane and opens the picker once", () => {

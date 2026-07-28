@@ -8,6 +8,7 @@ import { useOptionalPersistentCall, usePersistentCall } from "../../context/Pers
 import type { PersistentCallAffordance } from "../../context/CallRuntimeBoundary";
 import { isUuid } from "../../protocol/directedCallProtocol";
 import { serializeResourceRef } from "@/shared/utils/resourceRef";
+import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
 
 export function PersistentCallSurface({ children }: { children: ReactNode }) {
   const call = usePersistentCall();
@@ -20,6 +21,9 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
   const showAudio = Boolean(mediaStream);
   const onAudioPlaybackStateChange = useCallback((state: "playing" | "autoplay_unavailable") => {
     setAudioPlaybackUnavailable(state === "autoplay_unavailable");
+  }, []);
+  const onOutputDeviceFallback = useCallback(() => {
+    mediaSettingsStore.setOutputDeviceId("default");
   }, []);
   useEffect(() => {
     setAudioPlaybackUnavailable(false);
@@ -34,6 +38,7 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
           peerAudioPreferenceKey={peerAudioPreferenceKey}
           playbackRequest={audioPlaybackRequest}
           onPlaybackStateChange={onAudioPlaybackStateChange}
+          onOutputDeviceFallback={onOutputDeviceFallback}
         />
       )}
       {audioPlaybackUnavailable && showAudio && (

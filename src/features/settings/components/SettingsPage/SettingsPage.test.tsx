@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
-const { useAppStoreMock } = vi.hoisted(() => ({
+const { useAppStoreMock, settingsStoreState } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
+  settingsStoreState: { current: null as any },
 }));
 
 const {
@@ -16,6 +17,7 @@ const {
 
 vi.mock("@/store", () => ({
   useAppStore: (selector: (state: unknown) => unknown) => useAppStoreMock(selector),
+  getState: () => ({ refreshDevices: settingsStoreState.current.refreshDevices }),
 }));
 
 vi.mock("@/features/profile/components/ProfileModal/ProfileModal", () => ({
@@ -47,6 +49,7 @@ vi.mock("@/services/notifications", () => ({
 
 import { SettingsPage } from "./SettingsPage";
 import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
+import { startMediaDeviceObserver } from "@/shared/utils/mediaDeviceObserver";
 
 class MockAudioContext {
   createAnalyser() {
@@ -83,6 +86,8 @@ describe("SettingsPage audio settings", () => {
         getUserMedia: vi.fn().mockResolvedValue({
           getTracks: () => [{ stop: vi.fn() }],
         }),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
       },
       writable: true,
     });
@@ -124,6 +129,7 @@ describe("SettingsPage audio settings", () => {
         outputCount: 1,
       }),
     };
+    settingsStoreState.current = storeState;
 
     useAppStoreMock.mockImplementation((selector: (state: typeof storeState) => unknown) =>
       selector(storeState),
@@ -296,7 +302,7 @@ describe("SettingsPage audio settings", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
 
     await waitFor(() => {
-      expect(storeState.refreshDevices).toHaveBeenCalledWith();
+      expect(storeState.refreshDevices).toHaveBeenCalledWith({ source: "settings" });
     });
     expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
   });
@@ -317,6 +323,60 @@ describe("SettingsPage audio settings", () => {
       /device names may stay hidden until you use test microphone/i,
     );
     expect(feedback).toHaveRole("status");
+  });
+
+  it("applies only committed global refresh feedback while mounted", async () => {
+    const mediaDevices = navigator.mediaDevices as MediaDevices & {
+      addEventListener: ReturnType<typeof vi.fn>;
+    };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    storeState.refreshDevices.mockResolvedValue({
+      permissionState: "not-requested",
+      labelsAvailable: false,
+      inputCount: 1,
+      outputCount: 1,
+      committed: true,
+    });
+
+    const { unmount } = render(<SettingsPage onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
+    await waitFor(() => expect(storeState.refreshDevices).toHaveBeenCalledWith({ source: "settings" }));
+    const feedbackBeforeStaleRefresh = screen.getByTestId("settings-audio-feedback").textContent;
+
+    const stopObserver = startMediaDeviceObserver();
+    const deviceChange = mediaDevices.addEventListener.mock.calls[mediaDevices.addEventListener.mock.calls.length - 1]?.[1] as (() => void) | undefined;
+    expect(deviceChange).toBeDefined();
+
+    storeState.refreshDevices.mockResolvedValueOnce({
+      permissionState: "not-requested",
+      labelsAvailable: true,
+      inputCount: 1,
+      outputCount: 1,
+      committed: false,
+    });
+    deviceChange?.();
+    await Promise.resolve();
+    expect(screen.getByTestId("settings-audio-feedback")).toHaveTextContent(feedbackBeforeStaleRefresh ?? "");
+
+    storeState.refreshDevices.mockResolvedValueOnce({
+      permissionState: "not-requested",
+      labelsAvailable: false,
+      inputCount: 1,
+      outputCount: 1,
+      committed: true,
+    });
+    deviceChange?.();
+    expect(await screen.findByTestId("settings-audio-feedback")).toHaveTextContent(
+      /device names may stay hidden until you use test microphone/i,
+    );
+
+    consoleError.mockClear();
+    unmount();
+    await Promise.resolve();
+    deviceChange?.();
+    await Promise.resolve();
+    expect(consoleError).not.toHaveBeenCalled();
+    stopObserver();
   });
 
   it("surfaces microphone permission errors from explicit actions", async () => {

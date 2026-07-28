@@ -37,12 +37,107 @@ describe("PersistentRemoteAudioRenderer output routing", () => {
     Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", { configurable: true, value: setSinkId });
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
 
-    const { rerender } = render(<PersistentRemoteAudioRenderer stream={{} as MediaStream} />);
+    const stream = {} as MediaStream;
+    const { rerender } = render(<PersistentRemoteAudioRenderer stream={stream} />);
+    const audio = () => screen.getByTestId("persistent-remote-audio") as HTMLAudioElement;
     await waitFor(() => expect(setSinkId).toHaveBeenCalledWith("speakers-1"));
+    expect(audio().srcObject).toBe(stream);
 
     storeState.mediaPreferences.outputDeviceId = "default";
-    rerender(<PersistentRemoteAudioRenderer stream={{} as MediaStream} />);
+    rerender(<PersistentRemoteAudioRenderer stream={stream} />);
     await waitFor(() => expect(setSinkId).toHaveBeenCalledWith("default"));
+    expect(audio().srcObject).toBe(stream);
+  });
+
+  it("reports a missing selected output and retries default once", async () => {
+    const setSinkId = vi.fn()
+      .mockRejectedValueOnce(new DOMException("The object can not be found here", "NotFoundError"))
+      .mockResolvedValue(undefined);
+    const onOutputDeviceFallback = vi.fn();
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", { configurable: true, value: setSinkId });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    const stream = {} as MediaStream;
+    render(
+      <PersistentRemoteAudioRenderer
+        stream={stream}
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />,
+    );
+
+    await waitFor(() => expect(onOutputDeviceFallback).toHaveBeenCalledWith("speakers-1"));
+    expect((screen.getByTestId("persistent-remote-audio") as HTMLAudioElement).srcObject).toBe(stream);
+    expect(onOutputDeviceFallback).toHaveBeenCalledTimes(1);
+    expect(setSinkId).toHaveBeenNthCalledWith(1, "speakers-1");
+    expect(setSinkId).toHaveBeenNthCalledWith(2, "default");
+  });
+
+  it("does not retry default for a second failure of the same selected device", async () => {
+    const setSinkId = vi.fn().mockRejectedValue(new DOMException("not found", "NotFoundError"));
+    const onOutputDeviceFallback = vi.fn();
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", { configurable: true, value: setSinkId });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    render(
+      <PersistentRemoteAudioRenderer
+        stream={{} as MediaStream}
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />,
+    );
+
+    await waitFor(() => expect(onOutputDeviceFallback).toHaveBeenCalledTimes(1));
+    expect(setSinkId).toHaveBeenCalledTimes(2);
+  });
+
+  it("detaches the old stream on replacement and on unmount", async () => {
+    const firstStream = {} as MediaStream;
+    const secondStream = {} as MediaStream;
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    const { rerender, unmount } = render(<PersistentRemoteAudioRenderer stream={firstStream} />);
+    const audio = () => screen.getByTestId("persistent-remote-audio") as HTMLAudioElement;
+
+    await waitFor(() => expect(audio().srcObject).toBe(firstStream));
+    const element = audio();
+    rerender(<PersistentRemoteAudioRenderer stream={secondStream} />);
+    await waitFor(() => expect(audio().srcObject).toBe(secondStream));
+    unmount();
+    expect(element.srcObject).toBeNull();
+  });
+
+  it("does not loop when the default fallback also fails", async () => {
+    const setSinkId = vi.fn()
+      .mockRejectedValue(new DOMException("not found", "NotFoundError"));
+    const onOutputDeviceFallback = vi.fn();
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", { configurable: true, value: setSinkId });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    render(
+      <PersistentRemoteAudioRenderer
+        stream={{} as MediaStream}
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />,
+    );
+
+    await waitFor(() => expect(onOutputDeviceFallback).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setSinkId).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(setSinkId).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps default and security failures diagnostics-only", async () => {
+    const setSinkId = vi.fn().mockRejectedValue(new DOMException("The operation is insecure", "SecurityError"));
+    const onOutputDeviceFallback = vi.fn();
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", { configurable: true, value: setSinkId });
+
+    render(
+      <PersistentRemoteAudioRenderer
+        stream={{} as MediaStream}
+        onOutputDeviceFallback={onOutputDeviceFallback}
+      />,
+    );
+
+    await waitFor(() => expect(setSinkId).toHaveBeenCalled());
+    expect(onOutputDeviceFallback).not.toHaveBeenCalled();
   });
 
   it("continues using system-default playback when output routing is unsupported", async () => {

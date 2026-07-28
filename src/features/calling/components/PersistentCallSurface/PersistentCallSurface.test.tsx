@@ -1,8 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PersistentCallProvider } from "../../context/PersistentCallContext";
 import { PersistentCallSurface } from "./PersistentCallSurface";
+import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
+
+afterEach(() => {
+  mediaSettingsStore.reset();
+  Reflect.deleteProperty(HTMLMediaElement.prototype, "setSinkId");
+});
 
 function renderSurface({ phase = "active", presentationOverrides = {}, mediaOverrides = {} }: {
   phase?: string;
@@ -66,6 +72,21 @@ describe("PersistentCallSurface", () => {
     expect(media.toggleMute).not.toHaveBeenCalled();
     expect(play).toHaveBeenCalledTimes(2);
     play.mockRestore();
+  });
+
+  it("persists the persistent output fallback through mediaSettingsStore", async () => {
+    const setSinkId = vi.fn()
+      .mockRejectedValueOnce(new DOMException("not found", "NotFoundError"))
+      .mockResolvedValue(undefined);
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", { configurable: true, value: setSinkId });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    const setOutputDeviceId = vi.spyOn(mediaSettingsStore, "setOutputDeviceId");
+    mediaSettingsStore.setOutputDeviceId("speakers-1");
+    const remoteAudioStream = {} as MediaStream;
+
+    renderSurface({ mediaOverrides: { getSnapshot: () => ({ state: "signaling_ready", remoteAudioStream, localIssue: null, isMuted: false, canToggleMute: true, peerConnectionState: "connected" }) } });
+
+    await waitFor(() => expect(setOutputDeviceId).toHaveBeenCalledWith("default"));
   });
 
   it("renders exactly one correlated incoming modal and no modal for outgoing presentation", () => {

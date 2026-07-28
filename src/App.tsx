@@ -27,6 +27,7 @@ import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
 import { PersistentCallDebugPanel, PersistentCallDiagnosticsShortcut } from "@/features/calling/components/PersistentCallDebugPanel";
 import type { ActiveChat } from "@/shared/types";
+import { startMediaDeviceObserver } from "@/shared/utils/mediaDeviceObserver";
 
 const LEFT_PANE_STORAGE_KEY = "vetra:left-pane-width";
 const LEFT_PANE_MODE_STORAGE_KEY = "vetra:left-pane-mode";
@@ -80,6 +81,11 @@ function App() {
   const socketManager = useAppStore((s) => s.socketManager);
   useAuthHydration();
   useSocketEvents();
+
+  useEffect(() => {
+    if (!currentUser) return;
+    return startMediaDeviceObserver();
+  }, [currentUser]);
 
   if (!currentUser) {
     return <AuthPage />;
