@@ -10,6 +10,7 @@ const {
   startObserverMock,
   audioMounts,
   audioUnmounts,
+  persistentAudioState,
 } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
   setActiveChatMock: vi.fn(),
@@ -18,6 +19,7 @@ const {
   startObserverMock: vi.fn(() => vi.fn()),
   audioMounts: { current: 0 },
   audioUnmounts: { current: 0 },
+  persistentAudioState: { muted: undefined as boolean | undefined, deafened: undefined as boolean | undefined, effectiveMuted: undefined as boolean | undefined },
 }));
 
 function makeCallState(overrides = {}) {
@@ -94,7 +96,7 @@ vi.mock("./features/calling/context/CallRuntimeBoundary", async () => {
       startCall: vi.fn(), accept: vi.fn(), decline: vi.fn(), cancelCall: vi.fn(), hangup: vi.fn(), retryPendingAction: vi.fn(),
     },
     media: {
-      getSnapshot: () => ({ state: "active", remoteAudioStream: useCallMock(1).remoteStream, localIssue: null, isMuted: false, canToggleMute: true }),
+      getSnapshot: () => ({ state: "active", remoteAudioStream: useCallMock(1).remoteStream, localIssue: null, isMuted: false, canToggleMute: true, ...persistentAudioState }),
       subscribe: (listener: () => void) => { mediaListeners.add(listener); return () => mediaListeners.delete(listener); },
       toggleMute: vi.fn(),
     },
@@ -148,12 +150,15 @@ vi.mock("@/features/messaging/components/Sidebar/SidebarFooter", () => ({
     callStatus,
     onOpenSettings,
     onReturnToCall,
+    effectiveMuted,
   }: {
     callStatus: string;
     onOpenSettings: () => void;
     onReturnToCall?: () => void;
+    effectiveMuted?: boolean;
   }) => (
     <div>
+      <output data-testid="sidebar-effective-muted">{String(effectiveMuted)}</output>
       <button onClick={onOpenSettings}>open settings</button>
       {callStatus === "active" && (
         <button onClick={onReturnToCall}>return to call</button>
@@ -240,6 +245,9 @@ describe("App hash sync", () => {
     useCallMock.mockReturnValue(makeCallState());
     audioMounts.current = 0;
     audioUnmounts.current = 0;
+    persistentAudioState.muted = undefined;
+    persistentAudioState.deafened = undefined;
+    persistentAudioState.effectiveMuted = undefined;
     window.location.hash = "#";
     window.localStorage.clear();
     Object.defineProperty(navigator, "locks", {
@@ -638,6 +646,38 @@ describe("App hash sync", () => {
     expect(audioUnmounts.current).toBe(0);
     expect(startCall).not.toHaveBeenCalled();
     expect(setActiveChatMock).not.toHaveBeenCalled();
+  });
+
+  it("derives persistent effective mute from mute and deafen when omitted", async () => {
+    const remoteStream = { id: "remote-stream-1" } as MediaStream;
+    const state = makeState();
+    state.activeChat = { type: "direct", partnerId: 2, partnerRef: "2" };
+    window.location.hash = "#/2";
+    persistentAudioState.muted = false;
+    persistentAudioState.deafened = true;
+
+    useCallMock.mockReturnValue(makeCallState({ status: "active", remoteStream, remoteUsername: "Partner", remoteUserId: 2 }));
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId("sidebar-effective-muted")).toHaveTextContent("true"));
+  });
+
+  it("derives persistent effective mute as false when both preferences are false and omitted", async () => {
+    const remoteStream = { id: "remote-stream-1" } as MediaStream;
+    const state = makeState();
+    state.activeChat = { type: "direct", partnerId: 2, partnerRef: "2" };
+    window.location.hash = "#/2";
+    persistentAudioState.muted = false;
+    persistentAudioState.deafened = false;
+
+    useCallMock.mockReturnValue(makeCallState({ status: "active", remoteStream, remoteUsername: "Partner", remoteUserId: 2 }));
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId("sidebar-effective-muted")).toHaveTextContent("false"));
   });
 
   it("returns from Settings to the persistent active call direct chat", async () => {

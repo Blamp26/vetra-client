@@ -318,6 +318,7 @@ export class DirectedCallWebRtcAdapter {
   private disposed = false;
   private offerPrepared = false;
   private epoch = 0;
+  /** Last effective mute value applied to local audio tracks. */
   private localAudioMuted = false;
   private audioSwitchEpoch = 0;
   private audioReplacementTail: Promise<void> = Promise.resolve();

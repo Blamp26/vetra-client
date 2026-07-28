@@ -56,6 +56,10 @@ export interface DirectedCallMediaCoordinatorSnapshot {
   peerConnectionState: RTCPeerConnectionState | null;
   isMuted: boolean;
   canToggleMute: boolean;
+  muted: boolean;
+  deafened: boolean;
+  effectiveMuted: boolean;
+  canToggleDeafen: boolean;
 }
 
 export interface DirectedCallMediaLifecyclePort {
@@ -204,6 +208,7 @@ export class DirectedCallMediaCoordinator {
   private beginConnectingInFlight = false;
   private mediaReadyInFlight = false;
   private localStream: DirectedCallMediaStream | null = null;
+  private localAudioState = { muted: false, deafened: false };
   private readonly localTrackCleanups = new Map<DirectedCallMediaStreamTrack, () => void>();
   private localStreamCleanup: (() => void) | null = null;
   private readonly queuedLocalCandidates: Array<{ candidate: RTCIceCandidateInit; callId: string; attempt: number; renegotiationId?: string; iceRestartId?: string }> = [];
@@ -248,7 +253,7 @@ export class DirectedCallMediaCoordinator {
     this.lifecycle = lifecycle;
     this.generation = generation;
     this.isGenerationCurrent = options.isGenerationCurrent ?? ((current) => current === this.generation);
-    this.snapshot = { state: "idle", callId: null, participantRole: null, projection: null, generation, recovery: null, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false };
+    this.snapshot = this.audioSnapshot({ state: "idle", callId: null, participantRole: null, projection: null, generation, recovery: null, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false });
     this.adapterFactory = options.adapterFactory ?? ((adapterOptions) => new DirectedCallWebRtcAdapter(adapterOptions));
     this.audioConstraints = options.audioConstraints;
     this.onRecoveryResult = options.onRecoveryResult;
@@ -522,9 +527,10 @@ export class DirectedCallMediaCoordinator {
     this.remoteAudioStream = null;
     this.peerConnectionState = null;
     this.adapter = this.createAdapter();
+    this.localAudioState = { muted: false, deafened: false };
     this.recordMediaDiagnostic("cleanup", { callId, reason: "coordinator_reset" });
     this.recordMediaDiagnostic("cleanup", { callId, reason: "call_terminal_reset" });
-    this.setSnapshot({
+    this.setSnapshot(this.audioSnapshot({
       state: "idle",
       callId: null,
       participantRole: null,
@@ -539,7 +545,7 @@ export class DirectedCallMediaCoordinator {
       peerConnectionState: null,
       isMuted: false,
       canToggleMute: false,
-    });
+    }));
   }
 
   dispose(): void {
@@ -557,6 +563,7 @@ export class DirectedCallMediaCoordinator {
     this.unsubscribeSignal = null;
     this.unsubscribeIceRestart = null;
     this.clearLocalMediaState();
+    this.localAudioState = { muted: false, deafened: false };
     this.recordMediaDiagnostic("cleanup", { callId: this.snapshot.callId, reason: "coordinator_disposed" });
     this.signalTransport.dispose();
     this.renegotiation = null;
@@ -579,7 +586,7 @@ export class DirectedCallMediaCoordinator {
     this.offer = null;
     this.remoteAudioStream = null;
     this.localIssue = null;
-    this.setSnapshot({ state: "disposed", callId: null, participantRole: null, projection: null, generation: this.generation, recovery: null, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false });
+    this.setSnapshot(this.audioSnapshot({ state: "disposed", callId: null, participantRole: null, projection: null, generation: this.generation, recovery: null, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, peerConnectionState: null, isMuted: false, canToggleMute: false }));
     this.listeners.clear();
   }
 
@@ -661,7 +668,7 @@ export class DirectedCallMediaCoordinator {
     const localScreenShareStream = projection.state === "active"
       ? (this.adapter.getLocalScreenShareStream?.() ?? null)
       : null;
-    this.setSnapshot({ state, callId: projection.call_id, participantRole: projection.participant_role, projection, generation: this.generation, recovery: this.snapshot.recovery, remoteAudioStream: this.remoteAudioStream, localScreenShareStream, isLocalScreenShareActive: projection.state === "active" && this.localScreenShareActive, remoteScreenShareStream: this.remoteScreenShareStream, localIssue: this.localIssue, peerConnectionState: this.peerConnectionState, isMuted: this.snapshot.isMuted, canToggleMute: this.snapshot.canToggleMute });
+    this.setSnapshot(this.audioSnapshot({ state, callId: projection.call_id, participantRole: projection.participant_role, projection, generation: this.generation, recovery: this.snapshot.recovery, remoteAudioStream: this.remoteAudioStream, localScreenShareStream, isLocalScreenShareActive: projection.state === "active" && this.localScreenShareActive, remoteScreenShareStream: this.remoteScreenShareStream, localIssue: this.localIssue, peerConnectionState: this.peerConnectionState, isMuted: this.snapshot.isMuted, canToggleMute: this.snapshot.canToggleMute }));
 
     if (projection.state === "accepted") void this.startMedia(projection);
     if (projection.state === "connecting") {
@@ -1721,12 +1728,22 @@ export class DirectedCallMediaCoordinator {
 
   toggleMute(): boolean {
     if (this.disposed || !["accepted", "connecting", "active"].includes(this.snapshot.projection?.state ?? "")) return false;
-    const muted = !this.adapter.isLocalAudioMuted;
-    if (!this.adapter.setLocalAudioMuted(muted)) {
-      this.syncLocalMediaState(this.snapshot.callId, this.mediaAttemptEpoch);
-      return false;
-    }
-    this.setSnapshot({ ...this.snapshot, isMuted: muted, canToggleMute: true });
+    const liveAudioTracks = this.adapter.localMediaStream?.getTracks().filter((track) =>
+      (track.kind === undefined || track.kind === "audio") && track.readyState !== "ended",
+    ) ?? [];
+    if (liveAudioTracks.length === 0) return false;
+    const muted = !this.localAudioState.muted;
+    this.localAudioState = { ...this.localAudioState, muted };
+    this.applyEffectiveMute();
+    this.setSnapshot(this.audioSnapshot({ ...this.snapshot, isMuted: this.localAudioState.deafened || muted, canToggleMute: true }));
+    return true;
+  }
+
+  toggleDeafen(): boolean {
+    if (this.disposed || !["accepted", "connecting", "active"].includes(this.snapshot.projection?.state ?? "")) return false;
+    this.localAudioState = { ...this.localAudioState, deafened: !this.localAudioState.deafened };
+    this.applyEffectiveMute();
+    this.setSnapshot(this.audioSnapshot({ ...this.snapshot, isMuted: this.localAudioState.deafened || this.localAudioState.muted }));
     return true;
   }
 
@@ -1771,8 +1788,8 @@ export class DirectedCallMediaCoordinator {
     const liveAudioTracks = stream?.getTracks().filter((track) =>
       (track.kind === undefined || track.kind === "audio") && track.readyState !== "ended",
     ) ?? [];
-    if (this.adapter.isLocalAudioMuted && liveAudioTracks.length > 0) {
-      this.adapter.setLocalAudioMuted(true);
+    if (liveAudioTracks.length > 0) {
+      this.applyEffectiveMute();
     }
     this.localTrackCleanups.forEach((cleanup, track) => {
       if (!liveAudioTracks.includes(track)) {
@@ -1788,9 +1805,9 @@ export class DirectedCallMediaCoordinator {
     });
 
     const nextCanToggleMute = liveAudioTracks.length > 0;
-    const nextIsMuted = nextCanToggleMute ? this.adapter.isLocalAudioMuted : false;
+    const nextIsMuted = nextCanToggleMute ? this.localAudioState.deafened || this.localAudioState.muted : false;
     if (this.snapshot.canToggleMute !== nextCanToggleMute || this.snapshot.isMuted !== nextIsMuted) {
-      this.setSnapshot({ ...this.snapshot, canToggleMute: nextCanToggleMute, isMuted: nextIsMuted });
+      this.setSnapshot(this.audioSnapshot({ ...this.snapshot, canToggleMute: nextCanToggleMute, isMuted: nextIsMuted }));
     }
   }
 
@@ -1805,5 +1822,20 @@ export class DirectedCallMediaCoordinator {
   private setSnapshot(snapshot: DirectedCallMediaCoordinatorSnapshot): void {
     this.snapshot = snapshot;
     this.listeners.forEach((listener) => listener(snapshot));
+  }
+
+  private applyEffectiveMute(): boolean {
+    return this.adapter.setLocalAudioMuted(this.localAudioState.muted || this.localAudioState.deafened);
+  }
+
+  private audioSnapshot(snapshot: Omit<DirectedCallMediaCoordinatorSnapshot, "muted" | "deafened" | "effectiveMuted" | "canToggleDeafen">): DirectedCallMediaCoordinatorSnapshot {
+    const effectiveMuted = this.localAudioState.muted || this.localAudioState.deafened;
+    return {
+      ...snapshot,
+      muted: this.localAudioState.muted,
+      deafened: this.localAudioState.deafened,
+      effectiveMuted,
+      canToggleDeafen: snapshot.projection?.state === "accepted" || snapshot.projection?.state === "connecting" || snapshot.projection?.state === "active",
+    };
   }
 }

@@ -201,7 +201,7 @@ describe("PersistentRemoteAudioRenderer output routing", () => {
     expect(play).toHaveBeenCalledTimes(1);
   });
 
-  it("silences volume zero and global sound disable", async () => {
+  it("silences volume zero and call-local deafen", async () => {
     storeState.callUserVolumes["string:peer-a"] = 0;
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     const { rerender } = render(<PersistentRemoteAudioRenderer stream={{} as MediaStream} peerAudioPreferenceKey="string:peer-a" />);
@@ -212,8 +212,7 @@ describe("PersistentRemoteAudioRenderer output routing", () => {
     });
 
     storeState.callUserVolumes["string:peer-a"] = 100;
-    storeState.soundEnabled = false;
-    rerender(<PersistentRemoteAudioRenderer stream={{} as MediaStream} peerAudioPreferenceKey="string:peer-a" />);
+    rerender(<PersistentRemoteAudioRenderer stream={{} as MediaStream} peerAudioPreferenceKey="string:peer-a" deafened />);
     await waitFor(() => {
       expect(audio().volume).toBe(1);
       expect(audio().muted).toBe(true);
@@ -230,6 +229,20 @@ describe("PersistentRemoteAudioRenderer output routing", () => {
 
     rerender(<PersistentRemoteAudioRenderer stream={{} as MediaStream} peerAudioPreferenceKey="string:peer-b" />);
     await waitFor(() => expect(audio().volume).toBeCloseTo(0.8));
+  });
+
+  it("keeps current and newly arriving streams attached while deafened", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    const firstStream = {} as MediaStream;
+    const secondStream = {} as MediaStream;
+    const { rerender } = render(<PersistentRemoteAudioRenderer stream={firstStream} deafened />);
+    const audio = () => screen.getByTestId("persistent-remote-audio") as HTMLAudioElement;
+    await waitFor(() => expect(audio().srcObject).toBe(firstStream));
+    expect(audio().muted).toBe(true);
+
+    rerender(<PersistentRemoteAudioRenderer stream={secondStream} deafened />);
+    await waitFor(() => expect(audio().srcObject).toBe(secondStream));
+    expect(audio().muted).toBe(true);
   });
 
   it("falls back to an unmuted full peer volume when the key is unavailable", async () => {

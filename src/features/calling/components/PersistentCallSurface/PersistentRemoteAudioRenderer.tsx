@@ -8,12 +8,14 @@ export type PersistentAudioPlaybackState = "playing" | "autoplay_unavailable";
 
 export function PersistentRemoteAudioRenderer({
   stream,
+  deafened,
   peerAudioPreferenceKey,
   playbackRequest = 0,
   onPlaybackStateChange,
   onOutputDeviceFallback,
 }: {
   stream: MediaStream | null;
+  deafened?: boolean;
   peerAudioPreferenceKey?: string;
   playbackRequest?: number;
   onPlaybackStateChange?: (state: PersistentAudioPlaybackState) => void;
@@ -39,7 +41,6 @@ export function PersistentRemoteAudioRenderer({
   } | null>(null);
   const { preferences } = useMediaSettings();
   const selectedOutputDeviceId = preferences.outputDeviceId;
-  const soundEnabled = useAppStore((state: RootState) => state.soundEnabled);
   const outputVolume = useAppStore((state: RootState) => state.outputVolume);
   const callUserVolume = useAppStore((state: RootState) => peerAudioPreferenceKey ? state.callUserVolumes?.[peerAudioPreferenceKey] : undefined);
   const callUserMuted = useAppStore((state: RootState) => peerAudioPreferenceKey ? Boolean(state.mutedCallUserIds?.[peerAudioPreferenceKey]) : false);
@@ -195,8 +196,8 @@ export function PersistentRemoteAudioRenderer({
     const safePeerVolume = Math.min(100, Math.max(0, typeof callUserVolume === "number" && Number.isFinite(callUserVolume) ? callUserVolume : 100));
     const effectiveVolume = Math.min(1, Math.max(0, safeGlobalVolume * (callUserMuted ? 0 : safePeerVolume / 100)));
     audio.volume = effectiveVolume;
-    audio.muted = !soundEnabled || effectiveVolume === 0;
-  }, [callUserMuted, callUserVolume, outputVolume, soundEnabled]);
+    audio.muted = Boolean(deafened) || callUserMuted || effectiveVolume === 0;
+  }, [callUserMuted, callUserVolume, deafened, outputVolume]);
 
   return <audio ref={audioRef} autoPlay playsInline aria-label="Persistent call audio" data-testid="persistent-remote-audio" />;
 }

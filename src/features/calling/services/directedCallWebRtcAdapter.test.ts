@@ -321,6 +321,18 @@ describe("DirectedCallWebRtcAdapter", () => {
     expect(harness.createPeerConnection).toHaveBeenCalledTimes(2);
   });
 
+  it("inherits the effective mute state across a same-call peer rebuild", async () => {
+    const harness = createDistinctRebuildHarness();
+    await harness.adapter.prepareOffer();
+    expect(harness.adapter.setLocalAudioMuted(true)).toBe(true);
+    expect(harness.track.enabled).toBe(false);
+
+    await harness.adapter.rebuildPeerConnection();
+
+    expect(harness.track.enabled).toBe(false);
+    expect(harness.adapter.isLocalAudioMuted).toBe(true);
+  });
+
   it("retires the old PC and binds remote screen media to one replacement transceiver", async () => {
     const harness = createDistinctRebuildHarness();
     const adapter = harness.adapter;

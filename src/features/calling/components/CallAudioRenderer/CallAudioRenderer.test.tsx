@@ -370,7 +370,7 @@ describe('CallAudioRenderer', () => {
     expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
 
-  it('applies soundEnabled and outputVolume to remote playback', () => {
+  it('applies call-local deafen and outputVolume to remote playback', () => {
     const { rerender } = render(
       <CallAudioRenderer
         remoteStream={null}
@@ -388,7 +388,7 @@ describe('CallAudioRenderer', () => {
       <CallAudioRenderer
         remoteStream={null}
         selectedOutputDeviceId="default"
-        soundEnabled={false}
+        deafened
         outputVolume={0.4}
       />,
     );
@@ -400,7 +400,7 @@ describe('CallAudioRenderer', () => {
       <CallAudioRenderer
         remoteStream={null}
         selectedOutputDeviceId="default"
-        soundEnabled
+        deafened={false}
         outputVolume={0}
       />,
     );
@@ -422,5 +422,22 @@ describe('CallAudioRenderer', () => {
 
     rerender(<CallAudioRenderer remoteStream={null} selectedOutputDeviceId="default" soundEnabled outputVolume={0.8} callUserVolume={50} callUserMuted={false} />);
     expect(audio.volume).toBeCloseTo(0.4);
+  });
+
+  it('mutes without detaching current or newly supplied streams while deafened', () => {
+    const firstStream = new MediaStream();
+    const secondStream = new MediaStream();
+    const { rerender } = render(
+      <CallAudioRenderer remoteStream={firstStream} selectedOutputDeviceId="default" deafened outputVolume={1} />,
+    );
+    const audio = screen.getByTestId('call-audio-renderer') as HTMLAudioElement;
+    expect(audio.srcObject).toBe(firstStream);
+    expect(audio.muted).toBe(true);
+
+    rerender(
+      <CallAudioRenderer remoteStream={secondStream} selectedOutputDeviceId="default" deafened outputVolume={1} />,
+    );
+    expect(audio.srcObject).toBe(secondStream);
+    expect(audio.muted).toBe(true);
   });
 });

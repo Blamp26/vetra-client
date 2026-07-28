@@ -54,6 +54,7 @@ function renderFooter({
   onHangUp = vi.fn(),
   onCancelCall = vi.fn(),
   onMuteToggle = vi.fn(),
+  onDeafenToggle = vi.fn(),
   callDirection,
   canCancelCall,
   canHangUpCall,
@@ -61,6 +62,10 @@ function renderFooter({
   onOpenSettings = vi.fn(),
   isCollapsed = false,
   isMuted = false,
+  deafened = false,
+  effectiveMuted,
+  canToggleMute = true,
+  canToggleDeafen = true,
 }: {
   callStatus?: CallStatus;
   callUxStatus?: CallUxStatus["kind"];
@@ -74,6 +79,7 @@ function renderFooter({
   onHangUp?: () => void;
   onCancelCall?: () => void;
   onMuteToggle?: () => void;
+  onDeafenToggle?: () => void;
   callDirection?: "incoming" | "outgoing" | null;
   canCancelCall?: boolean;
   canHangUpCall?: boolean;
@@ -81,6 +87,10 @@ function renderFooter({
   onOpenSettings?: () => void;
   isCollapsed?: boolean;
   isMuted?: boolean;
+  deafened?: boolean;
+  effectiveMuted?: boolean;
+  canToggleMute?: boolean;
+  canToggleDeafen?: boolean;
 } = {}) {
   return render(
     <SidebarFooter
@@ -89,11 +99,16 @@ function renderFooter({
       remoteUsername={remoteUsername}
       callSeconds={12}
       isMuted={isMuted}
+      deafened={deafened}
+      effectiveMuted={effectiveMuted}
+      canToggleMute={canToggleMute}
+      canToggleDeafen={canToggleDeafen}
       isScreenSharing={isScreenSharing}
       isScreenShareUpdating={isScreenShareUpdating}
       callIssue={callIssue}
       isIncomingActionPending={isIncomingActionPending}
       onMuteToggle={onMuteToggle}
+      onDeafenToggle={onDeafenToggle}
       onHangUp={onHangUp}
       onCancelCall={onCancelCall}
       onAcceptCall={onAcceptCall}
@@ -176,7 +191,7 @@ describe("SidebarFooter call UX", () => {
 
     expect(screen.getByText("Reconnecting...")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Mute microphone" }));
-    expect(toggleMicMock).toHaveBeenCalledTimes(1);
+    expect(toggleMicMock).not.toHaveBeenCalled();
     expect(onMuteToggle).not.toHaveBeenCalled();
   });
 
@@ -285,7 +300,7 @@ describe("SidebarFooter call UX", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Mute microphone" }));
 
-    expect(toggleMicMock).toHaveBeenCalledTimes(1);
+    expect(toggleMicMock).not.toHaveBeenCalled();
     expect(onMuteToggle).toHaveBeenCalledTimes(1);
     expect(onReturnToCall).not.toHaveBeenCalled();
   });
@@ -327,7 +342,39 @@ describe("SidebarFooter call UX", () => {
     renderFooter({ callStatus: "active", isMuted: true });
 
     expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Restore call audio output" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mute call audio" })).toBeInTheDocument();
+  });
+
+  it("routes active-call output only to deafen and preserves global output outside calls", () => {
+    const onDeafenToggle = vi.fn();
+    renderFooter({ callStatus: "active", onDeafenToggle, canToggleDeafen: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mute call audio" }));
+    expect(onDeafenToggle).toHaveBeenCalledTimes(1);
+    expect(toggleSoundMock).not.toHaveBeenCalled();
+
+    renderFooter({ callStatus: "idle" });
+    fireEvent.click(screen.getByRole("button", { name: "Mute sound" }));
+    expect(toggleSoundMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the implicit mute label while the active call is deafened", () => {
+    renderFooter({ callStatus: "active", isMuted: false, deafened: true, effectiveMuted: true, canToggleDeafen: true });
+
+    expect(screen.getByRole("button", { name: "Microphone muted while deafened" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Restore call audio" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("derives effective mute from mute and deafen when omitted", () => {
+    renderFooter({ callStatus: "active", isMuted: false, deafened: true, effectiveMuted: undefined });
+
+    expect(screen.getByRole("button", { name: "Microphone muted while deafened" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps effective mute false when both preferences are false and omitted", () => {
+    renderFooter({ callStatus: "active", isMuted: false, deafened: false, effectiveMuted: undefined });
+
+    expect(screen.getByRole("button", { name: "Mute microphone" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("keeps settings wired to the existing handler", () => {

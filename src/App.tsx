@@ -127,6 +127,11 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     remoteUsername = persistentSidebar?.remoteUsername ?? null,
     remoteUserId = persistentCall?.presentation.peerPublicId ?? null,
     isMuted = persistentCall?.isMuted ?? false,
+    muted = persistentCall?.muted ?? isMuted,
+    deafened = persistentCall?.deafened ?? false,
+    effectiveMuted = persistentCall?.effectiveMuted ?? (muted || deafened),
+    canToggleMute = persistentCall?.canToggleMute ?? false,
+    canToggleDeafen = persistentCall?.canToggleDeafen ?? false,
     isScreenSharing = false,
     isScreenShareUpdating = false,
     seconds = persistentSidebar?.seconds ?? 0,
@@ -138,6 +143,11 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const resolvedRemoteUsername = call?.remoteUsername ?? remoteUsername;
   const resolvedRemoteUserId = call?.remoteUserId ?? remoteUserId;
   const resolvedIsMuted = call?.isMuted ?? isMuted;
+  const resolvedMuted = call?.muted ?? muted;
+  const resolvedDeafened = call?.deafened ?? deafened;
+  const resolvedEffectiveMuted = call?.effectiveMuted ?? effectiveMuted;
+  const resolvedCanToggleMute = call?.canToggleMute ?? canToggleMute;
+  const resolvedCanToggleDeafen = call?.canToggleDeafen ?? canToggleDeafen;
   const resolvedCallIssue = call?.callIssue ?? callIssue;
   const resolvedIncomingActionPending = call?.isIncomingActionPending ?? isIncomingActionPending;
   const activeChat = useAppStore((s) => s.activeChat);
@@ -624,11 +634,17 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
             remoteUsername={resolvedRemoteUsername}
             callSeconds={seconds}
             isMuted={resolvedIsMuted}
+            muted={resolvedMuted}
+            deafened={resolvedDeafened}
+            effectiveMuted={resolvedEffectiveMuted}
+            canToggleMute={resolvedCanToggleMute}
+            canToggleDeafen={resolvedCanToggleDeafen}
             isScreenSharing={isScreenSharing}
             isScreenShareUpdating={isScreenShareUpdating}
             callIssue={resolvedCallIssue}
             isIncomingActionPending={resolvedIncomingActionPending}
             onMuteToggle={call?.toggleMute ?? (() => { persistentCall?.toggleMute(); })}
+            onDeafenToggle={call?.toggleDeafen ?? (() => { persistentCall?.toggleDeafen(); })}
             onHangUp={call?.hangUp ?? (() => { void persistentCall?.hangup(); })}
             onCancelCall={call ? undefined : persistentSidebar?.canCancel ? () => { void persistentCall?.cancel(); } : undefined}
             onAcceptCall={call?.acceptCall ?? (persistentSidebar?.direction === "incoming" ? () => { void persistentCall?.accept(); } : undefined)}

@@ -13,6 +13,11 @@ export interface PersistentSidebarCallModel {
   remoteUsername: string | null;
   seconds: number;
   isMuted: boolean;
+  muted: boolean;
+  deafened: boolean;
+  effectiveMuted: boolean;
+  canToggleMute: boolean;
+  canToggleDeafen: boolean;
   callIssue: CallIssue | null;
   isIncomingActionPending: boolean;
   canCancel: boolean;
@@ -26,6 +31,11 @@ export interface PersistentActiveCallDockModel {
   remoteUsername: string;
   seconds: number;
   isMuted: boolean;
+  muted: boolean;
+  deafened: boolean;
+  effectiveMuted: boolean;
+  canToggleMute: boolean;
+  canToggleDeafen: boolean;
   callIssue: CallIssue | null;
   diagnostics: CallDiagnostics;
   screenShareAvailable: boolean;
@@ -108,6 +118,11 @@ export function persistentCallSidebarModel(call: PersistentCallRuntimeValue, sec
     remoteUsername: incoming ? presentation.incomingModal.callerDisplayName : presentation.peerUsername,
     seconds,
     isMuted: call.isMuted,
+    muted: call.muted,
+    deafened: call.deafened,
+    effectiveMuted: call.effectiveMuted,
+    canToggleMute: call.canToggleMute,
+    canToggleDeafen: call.canToggleDeafen,
     callIssue: runtimeCallIssue(call),
     isIncomingActionPending: incoming && Boolean(presentation.pendingAction),
     canCancel: !incoming && presentation.canCancel,
@@ -134,6 +149,11 @@ export function persistentActiveCallDockModel(call: PersistentCallRuntimeValue, 
     remoteUsername,
     seconds,
     isMuted: call.isMuted,
+    muted: call.muted,
+    deafened: call.deafened,
+    effectiveMuted: call.effectiveMuted,
+    canToggleMute: call.canToggleMute,
+    canToggleDeafen: call.canToggleDeafen,
     callIssue: runtimeCallIssue(call),
     screenShareAvailable: call.screenShareAvailable,
     isScreenSharing: call.isScreenSharing,

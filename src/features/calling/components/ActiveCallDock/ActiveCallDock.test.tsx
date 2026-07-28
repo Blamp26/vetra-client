@@ -564,6 +564,40 @@ describe("ActiveCallDock", () => {
     expect(onHangUp).toHaveBeenCalledTimes(1);
   });
 
+  it("uses effective mute and invokes only the deafen action", () => {
+    const onMuteToggle = vi.fn();
+    const onDeafenToggle = vi.fn();
+    renderDock({
+      muted: false,
+      effectiveMuted: true,
+      deafened: true,
+      canToggleMute: true,
+      canToggleDeafen: true,
+      onMuteToggle,
+      onDeafenToggle,
+    });
+
+    const microphone = screen.getByRole("button", { name: "Microphone muted while deafened" });
+    const deafen = screen.getByRole("button", { name: "Undeafen" });
+    expect(microphone).toHaveAttribute("aria-pressed", "true");
+    expect(deafen).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(deafen);
+    expect(onDeafenToggle).toHaveBeenCalledTimes(1);
+    expect(onMuteToggle).not.toHaveBeenCalled();
+  });
+
+  it("derives effective mute from mute and deafen when omitted", () => {
+    renderDock({ muted: false, deafened: true, effectiveMuted: undefined });
+
+    expect(screen.getByRole("button", { name: "Microphone muted while deafened" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps effective mute false when both preferences are false and omitted", () => {
+    renderDock({ muted: false, deafened: false, effectiveMuted: undefined });
+
+    expect(screen.getByRole("button", { name: "Mute" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("stops local sharing through the same control", () => {
     const onStopScreenShare = vi.fn();
     renderDock({ isScreenSharing: true, localScreenStream: stream("local"), onStopScreenShare });

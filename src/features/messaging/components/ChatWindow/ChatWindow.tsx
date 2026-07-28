@@ -460,7 +460,12 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
           remoteUsername={call!.remoteUsername ?? `User #${call!.remoteUserId}`}
           callStatus={call!.status}
           seconds={call!.seconds}
-          isMuted={call!.isMuted}
+          isMuted={call!.effectiveMuted ?? call!.isMuted}
+          muted={call!.muted ?? call!.isMuted}
+          deafened={call!.deafened ?? false}
+          effectiveMuted={call!.effectiveMuted ?? call!.isMuted}
+          canToggleMute={call!.canToggleMute ?? true}
+          canToggleDeafen={call!.canToggleDeafen ?? true}
           isScreenSharing={call!.isScreenSharing}
           isScreenShareUpdating={call!.isScreenShareUpdating}
           isRemoteScreenLoading={call!.isRemoteScreenLoading}
@@ -471,6 +476,7 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
           localScreenStream={call!.localScreenStream}
           diagnostics={call!.diagnostics}
           onMuteToggle={call!.toggleMute}
+          onDeafenToggle={call!.toggleDeafen ?? (() => undefined)}
           onStartScreenShare={call!.startScreenShare}
           onStopScreenShare={call!.stopScreenShare}
           onWatchRemoteScreen={call!.watchRemoteScreen}

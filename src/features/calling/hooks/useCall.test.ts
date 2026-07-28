@@ -1335,6 +1335,43 @@ describe('useCall', () => {
             expect(service.toggleLocalMuted).toHaveBeenCalledTimes(2);
             expect(result.current.isMuted).toBe(false);
         });
+
+        it('keeps explicit mute separate from deafen and restores it after undeafen', () => {
+            const { result } = renderHook(() => useCall(currentUserId));
+            act(() => {
+                result.current.startCall(2);
+            });
+            const service = MockWebRTCService.mock.results[0]?.value;
+
+            act(() => {
+                result.current.toggleDeafen?.();
+            });
+            expect(result.current.deafened).toBe(true);
+            expect(result.current.muted).toBe(false);
+            expect(result.current.effectiveMuted).toBe(true);
+            expect(service.setLocalMuted).toHaveBeenLastCalledWith(true);
+
+            act(() => {
+                result.current.toggleMute();
+            });
+            expect(result.current.muted).toBe(true);
+            expect(result.current.effectiveMuted).toBe(true);
+
+            act(() => {
+                result.current.toggleDeafen?.();
+            });
+            expect(result.current.deafened).toBe(false);
+            expect(result.current.muted).toBe(true);
+            expect(result.current.effectiveMuted).toBe(true);
+            expect(service.setLocalMuted).toHaveBeenLastCalledWith(true);
+
+            act(() => {
+                result.current.hangUp();
+            });
+            expect(result.current.muted).toBe(false);
+            expect(result.current.deafened).toBe(false);
+            expect(result.current.effectiveMuted).toBe(false);
+        });
     });
 
     describe('screen sharing', () => {

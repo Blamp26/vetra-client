@@ -19,6 +19,11 @@ export function PersistentActiveCallDock({ currentUser, remoteUser }: { currentU
       callStatus="active"
       seconds={model.seconds}
       isMuted={model.isMuted}
+      muted={model.muted}
+      deafened={model.deafened}
+      effectiveMuted={model.effectiveMuted}
+      canToggleMute={model.canToggleMute}
+      canToggleDeafen={model.canToggleDeafen}
       isScreenSharing={model.isScreenSharing}
       isScreenShareUpdating={false}
       isRemoteScreenLoading={false}
@@ -30,6 +35,7 @@ export function PersistentActiveCallDock({ currentUser, remoteUser }: { currentU
       diagnostics={model.diagnostics}
       screenShareAvailable={model.screenShareAvailable}
       onMuteToggle={call.toggleMute}
+      onDeafenToggle={call.toggleDeafen}
       onStartScreenShare={async () => { await model.startScreenShare(); }}
       onStopScreenShare={() => { void model.stopScreenShare(); }}
       onWatchRemoteScreen={async () => undefined}

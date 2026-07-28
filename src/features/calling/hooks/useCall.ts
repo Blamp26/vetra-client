@@ -205,6 +205,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [remoteUsername, setRemoteUsername] = useState<string | null>(null);
     const [callId, setCallId] = useState<string | null>(null);
     const [isMuted, setIsMuted] = useState(false);
+    const [deafened, setDeafened] = useState(false);
     const [isScreenSharing, setIsScreenSharing] = useState(false);
     const [isScreenShareUpdating, setIsScreenShareUpdating] = useState(false);
     const [isRemoteScreenLoading, setIsRemoteScreenLoading] = useState(false);
@@ -403,6 +404,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             setIsScreenShareUpdating(false);
             setIsRemoteScreenLoading(false);
             setIsMuted(false);
+            setDeafened(false);
             setIsScreenSharing(false);
             setLocalScreenStream(null);
             setSeconds(0);
@@ -442,6 +444,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         setIsScreenShareUpdating(false);
         setIsRemoteScreenLoading(false);
         setIsMuted(false);
+        setDeafened(false);
         setIsScreenSharing(false);
         setLocalScreenStream(null);
         setSeconds(0);
@@ -946,9 +949,24 @@ export function useCall(currentUserId: number): UseCallReturn {
         const service = webrtcRef.current;
         if (!service) return;
 
-        const nextMuted = service.toggleLocalMuted();
-        setIsMuted(nextMuted);
-    }, []);
+        setIsMuted((current) => {
+            const nextMuted = !current;
+            if (deafened) service.setLocalMuted(true);
+            else service.toggleLocalMuted();
+            return nextMuted;
+        });
+    }, [deafened]);
+
+    const toggleDeafen = useCallback(() => {
+        const service = webrtcRef.current;
+        if (!service) return;
+
+        setDeafened((current) => {
+            const nextDeafened = !current;
+            service.setLocalMuted(isMuted || nextDeafened);
+            return nextDeafened;
+        });
+    }, [isMuted]);
 
     const startScreenShare = useCallback(async () => {
         const mediaDevices = navigator.mediaDevices;
@@ -1020,6 +1038,11 @@ export function useCall(currentUserId: number): UseCallReturn {
         remoteUsername,
         callId,
         isMuted,
+        muted: isMuted,
+        deafened,
+        effectiveMuted: isMuted || deafened,
+        canToggleMute: status === 'active' && Boolean(webrtcRef.current?.getLocalAudioTracks().length),
+        canToggleDeafen: status === 'active',
         isScreenSharing,
         isScreenShareUpdating,
         isRemoteScreenLoading,
@@ -1041,5 +1064,6 @@ export function useCall(currentUserId: number): UseCallReturn {
         rejectCall,
         hangUp,
         toggleMute,
+        toggleDeafen,
     };
 }

@@ -59,8 +59,13 @@ export interface PersistentCallRuntimeValue {
   hangup: () => Promise<PresentationActionResult>;
   retry: () => Promise<PresentationActionResult>;
   isMuted: boolean;
+  muted: boolean;
+  deafened: boolean;
+  effectiveMuted: boolean;
   canToggleMute: boolean;
+  canToggleDeafen: boolean;
   toggleMute: () => boolean;
+  toggleDeafen: () => boolean;
   screenShareAvailable: boolean;
   isScreenSharing: boolean;
   localScreenShareStream: DirectedCallMediaStream | null;
@@ -110,8 +115,13 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
     hangup: () => runtime.presentation.hangup(),
     retry: () => runtime.presentation.retryPendingAction(),
     isMuted: media.isMuted,
+    muted: media.muted,
+    deafened: media.deafened,
+    effectiveMuted: media.effectiveMuted,
     canToggleMute: media.canToggleMute,
+    canToggleDeafen: media.canToggleDeafen,
     toggleMute: () => runtime.media.toggleMute(),
+    toggleDeafen: () => runtime.media.toggleDeafen(),
     screenShareAvailable: media.projection?.state === "active"
       && typeof navigator !== "undefined"
       && typeof navigator.mediaDevices?.getDisplayMedia === "function",

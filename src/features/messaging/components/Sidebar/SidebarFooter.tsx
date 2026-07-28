@@ -31,11 +31,17 @@ interface SidebarFooterProps {
   remoteUsername?: string | null;
   callSeconds: number;
   isMuted: boolean;
+  muted?: boolean;
+  deafened?: boolean;
+  effectiveMuted?: boolean;
+  canToggleMute?: boolean;
+  canToggleDeafen?: boolean;
   isScreenSharing: boolean;
   isScreenShareUpdating: boolean;
   callIssue: CallIssue | null;
   isIncomingActionPending: boolean;
   onMuteToggle?: () => void;
+  onDeafenToggle?: () => void;
   onHangUp?: () => void;
   onCancelCall?: () => void;
   onAcceptCall?: () => void;
@@ -54,11 +60,17 @@ export function SidebarFooter({
   remoteUsername,
   callSeconds,
   isMuted,
+  muted = isMuted,
+  deafened = false,
+  effectiveMuted = muted || deafened,
+  canToggleMute = true,
+  canToggleDeafen = false,
   isScreenSharing,
   isScreenShareUpdating,
   callIssue,
   isIncomingActionPending,
   onMuteToggle,
+  onDeafenToggle,
   onHangUp,
   onCancelCall,
   onAcceptCall,
@@ -106,7 +118,8 @@ export function SidebarFooter({
 
   const isConnectedCall = callStatus === "active" || callStatus === "connected" || callStatus === "reconnecting";
   const isMuteInteractionAllowed = callStatus === "active";
-  const isMicMuted = isMuteInteractionAllowed ? isMuted : !micEnabled;
+  const isCallSession = callStatus !== "idle";
+  const isMicMuted = isMuteInteractionAllowed ? effectiveMuted : !micEnabled;
   const displayIssue = normalizeCallIssue(callIssue);
   const isIncomingCall = callStatus === "ringing" && (callDirection === "incoming" || callDirection === undefined);
   const isOutgoingCall = callDirection === "outgoing" && (callStatus === "calling" || callStatus === "ringing" || callStatus === "idle" || callStatus === "connecting");
@@ -353,12 +366,15 @@ export function SidebarFooter({
             <IconButton
               size="compact"
               tone={isMicMuted ? "danger" : "neutral"}
-              label={isMicMuted ? "Unmute microphone" : "Mute microphone"}
-              title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
+              label={isMicMuted ? (deafened && !muted ? "Microphone muted while deafened" : "Unmute microphone") : "Mute microphone"}
+              title={isMicMuted ? (deafened && !muted ? "Microphone muted while deafened" : "Unmute microphone") : "Mute microphone"}
+              pressed={isMuteInteractionAllowed ? isMicMuted : undefined}
+              disabled={isCallSession ? !isMuteInteractionAllowed || !canToggleMute : false}
               onClick={() => {
-                toggleMic();
                 if (isMuteInteractionAllowed && onMuteToggle) {
                   onMuteToggle();
+                } else if (!isCallSession) {
+                  toggleMic();
                 }
               }}
             >
@@ -370,28 +386,29 @@ export function SidebarFooter({
             </IconButton>
             <IconButton
               size="compact"
-              tone={soundEnabled ? "neutral" : "danger"}
+              tone={isMuteInteractionAllowed ? (deafened ? "danger" : "neutral") : (soundEnabled ? "neutral" : "danger")}
               label={
-                callStatus === "active"
-                  ? soundEnabled
-                    ? "Mute call audio output"
-                    : "Restore call audio output"
+                isMuteInteractionAllowed
+                  ? (deafened ? "Restore call audio" : "Mute call audio")
                   : soundEnabled
                     ? "Mute sound"
                     : "Restore sound"
               }
               title={
-                callStatus === "active"
-                  ? soundEnabled
-                    ? "Mute call audio output"
-                    : "Restore call audio output"
+                isMuteInteractionAllowed
+                  ? (deafened ? "Restore call audio" : "Mute call audio")
                   : soundEnabled
                     ? "Mute sound"
                     : "Restore sound"
               }
-              onClick={() => toggleSound()}
+              pressed={isMuteInteractionAllowed ? deafened : undefined}
+              disabled={isCallSession ? !isMuteInteractionAllowed || !canToggleDeafen : false}
+              onClick={() => {
+                if (isMuteInteractionAllowed && onDeafenToggle) onDeafenToggle();
+                else if (!isCallSession) toggleSound();
+              }}
             >
-              {soundEnabled ? (
+              {(isMuteInteractionAllowed ? !deafened : soundEnabled) ? (
                 <Headphones className="h-3.5 w-3.5" />
               ) : (
                 <HeadphoneOff className="h-3.5 w-3.5 text-destructive" />

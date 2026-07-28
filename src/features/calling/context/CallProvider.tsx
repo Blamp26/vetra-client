@@ -17,7 +17,6 @@ export function CallProvider({ currentUserId, children }: CallProviderProps) {
   const call = useCall(currentUserId);
   const { preferences } = useMediaSettings();
   const selectedOutputDeviceId = preferences.outputDeviceId;
-  const soundEnabled = useAppStore((s) => s.soundEnabled);
   const outputVolume = useAppStore((s) => s.outputVolume);
   const callUserVolumes = useAppStore((s) => s.callUserVolumes);
   const mutedCallUserIds = useAppStore((s) => s.mutedCallUserIds);
@@ -53,7 +52,7 @@ export function CallProvider({ currentUserId, children }: CallProviderProps) {
       <CallAudioRenderer
         remoteStream={call.remoteStream}
         selectedOutputDeviceId={selectedOutputDeviceId}
-        soundEnabled={soundEnabled}
+        deafened={call.deafened ?? false}
         outputVolume={outputVolume}
         callUserVolume={call.remoteUserId == null ? 100 : (callUserVolumes ?? {})[serializeResourceRef(call.remoteUserId)] ?? 100}
         callUserMuted={call.remoteUserId != null && Boolean((mutedCallUserIds ?? {})[serializeResourceRef(call.remoteUserId)])}

@@ -2,7 +2,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import type * as React from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Maximize, Mic, MicOff, Minimize, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
+import { HeadphoneOff, Headphones, Maximize, Mic, MicOff, Minimize, MonitorUp, MonitorX, PhoneOff } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
 import { formatCallTime } from "@/utils/formatDate";
 import type { CallDiagnostics, CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
@@ -42,6 +42,11 @@ interface ActiveCallDockProps {
   callStatus?: CallStatus;
   seconds: number;
   isMuted: boolean;
+  muted?: boolean;
+  deafened?: boolean;
+  effectiveMuted?: boolean;
+  canToggleMute?: boolean;
+  canToggleDeafen?: boolean;
   isScreenSharing: boolean;
   isScreenShareUpdating: boolean;
   isRemoteScreenLoading: boolean;
@@ -53,6 +58,7 @@ interface ActiveCallDockProps {
   diagnostics: CallDiagnostics;
   screenShareAvailable?: boolean;
   onMuteToggle: () => void;
+  onDeafenToggle?: () => void;
   onStartScreenShare: () => Promise<void>;
   onStopScreenShare: () => void;
   onWatchRemoteScreen: () => Promise<void>;
@@ -104,6 +110,11 @@ export function ActiveCallDock({
   callStatus = "active",
   seconds,
   isMuted,
+  muted,
+  deafened = false,
+  effectiveMuted = (muted ?? isMuted) || deafened,
+  canToggleMute = true,
+  canToggleDeafen = false,
   isScreenSharing,
   isScreenShareUpdating,
   isRemoteScreenLoading,
@@ -115,6 +126,7 @@ export function ActiveCallDock({
   diagnostics,
   screenShareAvailable = true,
   onMuteToggle,
+  onDeafenToggle = () => undefined,
   onStartScreenShare,
   onStopScreenShare,
   onWatchRemoteScreen,
@@ -449,7 +461,7 @@ export function ActiveCallDock({
 
         <div className={cn("voice-call-participants flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10", isFullscreen && "fullscreen-voice-participants")} data-testid="active-call-voice-surface">
           <div className="voice-call-tile-row grid w-full max-w-[760px] grid-cols-2 gap-3" data-testid="voice-call-tile-row">
-            <VoiceParticipantTile name="You" isMuted={isMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
+            <VoiceParticipantTile name="You" isMuted={effectiveMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
             <VoiceParticipantTile name={remoteUsername} isLocallyMuted={remoteMutedLocally} onContextMenu={(event) => openUserContext(event, remoteTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, remoteTarget); }} />
           </div>
         </div>
@@ -457,11 +469,16 @@ export function ActiveCallDock({
         <div className="voice-call-controls-wrap absolute inset-x-0 bottom-4 z-10 flex justify-center" data-testid="active-call-dock-controls">
           <CallControls
             className="voice-call-controls"
-            isMuted={isMuted}
+            isMuted={effectiveMuted}
+            muted={muted ?? isMuted}
+            deafened={deafened}
+            canToggleMute={canToggleMute}
+            canToggleDeafen={canToggleDeafen}
             isScreenSharing={false}
             isScreenShareUpdating={isScreenShareUpdating}
             isFullscreen={isFullscreen}
             onMuteToggle={onMuteToggle}
+            onDeafenToggle={onDeafenToggle}
             onStartScreenShare={onStartScreenShare}
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
@@ -530,7 +547,7 @@ export function ActiveCallDock({
                 onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, isRemoteScreenAvailable ? remoteTarget : selfTarget); }}
                 isLocallyMuted={isRemoteScreenAvailable && remoteMutedLocally}
               />
-              <FramedParticipantTile name="You" isMuted={isMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
+              <FramedParticipantTile name="You" isMuted={effectiveMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
               <FramedParticipantTile
                 name={remoteUsername}
                 className={isFullscreen ? "col-span-2 w-[calc(50%_-_4px)] justify-self-center" : undefined}
@@ -550,11 +567,16 @@ export function ActiveCallDock({
           >
             <CallControls
               className="screen-share-framed-controls__group"
-              isMuted={isMuted}
+              isMuted={effectiveMuted}
+              muted={muted ?? isMuted}
+              deafened={deafened}
+              canToggleMute={canToggleMute}
+              canToggleDeafen={canToggleDeafen}
               isScreenSharing={isScreenSharing}
               isScreenShareUpdating={isScreenShareUpdating}
               isFullscreen={isFullscreen}
               onMuteToggle={onMuteToggle}
+              onDeafenToggle={onDeafenToggle}
               onStartScreenShare={onStartScreenShare}
               onStopScreenShare={onStopScreenShare}
               onHangUp={onHangUp}
@@ -636,11 +658,16 @@ export function ActiveCallDock({
           {...controlProps}
         >
           <CallControls
-            isMuted={isMuted}
+            isMuted={effectiveMuted}
+            muted={muted ?? isMuted}
+            deafened={deafened}
+            canToggleMute={canToggleMute}
+            canToggleDeafen={canToggleDeafen}
             isScreenSharing={isScreenSharing}
             isScreenShareUpdating={isScreenShareUpdating}
             isFullscreen={isFullscreen}
             onMuteToggle={onMuteToggle}
+            onDeafenToggle={onDeafenToggle}
             onStartScreenShare={onStartScreenShare}
             onStopScreenShare={onStopScreenShare}
             onHangUp={onHangUp}
@@ -656,13 +683,14 @@ export function ActiveCallDock({
 
 function CallControls({
   className,
-  isMuted, isScreenSharing, isScreenShareUpdating, isFullscreen, onMuteToggle, onStartScreenShare, onStopScreenShare, onHangUp, onToggleFullscreen, screenShareAvailable = true, onMouseEnter, onMouseLeave,
+  isMuted, muted, deafened, canToggleMute, canToggleDeafen, isScreenSharing, isScreenShareUpdating, isFullscreen, onMuteToggle, onDeafenToggle, onStartScreenShare, onStopScreenShare, onHangUp, onToggleFullscreen, screenShareAvailable = true, onMouseEnter, onMouseLeave,
 }: {
   className?: string; screenShareAvailable?: boolean;
-  isMuted: boolean; isScreenSharing: boolean; isScreenShareUpdating: boolean; isFullscreen: boolean; onMuteToggle: () => void; onStartScreenShare: () => Promise<void>; onStopScreenShare: () => void; onHangUp: () => void; onToggleFullscreen?: () => Promise<void>; onMouseEnter?: () => void; onMouseLeave?: () => void;
+  isMuted: boolean; muted: boolean; deafened: boolean; canToggleMute: boolean; canToggleDeafen: boolean; isScreenSharing: boolean; isScreenShareUpdating: boolean; isFullscreen: boolean; onMuteToggle: () => void; onDeafenToggle: () => void; onStartScreenShare: () => Promise<void>; onStopScreenShare: () => void; onHangUp: () => void; onToggleFullscreen?: () => Promise<void>; onMouseEnter?: () => void; onMouseLeave?: () => void;
 }) {
   return <div className={cn("call-controls flex items-center justify-center gap-2 rounded-lg bg-black/60 p-2 text-white", className)} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-    <button className={cn("vt-call-control h-10 w-10 p-0", isMuted && "bg-destructive/20 text-destructive")} onClick={onMuteToggle} aria-label={isMuted ? "Unmute" : "Mute"}>{isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
+    <button className={cn("vt-call-control h-10 w-10 p-0", isMuted && "bg-destructive/20 text-destructive")} onClick={onMuteToggle} disabled={!canToggleMute} aria-pressed={isMuted} aria-label={isMuted ? (deafened && !muted ? "Microphone muted while deafened" : "Unmute") : "Mute"}>{isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
+    <button className={cn("vt-call-control h-10 w-10 p-0", deafened && "bg-destructive/20 text-destructive")} onClick={onDeafenToggle} disabled={!canToggleDeafen} aria-pressed={deafened} aria-label={deafened ? "Undeafen" : "Deafen"}>{deafened ? <HeadphoneOff className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}</button>
     {screenShareAvailable && <button className="vt-call-control h-10 w-10 p-0" onClick={isScreenSharing ? onStopScreenShare : () => { void onStartScreenShare(); }} aria-label={isScreenShareUpdating ? "Updating screen share" : isScreenSharing ? "Stop sharing" : "Share screen"} disabled={isScreenShareUpdating}>{isScreenSharing ? <MonitorX className="h-4 w-4" /> : <MonitorUp className="h-4 w-4" />}</button>}
     {onToggleFullscreen && <button className="vt-call-control h-10 w-10 p-0" onClick={() => { void onToggleFullscreen(); }} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>{isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button>}
     <button className="vt-call-control vt-call-control--danger h-10 w-10 p-0" onClick={onHangUp} aria-label="Hang Up"><PhoneOff className="h-4 w-4" /></button>

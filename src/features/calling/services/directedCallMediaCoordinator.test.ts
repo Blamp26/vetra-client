@@ -416,10 +416,27 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(video.enabled).toBe(true);
     expect(coordinator.getSnapshot().isMuted).toBe(false);
 
+    expect(coordinator.toggleDeafen()).toBe(true);
+    expect(coordinator.getSnapshot()).toMatchObject({ muted: false, deafened: true, effectiveMuted: true, isMuted: true });
+    expect(audioOne.enabled).toBe(false);
+    const deafenedReplacement = createTrack();
+    stream.addTrack(deafenedReplacement);
+    expect(deafenedReplacement.enabled).toBe(false);
+
+    expect(coordinator.toggleMute()).toBe(true);
+    expect(coordinator.getSnapshot()).toMatchObject({ muted: true, deafened: true, effectiveMuted: true });
+    expect(coordinator.toggleDeafen()).toBe(true);
+    expect(coordinator.getSnapshot()).toMatchObject({ muted: true, deafened: false, effectiveMuted: true });
+
+    expect(coordinator.toggleMute()).toBe(true);
+    expect(coordinator.getSnapshot()).toMatchObject({ muted: false, deafened: false, effectiveMuted: false });
+    expect(deafenedReplacement.enabled).toBe(true);
+
     audioOne.readyState = "ended";
     audioOne.emit("ended");
     stream.removeTrack(audioTwo);
     stream.removeTrack(replacement);
+    stream.removeTrack(deafenedReplacement);
     expect(coordinator.getSnapshot().canToggleMute).toBe(false);
     expect(coordinator.toggleMute()).toBe(false);
     expect(coordinator.getSnapshot().isMuted).toBe(false);
@@ -445,7 +462,7 @@ describe("DirectedCallMediaCoordinator", () => {
     coordinator.toggleMute();
     session.emit(projection("ended"));
 
-    expect(coordinator.getSnapshot()).toMatchObject({ state: "idle", callId: null, isMuted: false, canToggleMute: false });
+    expect(coordinator.getSnapshot()).toMatchObject({ state: "idle", callId: null, isMuted: false, muted: false, deafened: false, effectiveMuted: false, canToggleMute: false, canToggleDeafen: false });
     track.readyState = "ended";
     track.emit("ended");
     expect(coordinator.getSnapshot()).toMatchObject({ state: "idle", callId: null, isMuted: false, canToggleMute: false });
@@ -1163,6 +1180,76 @@ describe("DirectedCallMediaCoordinator", () => {
     connectionState("failed");
     await vi.advanceTimersByTimeAsync(22_000);
     expect(adapter.rebuildPeerConnection).toHaveBeenCalledTimes(2);
+    coordinator.dispose();
+  });
+
+  it("preserves both audio preferences through same-call recovery and resets them for the next call", async () => {
+    vi.useFakeTimers();
+    const secondCallId = "44444444-4444-4444-8444-444444444444";
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapters: Array<TestAdapter & { track: ReturnType<typeof createTrack> }> = [];
+    const connectionStates: Array<NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>> = [];
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => {
+        const adapter = createAdapter(options);
+        const track = createTrack();
+        const stream = createStream([track]);
+        (adapter as unknown as { localMediaStream: DirectedCallMediaStream }).localMediaStream = stream;
+        adapter.setLocalAudioMuted = vi.fn((muted: boolean) => {
+          track.enabled = !muted;
+          return true;
+        });
+        connectionStates.push(options.onPeerConnectionState!);
+        adapters.push(Object.assign(adapter, { track }));
+        return adapter;
+      },
+    });
+
+    startActive(coordinator, session);
+    await vi.waitFor(() => expect(coordinator.getSnapshot().canToggleMute).toBe(true));
+    expect(coordinator.toggleMute()).toBe(true);
+    expect(coordinator.toggleDeafen()).toBe(true);
+    expect(coordinator.getSnapshot()).toMatchObject({ muted: true, deafened: true, effectiveMuted: true });
+
+    mockedMethod(adapters[0].rebuildPeerConnection).mockImplementationOnce(async () => {
+      adapters[0].setReadiness(readySnapshot);
+    });
+    connectionStates[0]("failed");
+    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(adapters[0].rebuildPeerConnection).toHaveBeenCalledTimes(1);
+    expect(coordinator.getSnapshot()).toMatchObject({
+      callId,
+      muted: true,
+      deafened: true,
+      effectiveMuted: true,
+    });
+    expect(adapters[0].track.enabled).toBe(false);
+    expect(adapters[0].setLocalAudioMuted).toHaveBeenLastCalledWith(true);
+
+    session.emit(projection("ended"));
+    expect(coordinator.getSnapshot()).toMatchObject({
+      state: "idle",
+      callId: null,
+      muted: false,
+      deafened: false,
+      effectiveMuted: false,
+    });
+
+    session.emit(projection("accepted", secondCallId));
+    session.emit(projection("connecting", secondCallId));
+    session.emit(projection("active", secondCallId));
+    await vi.waitFor(() => expect(adapters).toHaveLength(2));
+    expect(coordinator.getSnapshot()).toMatchObject({
+      callId: secondCallId,
+      muted: false,
+      deafened: false,
+      effectiveMuted: false,
+    });
+    expect(adapters[1].track.enabled).toBe(true);
     coordinator.dispose();
   });
 

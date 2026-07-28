@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { formatCallTime } from '@/utils/formatDate';
-import { Mic, MicOff, MonitorUp, MonitorX, PhoneOff } from 'lucide-react';
+import { HeadphoneOff, Headphones, Mic, MicOff, MonitorUp, MonitorX, PhoneOff } from 'lucide-react';
 import type { CallDiagnostics, CallIssue } from '../../hooks/useCall.types';
 import { debugCall } from '../../utils/callDebug';
 
@@ -9,6 +9,11 @@ interface ActiveCallWindowProps {
   remoteUsername: string;
   seconds: number;
   isMuted: boolean;
+  muted?: boolean;
+  effectiveMuted?: boolean;
+  deafened?: boolean;
+  canToggleMute?: boolean;
+  canToggleDeafen?: boolean;
   isScreenSharing: boolean;
   isScreenShareUpdating: boolean;
   isRemoteScreenLoading: boolean;
@@ -17,6 +22,7 @@ interface ActiveCallWindowProps {
   localScreenStream: MediaStream | null;
   diagnostics: CallDiagnostics;
   onMuteToggle: () => void;
+  onDeafenToggle?: () => void;
   onStartScreenShare: () => Promise<void>;
   onStopScreenShare: () => void;
   onHangUp: () => void;
@@ -50,6 +56,11 @@ export const ActiveCallWindow = ({
   remoteUsername,
   seconds,
   isMuted,
+  muted = isMuted,
+  deafened = false,
+  effectiveMuted = muted || deafened,
+  canToggleMute = true,
+  canToggleDeafen = false,
   isScreenSharing,
   isScreenShareUpdating,
   isRemoteScreenLoading,
@@ -58,6 +69,7 @@ export const ActiveCallWindow = ({
   localScreenStream,
   diagnostics,
   onMuteToggle,
+  onDeafenToggle = () => undefined,
   onStartScreenShare,
   onStopScreenShare,
   onHangUp,
@@ -221,12 +233,27 @@ export const ActiveCallWindow = ({
           <button
             className={cn(
               "vt-call-control h-12 w-12 p-0",
-              isMuted ? "bg-destructive/12 text-destructive hover:bg-destructive/16" : "",
+              effectiveMuted ? "bg-destructive/12 text-destructive hover:bg-destructive/16" : "",
             )}
             onClick={onMuteToggle}
-            aria-label={isMuted ? 'Unmute' : 'Mute'}
+            disabled={!canToggleMute}
+            aria-pressed={effectiveMuted}
+            aria-label={effectiveMuted ? (deafened && !muted ? 'Microphone muted while deafened' : 'Unmute') : 'Mute'}
           >
-            {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+            {effectiveMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+          </button>
+
+          <button
+            className={cn(
+              "vt-call-control h-12 w-12 p-0",
+              deafened ? "bg-destructive/12 text-destructive hover:bg-destructive/16" : "",
+            )}
+            onClick={onDeafenToggle}
+            disabled={!canToggleDeafen}
+            aria-pressed={deafened}
+            aria-label={deafened ? 'Undeafen' : 'Deafen'}
+          >
+            {deafened ? <HeadphoneOff className="h-5 w-5" /> : <Headphones className="h-5 w-5" />}
           </button>
 
           <button

@@ -5,7 +5,9 @@ import { isMissingOutputDeviceError, isOutputDeviceSecurityError } from '../../u
 interface CallAudioRendererProps {
   remoteStream: MediaStream | null;
   selectedOutputDeviceId: string;
-  soundEnabled: boolean;
+  /** Retained for source compatibility; active-call deafen is call-local. */
+  soundEnabled?: boolean;
+  deafened?: boolean;
   outputVolume: number;
   callUserVolume?: number;
   callUserMuted?: boolean;
@@ -15,7 +17,8 @@ interface CallAudioRendererProps {
 export function CallAudioRenderer({
   remoteStream,
   selectedOutputDeviceId,
-  soundEnabled,
+  deafened,
+  soundEnabled: _soundEnabled,
   outputVolume,
   callUserVolume = 100,
   callUserMuted = false,
@@ -49,8 +52,8 @@ export function CallAudioRenderer({
       Math.max(0, (Number.isFinite(outputVolume) ? outputVolume : 1) * (callUserMuted ? 0 : callUserVolume / 100)),
     );
     audio.volume = normalizedVolume;
-    audio.muted = !soundEnabled || normalizedVolume === 0;
-  }, [callUserMuted, callUserVolume, outputVolume, soundEnabled]);
+    audio.muted = Boolean(deafened) || callUserMuted || normalizedVolume === 0;
+  }, [callUserMuted, callUserVolume, deafened, outputVolume]);
 
   useEffect(() => {
     const audio = audioRef.current as (HTMLAudioElement & {

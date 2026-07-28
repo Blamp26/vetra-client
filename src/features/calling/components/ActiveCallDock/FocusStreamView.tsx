@@ -10,6 +10,8 @@ import {
   ScreenShare,
   Volume2,
   VolumeX,
+  HeadphoneOff,
+  Headphones,
   X,
 } from "lucide-react";
 import { cn } from "@/shared/utils/cn";
@@ -23,11 +25,16 @@ interface FocusStreamViewProps {
   sharerName: string;
   isLocalSharer: boolean;
   participants: CallGridParticipant[];
-  isMuted: boolean;
+  muted: boolean;
+  effectiveMuted: boolean;
+  deafened: boolean;
+  canToggleMute: boolean;
+  canToggleDeafen: boolean;
   isScreenSharing: boolean;
   isScreenShareUpdating: boolean;
   onExitFocus: () => void;
   onMuteToggle: () => void;
+  onDeafenToggle: () => void;
   onStartScreenShare: () => Promise<void>;
   onStopScreenShare: () => void;
   onHangUp: () => void;
@@ -40,11 +47,16 @@ export function FocusStreamView({
   sharerName,
   isLocalSharer,
   participants,
-  isMuted,
+  muted: _muted,
+  effectiveMuted,
+  deafened,
+  canToggleMute,
+  canToggleDeafen,
   isScreenSharing,
   isScreenShareUpdating,
   onExitFocus,
   onMuteToggle,
+  onDeafenToggle,
   onStartScreenShare,
   onStopScreenShare,
   onHangUp,
@@ -54,10 +66,8 @@ export function FocusStreamView({
   const volumePanelRef = useRef<HTMLDivElement>(null);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isVolumePanelOpen, setIsVolumePanelOpen] = useState(false);
-  const soundEnabled = useAppStore((s) => s.soundEnabled);
   const outputVolume = useAppStore((s) => s.outputVolume);
   const setOutputVolume = useAppStore((s) => s.setOutputVolume);
-  const toggleSound = useAppStore((s) => s.toggleSound);
   const outputVolumePercent = Math.round(outputVolume * 100);
 
   useEffect(() => {
@@ -174,12 +184,27 @@ export function FocusStreamView({
           <button
             className={cn(
               "vt-call-control ctrl-btn h-12 w-12 p-0",
-              isMuted && "bg-destructive/12 text-destructive hover:bg-destructive/16",
+              effectiveMuted && "bg-destructive/12 text-destructive hover:bg-destructive/16",
             )}
             onClick={onMuteToggle}
-            aria-label={isMuted ? "Unmute" : "Mute"}
+            disabled={!canToggleMute}
+            aria-pressed={effectiveMuted}
+            aria-label={effectiveMuted ? (deafened && !_muted ? "Microphone muted while deafened" : "Unmute") : "Mute"}
           >
-            {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+            {effectiveMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+          </button>
+
+          <button
+            className={cn(
+              "vt-call-control ctrl-btn h-12 w-12 p-0",
+              deafened && "bg-destructive/12 text-destructive hover:bg-destructive/16",
+            )}
+            onClick={onDeafenToggle}
+            disabled={!canToggleDeafen}
+            aria-pressed={deafened}
+            aria-label={deafened ? "Undeafen" : "Deafen"}
+          >
+            {deafened ? <HeadphoneOff className="h-5 w-5" /> : <Headphones className="h-5 w-5" />}
           </button>
 
           <button
@@ -230,7 +255,7 @@ export function FocusStreamView({
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-foreground">Call output volume</span>
                   <span className="text-[11px] text-muted-foreground">
-                    {soundEnabled ? `${outputVolumePercent}%` : "Muted"}
+                    {`${outputVolumePercent}%`}
                   </span>
                 </div>
                 <input
@@ -250,9 +275,10 @@ export function FocusStreamView({
                   <button
                     type="button"
                     className="vt-button h-8 px-2.5 text-xs"
-                    onClick={() => toggleSound()}
+                    onClick={onDeafenToggle}
+                    aria-pressed={deafened}
                   >
-                    {soundEnabled ? "Mute" : "Unmute"}
+                    {deafened ? "Undeafen" : "Deafen"}
                   </button>
                 </div>
               </div>
@@ -281,11 +307,16 @@ export function FullscreenStreamView({
   sharerName,
   isLocalSharer,
   participants,
-  isMuted,
+  muted: _muted,
+  effectiveMuted,
+  deafened,
+  canToggleMute,
+  canToggleDeafen,
   isScreenSharing,
   isScreenShareUpdating,
   onExitTrueFullscreen,
   onMuteToggle,
+  onDeafenToggle,
   onStartScreenShare,
   onStopScreenShare,
   onHangUp,
@@ -460,12 +491,23 @@ export function FullscreenStreamView({
           <button
             className={cn(
               "vt-call-control ctrl-btn h-10 w-10 p-0 text-white",
-              isMuted ? "bg-destructive/20 text-destructive-foreground hover:bg-destructive/30" : "bg-white/8 border-white/10 hover:bg-white/12",
+              effectiveMuted ? "bg-destructive/20 text-destructive-foreground hover:bg-destructive/30" : "bg-white/8 border-white/10 hover:bg-white/12",
             )}
             onClick={onMuteToggle}
-            aria-label={isMuted ? "Unmute" : "Mute"}
+            disabled={!canToggleMute}
+            aria-pressed={effectiveMuted}
+            aria-label={effectiveMuted ? (deafened && !_muted ? "Microphone muted while deafened" : "Unmute") : "Mute"}
           >
-            {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+            {effectiveMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+          </button>
+          <button
+            className={cn("vt-call-control ctrl-btn h-10 w-10 p-0 text-white", deafened && "bg-destructive/20 text-destructive-foreground")}
+            onClick={onDeafenToggle}
+            disabled={!canToggleDeafen}
+            aria-pressed={deafened}
+            aria-label={deafened ? "Undeafen" : "Deafen"}
+          >
+            {deafened ? <HeadphoneOff className="h-5 w-5" /> : <Headphones className="h-5 w-5" />}
           </button>
           <button
             className="vt-call-control vt-call-control--active ctrl-btn h-10 w-10 p-0 disabled:pointer-events-none disabled:opacity-60"

@@ -3,6 +3,16 @@ import type { ResourceRef } from "@/shared/types";
 export type CallStatus = 'idle' | 'calling' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'active' | 'ended' | 'failed';
 export type CallServiceStatus = 'idle' | 'connecting' | 'ready' | 'retrying' | 'closed' | 'failed';
 
+export interface CallAudioControls {
+    muted: boolean;
+    deafened: boolean;
+    effectiveMuted: boolean;
+    canToggleMute: boolean;
+    canToggleDeafen: boolean;
+    onMuteToggle: () => void;
+    onDeafenToggle: () => void;
+}
+
 // ── Входящие события от сервера ──────────────────────────────────────────────
 
 export interface IncomingCallPayload {
@@ -59,6 +69,11 @@ export interface UseCallReturn {
     remoteUsername: string | null;
     callId: string | null;
     isMuted: boolean;
+    muted?: boolean;
+    deafened?: boolean;
+    effectiveMuted?: boolean;
+    canToggleMute?: boolean;
+    canToggleDeafen?: boolean;
     isScreenSharing: boolean;
     isScreenShareUpdating: boolean;
     isRemoteScreenLoading: boolean;
@@ -80,4 +95,5 @@ export interface UseCallReturn {
     rejectCall: () => void;
     hangUp: () => void;
     toggleMute: () => void;
+    toggleDeafen?: () => void;
 }

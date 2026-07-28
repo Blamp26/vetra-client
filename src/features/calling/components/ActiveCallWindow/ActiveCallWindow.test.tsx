@@ -22,8 +22,15 @@ function renderWindow({
   callIssue = null,
   remoteScreenStream = null,
   localScreenStream = null,
+  muted = false,
+  effectiveMuted,
+  deafened = false,
+  canToggleMute = true,
+  canToggleDeafen = true,
   onStartScreenShare = async () => undefined,
   onStopScreenShare = () => undefined,
+  onMuteToggle = vi.fn(),
+  onDeafenToggle = vi.fn(),
 } : {
   diagnostics?: CallDiagnostics;
   isScreenSharing?: boolean;
@@ -32,14 +39,26 @@ function renderWindow({
   callIssue?: CallIssue | null;
   remoteScreenStream?: MediaStream | null;
   localScreenStream?: MediaStream | null;
+  muted?: boolean;
+  effectiveMuted?: boolean;
+  deafened?: boolean;
+  canToggleMute?: boolean;
+  canToggleDeafen?: boolean;
   onStartScreenShare?: () => Promise<void>;
   onStopScreenShare?: () => void;
+  onMuteToggle?: () => void;
+  onDeafenToggle?: () => void;
 } = {}) {
   return render(
     <ActiveCallWindow
       remoteUsername="Alice"
       seconds={12}
-      isMuted={false}
+      isMuted={muted}
+      muted={muted}
+      effectiveMuted={effectiveMuted}
+      deafened={deafened}
+      canToggleMute={canToggleMute}
+      canToggleDeafen={canToggleDeafen}
       isScreenSharing={isScreenSharing}
       isScreenShareUpdating={isScreenShareUpdating}
       isRemoteScreenLoading={isRemoteScreenLoading}
@@ -47,7 +66,8 @@ function renderWindow({
       remoteScreenStream={remoteScreenStream}
       localScreenStream={localScreenStream}
       diagnostics={diagnostics}
-      onMuteToggle={vi.fn()}
+      onMuteToggle={onMuteToggle}
+      onDeafenToggle={onDeafenToggle}
       onStartScreenShare={onStartScreenShare}
       onStopScreenShare={onStopScreenShare}
       onHangUp={vi.fn()}
@@ -60,6 +80,39 @@ describe('ActiveCallWindow', () => {
     vi.unstubAllEnvs();
     global.MediaStream = MockMediaStream as typeof MediaStream;
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+  });
+
+  it('uses effective mute and deafen state for accessible controls', () => {
+    const onMuteToggle = vi.fn();
+    const onDeafenToggle = vi.fn();
+    renderWindow({
+      muted: false,
+      effectiveMuted: true,
+      deafened: true,
+      onMuteToggle,
+      onDeafenToggle,
+    });
+
+    const microphone = screen.getByRole('button', { name: 'Microphone muted while deafened' });
+    const deafen = screen.getByRole('button', { name: 'Undeafen' });
+    expect(microphone).toHaveAttribute('aria-pressed', 'true');
+    expect(deafen).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(microphone);
+    fireEvent.click(deafen);
+    expect(onMuteToggle).toHaveBeenCalledTimes(1);
+    expect(onDeafenToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('derives effective mute from mute and deafen when omitted', () => {
+    renderWindow({ muted: false, deafened: true, effectiveMuted: undefined });
+
+    expect(screen.getByRole('button', { name: 'Microphone muted while deafened' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps effective mute false when both preferences are false and omitted', () => {
+    renderWindow({ muted: false, deafened: false, effectiveMuted: undefined });
+
+    expect(screen.getByRole('button', { name: 'Mute' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('hides diagnostics by default', () => {

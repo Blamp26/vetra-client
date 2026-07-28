@@ -35,6 +35,7 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
       {showAudio && (
         <PersistentRemoteAudioRenderer
           stream={mediaStream}
+          deafened={call.deafened}
           peerAudioPreferenceKey={peerAudioPreferenceKey}
           playbackRequest={audioPlaybackRequest}
           onPlaybackStateChange={onAudioPlaybackStateChange}
