@@ -90,6 +90,11 @@ export interface DirectedCallMediaCoordinatorOptions {
 
 type Listener = (snapshot: DirectedCallMediaCoordinatorSnapshot) => void;
 type ScreenShareAction = "none" | "start" | "stop";
+type TransportRetirementReason =
+  | "offer_send_failed"
+  | "ice_candidate_send_failed"
+  | "signal_processing_failed"
+  | "sync_interrupted_connecting";
 type CoordinatorScreenShareResult =
   | { ok: true; stream: DirectedCallMediaStream | null; transaction?: DirectedCallScreenShareTransactionIdentity }
   | { ok: false; issue: ScreenShareIssue; stream?: DirectedCallMediaStream | null };
@@ -834,7 +839,7 @@ export class DirectedCallMediaCoordinator {
         this.maybeSendMediaReady(projection.call_id, attempt, this.adapterEpoch);
       } catch {
         // A transient relay failure is not a confirmed local setup failure.
-        this.retireForTransport(projection.call_id, attempt);
+        this.retireForTransport(projection.call_id, attempt, "offer_send_failed");
       }
     }
   }
@@ -911,7 +916,7 @@ export class DirectedCallMediaCoordinator {
         return;
       }
       if (error instanceof DirectedCallWebRtcError) await this.reportSetupFailure(projection.call_id, error, attempt);
-      else this.retireForTransport(projection.call_id, attempt);
+      else this.retireForTransport(projection.call_id, attempt, "signal_processing_failed");
     }
   }
 
@@ -1441,7 +1446,7 @@ export class DirectedCallMediaCoordinator {
           this.recordMediaDiagnostic("ice_sent", { transactionId: entry.renegotiationId, candidateAction: "sent", candidateIndex: this.flushedLocalCandidateCount });
           this.recordPeerConnectionDiagnostics();
         } catch {
-          this.retireForTransport(callId, attempt);
+          this.retireForTransport(callId, attempt, "ice_candidate_send_failed");
           return;
         }
       }
@@ -1486,7 +1491,7 @@ export class DirectedCallMediaCoordinator {
       return;
     }
     if (["accepted", "connecting"].includes(projection.state) && this.mediaStarted && this.snapshot.state !== "idle") {
-      this.retireForTransport(projection.call_id, this.mediaAttemptEpoch);
+      this.retireForTransport(projection.call_id, this.mediaAttemptEpoch, "sync_interrupted_connecting");
     }
   }
 
@@ -1811,12 +1816,12 @@ export class DirectedCallMediaCoordinator {
     return !this.disposed && this.mediaAttemptActive && attempt === this.mediaAttemptEpoch && isUuid(callId) && this.snapshot.callId === callId && this.isGenerationCurrent(this.generation);
   }
 
-  private retireForTransport(callId: string | null, attempt: number, peerConnectionState: RTCPeerConnectionState | null = null): void {
+  private retireForTransport(callId: string | null, attempt: number, reason: TransportRetirementReason, peerConnectionState: RTCPeerConnectionState | null = null): void {
     if (!callId || !this.isCurrentCall(callId, attempt)) return;
     this.localIssue = "transport_recovery";
     this.invalidateMediaAttempt();
     this.remoteScreenShareStream = null;
-    this.recordMediaDiagnostic("failure", { callId, failureKind: this.localIssue });
+    this.recordMediaDiagnostic("failure", { callId, failureKind: this.localIssue, reason });
     this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: this.localIssue, mediaErrorCode: null, canRetryMedia: false, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, peerConnectionState });
   }
 

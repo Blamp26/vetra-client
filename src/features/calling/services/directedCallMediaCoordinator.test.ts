@@ -262,6 +262,13 @@ function startActive(
   session.emit(projection("active", callId, participantRole));
 }
 
+function expectTransportRetirement(reason: string, rawError?: string): void {
+  const entry = getDirectedCallDiagnosticTimeline().find((candidate) => candidate.event === "failure" && candidate.line.includes(`reason=${reason}`));
+  expect(entry?.line).toContain("failure_kind=transport_recovery");
+  expect(entry?.line).toContain(`reason=${reason}`);
+  if (rawError) expect(entry?.line).not.toContain(rawError);
+}
+
 function renegotiationAnswer(id: string, screenShare = false) {
   return {
     call_id: callId,
@@ -580,6 +587,30 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(candidates).toEqual(["candidate:one", "candidate:two"]);
   });
 
+  it("retires local ICE delivery with a typed safe reason and preserves cleanup", async () => {
+    setCallDebugEnabled(true);
+    resetDirectedCallDiagnosticTimeline();
+    const session = createSession();
+    (session.sendSignal as any).mockImplementation(async (...args: any[]) => {
+      if (args[2] === "ice_candidate") throw new Error("candidate relay unavailable");
+    });
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let onIceCandidate!: (candidate: RTCIceCandidateInit) => void;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { onIceCandidate = options.onIceCandidate!; return bindAdapter(options, adapter); },
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    await vi.waitFor(() => expect(adapter.prepareOffer).toHaveBeenCalled());
+    onIceCandidate({ candidate: "candidate:one", sdpMid: "0", sdpMLineIndex: 0 });
+    session.emit(projection("connecting"));
+    await vi.waitFor(() => expect(adapter.dispose).toHaveBeenCalled());
+
+    expectTransportRetirement("ice_candidate_send_failed", "candidate relay unavailable");
+    expect(coordinator.getSnapshot().localIssue).toBe("transport_recovery");
+  });
+
   it("discards local ICE callbacks after terminal disposal", async () => {
     const session = createSession();
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
@@ -896,6 +927,8 @@ describe("DirectedCallMediaCoordinator", () => {
   });
 
   it("disposes incomplete setup after sync without sending setup_failed", async () => {
+    setCallDebugEnabled(true);
+    resetDirectedCallDiagnosticTimeline();
     const session = createSession();
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
     const lifecycle = createLifecycle();
@@ -912,6 +945,7 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(adapter.dispose).toHaveBeenCalled();
     expect(coordinator.getSnapshot().localIssue).toBe("transport_recovery");
     expect(lifecycle.setupFailed).not.toHaveBeenCalled();
+    expectTransportRetirement("sync_interrupted_connecting");
   });
 
   it("does not bind a terminal or second call and can be deterministically disposed", () => {
@@ -927,6 +961,8 @@ describe("DirectedCallMediaCoordinator", () => {
   });
 
   it("retires a failed offer delivery and never replays it after sync", async () => {
+    setCallDebugEnabled(true);
+    resetDirectedCallDiagnosticTimeline();
     const session = createSession();
     (session.sendSignal as any).mockRejectedValueOnce(new Error("relay unavailable"));
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
@@ -937,14 +973,18 @@ describe("DirectedCallMediaCoordinator", () => {
     await vi.waitFor(() => expect(session.getProjection).toHaveBeenCalled());
     session.emit(projection("connecting"));
     await vi.waitFor(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(coordinator.getSnapshot().localIssue).toBe("transport_recovery"));
     session.emitSync();
     session.emit(projection("connecting"));
 
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect(coordinator.getSnapshot().localIssue).toBe("transport_recovery");
+    expectTransportRetirement("offer_send_failed", "relay unavailable");
   });
 
   it("retires answer delivery failure without creating or sending another answer", async () => {
+    setCallDebugEnabled(true);
+    resetDirectedCallDiagnosticTimeline();
     const session = createSession();
     (session.sendSignal as any).mockRejectedValueOnce(new Error("relay unavailable"));
     const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
@@ -964,6 +1004,7 @@ describe("DirectedCallMediaCoordinator", () => {
     expect(adapter.acceptOffer).toHaveBeenCalledTimes(1);
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect(options.onPeerConnectionState).toBeDefined();
+    expectTransportRetirement("signal_processing_failed", "relay unavailable");
   });
 
   it("turns active connection loss into only a local recoverable issue", async () => {
