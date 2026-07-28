@@ -111,6 +111,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const persistentSidebar = persistentCall
     ? persistentCallSidebarModel(persistentCall, persistentSeconds)
     : null;
+  const persistentPrePresentation = persistentCall?.ux.status.kind === "idle" && persistentCall.ux.actionBusy;
   const persistentCallIssue = persistentCall?.presentation.callIssue
     ? { tone: "error" as const, message: persistentCall.presentation.callIssue.message }
     : null;
@@ -127,6 +128,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     isIncomingActionPending = persistentSidebar?.isIncomingActionPending ?? false,
   } = call ?? {};
   const resolvedStatus = call?.status ?? status;
+  const isResolvedActive = resolvedStatus === "active" || resolvedStatus === "connected";
   const resolvedRemoteUsername = call?.remoteUsername ?? remoteUsername;
   const resolvedRemoteUserId = call?.remoteUserId ?? remoteUserId;
   const resolvedIsMuted = call?.isMuted ?? isMuted;
@@ -338,14 +340,14 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   );
 
   useEffect(() => {
-    if (resolvedStatus === "idle" || resolvedStatus === "ended" || resolvedStatus === "failed") {
+    if ((resolvedStatus === "idle" && !persistentPrePresentation) || resolvedStatus === "ended" || resolvedStatus === "failed") {
       activeCallDirectChatRef.current = null;
       return;
     }
 
     if (activeChat?.type !== "direct") return;
 
-    if (resolvedStatus === "calling" && !activeCallDirectChatRef.current) {
+    if ((resolvedStatus === "calling" || persistentPrePresentation) && !activeCallDirectChatRef.current) {
       activeCallDirectChatRef.current = activeChat;
       return;
     }
@@ -353,10 +355,10 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     if (activeDirectChatMatchesRemote(activeChat)) {
       activeCallDirectChatRef.current = activeChat;
     }
-  }, [activeChat, activeDirectChatMatchesRemote, resolvedStatus]);
+  }, [activeChat, activeDirectChatMatchesRemote, persistentPrePresentation, resolvedStatus]);
 
   const activeCallChatTarget = useMemo((): Extract<ActiveChat, { type: "direct" }> | null => {
-    if (resolvedStatus !== "active" || resolvedRemoteUserId === null || resolvedRemoteUserId === undefined) {
+    if (!isResolvedActive || resolvedRemoteUserId === null || resolvedRemoteUserId === undefined) {
       return null;
     }
 
@@ -384,7 +386,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     activeDirectChatMatchesRemote,
     resolvedRemoteUserId,
     routeLookup,
-    resolvedStatus,
+    isResolvedActive,
   ]);
 
   const activeCallChatHash = useMemo(
@@ -393,7 +395,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   );
 
   const handleReturnToActiveCall = useCallback(() => {
-    if (resolvedStatus !== "active") return;
+    if (!isResolvedActive) return;
 
     debugCall("[AppShell] return to call requested", {
       remoteUserId: resolvedRemoteUserId,
@@ -432,7 +434,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     resolvedRemoteUserId,
     routeHash,
     setActiveChat,
-    resolvedStatus,
+    isResolvedActive,
   ]);
 
   useEffect(() => {
@@ -470,7 +472,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     if (!activeChat) return;
     if (isSettingsRoute) return;
     if (
-      resolvedStatus === "active" &&
+      isResolvedActive &&
       activeCallChatHash &&
       routeHash === activeCallChatHash &&
       routeTarget &&
@@ -496,7 +498,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     routeHash,
     routeTarget,
     routeTargetKey,
-    resolvedStatus,
+    isResolvedActive,
   ]);
 
   useEffect(() => {
@@ -611,7 +613,8 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
           </div>
 
           <SidebarFooter
-            callStatus={resolvedStatus}
+            callStatus={resolvedStatus === "connected" ? "active" : resolvedStatus}
+            callUxStatus={persistentCall?.ux.status.kind}
             remoteUsername={resolvedRemoteUsername}
             callSeconds={seconds}
             isMuted={resolvedIsMuted}

@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PersistentCallProvider, usePersistentCall } from "./PersistentCallContext";
 import type { DirectedCallMediaCoordinatorSnapshot } from "../services/directedCallMediaCoordinator";
+import { CallUxProjection } from "../services/callUxProjection";
 
 const baseSnapshot = {
   state: "signaling_ready",
@@ -20,7 +21,7 @@ const baseSnapshot = {
   canToggleMute: true,
 } as unknown as DirectedCallMediaCoordinatorSnapshot;
 
-function presentationSnapshot() {
+function presentationSnapshot(overrides: Record<string, unknown> = {}) {
   return {
     phase: "active",
     callId: baseSnapshot.callId,
@@ -37,11 +38,14 @@ function presentationSnapshot() {
     canCancel: false,
     canHangup: true,
     incomingModal: { visible: false, callerDisplayName: "", presentationKey: null },
+    ...overrides,
   } as any;
 }
 
-function makeRuntime(snapshot = baseSnapshot) {
+function makeRuntime(snapshot = baseSnapshot, uxProjection?: CallUxProjection) {
   const listeners = new Set<(next: DirectedCallMediaCoordinatorSnapshot) => void>();
+  const presentationListeners = new Set<(next: any) => void>();
+  let currentPresentation = presentationSnapshot();
   const media = {
     getSnapshot: vi.fn(() => snapshot),
     subscribe: vi.fn((listener: (next: DirectedCallMediaCoordinatorSnapshot) => void) => {
@@ -56,16 +60,23 @@ function makeRuntime(snapshot = baseSnapshot) {
     },
   };
   const presentation = {
-    getSnapshot: vi.fn(presentationSnapshot),
-    subscribe: vi.fn(() => () => undefined),
+    getSnapshot: vi.fn(() => currentPresentation),
+    subscribe: vi.fn((listener: (next: any) => void) => {
+      presentationListeners.add(listener);
+      return () => presentationListeners.delete(listener);
+    }),
     startCall: vi.fn(),
     accept: vi.fn(),
     decline: vi.fn(),
     cancelCall: vi.fn(),
     hangup: vi.fn(),
     retryPendingAction: vi.fn(),
+    emit(next: any) {
+      currentPresentation = next;
+      presentationListeners.forEach((listener) => listener(next));
+    },
   };
-  return { presentation, media };
+  return { presentation, media, uxProjection };
 }
 
 function Probe() {
@@ -77,6 +88,12 @@ function Probe() {
       <output data-testid="remote-available">{String(call.remoteScreenShareAvailable)}</output>
       <output data-testid="local-stream">{String(Boolean(call.localScreenShareStream))}</output>
       <output data-testid="remote-stream">{String(Boolean(call.remoteScreenShareStream))}</output>
+      <output data-testid="ux-kind">{call.ux.status.kind}</output>
+      <output data-testid="ux-busy">{String(call.ux.actionBusy)}</output>
+      <output data-testid="ux-recovery">
+        {call.ux.status.kind === "reconnecting" ? `${call.ux.status.recovery.strategy}:${call.ux.status.recovery.attempt}` : ""}
+      </output>
+      <output data-testid="ux-reason">{call.ux.status.kind === "ended" ? call.ux.status.reason : ""}</output>
       <button onClick={() => { void call.startScreenShare(); }}>start</button>
       <button onClick={() => { void call.stopScreenShare(); }}>stop</button>
     </div>
@@ -135,5 +152,58 @@ describe("PersistentCallProvider screen-share exposure", () => {
     view.unmount();
     first.media.emit({ ...baseSnapshot, isLocalScreenShareActive: true });
     expect(second.media.subscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes the runtime UX projection through the persistent context", () => {
+    const uxProjection = new CallUxProjection();
+    uxProjection.handle({ type: "runtime_generation", generation: "g1" });
+    const provisional = presentationSnapshot({
+      phase: "preparing",
+      callId: baseSnapshot.callId,
+      participantRole: "initiator",
+      peerPublicId: "44444444-4444-4444-8444-444444444444",
+      canonicalState: null,
+      stateVersion: null,
+    });
+    const runtime = makeRuntime({ ...baseSnapshot, recovery: null } as any);
+    runtime.uxProjection = uxProjection;
+    runtime.presentation.emit(provisional);
+    const view = renderRuntime(runtime);
+
+    expect(screen.getByTestId("ux-kind")).toHaveTextContent("idle");
+    act(() => uxProjection.handle({ type: "presentation_snapshot", snapshot: provisional }));
+    expect(screen.getByTestId("ux-kind")).toHaveTextContent("idle");
+    expect(screen.getByTestId("ux-busy")).toHaveTextContent("true");
+
+    const presented = presentationSnapshot({ phase: "ringing", canonicalState: "presented", stateVersion: 1 });
+    act(() => uxProjection.handle({ type: "presentation_snapshot", snapshot: presented }));
+    expect(screen.getByTestId("ux-kind")).toHaveTextContent("ringing");
+
+    const connecting = presentationSnapshot({ phase: "connecting", canonicalState: "connecting", stateVersion: 2 });
+    act(() => uxProjection.handle({ type: "presentation_snapshot", snapshot: connecting }));
+    expect(screen.getByTestId("ux-kind")).toHaveTextContent("connecting");
+
+    const active = presentationSnapshot({ phase: "active", canonicalState: "active", stateVersion: 3 });
+    act(() => uxProjection.handle({ type: "presentation_snapshot", snapshot: active }));
+    expect(screen.getByTestId("ux-kind")).toHaveTextContent("connected");
+
+    act(() => uxProjection.handle({
+      type: "media_snapshot",
+      snapshot: {
+        ...baseSnapshot,
+        callId: baseSnapshot.callId,
+        projection: { state: "active" },
+        recovery: { phase: "ice_restart", attempt: 2 },
+        localIssue: "transport_recovery",
+      } as any,
+    }));
+    expect(screen.getByTestId("ux-kind")).toHaveTextContent("reconnecting");
+    expect(screen.getByTestId("ux-recovery")).toHaveTextContent("ice_restart:2");
+
+    const ended = presentationSnapshot({ phase: "terminal", canonicalState: "declined", terminalState: "declined", stateVersion: 4 });
+    act(() => uxProjection.handle({ type: "presentation_snapshot", snapshot: ended }));
+    expect(screen.getByTestId("ux-kind")).toHaveTextContent("ended");
+    expect(screen.getByTestId("ux-reason")).toHaveTextContent("declined");
+    view.unmount();
   });
 });

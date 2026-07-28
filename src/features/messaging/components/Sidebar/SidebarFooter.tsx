@@ -23,9 +23,11 @@ import {
 import { debugCall } from "@/features/calling/utils/callDebug";
 import { getCallStatusLabel, normalizeCallIssue } from "@/features/calling/utils/callUxText";
 import type { PersistentCallDirection } from "@/features/calling/components/PersistentCallSurface/PersistentCallViewModel";
+import type { CallUxStatus } from "@/features/calling/services/callUxProjection";
 
 interface SidebarFooterProps {
   callStatus: CallStatus;
+  callUxStatus?: CallUxStatus["kind"];
   remoteUsername?: string | null;
   callSeconds: number;
   isMuted: boolean;
@@ -48,6 +50,7 @@ interface SidebarFooterProps {
 
 export function SidebarFooter({
   callStatus,
+  callUxStatus,
   remoteUsername,
   callSeconds,
   isMuted,
@@ -67,6 +70,7 @@ export function SidebarFooter({
   onReturnToCall,
   isCollapsed = false,
 }: SidebarFooterProps) {
+  const displayStatus: CallStatus = callUxStatus === "connected" ? "connected" : callStatus;
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
   const userStatuses = useAppStore((s: RootState) => s.userStatuses);
@@ -100,15 +104,17 @@ export function SidebarFooter({
     [currentStatus, currentUser?.last_seen_at],
   );
 
-  const isMicMuted = callStatus === "active" ? isMuted : !micEnabled;
+  const isConnectedCall = callStatus === "active" || callStatus === "connected" || callStatus === "reconnecting";
+  const isMuteInteractionAllowed = callStatus === "active";
+  const isMicMuted = isMuteInteractionAllowed ? isMuted : !micEnabled;
   const displayIssue = normalizeCallIssue(callIssue);
   const isIncomingCall = callStatus === "ringing" && (callDirection === "incoming" || callDirection === undefined);
-  const isOutgoingCall = callDirection === "outgoing" && (callStatus === "calling" || callStatus === "ringing");
+  const isOutgoingCall = callDirection === "outgoing" && (callStatus === "calling" || callStatus === "ringing" || callStatus === "idle" || callStatus === "connecting");
   const showLegacyCallingHangup = callDirection === undefined && callStatus === "calling";
   const showCancel = isOutgoingCall && canCancelCall === true;
-  const showHangup = canHangUpCall ?? (callStatus === "active" || showLegacyCallingHangup);
+  const showHangup = canHangUpCall ?? (isConnectedCall || showLegacyCallingHangup);
   const callPanel = useMemo(() => {
-    switch (callStatus) {
+    switch (displayStatus) {
       case "calling":
         return {
           title: getCallStatusLabel({ status: callStatus }),
@@ -128,10 +134,18 @@ export function SidebarFooter({
           subtitle: remoteUsername ? `${remoteUsername} is calling` : "Someone is calling you",
           tone: "default" as const,
         };
+      case "connecting":
+        return {
+          title: getCallStatusLabel({ status: displayStatus }),
+          subtitle: remoteUsername ? `Connecting to ${remoteUsername}` : "Establishing the call",
+          tone: "default" as const,
+        };
       case "active":
+      case "connected":
+      case "reconnecting":
         return {
           title: getCallStatusLabel({
-            status: callStatus,
+            status: displayStatus,
             diagnostics: {
               connectionState: "connected",
               iceConnectionState: "connected",
@@ -163,6 +177,7 @@ export function SidebarFooter({
   }, [
     callSeconds,
     callStatus,
+    displayStatus,
     displayIssue,
     isIncomingCall,
     isIncomingActionPending,
@@ -183,19 +198,19 @@ export function SidebarFooter({
               "flex items-center justify-between rounded-[12px] border bg-card/90",
               isCollapsed ? "px-2 py-2" : "px-3 py-2.5",
               callPanel.tone === "error" ? "border-destructive/50" : "border-border",
-              callStatus === "active" && "cursor-pointer hover:bg-accent",
+              isConnectedCall && "cursor-pointer hover:bg-accent",
             )}
-            data-testid={callStatus === "active" ? "sidebar-connected-call-block" : undefined}
-            role={callStatus === "active" ? "button" : undefined}
-            tabIndex={callStatus === "active" ? 0 : undefined}
+            data-testid={isConnectedCall ? "sidebar-connected-call-block" : undefined}
+            role={isConnectedCall ? "button" : undefined}
+            tabIndex={isConnectedCall ? 0 : undefined}
             aria-label={
-              callStatus === "active"
+              isConnectedCall
                 ? `Return to call with ${remoteUsername || "current user"}`
                 : undefined
             }
-            title={callStatus === "active" ? "Return to active call" : undefined}
+            title={isConnectedCall ? "Return to active call" : undefined}
             onClick={() => {
-              if (callStatus !== "active") return;
+              if (!isConnectedCall) return;
               debugCall("[SidebarFooter] connected call block clicked", {
                 remoteUsername,
                 hasReturnHandler: Boolean(onReturnToCall),
@@ -203,7 +218,7 @@ export function SidebarFooter({
               onReturnToCall?.();
             }}
             onKeyDown={(event) => {
-              if (callStatus !== "active") return;
+              if (!isConnectedCall) return;
               if (event.target !== event.currentTarget) return;
               if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();
@@ -214,7 +229,7 @@ export function SidebarFooter({
               onReturnToCall?.();
             }}
           >
-            {callStatus === "active" ? (
+            {isConnectedCall ? (
               <div className="flex min-w-0 flex-1 flex-col text-left">
                 <span
                   className={cn(
@@ -342,7 +357,7 @@ export function SidebarFooter({
               title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
               onClick={() => {
                 toggleMic();
-                if (callStatus === "active" && onMuteToggle) {
+                if (isMuteInteractionAllowed && onMuteToggle) {
                   onMuteToggle();
                 }
               }}

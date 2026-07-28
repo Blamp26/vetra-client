@@ -9,6 +9,7 @@ import { DirectedCallIncomingCoordinator } from "../services/directedCallIncomin
 import { DirectedCallPresentationModel } from "../services/directedCallPresentationModel";
 import { DirectedCallSignalTransport } from "../services/directedCallSignalTransport";
 import { DirectedCallMediaCoordinator } from "../services/directedCallMediaCoordinator";
+import { CallUxProjection } from "../services/callUxProjection";
 import {
   PersistentCallBoundaryDebugProvider,
   PersistentCallProvider,
@@ -199,10 +200,20 @@ export function CallRuntimeBoundary({
             isGenerationCurrent: (generation) => generation.startsWith(`${effectGeneration}:`),
           },
         );
+        const uxProjection = new CallUxProjection();
+        const runtimeGeneration = `${effectGeneration}:${deviceId}`;
+        uxProjection.handle({ type: "runtime_generation", generation: runtimeGeneration });
+        uxProjection.handle({ type: "presentation_snapshot", snapshot: presentation.getSnapshot() });
+        uxProjection.handle({ type: "media_snapshot", snapshot: mediaCoordinator.getSnapshot() });
+        const unsubscribeUxPresentation = presentation.subscribe((snapshot) => uxProjection.handle({ type: "presentation_snapshot", snapshot }));
+        const unsubscribeUxMedia = mediaCoordinator.subscribe((snapshot) => uxProjection.handle({ type: "media_snapshot", snapshot }));
         const runtime: PersistentRuntime = {
           start: () => mediaCoordinator.start(),
-          services: { presentation, media: mediaCoordinator },
+          services: { presentation, media: mediaCoordinator, uxProjection },
           dispose: () => {
+            unsubscribeUxPresentation();
+            unsubscribeUxMedia();
+            uxProjection.handle({ type: "disposed" });
             mediaCoordinator.dispose();
             signalTransport.dispose();
             presentation.dispose();

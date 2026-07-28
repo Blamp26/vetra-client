@@ -39,9 +39,11 @@ vi.mock("@/shared/components/ConfirmModal/ConfirmModal", () => ({
 
 import { SidebarFooter } from "./SidebarFooter";
 import type { CallIssue, CallStatus } from "@/features/calling/hooks/useCall.types";
+import type { CallUxStatus } from "@/features/calling/services/callUxProjection";
 
 function renderFooter({
   callStatus = "idle",
+  callUxStatus,
   remoteUsername = "Alice",
   isScreenSharing = false,
   isScreenShareUpdating = false,
@@ -61,6 +63,7 @@ function renderFooter({
   isMuted = false,
 }: {
   callStatus?: CallStatus;
+  callUxStatus?: CallUxStatus["kind"];
   remoteUsername?: string | null;
   isScreenSharing?: boolean;
   isScreenShareUpdating?: boolean;
@@ -82,6 +85,7 @@ function renderFooter({
   return render(
     <SidebarFooter
       callStatus={callStatus}
+      callUxStatus={callUxStatus}
       remoteUsername={remoteUsername}
       callSeconds={12}
       isMuted={isMuted}
@@ -157,6 +161,23 @@ describe("SidebarFooter call UX", () => {
     renderFooter({ callStatus: "active" });
 
     expect(screen.getByText("Connected")).toBeInTheDocument();
+  });
+
+  it("shows a distinct Connecting panel", () => {
+    renderFooter({ callStatus: "connecting" });
+
+    expect(screen.getByText("Connecting...")).toBeInTheDocument();
+    expect(screen.getByText("Connecting to Alice")).toBeInTheDocument();
+  });
+
+  it("shows Reconnecting without enabling the existing mute interaction", () => {
+    const onMuteToggle = vi.fn();
+    renderFooter({ callStatus: "reconnecting", onMuteToggle });
+
+    expect(screen.getByText("Reconnecting...")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mute microphone" }));
+    expect(toggleMicMock).toHaveBeenCalledTimes(1);
+    expect(onMuteToggle).not.toHaveBeenCalled();
   });
 
   it("renders the current user presence status in the footer", () => {

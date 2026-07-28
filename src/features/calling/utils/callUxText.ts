@@ -9,6 +9,7 @@ export const CALL_UX_TEXT = {
   calling: "Calling...",
   connecting: "Connecting...",
   connected: "Connected",
+  reconnecting: "Reconnecting...",
   incoming: "Incoming call",
   ended: "Call ended",
   declined: "Call declined",
@@ -38,6 +39,8 @@ export function getCallStatusLabel({
   if (isScreenShareUpdating) return CALL_UX_TEXT.screenShareUpdating;
   if (isScreenSharing) return CALL_UX_TEXT.screenSharing;
   if (status === "calling") return CALL_UX_TEXT.calling;
+  if (status === "connecting") return CALL_UX_TEXT.connecting;
+  if (status === "reconnecting") return CALL_UX_TEXT.reconnecting;
   if (status === "ringing") return isIncomingActionPending ? CALL_UX_TEXT.connecting : CALL_UX_TEXT.incoming;
   if (status === "ended") return CALL_UX_TEXT.ended;
   if (status === "failed") return CALL_UX_TEXT.failed;

@@ -7,6 +7,19 @@ import type { DirectedCallMediaStream } from "../services/directedCallWebRtcAdap
 import type { DirectedCallPresentationModel, PersistentPresentationSnapshot, PresentationActionResult } from "../services/directedCallPresentationModel";
 import type { CallAuthorityBackend, CallAuthorityState, CallAuthorityTraceEvent } from "../services/callAuthorityOwnership";
 import type { DirectedCallDiagnosticEntry } from "../services/directedCallDiagnostics";
+import { CallUxProjection, type CallUxSnapshot } from "../services/callUxProjection";
+
+function legacyUxSnapshot(snapshot: PersistentPresentationSnapshot): CallUxSnapshot {
+  const context = snapshot.callId && (snapshot.peerPublicId || snapshot.phase === "active")
+    ? { callId: snapshot.callId, peerPublicId: snapshot.peerPublicId ?? "unknown", direction: snapshot.participantRole === "recipient" ? "incoming" as const : "outgoing" as const }
+    : null;
+  if (!context) return { status: { kind: "idle" }, actionBusy: false };
+  if (snapshot.phase === "terminal") return { status: { kind: "ended", reason: (snapshot.terminalState ?? "ended") as any, ...context }, actionBusy: false };
+  if (snapshot.phase === "active") return { status: { kind: "connected", ...context }, actionBusy: false };
+  if (snapshot.phase === "connecting" || snapshot.phase === "accepting") return { status: { kind: "connecting", ...context }, actionBusy: Boolean(snapshot.pendingAction) };
+  if (snapshot.phase === "ringing") return { status: { kind: "ringing", ...context }, actionBusy: Boolean(snapshot.pendingAction) };
+  return { status: { kind: "idle" }, actionBusy: snapshot.phase === "preparing" || snapshot.phase === "calling" || Boolean(snapshot.pendingAction) };
+}
 
 export interface PersistentCallBoundaryDebugSnapshot {
   mode: "persistent" | "disabled";
@@ -32,11 +45,13 @@ const PersistentCallBoundaryDebugContext = createContext<PersistentCallBoundaryD
 export interface PersistentCallRuntimeServices {
   presentation: DirectedCallPresentationModel;
   media: DirectedCallMediaCoordinator;
+  uxProjection?: CallUxProjection;
 }
 
 export interface PersistentCallRuntimeValue {
   presentation: PersistentPresentationSnapshot;
   media: DirectedCallMediaCoordinatorSnapshot;
+  ux: CallUxSnapshot;
   startCall: (targetPublicUserId: string, targetUsername: string) => Promise<PresentationActionResult>;
   accept: () => Promise<PresentationActionResult>;
   decline: () => Promise<PresentationActionResult>;
@@ -58,23 +73,36 @@ export interface PersistentCallRuntimeValue {
 const PersistentCallContext = createContext<PersistentCallRuntimeValue | null>(null);
 
 export function PersistentCallProvider({ runtime, children }: { runtime: PersistentCallRuntimeServices; children: ReactNode }) {
+  const uxProjection = useMemo(() => runtime.uxProjection ?? new CallUxProjection(), [runtime]);
   const [presentation, setPresentation] = useState(() => runtime.presentation.getSnapshot());
   const [media, setMedia] = useState(() => runtime.media.getSnapshot());
+  const hasUxProjection = Boolean(runtime.uxProjection);
+  const [ux, setUx] = useState(() => runtime.uxProjection?.getSnapshot() ?? legacyUxSnapshot(runtime.presentation.getSnapshot()));
 
   useEffect(() => {
-    const unsubscribePresentation = runtime.presentation.subscribe(setPresentation);
-    const unsubscribeMedia = runtime.media.subscribe(setMedia);
+    const unsubscribePresentation = runtime.presentation.subscribe((next) => {
+      setPresentation(next);
+      if (!hasUxProjection) setUx(legacyUxSnapshot(next));
+    });
+    const unsubscribeMedia = runtime.media.subscribe((next) => {
+      setMedia(next);
+      if (!hasUxProjection) setUx(legacyUxSnapshot(runtime.presentation.getSnapshot()));
+    });
+    const unsubscribeUx = uxProjection.subscribe(setUx);
     setPresentation(runtime.presentation.getSnapshot());
     setMedia(runtime.media.getSnapshot());
+    if (hasUxProjection) setUx(uxProjection.getSnapshot());
     return () => {
       unsubscribePresentation();
       unsubscribeMedia();
+      unsubscribeUx();
     };
-  }, [runtime]);
+  }, [hasUxProjection, runtime, uxProjection]);
 
   const value = useMemo<PersistentCallRuntimeValue>(() => ({
     presentation,
     media,
+    ux,
     startCall: (target, username) => runtime.presentation.startCall(target, username),
     accept: () => runtime.presentation.accept(),
     decline: () => runtime.presentation.decline(),
@@ -93,7 +121,7 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
     remoteScreenShareStream: media.remoteScreenShareStream,
     startScreenShare: () => runtime.media.startScreenShare(),
     stopScreenShare: () => runtime.media.stopScreenShare(),
-  }), [media, presentation, runtime]);
+  }), [media, presentation, runtime, ux]);
 
   return <PersistentCallContext.Provider value={value}>{children}</PersistentCallContext.Provider>;
 }

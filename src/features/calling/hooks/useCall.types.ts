@@ -1,6 +1,6 @@
 import type { ResourceRef } from "@/shared/types";
 
-export type CallStatus = 'idle' | 'calling' | 'ringing' | 'active' | 'ended' | 'failed';
+export type CallStatus = 'idle' | 'calling' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'active' | 'ended' | 'failed';
 export type CallServiceStatus = 'idle' | 'connecting' | 'ready' | 'retrying' | 'closed' | 'failed';
 
 // ── Входящие события от сервера ──────────────────────────────────────────────

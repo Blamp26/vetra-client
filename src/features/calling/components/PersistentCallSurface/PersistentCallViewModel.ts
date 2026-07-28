@@ -77,20 +77,34 @@ export function usePersistentCallElapsedSeconds(snapshot: PersistentPresentation
 
 export function persistentCallSidebarModel(call: PersistentCallRuntimeValue, seconds: number): PersistentSidebarCallModel {
   const { presentation } = call;
-  const incoming = presentation.incomingModal.visible && presentation.participantRole === "recipient";
-  const status: CallStatus = presentation.phase === "active"
-    ? "active"
+  const uxStatus = call.ux?.status ?? (presentation.phase === "active"
+    ? { kind: "connected", callId: presentation.callId!, peerPublicId: presentation.peerPublicId!, direction: "outgoing" as const }
     : presentation.phase === "terminal"
-      ? "ended"
-      : incoming
-        ? "ringing"
-        : presentation.phase === "idle"
-          ? "idle"
-          : "calling";
+      ? { kind: "ended", reason: "ended" as const, callId: presentation.callId!, peerPublicId: presentation.peerPublicId!, direction: "outgoing" as const }
+      : { kind: "idle" as const });
+  const incoming = presentation.incomingModal.visible && presentation.participantRole === "recipient";
+  const status: CallStatus = call.ux ? (uxStatus.kind === "connected"
+    ? "connected"
+    : uxStatus.kind === "connecting"
+      ? "connecting"
+      : uxStatus.kind === "reconnecting"
+        ? "reconnecting"
+        : uxStatus.kind === "failed"
+          ? "failed"
+          : uxStatus.kind === "ended"
+            ? "ended"
+            : uxStatus.kind === "ringing" && incoming
+              ? "ringing"
+              : uxStatus.kind === "idle" && call.ux?.actionBusy
+                ? "idle"
+                : uxStatus.kind === "ringing"
+                  ? "calling"
+                  : presentation.phase === "terminal" ? "ended" : "idle")
+    : presentation.phase === "active" ? "active" : presentation.phase === "terminal" ? "ended" : incoming ? "ringing" : presentation.phase === "idle" ? "idle" : "calling";
 
   return {
     status,
-    direction: incoming ? "incoming" : presentation.phase === "idle" || presentation.phase === "terminal" ? null : "outgoing",
+    direction: uxStatus.kind === "ringing" && incoming ? "incoming" : contextDirection(uxStatus, presentation),
     remoteUsername: incoming ? presentation.incomingModal.callerDisplayName : presentation.peerUsername,
     seconds,
     isMuted: call.isMuted,
@@ -99,6 +113,15 @@ export function persistentCallSidebarModel(call: PersistentCallRuntimeValue, sec
     canCancel: !incoming && presentation.canCancel,
     canHangup: presentation.canHangup,
   };
+}
+
+function contextDirection(status: PersistentCallRuntimeValue["ux"]["status"], presentation: PersistentPresentationSnapshot): PersistentCallDirection {
+  if (status.kind === "idle") {
+    if (presentation.incomingModal.visible && presentation.participantRole === "recipient") return "incoming";
+    return presentation.phase !== "idle" && presentation.phase !== "terminal" ? "outgoing" : null;
+  }
+  if (status.kind === "ended") return null;
+  return status.direction;
 }
 
 export function persistentActiveCallDockModel(call: PersistentCallRuntimeValue, currentUser: User, remoteUser: User | null, seconds: number): PersistentActiveCallDockModel {

@@ -1077,6 +1077,44 @@ describe("DirectedCallMediaCoordinator", () => {
     coordinator.dispose();
   });
 
+  it("publishes the semantic recovery sequence after disconnect grace", async () => {
+    vi.useFakeTimers();
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const adapter = createAdapter();
+    let connectionState!: NonNullable<DirectedCallWebRtcAdapterOptions["onPeerConnectionState"]>;
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, createLifecycle(), "g1", {
+      adapterFactory: (options) => { connectionState = options.onPeerConnectionState!; return bindAdapter(options, adapter); },
+    });
+    const recoveryKeys = ["null"];
+    coordinator.subscribe((snapshot) => {
+      const recovery = snapshot.recovery;
+      const key = recovery ? `${recovery.phase}:${recovery.attempt}` : "null";
+      if (recoveryKeys[recoveryKeys.length - 1] !== key) recoveryKeys.push(key);
+    });
+
+    startActive(coordinator, session);
+    connectionState("disconnected");
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(recoveryKeys).toEqual(["null"]);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(recoveryKeys).toEqual(["null", "ice_restart:1"]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await Promise.resolve();
+    expect(recoveryKeys).toEqual(["null", "ice_restart:1", "ice_restart:2"]);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(recoveryKeys).toEqual(["null", "ice_restart:1", "ice_restart:2", "peer_rebuild:1"]);
+
+    connectionState("connected");
+    expect(coordinator.getSnapshot()).toMatchObject({ recovery: null, localIssue: null });
+    expect(recoveryKeys).toEqual(["null", "ice_restart:1", "ice_restart:2", "peer_rebuild:1", "null"]);
+    coordinator.dispose();
+  });
+
   it("times out the rebuild with only a local rebuild_exhausted result", async () => {
     vi.useFakeTimers();
     const session = createSession();
