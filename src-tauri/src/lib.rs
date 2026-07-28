@@ -10,6 +10,29 @@ use std::sync::{
 use fs2::FileExt;
 use tauri::{Manager, WindowEvent};
 
+#[cfg(target_os = "linux")]
+fn enable_linux_webrtc(window: &tauri::WebviewWindow) -> Result<(), String> {
+    use std::sync::{Arc, Mutex};
+    use webkit2gtk::{SettingsExt, WebViewExt};
+
+    let error = Arc::new(Mutex::new(None));
+    let error_for_callback = Arc::clone(&error);
+
+    window
+        .with_webview(move |webview| {
+            let Some(settings) = webview.inner().settings() else {
+                *error_for_callback.lock().unwrap() =
+                    Some("main webview settings are unavailable".to_string());
+                return;
+            };
+            settings.set_enable_webrtc(true);
+        })
+        .map_err(|error| format!("failed to access main webview: {error}"))?;
+
+    let result = error.lock().unwrap().take().map_or(Ok(()), Err);
+    result
+}
+
 const AUTHORITY_PREFIX: &str = "vetra:call-authority:";
 const MAX_AUTHORITY_KEY_BYTES: usize = 512;
 const ERROR_SHARING_VIOLATION: i32 = 32;
@@ -222,6 +245,16 @@ fn get_call_authority_snapshot(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            #[cfg(target_os = "linux")]
+            {
+                let main_window = app
+                    .get_webview_window("main")
+                    .ok_or_else(|| "main webview window is unavailable".to_string())?;
+                enable_linux_webrtc(&main_window).map_err(std::io::Error::other)?;
+            }
+            Ok(())
+        })
         .manage(CallAuthorityRegistry::default())
         .invoke_handler(tauri::generate_handler![
             acquire_call_authority,
