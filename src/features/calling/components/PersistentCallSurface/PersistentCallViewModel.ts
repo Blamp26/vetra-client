@@ -17,6 +17,7 @@ export interface PersistentSidebarCallModel {
   muted: boolean;
   deafened: boolean;
   effectiveMuted: boolean;
+  speaking: { localSpeaking: boolean; remoteSpeaking: boolean };
   canToggleMute: boolean;
   canToggleDeafen: boolean;
   callIssue: CallIssue | null;
@@ -37,6 +38,7 @@ export interface PersistentActiveCallDockModel {
   muted: boolean;
   deafened: boolean;
   effectiveMuted: boolean;
+  speaking: { localSpeaking: boolean; remoteSpeaking: boolean };
   canToggleMute: boolean;
   canToggleDeafen: boolean;
   callIssue: CallIssue | null;
@@ -128,6 +130,7 @@ export function persistentCallSidebarModel(call: PersistentCallRuntimeValue, sec
     muted: call.muted,
     deafened: call.deafened,
     effectiveMuted: call.effectiveMuted,
+    speaking: call.speaking,
     canToggleMute: call.canToggleMute,
     canToggleDeafen: call.canToggleDeafen,
     callIssue: runtimeCallIssue(call),
@@ -161,6 +164,7 @@ export function persistentActiveCallDockModel(call: PersistentCallRuntimeValue, 
     muted: call.muted,
     deafened: call.deafened,
     effectiveMuted: call.effectiveMuted,
+    speaking: call.speaking,
     canToggleMute: call.canToggleMute,
     canToggleDeafen: call.canToggleDeafen,
     callIssue: runtimeCallIssue(call),

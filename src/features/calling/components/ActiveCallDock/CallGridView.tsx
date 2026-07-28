@@ -5,6 +5,7 @@ export interface CallGridParticipant {
   name: string;
   label: string;
   isMuted?: boolean;
+  isSpeaking?: boolean;
   isLocallyMuted?: boolean;
 }
 
@@ -14,6 +15,7 @@ export interface CallGridScreenShare {
   stream: MediaStream | null;
   state: ScreenShareTileState;
   isLocalSharer: boolean;
+  isSpeaking?: boolean;
 }
 
 interface CallGridViewProps {
@@ -55,6 +57,7 @@ export function CallGridView({
           stream={share.stream}
           screenShareState={share.state}
           isLocalSharer={share.isLocalSharer}
+          isSpeaking={share.isSpeaking}
           onWatch={() => onWatchStream(share.id)}
           onExpand={() => onExpandStream(share.id)}
           onStopScreenShare={share.isLocalSharer ? onStopScreenShare : undefined}
@@ -71,6 +74,7 @@ export function CallGridView({
           label={participant.label}
           variant="avatar"
           isMuted={participant.isMuted}
+          isSpeaking={participant.isSpeaking}
           isLocallyMuted={participant.isLocallyMuted}
           compact={compactParticipants || hasPrimaryScreenShare}
           className={tileSizeClass}

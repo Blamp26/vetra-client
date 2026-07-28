@@ -15,6 +15,7 @@ import type {
 import { debugCall } from '../utils/callDebug';
 import { mediaSettingsStore } from '@/shared/utils/mediaSettings';
 import { callMediaErrorMessage, classifyMicrophoneError } from '../utils/callMediaErrors';
+import { SpeakingDetector, type CallSpeakingProjection } from '../services/speakingDetector';
 
 const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
     connectionState: 'unknown',
@@ -197,6 +198,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [callServiceStatus, setCallServiceStatus] = useState<CallServiceStatus>(
         callSignalingService.getReadinessStatus(),
     );
+    const [speaking, setSpeaking] = useState<CallSpeakingProjection>({ localSpeaking: false, remoteSpeaking: false });
 
     const callChannelRef = useRef<Channel | null>(null);
     const webrtcRef = useRef<WebRTCService | null>(null);
@@ -220,6 +222,25 @@ export function useCall(currentUserId: number): UseCallReturn {
     const pendingIncomingIceKeysRef = useRef(new Set<string>());
     const deliveredIncomingIceKeysRef = useRef(new Set<string>());
     const incomingIceDeliveryPausedRef = useRef(false);
+    const speakingDetectorRef = useRef<SpeakingDetector | null>(null);
+
+    const registerSpeakingStream = useCallback((role: "local" | "remote", stream: MediaStream | null) => {
+        const detector = speakingDetectorRef.current ?? new SpeakingDetector({ onChange: setSpeaking });
+        speakingDetectorRef.current = detector;
+        detector.registerStream(role, stream);
+    }, []);
+
+    const registerSpeakingTrack = useCallback((track: MediaStreamTrack | null) => {
+        const detector = speakingDetectorRef.current ?? new SpeakingDetector({ onChange: setSpeaking });
+        speakingDetectorRef.current = detector;
+        detector.registerTrack("local", track);
+    }, []);
+
+    const disposeSpeakingDetector = useCallback(() => {
+        speakingDetectorRef.current?.dispose();
+        speakingDetectorRef.current = null;
+        setSpeaking({ localSpeaking: false, remoteSpeaking: false });
+    }, []);
 
     const cleanupScreenShare = useCallback((options?: { stopTracks?: boolean }) => {
         const shouldStopTracks = options?.stopTracks ?? true;
@@ -363,6 +384,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         cleanupScreenShare({ stopTracks: !webrtcRef.current });
         webrtcRef.current?.dispose();
         webrtcRef.current = null;
+        disposeSpeakingDetector();
         clearPendingIncomingIce();
         callChannelRef.current = null;
         offerSdpRef.current = null;
@@ -388,7 +410,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             setCallIssue(null);
             setIsIncomingActionPending(false);
         }
-    }, [cleanupScreenShare, clearCallTimeout, clearPendingIncomingIce]);
+    }, [cleanupScreenShare, clearCallTimeout, clearPendingIncomingIce, disposeSpeakingDetector]);
 
     const cleanupLocalCall = useCallback((reason: string, options?: { issue?: CallIssue | null }) => {
         debugCall('[useCall] cleanup local call', {
@@ -404,6 +426,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         cleanupScreenShare({ stopTracks: !webrtcRef.current });
         webrtcRef.current?.dispose();
         webrtcRef.current = null;
+        disposeSpeakingDetector();
         clearPendingIncomingIce();
         offerSdpRef.current = null;
         incomingActionPendingRef.current = false;
@@ -427,7 +450,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         setDiagnostics(EMPTY_CALL_DIAGNOSTICS);
         setCallIssue(options?.issue ?? null);
         setIsIncomingActionPending(false);
-    }, [cleanupScreenShare, clearCallTimeout, clearPendingIncomingIce]);
+    }, [cleanupScreenShare, clearCallTimeout, clearPendingIncomingIce, disposeSpeakingDetector]);
 
     const resetAfterDelay = useCallback((options?: { status?: 'ended' | 'failed'; issue?: CallIssue | null }) => {
         clearPendingIncomingIce();
@@ -793,7 +816,11 @@ export function useCall(currentUserId: number): UseCallReturn {
         callIdRef.current = null;
 
         const service = new WebRTCService(channel, currentUserId, targetUserId);
-        service.onRemoteStream = (stream) => setRemoteStream(stream);
+        service.onRemoteStream = (stream) => {
+            if (webrtcRef.current !== service) return;
+            setRemoteStream(stream);
+            registerSpeakingStream("remote", stream);
+        };
         service.onRemoteScreenStream = (stream) => setRemoteScreenStream(stream);
         service.onRemoteScreenAvailabilityChange = (available) => setIsRemoteScreenAvailable(available);
         service.onRemoteScreenWatchStateChange = (watching) => setIsWatchingRemoteScreen(watching);
@@ -809,6 +836,7 @@ export function useCall(currentUserId: number): UseCallReturn {
 
         service.startCall()
             .then(() => {
+                if (webrtcRef.current === service) registerSpeakingTrack(service.getLocalAudioTracks()[0] ?? null);
                 callTimeoutRef.current = setTimeout(() => {
                     if (webrtcRef.current) {
                         console.warn('[useCall] Call timeout');
@@ -831,7 +859,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 console.error('[useCall] startCall failed', err);
                 cleanupLocalCall('start_call_failed', { issue });
             });
-    }, [cleanupLocalCall, clearPendingIncomingIce, currentUserId]);
+    }, [cleanupLocalCall, clearPendingIncomingIce, currentUserId, registerSpeakingStream, registerSpeakingTrack]);
 
     const acceptCall = useCallback(() => {
         const channel = callChannelRef.current;
@@ -854,7 +882,9 @@ export function useCall(currentUserId: number): UseCallReturn {
         const authoritativeCallId = callIdRef.current ?? callId;
         service.setCallId(authoritativeCallId);
         service.onRemoteStream = (stream) => {
+            if (webrtcRef.current !== service) return;
             setRemoteStream(stream);
+            registerSpeakingStream("remote", stream);
         };
         service.onRemoteScreenStream = (stream) => {
             setRemoteScreenStream(stream);
@@ -873,6 +903,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         setDiagnostics(mapDiagnostics(service.getDiagnosticsSnapshot()));
 
         service.acceptCall(sdp).then(async () => {
+            if (webrtcRef.current === service) registerSpeakingTrack(service.getLocalAudioTracks()[0] ?? null);
             await flushPendingIncomingIce(service, authoritativeCallId, remote);
             incomingIceDeliveryPausedRef.current = false;
             setIsIncomingActionPending(false);
@@ -883,7 +914,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             console.error('[useCall] acceptCall failed', err);
             cleanupLocalCall('accept_call_failed', { issue: mapAcceptCallIssue(err) });
         });
-    }, [callId, clearCallTimeout, cleanupLocalCall, currentUserId, flushPendingIncomingIce, remoteUserId, status]);
+    }, [callId, clearCallTimeout, cleanupLocalCall, currentUserId, flushPendingIncomingIce, registerSpeakingStream, registerSpeakingTrack, remoteUserId, status]);
 
     const rejectCall = useCallback(() => {
         const channel = callChannelRef.current;
@@ -929,6 +960,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             const nextMuted = !current;
             if (deafened) service.setLocalMuted(true);
             else service.toggleLocalMuted();
+            speakingDetectorRef.current?.setLocalMuted(nextMuted || deafened);
             return nextMuted;
         });
     }, [deafened]);
@@ -940,6 +972,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         setDeafened((current) => {
             const nextDeafened = !current;
             service.setLocalMuted(isMuted || nextDeafened);
+            speakingDetectorRef.current?.setLocalMuted(isMuted || nextDeafened);
             return nextDeafened;
         });
     }, [isMuted]);
@@ -1017,6 +1050,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         muted: isMuted,
         deafened,
         effectiveMuted: isMuted || deafened,
+        speaking,
         canToggleMute: status === 'active' && Boolean(webrtcRef.current?.getLocalAudioTracks().length),
         canToggleDeafen: status === 'active',
         isScreenSharing,

@@ -70,6 +70,13 @@ function stream(id: string) { return { id } as MediaStream; }
 function expandShare() { fireEvent.click(screen.getByTestId("screen-share-framed-tile")); }
 
 describe("ActiveCallDock", () => {
+  it("renders accessible speaking indicators on both legacy participant tiles", () => {
+    renderDock({ speaking: { localSpeaking: true, remoteSpeaking: true } });
+    expect(screen.getByText("You are speaking")).toBeInTheDocument();
+    expect(screen.getByText("Alice is speaking")).toBeInTheDocument();
+    expect(screen.getAllByTestId("voice-participant-avatar")[0]).toHaveClass("ring-2", "ring-primary");
+  });
+
   it("renders a substantial one-to-one voice stage instead of the rejected 88px header", () => {
     renderDock();
     const dock = screen.getByTestId("active-call-dock");

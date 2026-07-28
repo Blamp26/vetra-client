@@ -1102,6 +1102,18 @@ body[data-vt-shell-resizing="true"] {
     color: var(--primary-foreground);
   }
 
+  .vt-speaking-indicator {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    .vt-speaking-indicator {
+      outline: 2px solid Highlight;
+      outline-offset: 2px;
+    }
+  }
+
   .voice-call-controls {
     border-radius: 0;
     background: transparent;

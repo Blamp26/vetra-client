@@ -72,6 +72,7 @@ export interface UseCallReturn {
     muted?: boolean;
     deafened?: boolean;
     effectiveMuted?: boolean;
+    speaking?: { localSpeaking: boolean; remoteSpeaking: boolean };
     canToggleMute?: boolean;
     canToggleDeafen?: boolean;
     isScreenSharing: boolean;

@@ -4,6 +4,7 @@ import type {
   DirectedCallMediaCoordinatorSnapshot,
 } from "../services/directedCallMediaCoordinator";
 import type { DirectedCallMediaStream } from "../services/directedCallWebRtcAdapter";
+import type { CallSpeakingProjection } from "../services/speakingDetector";
 import type { DirectedCallPresentationModel, PersistentPresentationSnapshot, PresentationActionResult } from "../services/directedCallPresentationModel";
 import type { CallAuthorityBackend, CallAuthorityState, CallAuthorityTraceEvent } from "../services/callAuthorityOwnership";
 import type { DirectedCallDiagnosticEntry } from "../services/directedCallDiagnostics";
@@ -63,6 +64,7 @@ export interface PersistentCallRuntimeValue {
   muted: boolean;
   deafened: boolean;
   effectiveMuted: boolean;
+  speaking: CallSpeakingProjection;
   canToggleMute: boolean;
   canToggleDeafen: boolean;
   toggleMute: () => boolean;
@@ -120,6 +122,7 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
     muted: media.muted,
     deafened: media.deafened,
     effectiveMuted: media.effectiveMuted,
+    speaking: media.speaking,
     canToggleMute: media.canToggleMute,
     canToggleDeafen: media.canToggleDeafen,
     toggleMute: () => runtime.media.toggleMute(),

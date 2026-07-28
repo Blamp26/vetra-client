@@ -28,6 +28,7 @@ vi.mock("../ActiveCallDock", () => ({
       <span>{props.remoteUsername}</span>
       <span>{props.callStatus}</span>
       <span>{props.seconds}</span>
+      <span data-testid="speaking-props">{JSON.stringify(props.speaking)}</span>
       <button onClick={props.onMuteToggle}>mute</button>
       <button onClick={props.onHangUp}>hangup</button>
       {props.screenShareAvailable && <button onClick={props.isScreenSharing ? props.onStopScreenShare : props.onStartScreenShare}>screen share</button>}
@@ -45,6 +46,15 @@ vi.mock("../ActiveCallDock", () => ({
 }));
 
 describe("PersistentActiveCallDock", () => {
+  it("projects persistent speaking state into the active-call surface", () => {
+    const runtime = {
+      presentation: { getSnapshot: () => activePresentation, subscribe: () => () => undefined },
+      media: { getSnapshot: () => ({ remoteAudioStream: null, localIssue: null, isMuted: false, canToggleMute: true, peerConnectionState: "connected", projection: { state: "active" }, speaking: { localSpeaking: false, remoteSpeaking: true }, isLocalScreenShareActive: false, localScreenShareStream: null, remoteScreenShareStream: null }), subscribe: () => () => undefined },
+    } as any;
+    render(<PersistentCallProvider runtime={runtime}><PersistentActiveCallDock currentUser={{ id: 1, public_id: "me", display_name: "Me" } as any} remoteUser={null} /></PersistentCallProvider>);
+    expect(screen.getByTestId("speaking-props")).toHaveTextContent(JSON.stringify({ localSpeaking: false, remoteSpeaking: true }));
+  });
+
   beforeAll(() => {
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,

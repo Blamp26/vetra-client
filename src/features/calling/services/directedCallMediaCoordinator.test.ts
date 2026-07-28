@@ -12,6 +12,7 @@ import type {
 import type { DirectedCallSession } from "./directedCallSession";
 import { getDirectedCallDiagnosticTimeline, getDirectedCallDiagnosticsProbe, resetDirectedCallDiagnosticsProbe, resetDirectedCallDiagnosticTimeline } from "./directedCallDiagnostics";
 import { setCallDebugEnabled } from "../utils/callDebug";
+import type { SpeakingDetector } from "./speakingDetector";
 
 const callId = "33333333-3333-4333-8333-333333333333";
 const peerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -1490,6 +1491,42 @@ describe("DirectedCallMediaCoordinator", () => {
 
     expect(lifecycle.setupFailed).toHaveBeenCalledWith(callId, "peer_connection_failed");
     expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears persistent speaking state on setup failure and ignores stale detector callbacks", async () => {
+    const session = createSession();
+    const transport = new DirectedCallSignalTransport(session, { generation: "g1" });
+    const lifecycle = createLifecycle();
+    const adapter = createAdapter();
+    adapter.prepareOffer = vi.fn().mockRejectedValue(new Error("sdp failed")) as typeof adapter.prepareOffer;
+    const callbacks: Array<(speaking: { localSpeaking: boolean; remoteSpeaking: boolean }) => void> = [];
+    const detectors: Array<{ dispose: ReturnType<typeof vi.fn> }> = [];
+    const coordinator = new DirectedCallMediaCoordinator(session, transport, lifecycle, "g1", {
+      adapterFactory: (options) => bindAdapter(options, adapter),
+      speakingDetectorFactory: (onChange) => {
+        let current = { localSpeaking: false, remoteSpeaking: false };
+        callbacks.push((next) => { current = next; onChange(next); });
+        const detector = {
+          dispose: vi.fn(),
+          getSnapshot: vi.fn(() => current),
+          registerStream: vi.fn(),
+          unregister: vi.fn(),
+          setLocalMuted: vi.fn(),
+        };
+        detectors.push(detector);
+        return detector as unknown as SpeakingDetector;
+      },
+    });
+    coordinator.start();
+    session.emit(projection("accepted"));
+    callbacks[0]({ localSpeaking: false, remoteSpeaking: true });
+    expect(coordinator.getSnapshot().speaking.remoteSpeaking).toBe(true);
+    await vi.waitFor(() => expect(lifecycle.setupFailed).toHaveBeenCalledTimes(1));
+    expect(coordinator.getSnapshot().speaking).toEqual({ localSpeaking: false, remoteSpeaking: false });
+    expect(detectors[0].dispose).toHaveBeenCalledTimes(1);
+    callbacks[0]({ localSpeaking: false, remoteSpeaking: true });
+    expect(coordinator.getSnapshot().speaking).toEqual({ localSpeaking: false, remoteSpeaking: false });
+    coordinator.dispose();
   });
 
   it("preserves every safe setup failure code", async () => {

@@ -21,6 +21,7 @@ export interface ParticipantTileProps {
   screenShareState?: ScreenShareTileState;
   isLocalSharer?: boolean;
   isMuted?: boolean;
+  isSpeaking?: boolean;
   isLocallyMuted?: boolean;
   onWatch?: () => void;
   onExpand?: () => void;
@@ -39,6 +40,7 @@ export function ParticipantTile({
   screenShareState = "idle",
   isLocalSharer = false,
   isMuted = false,
+  isSpeaking = false,
   isLocallyMuted = false,
   onWatch,
   onExpand,
@@ -55,6 +57,7 @@ export function ParticipantTile({
         stream={stream}
         state={screenShareState}
         isLocalSharer={isLocalSharer}
+        isSpeaking={isSpeaking}
         isLocallyMuted={isLocallyMuted}
         onWatch={onWatch}
         onExpand={onExpand}
@@ -81,6 +84,7 @@ export function ParticipantTile({
           compact
             ? "h-[clamp(42px,7vh,72px)] w-[clamp(42px,7vh,72px)] text-[clamp(15px,2.3vh,24px)] font-semibold"
             : "h-[clamp(64px,10vh,112px)] w-[clamp(64px,10vh,112px)] text-[clamp(24px,4vh,40px)] font-semibold",
+          isSpeaking && "vt-speaking-indicator ring-2 ring-primary ring-offset-2 ring-offset-background transition-shadow motion-reduce:transition-none",
         )}
       >
         {name.charAt(0).toUpperCase()}
@@ -92,7 +96,7 @@ export function ParticipantTile({
         {name}
       </p>
       {isLocallyMuted && <VolumeX className="absolute bottom-3 right-3 h-4 w-4 text-muted-foreground" aria-label="Muted locally" />}
-      <span className="sr-only">{isMuted ? "Muted" : label}</span>
+      <span className="sr-only">{isMuted ? "Muted" : label}{isSpeaking ? `. ${name === "You" ? "You are speaking" : `${name} is speaking`}` : ""}</span>
     </div>
   );
 }
@@ -109,6 +113,7 @@ function ScreenShareParticipantTile({
   className,
   testId,
   isLocallyMuted,
+  isSpeaking,
 }: {
   name: string;
   stream: MediaStream | null;
@@ -121,6 +126,7 @@ function ScreenShareParticipantTile({
   className?: string;
   testId: string;
   isLocallyMuted?: boolean;
+  isSpeaking?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isVideoReady, setIsVideoReady] = useState(false);
@@ -149,6 +155,7 @@ function ScreenShareParticipantTile({
       className={cn(
         "vt-call-video-shell participant-tile participant-tile--screen relative flex shrink-0 items-center justify-center text-white",
         isWatchingInline && "participant-tile--watching bg-[#0d0e10]",
+        isSpeaking && "vt-speaking-indicator ring-2 ring-primary",
         className,
       )}
       data-testid={testId}
@@ -181,6 +188,7 @@ function ScreenShareParticipantTile({
           >
             720p · LIVE
           </span>
+          {isSpeaking && <span className="sr-only">{isLocalSharer ? "You are speaking" : `${name} is speaking`}</span>}
           <Volume2
             className="tile-speaker absolute bottom-3 right-3 h-4 w-4 text-white opacity-90"
             aria-label="Stream volume"

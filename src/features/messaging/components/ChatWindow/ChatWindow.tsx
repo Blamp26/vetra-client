@@ -464,6 +464,7 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
           muted={call!.muted ?? call!.isMuted}
           deafened={call!.deafened ?? false}
           effectiveMuted={call!.effectiveMuted ?? call!.isMuted}
+          speaking={call!.speaking}
           canToggleMute={call!.canToggleMute ?? true}
           canToggleDeafen={call!.canToggleDeafen ?? true}
           isScreenSharing={call!.isScreenSharing}

@@ -22,6 +22,7 @@ export function PersistentActiveCallDock({ currentUser, remoteUser }: { currentU
       muted={model.muted}
       deafened={model.deafened}
       effectiveMuted={model.effectiveMuted}
+      speaking={model.speaking}
       canToggleMute={model.canToggleMute}
       canToggleDeafen={model.canToggleDeafen}
       isScreenSharing={model.isScreenSharing}

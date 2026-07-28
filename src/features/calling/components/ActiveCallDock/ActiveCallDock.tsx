@@ -46,6 +46,7 @@ interface ActiveCallDockProps {
   muted?: boolean;
   deafened?: boolean;
   effectiveMuted?: boolean;
+  speaking?: { localSpeaking: boolean; remoteSpeaking: boolean };
   canToggleMute?: boolean;
   canToggleDeafen?: boolean;
   isScreenSharing: boolean;
@@ -115,6 +116,7 @@ export function ActiveCallDock({
   muted,
   deafened = false,
   effectiveMuted = (muted ?? isMuted) || deafened,
+  speaking = { localSpeaking: false, remoteSpeaking: false },
   canToggleMute = true,
   canToggleDeafen = false,
   isScreenSharing,
@@ -465,8 +467,8 @@ export function ActiveCallDock({
 
         <div className={cn("voice-call-participants flex min-h-0 flex-1 items-center justify-center px-4 pb-20 pt-10", isFullscreen && "fullscreen-voice-participants")} data-testid="active-call-voice-surface">
           <div className="voice-call-tile-row grid w-full max-w-[760px] grid-cols-2 gap-3" data-testid="voice-call-tile-row">
-            <VoiceParticipantTile name="You" isMuted={effectiveMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
-            <VoiceParticipantTile name={remoteUsername} isLocallyMuted={remoteMutedLocally} onContextMenu={(event) => openUserContext(event, remoteTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, remoteTarget); }} />
+            <VoiceParticipantTile name="You" isMuted={effectiveMuted} isSpeaking={speaking.localSpeaking} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
+            <VoiceParticipantTile name={remoteUsername} isSpeaking={speaking.remoteSpeaking} isLocallyMuted={remoteMutedLocally} onContextMenu={(event) => openUserContext(event, remoteTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, remoteTarget); }} />
           </div>
         </div>
 
@@ -552,13 +554,14 @@ export function ActiveCallDock({
                 onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, isRemoteScreenAvailable ? remoteTarget : selfTarget); }}
                 isLocallyMuted={isRemoteScreenAvailable && remoteMutedLocally}
               />
-              <FramedParticipantTile name="You" isMuted={effectiveMuted} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
+              <FramedParticipantTile name="You" isMuted={effectiveMuted} isSpeaking={speaking.localSpeaking} onContextMenu={(event) => openUserContext(event, selfTarget)} onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, selfTarget); }} />
               <FramedParticipantTile
                 name={remoteUsername}
                 className={isFullscreen ? "col-span-2 w-[calc(50%_-_4px)] justify-self-center" : undefined}
                 onContextMenu={(event) => openUserContext(event, remoteTarget)}
                 onKeyDown={(event) => { if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") openUserContext(event, remoteTarget); }}
                 isLocallyMuted={remoteMutedLocally}
+                isSpeaking={speaking.remoteSpeaking}
               />
             </div>
           </div>
@@ -645,8 +648,8 @@ export function ActiveCallDock({
 
         {isFullscreen ? (
           <div className="fullscreen-share-participants relative z-10 mx-auto mb-4 mt-5 grid min-w-0 w-[min(560px,calc(100%-32px))] shrink-0 grid-cols-2 gap-3" data-testid="fullscreen-participant-strip">
-            <FramedParticipantTile name="You" isMuted={isMuted} />
-            <FramedParticipantTile name={remoteUsername} isLocallyMuted={remoteMutedLocally} />
+            <FramedParticipantTile name="You" isMuted={isMuted} isSpeaking={speaking.localSpeaking} />
+            <FramedParticipantTile name={remoteUsername} isLocallyMuted={remoteMutedLocally} isSpeaking={speaking.remoteSpeaking} />
           </div>
         ) : localScreenStream && remoteScreenStream ? (
           <div className="absolute bottom-20 right-4 h-[90px] w-[160px] overflow-hidden rounded-md bg-zinc-900 shadow-lg" data-testid="local-screen-share-pip"><StreamVideo stream={localScreenStream} label="Your screen share preview" className="h-full w-full object-cover" testId="local-screen-share-pip-video" /></div>
@@ -759,14 +762,15 @@ function ScreenShareFrame({
   );
 }
 
-function FramedParticipantTile({ name, isMuted = false, isLocallyMuted = false, className, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; isLocallyMuted?: boolean; className?: string; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
+function FramedParticipantTile({ name, isMuted = false, isLocallyMuted = false, isSpeaking = false, className, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; isLocallyMuted?: boolean; isSpeaking?: boolean; className?: string; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
   return (
     <div tabIndex={0} onContextMenu={onContextMenu} onKeyDown={onKeyDown} className={cn("screen-share-framed-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden", className)} data-testid="screen-share-framed-participant-tile">
-      <div className="voice-participant-avatar flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-semibold" aria-hidden="true">
+      <div className={cn("voice-participant-avatar flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-semibold transition-shadow motion-reduce:transition-none", isSpeaking && "vt-speaking-indicator ring-2 ring-primary ring-offset-2 ring-offset-background")} aria-hidden="true">
         {name.slice(0, 1).toUpperCase()}
       </div>
       <div className="absolute bottom-2 left-2 flex min-w-0 max-w-[calc(100%-16px)] items-center gap-1.5 text-xs font-medium" data-testid="screen-share-framed-participant-label">
         <span className="truncate">{name}</span>
+        {isSpeaking && <span className="sr-only">{name === "You" ? "You are speaking" : `${name} is speaking`}</span>}
         {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label={`${name} muted`} />}
         {isLocallyMuted && <VolumeX className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Muted locally" />}
       </div>
@@ -774,14 +778,15 @@ function FramedParticipantTile({ name, isMuted = false, isLocallyMuted = false, 
   );
 }
 
-function VoiceParticipantTile({ name, isMuted = false, isLocallyMuted = false, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; isLocallyMuted?: boolean; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
+function VoiceParticipantTile({ name, isMuted = false, isLocallyMuted = false, isSpeaking = false, onContextMenu, onKeyDown }: { name: string; isMuted?: boolean; isLocallyMuted?: boolean; isSpeaking?: boolean; onContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void; onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void }) {
   return (
     <div tabIndex={0} onContextMenu={onContextMenu} onKeyDown={onKeyDown} className="voice-participant-tile relative flex aspect-video min-w-0 items-center justify-center overflow-hidden rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" data-testid="active-call-voice-participant-tile">
-      <div className="voice-participant-avatar flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-semibold" aria-hidden="true" data-testid="voice-participant-avatar">
+      <div className={cn("voice-participant-avatar flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-semibold transition-shadow motion-reduce:transition-none", isSpeaking && "vt-speaking-indicator ring-2 ring-primary ring-offset-2 ring-offset-background")} aria-hidden="true" data-testid="voice-participant-avatar">
         {name.slice(0, 1).toUpperCase()}
       </div>
       <div className="absolute bottom-3 left-3 flex min-w-0 max-w-[calc(100%-24px)] items-center gap-1.5 text-sm font-medium" data-testid="voice-participant-label">
         <span className="truncate">{name}</span>
+        {isSpeaking && <span className="sr-only">{name === "You" ? "You are speaking" : `${name} is speaking`}</span>}
         {isMuted && <MicOff className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label={`${name} muted`} />}
         {isLocallyMuted && <VolumeX className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Muted locally" />}
       </div>

@@ -27,6 +27,7 @@ import type { DirectedCallSession } from "./directedCallSession";
 import type { LifecycleCommandOutcome } from "./directedCallLifecycleController";
 import { recordDirectedCallDiagnostic } from "./directedCallDiagnostics";
 import type { DirectedCallDiagnosticEvent, DirectedCallDiagnosticProducerFamily } from "./directedCallDiagnostics";
+import { SpeakingDetector, type CallSpeakingProjection } from "./speakingDetector";
 
 export type DirectedCallMediaCoordinatorState =
   | "idle"
@@ -63,6 +64,7 @@ export interface DirectedCallMediaCoordinatorSnapshot {
   deafened: boolean;
   effectiveMuted: boolean;
   canToggleDeafen: boolean;
+  speaking: CallSpeakingProjection;
 }
 
 export interface DirectedCallMediaLifecyclePort {
@@ -73,6 +75,7 @@ export interface DirectedCallMediaLifecyclePort {
 
 export interface DirectedCallMediaCoordinatorOptions {
   adapterFactory?: (options: DirectedCallWebRtcAdapterOptions) => DirectedCallWebRtcAdapter;
+  speakingDetectorFactory?: (onChange: (speaking: CallSpeakingProjection) => void) => SpeakingDetector;
   audioConstraints?: () => MediaStreamConstraints;
   isGenerationCurrent?: (generation: string) => boolean;
   onRecoveryResult?: (result:
@@ -247,6 +250,8 @@ export class DirectedCallMediaCoordinator {
   private mediaRetryInFlight: Promise<boolean> | null = null;
   private mediaRetryReadinessCheck: (() => void) | null = null;
   private mediaRetryTimeout: ReturnType<typeof setTimeout> | null = null;
+  private speakingDetector: SpeakingDetector;
+  private readonly speakingDetectorFactory?: DirectedCallMediaCoordinatorOptions["speakingDetectorFactory"];
 
   constructor(
     session: DirectedCallSession,
@@ -260,11 +265,31 @@ export class DirectedCallMediaCoordinator {
     this.lifecycle = lifecycle;
     this.generation = generation;
     this.isGenerationCurrent = options.isGenerationCurrent ?? ((current) => current === this.generation);
+    this.speakingDetectorFactory = options.speakingDetectorFactory;
+    this.speakingDetector = this.createSpeakingDetector();
     this.snapshot = this.audioSnapshot({ state: "idle", callId: null, participantRole: null, projection: null, generation, recovery: null, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, localIssue: null, mediaErrorCode: null, canRetryMedia: false, peerConnectionState: null, isMuted: false, canToggleMute: false });
+
     this.adapterFactory = options.adapterFactory ?? ((adapterOptions) => new DirectedCallWebRtcAdapter(adapterOptions));
     this.audioConstraints = options.audioConstraints;
     this.onRecoveryResult = options.onRecoveryResult;
     this.adapter = this.createAdapter();
+  }
+
+  private createSpeakingDetector(): SpeakingDetector {
+    let detector!: SpeakingDetector;
+    const onChange = (speaking: CallSpeakingProjection) => {
+      if (!this.disposed && this.speakingDetector === detector) this.setSnapshot({ ...this.snapshot, speaking });
+    };
+    detector = this.speakingDetectorFactory?.(onChange) ?? new SpeakingDetector({ onChange });
+    return detector;
+  }
+
+  private resetSpeakingDetector(): void {
+    this.speakingDetector.dispose();
+    this.speakingDetector = this.createSpeakingDetector();
+    if (this.snapshot) {
+      this.setSnapshot(this.audioSnapshot({ ...this.snapshot }));
+    }
   }
 
   private createAdapter(): DirectedCallWebRtcAdapter {
@@ -281,6 +306,7 @@ export class DirectedCallMediaCoordinator {
       onRemoteStream: (stream) => {
         if (this.disposed || this.adapterEpoch !== adapterEpoch) return;
         this.remoteAudioStream = stream;
+        this.speakingDetector.registerStream("remote", stream);
         this.setSnapshot({ ...this.snapshot, remoteAudioStream: stream });
       },
       onInitialMediaReadinessChange: () => {
@@ -564,7 +590,7 @@ export class DirectedCallMediaCoordinator {
     this.mediaRetryReadinessCheck?.();
     this.retireSetupFailureReport();
     this.cancelRecoveryWork();
-    this.invalidateMediaAttempt();
+    this.invalidateMediaAttempt(false);
     this.disposed = true;
     this.recordMediaDiagnostic("cleanup", { reason: "coordinator_dispose" });
     this.setSnapshot({ ...this.snapshot, state: "disposing" });
@@ -575,6 +601,7 @@ export class DirectedCallMediaCoordinator {
     this.unsubscribeSignal = null;
     this.unsubscribeIceRestart = null;
     this.clearLocalMediaState();
+    this.speakingDetector.dispose();
     this.localAudioState = { muted: false, deafened: false };
     this.recordMediaDiagnostic("cleanup", { callId: this.snapshot.callId, reason: "coordinator_disposed" });
     this.signalTransport.dispose();
@@ -1579,6 +1606,7 @@ export class DirectedCallMediaCoordinator {
     }, PEER_CONNECTION_REBUILD_TIMEOUT_MS);
     const ready = Promise.resolve().then(() => {
       if (!this.adapter.rebuildPeerConnection) throw new DirectedCallWebRtcError("media_binding_failed");
+      this.speakingDetector.unregister("remote");
       return this.adapter.rebuildPeerConnection();
     });
     this.rebuildReadyPromise = ready;
@@ -1704,7 +1732,8 @@ export class DirectedCallMediaCoordinator {
     this.setSnapshot({ ...this.snapshot, state: "failed", localIssue: this.localIssue, mediaErrorCode: null, canRetryMedia: false, remoteAudioStream: null, localScreenShareStream: null, isLocalScreenShareActive: false, remoteScreenShareStream: null, peerConnectionState });
   }
 
-  private invalidateMediaAttempt(): void {
+  private invalidateMediaAttempt(resetSpeaking = true): void {
+    if (resetSpeaking) this.resetSpeakingDetector();
     this.mediaRetryReadinessCheck?.();
     if (this.renegotiation) this.clearRenegotiation(this.renegotiation.id);
     if (this.iceRestart) this.clearIceRestart(this.iceRestart.id);
@@ -1754,6 +1783,7 @@ export class DirectedCallMediaCoordinator {
     const muted = !this.localAudioState.muted;
     this.localAudioState = { ...this.localAudioState, muted };
     this.applyEffectiveMute();
+    this.speakingDetector.setLocalMuted(this.localAudioState.muted || this.localAudioState.deafened);
     this.setSnapshot(this.audioSnapshot({ ...this.snapshot, isMuted: this.localAudioState.deafened || muted, canToggleMute: true }));
     return true;
   }
@@ -1762,6 +1792,7 @@ export class DirectedCallMediaCoordinator {
     if (this.disposed || !["accepted", "connecting", "active"].includes(this.snapshot.projection?.state ?? "")) return false;
     this.localAudioState = { ...this.localAudioState, deafened: !this.localAudioState.deafened };
     this.applyEffectiveMute();
+    this.speakingDetector.setLocalMuted(this.localAudioState.muted || this.localAudioState.deafened);
     this.setSnapshot(this.audioSnapshot({ ...this.snapshot, isMuted: this.localAudioState.deafened || this.localAudioState.muted }));
     return true;
   }
@@ -1803,6 +1834,7 @@ export class DirectedCallMediaCoordinator {
     this.mediaStartInFlight = false;
     this.mediaStarted = true;
     this.retireSetupFailureReport();
+    this.resetSpeakingDetector();
     this.adapter.dispose();
     this.adapter = this.createAdapter();
     this.offer = null;
@@ -1860,6 +1892,7 @@ export class DirectedCallMediaCoordinator {
       this.localTrackCleanups.forEach((cleanup) => cleanup());
       this.localTrackCleanups.clear();
       this.localStream = stream;
+      this.speakingDetector.registerStream("local", stream);
       if (stream?.addEventListener) {
         const onStreamChange = () => this.syncLocalMediaState(callId, attempt);
         stream.addEventListener("addtrack", onStreamChange as EventListener);
@@ -1905,6 +1938,7 @@ export class DirectedCallMediaCoordinator {
     this.localTrackCleanups.forEach((cleanup) => cleanup());
     this.localTrackCleanups.clear();
     this.localStream = null;
+    this.speakingDetector.unregister("local");
   }
 
   private setSnapshot(snapshot: DirectedCallMediaCoordinatorSnapshot): void {
@@ -1913,13 +1947,15 @@ export class DirectedCallMediaCoordinator {
   }
 
   private applyEffectiveMute(): boolean {
+    this.speakingDetector.setLocalMuted(this.localAudioState.muted || this.localAudioState.deafened);
     return this.adapter.setLocalAudioMuted(this.localAudioState.muted || this.localAudioState.deafened);
   }
 
-  private audioSnapshot(snapshot: Omit<DirectedCallMediaCoordinatorSnapshot, "muted" | "deafened" | "effectiveMuted" | "canToggleDeafen">): DirectedCallMediaCoordinatorSnapshot {
+  private audioSnapshot(snapshot: Omit<DirectedCallMediaCoordinatorSnapshot, "muted" | "deafened" | "effectiveMuted" | "canToggleDeafen" | "speaking">): DirectedCallMediaCoordinatorSnapshot {
     const effectiveMuted = this.localAudioState.muted || this.localAudioState.deafened;
     return {
       ...snapshot,
+      speaking: this.speakingDetector.getSnapshot(),
       muted: this.localAudioState.muted,
       deafened: this.localAudioState.deafened,
       effectiveMuted,
