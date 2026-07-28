@@ -645,6 +645,23 @@ describe('WebRTCService', () => {
     });
 
     describe('screen sharing', () => {
+        it('invalidates a pending stable capture when stop is requested', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            let resolveCapture!: (stream: typeof mockScreenStream) => void;
+            mockGetDisplayMedia.mockReturnValueOnce(new Promise((resolve) => { resolveCapture = resolve; }));
+
+            const start = service.startScreenShare();
+            await Promise.resolve();
+            await service.stopScreenShare({ renegotiate: false });
+            resolveCapture(mockScreenStream);
+
+            await expect(start).rejects.toThrow();
+            expect(mockScreenTrack.stop).toHaveBeenCalled();
+            expect((service as any).screenStream).toBeNull();
+            expect((service as any).isScreenShareActiveLocal).toBe(false);
+        });
+
         it('startScreenShare gets display media, attaches the screen track, and sends a renegotiation offer', async () => {
             await service.startCall();
             await service.handleAnswer('answer-sdp');
@@ -654,10 +671,7 @@ describe('WebRTCService', () => {
 
             const pc = (service as any).peerConnection as MockRTCPeerConnection;
             expect(stream).toBe(mockScreenStream);
-            expect(mockGetDisplayMedia).toHaveBeenCalledWith({
-                video: true,
-                audio: false,
-            });
+            expect(mockGetDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: false, video: expect.objectContaining({ width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 15, max: 30 }, cursor: 'motion' }) }));
             expect(pc.addTransceiver).toHaveBeenCalledWith(mockScreenTrack, {
                 direction: 'sendonly',
                 streams: [mockScreenStream],
@@ -670,6 +684,76 @@ describe('WebRTCService', () => {
                 sdp: expect.any(String),
                 type: 'offer',
             });
+        });
+
+        it('replaces an active source before stopping the previous stream', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            const firstTrack = mockScreenTrack;
+            const firstStream = mockScreenStream;
+            const secondTrack = {
+                ...firstTrack,
+                stop: vi.fn(),
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                onended: null as (() => void) | null,
+            };
+            const secondStream = {
+                ...firstStream,
+                getTracks: vi.fn(() => [secondTrack]),
+                getVideoTracks: vi.fn(() => [secondTrack]),
+            };
+            mockGetDisplayMedia.mockResolvedValueOnce(firstStream).mockResolvedValueOnce(secondStream);
+
+            await service.startScreenShare();
+            const replacement = await (service as any).attachScreenTrack((service as any).screenShareAttemptEpoch);
+
+            const sender = (service as any).screenSender;
+            expect(sender.replaceTrack).toHaveBeenCalledWith(secondTrack);
+            expect(firstTrack.stop).not.toHaveBeenCalled();
+            expect(replacement).toBe(secondStream);
+            expect((service as any).screenStream).toBe(firstStream);
+            (service as any).commitScreenShareReplacement((service as any).screenShareReplacement.identity);
+            expect((service as any).screenStream).toBe(secondStream);
+        });
+
+        it('ignores stale replacement identities after a newer candidate is installed', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            const first = { ...mockScreenTrack, stop: vi.fn(), readyState: 'live' as const };
+            const second = { ...mockScreenTrack, stop: vi.fn(), readyState: 'live' as const };
+            const firstStream = { ...mockScreenStream, getTracks: vi.fn(() => [first]), getVideoTracks: vi.fn(() => [first]) };
+            const secondStream = { ...mockScreenStream, getTracks: vi.fn(() => [second]), getVideoTracks: vi.fn(() => [second]) };
+            mockGetDisplayMedia.mockResolvedValueOnce(firstStream).mockResolvedValueOnce(secondStream);
+            (service as any).desiredScreenShareActive = true;
+
+            await (service as any).attachScreenTrack((service as any).screenShareAttemptEpoch);
+            const transactionA = (service as any).screenShareReplacement.identity;
+            await (service as any).attachScreenTrack((service as any).screenShareAttemptEpoch);
+            const transactionB = (service as any).screenShareReplacement.identity;
+
+            await expect((service as any).rollbackScreenShareReplacement(transactionA)).resolves.toBe(false);
+            expect((service as any).screenSender.replaceTrack).toHaveBeenCalledTimes(1);
+            expect((service as any).screenSender.replaceTrack).toHaveBeenLastCalledWith(second);
+            expect(second.stop).not.toHaveBeenCalled();
+            expect((service as any).commitScreenShareReplacement(transactionA)).toBe(false);
+            expect((service as any).commitScreenShareReplacement(transactionB)).toBe(true);
+            expect((service as any).screenStream).toBe(secondStream);
+            expect((service as any).commitScreenShareReplacement(transactionB)).toBe(false);
+            await expect((service as any).rollbackScreenShareReplacement(transactionB)).resolves.toBe(false);
+        });
+
+        it('invalidates a replacement identity when the service generation changes', async () => {
+            await service.startCall();
+            await service.handleAnswer('answer-sdp');
+            (service as any).desiredScreenShareActive = true;
+            await (service as any).attachScreenTrack((service as any).screenShareAttemptEpoch);
+            const identity = (service as any).screenShareReplacement.identity;
+
+            service.dispose();
+
+            expect((service as any).commitScreenShareReplacement(identity)).toBe(false);
+            await expect((service as any).rollbackScreenShareReplacement(identity)).resolves.toBe(false);
         });
 
         it('startScreenShare queues renegotiation instead of creating an offer while signaling is not stable', async () => {
@@ -1276,6 +1360,15 @@ describe('WebRTCService', () => {
                     call_id: expect.any(String),
                 }));
             });
+        });
+
+        it('supersedes a queued screen start with an internal cancellation', async () => {
+            await service.startCall();
+            const startPromise = service.startScreenShare();
+            await service.stopScreenShare({ renegotiate: false });
+
+            await expect(startPromise).rejects.toMatchObject({ name: 'ScreenShareCaptureError', code: 'cancelled' });
+            expect(mockGetDisplayMedia).not.toHaveBeenCalled();
         });
 
         it('preserves the local screen sender when a non-sharing peer requests recvonly', async () => {

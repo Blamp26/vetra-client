@@ -1,5 +1,6 @@
 import type { ResourceRef } from "@/shared/types";
 import type { CallSoundEvent, CallSoundProjection } from "../services/callSoundController";
+import type { ScreenShareIssue } from "../utils/screenShare";
 
 export type CallStatus = 'idle' | 'calling' | 'ringing' | 'connecting' | 'connected' | 'reconnecting' | 'active' | 'ended' | 'failed';
 export type CallServiceStatus = 'idle' | 'connecting' | 'ready' | 'retrying' | 'closed' | 'failed';
@@ -87,6 +88,7 @@ export interface UseCallReturn {
     seconds: number;
     diagnostics: CallDiagnostics;
     callIssue: CallIssue | null;
+    screenShareIssue?: ScreenShareIssue | null;
     isIncomingActionPending: boolean;
     startCall: (targetUserId: ResourceRef, targetUsername?: string) => void;
     startScreenShare: () => Promise<void>;

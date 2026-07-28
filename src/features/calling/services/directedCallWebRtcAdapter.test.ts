@@ -1259,12 +1259,122 @@ describe("DirectedCallWebRtcAdapter", () => {
 
     await expect(harness.adapter.startScreenShare()).resolves.toBe(true);
 
-    expect(harness.getDisplayMedia).toHaveBeenCalledWith({ video: true, audio: false });
+    expect(harness.getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: false, video: expect.objectContaining({ width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 15, max: 30 }, cursor: "motion" }) }));
     expect(harness.pc.addTransceiver).toHaveBeenCalledTimes(1);
     expect(harness.pc.addTransceiver).toHaveBeenCalledWith("video", { direction: "sendonly" });
     expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(harness.screenTrack);
     expect(harness.adapter.getLocalScreenShareStream()?.getTracks()).toEqual([harness.screenTrack]);
     expect(harness.getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces an active screen source before stopping the previous stream", async () => {
+    const harness = createHarness();
+    const firstTrack = harness.screenTrack;
+    const secondTrack = { ...firstTrack, stop: vi.fn() };
+    const firstStream = displayStream(firstTrack);
+    const secondStream = displayStream(secondTrack);
+    harness.getDisplayMedia.mockResolvedValueOnce(firstStream).mockResolvedValueOnce(secondStream);
+
+    await harness.adapter.startScreenShare();
+    const replacementResult = await harness.adapter.startScreenShareResult();
+
+    expect(harness.screenSender.replaceTrack).toHaveBeenNthCalledWith(2, secondTrack);
+    expect(firstTrack.stop).not.toHaveBeenCalled();
+    expect(harness.adapter.getLocalScreenShareStream()).toBe(firstStream);
+    if (!replacementResult.ok) throw new Error("replacement did not start");
+    harness.adapter.commitScreenShareReplacement(replacementResult.transaction!);
+    expect(harness.adapter.getLocalScreenShareStream()).toBe(secondStream);
+    expect(firstTrack.stop).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the old source when active replacement fails", async () => {
+    const harness = createHarness();
+    const firstTrack = harness.screenTrack;
+    const secondTrack = { ...firstTrack, stop: vi.fn() };
+    harness.getDisplayMedia.mockResolvedValueOnce(displayStream(firstTrack)).mockResolvedValueOnce(displayStream(secondTrack));
+    await harness.adapter.startScreenShare();
+    harness.screenSender.replaceTrack.mockRejectedValueOnce(new Error("replace failed"));
+
+    await expect(harness.adapter.startScreenShare()).resolves.toBe(false);
+    expect(harness.screenSender.track).toBe(firstTrack);
+    expect(harness.adapter.getLocalScreenShareStream()?.getTracks()).toEqual([firstTrack]);
+    expect(secondTrack.stop).toHaveBeenCalledOnce();
+    expect(firstTrack.stop).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale replacement commit and rollback identities", async () => {
+    const harness = createHarness();
+    const trackA = { ...harness.screenTrack, stop: vi.fn() };
+    const trackB = { ...harness.screenTrack, stop: vi.fn() };
+    const streamA = displayStream(trackA);
+    const streamB = displayStream(trackB);
+    harness.getDisplayMedia.mockResolvedValueOnce(streamA).mockResolvedValueOnce(streamB);
+
+    const resultA = await harness.adapter.startScreenShareResult();
+    const resultB = await harness.adapter.startScreenShareResult();
+    if (!resultA.ok || !resultB.ok || !resultA.transaction || !resultB.transaction) throw new Error("replacement did not start");
+
+    await expect(harness.adapter.rollbackScreenShareReplacement(resultA.transaction)).resolves.toBe(false);
+    expect(harness.screenSender.track).toBe(trackB);
+    expect(trackB.stop).not.toHaveBeenCalled();
+    expect(harness.adapter.commitScreenShareReplacement(resultA.transaction)).toBe(false);
+    expect(harness.adapter.commitScreenShareReplacement(resultB.transaction)).toBe(true);
+    expect(harness.screenSender.track).toBe(trackB);
+    expect(harness.adapter.getLocalScreenShareStream()).toBe(streamB);
+    expect(harness.adapter.commitScreenShareReplacement(resultB.transaction)).toBe(false);
+    await expect(harness.adapter.rollbackScreenShareReplacement(resultB.transaction)).resolves.toBe(false);
+  });
+
+  it("invalidates a replacement identity when the adapter generation changes", async () => {
+    const harness = createHarness();
+    harness.getDisplayMedia.mockResolvedValue(displayStream(harness.screenTrack));
+    const result = await harness.adapter.startScreenShareResult();
+    if (!result.ok || !result.transaction) throw new Error("replacement did not start");
+
+    harness.adapter.dispose();
+
+    expect(harness.adapter.commitScreenShareReplacement(result.transaction)).toBe(false);
+    await expect(harness.adapter.rollbackScreenShareReplacement(result.transaction)).resolves.toBe(false);
+  });
+
+  it("cleans a candidate exactly once when stop races a pending replacement", async () => {
+    const harness = createHarness();
+    const candidateTrack = { ...harness.screenTrack, stop: vi.fn() };
+    const candidateStream = displayStream(candidateTrack);
+    let resolveReplace!: () => void;
+    harness.getDisplayMedia.mockResolvedValue(candidateStream);
+    harness.screenSender.replaceTrack.mockImplementation((nextTrack) => nextTrack === candidateTrack
+      ? new Promise<void>((resolve) => { resolveReplace = resolve; })
+      : Promise.resolve());
+
+    const operation = harness.adapter.startScreenShareResult();
+    await vi.waitFor(() => expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(candidateTrack));
+    harness.adapter.stopScreenShare();
+    expect(candidateTrack.stop).toHaveBeenCalledOnce();
+
+    resolveReplace();
+    await expect(operation).resolves.toEqual({ ok: false, issue: { code: "cancelled", message: "" } });
+    expect(candidateTrack.stop).toHaveBeenCalledOnce();
+  });
+
+  it("does not double-clean a rejected replacement after disposal", async () => {
+    const harness = createHarness();
+    const candidateTrack = { ...harness.screenTrack, stop: vi.fn() };
+    const candidateStream = displayStream(candidateTrack);
+    let rejectReplace!: (error: Error) => void;
+    harness.getDisplayMedia.mockResolvedValue(candidateStream);
+    harness.screenSender.replaceTrack.mockImplementation((nextTrack) => nextTrack === candidateTrack
+      ? new Promise<void>((_resolve, reject) => { rejectReplace = reject; })
+      : Promise.resolve());
+
+    const operation = harness.adapter.startScreenShareResult();
+    await vi.waitFor(() => expect(harness.screenSender.replaceTrack).toHaveBeenCalledWith(candidateTrack));
+    harness.adapter.dispose();
+    expect(candidateTrack.stop).toHaveBeenCalledOnce();
+
+    rejectReplace(new Error("late replace failure"));
+    await expect(operation).resolves.toEqual({ ok: false, issue: { code: "cancelled", message: "" } });
+    expect(candidateTrack.stop).toHaveBeenCalledOnce();
   });
 
   it("labels local and remote SDP video directions without swapping them", async () => {

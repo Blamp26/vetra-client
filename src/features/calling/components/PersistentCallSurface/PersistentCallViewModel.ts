@@ -47,6 +47,8 @@ export interface PersistentActiveCallDockModel {
   diagnostics: CallDiagnostics;
   screenShareAvailable: boolean;
   isScreenSharing: boolean;
+  isScreenShareUpdating: boolean;
+  canRetryScreenShare: boolean;
   localScreenShareStream: DirectedCallMediaStream | null;
   remoteScreenShareAvailable: boolean;
   remoteScreenShareStream: DirectedCallMediaStream | null;
@@ -59,7 +61,10 @@ function toCallIssue(snapshot: PersistentPresentationSnapshot): CallIssue | null
 }
 
 function runtimeCallIssue(call: PersistentCallRuntimeValue): CallIssue | null {
-  return toCallIssue(call.presentation) ?? (call.media.localIssue ? {
+  return toCallIssue(call.presentation) ?? (call.screenShareIssue ? {
+    tone: "error",
+    message: call.screenShareIssue.message,
+  } : call.media.localIssue ? {
     tone: "error",
     message: call.media.mediaErrorCode
       ? callMediaErrorMessage(call.media.mediaErrorCode as CallMediaErrorCode)
@@ -171,6 +176,8 @@ export function persistentActiveCallDockModel(call: PersistentCallRuntimeValue, 
     canRetryMedia: call.media.canRetryMedia,
     screenShareAvailable: call.screenShareAvailable,
     isScreenSharing: call.isScreenSharing,
+    isScreenShareUpdating: call.isScreenShareUpdating,
+    canRetryScreenShare: call.canRetryScreenShare,
     localScreenShareStream: call.localScreenShareStream,
     remoteScreenShareAvailable: call.remoteScreenShareAvailable,
     remoteScreenShareStream: call.remoteScreenShareStream,

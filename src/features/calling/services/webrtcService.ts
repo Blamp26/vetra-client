@@ -2,6 +2,16 @@ import { Channel } from 'phoenix';
 import { getState } from '@/store';
 import { mediaSettingsStore } from '@/shared/utils/mediaSettings';
 import { buildMicrophoneConstraints } from '@/shared/utils/audioConstraints';
+import { captureScreenShare, classifyScreenShareError, ScreenShareCaptureError, type ScreenShareIssue } from '../utils/screenShare';
+
+export interface WebRTCScreenShareTransactionIdentity {
+    readonly operationId: number;
+    readonly generation: number;
+}
+
+export type WebRTCScreenShareResult =
+    | { ok: true; stream: MediaStream; transaction: WebRTCScreenShareTransactionIdentity }
+    | { ok: false; issue: ScreenShareIssue; stream: MediaStream | null };
 import type { ResourceRef } from '@/shared/types';
 import type { CallIceCandidatePayload, RenegotiationSignalPayload } from '../hooks/useCall.types';
 import { debugCall, isCallDebugEnabled } from '../utils/callDebug';
@@ -167,6 +177,20 @@ export class WebRTCService {
         reject: (error: Error) => void;
     }> = [];
     private pendingScreenShareOnEnded: (() => void) | null = null;
+    private screenShareAttemptEpoch = 0;
+    private nextScreenShareOperationId = 0;
+    private lastScreenShareTransaction: WebRTCScreenShareTransactionIdentity | null = null;
+    private screenShareReplacement: {
+        identity: WebRTCScreenShareTransactionIdentity;
+        previousStream: MediaStream | null;
+        previousTrack: MediaStreamTrack | null;
+        previousEndedHandler: (() => void) | null;
+        candidateStream: MediaStream;
+        candidateTrack: MediaStreamTrack;
+        candidateEndedHandler: () => void;
+        committed: boolean;
+        rolledBack: boolean;
+    } | null = null;
     private channel: Channel;
     private remoteUserId: ResourceRef;
     private callId: string | null = null;
@@ -425,15 +449,9 @@ export class WebRTCService {
             signalingState: this.peerConnection.signalingState,
         });
 
+        const attempt = ++this.screenShareAttemptEpoch;
         this.desiredScreenShareActive = true;
         this.pendingScreenShareOnEnded = onEnded ?? null;
-
-        if (this.isScreenShareActiveLocal && this.screenStream) {
-            this.pendingScreenShareChange = false;
-            this.pendingScreenShareChangeReason = null;
-            this.emitScreenShareUpdatingState();
-            return this.screenStream;
-        }
 
         if (!this.canApplyScreenShareChangeNow()) {
             this.pendingScreenShareChange = true;
@@ -451,7 +469,18 @@ export class WebRTCService {
             });
         }
 
-        return this.applyDesiredScreenShareState();
+        return this.applyDesiredScreenShareState(undefined, attempt);
+    }
+
+    async startScreenShareResult(onEnded?: () => void): Promise<WebRTCScreenShareResult> {
+        try {
+            const stream = await this.startScreenShare(onEnded);
+            if (!this.lastScreenShareTransaction) throw new ScreenShareCaptureError('cancelled');
+            return { ok: true, stream: this.screenStream ?? stream, transaction: this.lastScreenShareTransaction };
+        } catch (error) {
+            const issue = classifyScreenShareError(error, error instanceof ScreenShareCaptureError && error.code === 'renegotiation_failed' ? 'renegotiation' : 'capture');
+            return { ok: false, issue, stream: this.screenStream };
+        }
     }
 
     async stopScreenShare(options?: { stopTracks?: boolean; renegotiate?: boolean }): Promise<void> {
@@ -467,7 +496,8 @@ export class WebRTCService {
         });
 
         this.desiredScreenShareActive = false;
-        this.rejectPendingScreenShareStarts(new Error('Screen share start was superseded by stop'));
+        this.screenShareAttemptEpoch += 1;
+        this.rejectPendingScreenShareStarts(new ScreenShareCaptureError('cancelled'));
 
         if (!shouldRenegotiate || !this.peerConnection) {
             await this.detachScreenTrack({ stopTracks: options?.stopTracks ?? true });
@@ -506,7 +536,7 @@ export class WebRTCService {
         await this.renegotiate('stop_screen_share');
     }
 
-    private async applyDesiredScreenShareState(options?: { stopTracks?: boolean }): Promise<MediaStream> {
+    private async applyDesiredScreenShareState(options?: { stopTracks?: boolean }, attempt = this.screenShareAttemptEpoch): Promise<MediaStream> {
         if (!this.peerConnection) throw new Error('No peer connection');
 
         debugCall('[WebRTCService] apply screen desired state', {
@@ -517,12 +547,27 @@ export class WebRTCService {
         });
 
         if (this.desiredScreenShareActive) {
-            const stream = await this.attachScreenTrack();
+            const stream = await this.attachScreenTrack(attempt);
+            const replacement = this.screenShareReplacement;
+            const identity = replacement?.identity;
             this.pendingScreenShareChange = false;
             this.pendingScreenShareChangeReason = null;
             this.emitScreenShareUpdatingState();
-            this.resolvePendingScreenShareStarts(stream);
-            await this.renegotiate('start_screen_share');
+            try {
+                await this.renegotiate('start_screen_share');
+                if (!identity || !this.commitScreenShareReplacement(identity)) {
+                    if (replacement && !replacement.committed && !replacement.rolledBack) this.cleanupScreenShareReplacement(replacement);
+                    throw new ScreenShareCaptureError('cancelled');
+                }
+                this.resolvePendingScreenShareStarts(this.screenStream ?? stream);
+            } catch (error) {
+                if (identity && this.screenShareReplacement?.identity.operationId === identity.operationId && this.screenShareReplacement.identity.generation === identity.generation) {
+                    await this.rollbackScreenShareReplacement(identity);
+                } else {
+                    if (replacement && !replacement.committed && !replacement.rolledBack) this.cleanupScreenShareReplacement(replacement);
+                }
+                throw error instanceof ScreenShareCaptureError ? error : new ScreenShareCaptureError('renegotiation_failed');
+            }
             return stream;
         }
 
@@ -534,40 +579,37 @@ export class WebRTCService {
         return this.screenStream ?? new MediaStream();
     }
 
-    private async attachScreenTrack(): Promise<MediaStream> {
+    private async attachScreenTrack(attempt = this.screenShareAttemptEpoch): Promise<MediaStream> {
         if (!this.peerConnection) throw new Error('No peer connection');
 
-        if (this.isScreenShareActiveLocal && this.screenStream) {
-            return this.screenStream;
-        }
-
-        await this.detachScreenTrack({ stopTracks: true });
-
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: false,
-        });
+        const stream = await captureScreenShare((constraints) => navigator.mediaDevices.getDisplayMedia(constraints));
         const screenTrack = stream.getVideoTracks()[0];
         if (!screenTrack) {
             stream.getTracks().forEach((track) => track.stop());
-            throw new Error('Screen share did not provide a video track');
+            throw new ScreenShareCaptureError('no_source');
+        }
+        if (attempt !== this.screenShareAttemptEpoch || !this.desiredScreenShareActive || !this.peerConnection) {
+            stream.getTracks().forEach((track) => track.stop());
+            throw new ScreenShareCaptureError('cancelled');
         }
 
+        const previousStream = this.screenStream;
+        const previousTrack = previousStream?.getVideoTracks()[0] ?? this.screenSender?.track ?? null;
+        const previousEndedHandler = this.screenTrackEndedHandler;
         const handleEnded = () => {
             this.pendingScreenShareOnEnded?.();
             void this.stopScreenShare({ stopTracks: false });
         };
-
-        if ('addEventListener' in screenTrack) {
-            screenTrack.addEventListener?.('ended', handleEnded);
-        }
-        screenTrack.onended = handleEnded;
-
-        this.screenStream = stream;
-        this.screenTrackEndedHandler = handleEnded;
-        this.isScreenShareActiveLocal = true;
         if (this.screenSender) {
-            await this.screenSender.replaceTrack(screenTrack);
+            try {
+                await this.screenSender.replaceTrack(screenTrack);
+            } catch {
+                stream.getTracks().forEach((track) => track.stop());
+                if (previousTrack && this.screenSender.track !== previousTrack) {
+                    await this.screenSender.replaceTrack(previousTrack).catch(() => undefined);
+                }
+                throw new ScreenShareCaptureError('replace_failed');
+            }
             if (this.screenTransceiver) {
                 this.screenTransceiver.direction = 'sendonly';
             }
@@ -580,6 +622,17 @@ export class WebRTCService {
         } else {
             this.screenSender = this.peerConnection.addTrack(screenTrack, stream);
         }
+        this.screenShareReplacement = {
+            identity: { operationId: ++this.nextScreenShareOperationId, generation: this.lifecycleGeneration },
+            previousStream,
+            previousTrack,
+            previousEndedHandler,
+            candidateStream: stream,
+            candidateTrack: screenTrack,
+            candidateEndedHandler: handleEnded,
+            committed: false,
+            rolledBack: false,
+        };
         debugCall('[WebRTCService] attach screen track', {
             call_id: this.getCallId(),
             track_id: screenTrack.id,
@@ -588,7 +641,64 @@ export class WebRTCService {
         return stream;
     }
 
+    private commitScreenShareReplacement(identity: WebRTCScreenShareTransactionIdentity): boolean {
+        const replacement = this.screenShareReplacement;
+        if (!replacement || replacement.identity.operationId !== identity.operationId || replacement.identity.generation !== identity.generation || replacement.committed || replacement.rolledBack) return false;
+        replacement.committed = true;
+        this.screenShareReplacement = null;
+        this.screenStream = replacement.candidateStream;
+        this.screenTrackEndedHandler = replacement.candidateEndedHandler;
+        this.isScreenShareActiveLocal = true;
+        this.lastScreenShareTransaction = identity;
+        if ('addEventListener' in replacement.candidateTrack) replacement.candidateTrack.addEventListener?.('ended', replacement.candidateEndedHandler);
+        replacement.candidateTrack.onended = replacement.candidateEndedHandler;
+        if (!replacement.previousStream || replacement.previousStream === replacement.candidateStream) return true;
+        const previousTrack = replacement.previousTrack;
+        if (previousTrack && replacement.previousEndedHandler) {
+            previousTrack.removeEventListener?.('ended', replacement.previousEndedHandler);
+            previousTrack.onended = null;
+        }
+        replacement.previousStream.getTracks().forEach((track) => track.stop());
+        return true;
+    }
+
+    private async rollbackScreenShareReplacement(identity: WebRTCScreenShareTransactionIdentity): Promise<boolean> {
+        const replacement = this.screenShareReplacement;
+        if (!replacement || replacement.identity.operationId !== identity.operationId || replacement.identity.generation !== identity.generation || replacement.committed || replacement.rolledBack) return false;
+        replacement.rolledBack = true;
+        this.screenShareReplacement = null;
+        const candidateHandler = replacement.candidateEndedHandler;
+        if (candidateHandler) {
+            replacement.candidateTrack.removeEventListener?.('ended', candidateHandler);
+            replacement.candidateTrack.onended = null;
+        }
+        const previousLive = replacement.previousTrack?.readyState === 'live';
+        if (previousLive && this.screenSender) {
+            await this.screenSender.replaceTrack(replacement.previousTrack).catch(() => undefined);
+        } else if (this.screenSender) {
+            await this.screenSender.replaceTrack(null).catch(() => undefined);
+        }
+        replacement.candidateStream.getTracks().forEach((track) => track.stop());
+        this.screenStream = previousLive ? replacement.previousStream : null;
+        this.screenTrackEndedHandler = previousLive ? replacement.previousEndedHandler : null;
+        this.isScreenShareActiveLocal = Boolean(previousLive && replacement.previousStream);
+        if (!this.isScreenShareActiveLocal) this.lastScreenShareTransaction = null;
+        return this.isScreenShareActiveLocal;
+    }
+
+    private cleanupScreenShareReplacement(replacement: NonNullable<typeof this.screenShareReplacement>): void {
+        if (replacement.committed || replacement.rolledBack) return;
+        replacement.rolledBack = true;
+        replacement.candidateTrack.removeEventListener?.('ended', replacement.candidateEndedHandler);
+        replacement.candidateTrack.onended = null;
+        replacement.candidateStream.getTracks().forEach((track) => track.stop());
+        if (this.screenShareReplacement?.identity.operationId === replacement.identity.operationId && this.screenShareReplacement.identity.generation === replacement.identity.generation) this.screenShareReplacement = null;
+    }
+
     private async detachScreenTrack(options?: { stopTracks?: boolean }): Promise<void> {
+        const replacement = this.screenShareReplacement;
+        if (replacement) replacement.rolledBack = true;
+        this.screenShareReplacement = null;
         const stopTracks = options?.stopTracks ?? true;
         const stream = this.screenStream;
         const sender = this.screenSender;
@@ -598,6 +708,7 @@ export class WebRTCService {
         this.screenStream = null;
         this.screenTrackEndedHandler = null;
         this.isScreenShareActiveLocal = false;
+        this.lastScreenShareTransaction = null;
 
         if (track && endedHandler) {
             if ('removeEventListener' in track) {
@@ -608,6 +719,16 @@ export class WebRTCService {
 
         if (stopTracks && stream) {
             stream.getTracks().forEach((mediaTrack) => mediaTrack.stop());
+        }
+        if (replacement?.candidateStream && replacement.candidateStream !== stream) {
+            replacement.candidateTrack.removeEventListener?.('ended', replacement.candidateEndedHandler);
+            replacement.candidateTrack.onended = null;
+            replacement.candidateStream.getTracks().forEach((mediaTrack) => mediaTrack.stop());
+        }
+        if (stopTracks && replacement?.previousStream && replacement.previousStream !== stream) {
+            if (replacement.previousTrack && replacement.previousEndedHandler) replacement.previousTrack.removeEventListener?.('ended', replacement.previousEndedHandler);
+            if (replacement.previousTrack) replacement.previousTrack.onended = null;
+            replacement.previousStream.getTracks().forEach((mediaTrack) => mediaTrack.stop());
         }
         debugCall('[WebRTCService] local screen track stopped', {
             call_id: this.getCallId(),
@@ -628,6 +749,7 @@ export class WebRTCService {
     }
 
     dispose(): void {
+        this.screenShareAttemptEpoch += 1;
         if (this.peerConnection) {
             this.peerConnection.close();
         }
@@ -912,7 +1034,7 @@ export class WebRTCService {
             await this.sendRenegotiationSignal({
                 sdp: peerConnection.localDescription!.sdp ?? offer.sdp ?? '',
                 type: 'offer',
-                screen_share_active: this.isScreenShareActiveLocal,
+                screen_share_active: this.desiredScreenShareActive,
             });
             this.startRenegotiationAnswerTimeout(reason);
         } catch (error) {

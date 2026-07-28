@@ -31,7 +31,7 @@ vi.mock("../ActiveCallDock", () => ({
       <span data-testid="speaking-props">{JSON.stringify(props.speaking)}</span>
       <button onClick={props.onMuteToggle}>mute</button>
       <button onClick={props.onHangUp}>hangup</button>
-      {props.screenShareAvailable && <button onClick={props.isScreenSharing ? props.onStopScreenShare : props.onStartScreenShare}>screen share</button>}
+      {props.screenShareAvailable && <button disabled={props.isScreenShareUpdating} onClick={props.isScreenSharing ? props.onStopScreenShare : props.onStartScreenShare}>screen share</button>}
       <output data-testid="screen-share-props">{JSON.stringify({
         screenShareAvailable: props.screenShareAvailable,
         isScreenSharing: props.isScreenSharing,
@@ -107,5 +107,14 @@ describe("PersistentActiveCallDock", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "screen share" }));
     expect(startScreenShare).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the existing share control while persistent capture updates", () => {
+    const runtime = {
+      presentation: { getSnapshot: () => activePresentation, subscribe: () => () => undefined },
+      media: { getSnapshot: () => ({ remoteAudioStream: null, localIssue: null, isMuted: false, canToggleMute: true, peerConnectionState: "connected", projection: { state: "active" }, isScreenShareUpdating: true, isLocalScreenShareActive: false, localScreenShareStream: null, remoteScreenShareStream: null }), subscribe: () => () => undefined },
+    } as any;
+    render(<PersistentCallProvider runtime={runtime}><PersistentActiveCallDock currentUser={{ id: 1, public_id: "me", display_name: "Me" } as any} remoteUser={null} /></PersistentCallProvider>);
+    expect(screen.getByRole("button", { name: "screen share" })).toBeDisabled();
   });
 });

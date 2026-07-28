@@ -26,7 +26,7 @@ export function PersistentActiveCallDock({ currentUser, remoteUser }: { currentU
       canToggleMute={model.canToggleMute}
       canToggleDeafen={model.canToggleDeafen}
       isScreenSharing={model.isScreenSharing}
-      isScreenShareUpdating={false}
+      isScreenShareUpdating={model.isScreenShareUpdating}
       isRemoteScreenLoading={false}
       isRemoteScreenAvailable={model.remoteScreenShareAvailable || hasRemoteScreenStream}
       isWatchingRemoteScreen={hasRemoteScreenStream}

@@ -7,6 +7,12 @@ import {
 import { buildMicrophoneConstraints, DEFAULT_AUDIO_PREFERENCES } from "@/shared/utils/audioConstraints";
 import { isCallDebugEnabled } from "../utils/callDebug";
 import { classifyMicrophoneError, type CallMediaErrorCode } from "../utils/callMediaErrors";
+import {
+  captureScreenShare,
+  classifyScreenShareError,
+  ScreenShareCaptureError,
+  type ScreenShareIssue,
+} from "../utils/screenShare";
 
 export type DirectedCallWebRtcFailureCode =
   | "permission_denied"
@@ -40,6 +46,7 @@ export interface DirectedCallMediaStreamTrack {
   kind?: string;
   enabled?: boolean;
   readyState?: string;
+  onended?: ((event: Event) => void) | null;
   addEventListener?(type: string, listener: EventListener): void;
   removeEventListener?(type: string, listener: EventListener): void;
 }
@@ -203,6 +210,24 @@ export type DirectedCallWebRtcDiagnosticReason =
 
 export type DirectedCallLocalScreenShareEndedHandler = () => void;
 export type DirectedCallRemoteScreenShareChangedHandler = (stream: DirectedCallMediaStream | null) => void;
+export interface DirectedCallScreenShareTransactionIdentity {
+  readonly operationId: number;
+  readonly generation: number;
+}
+type DirectedCallScreenShareReplacementTransaction = {
+  identity: DirectedCallScreenShareTransactionIdentity;
+  previousStream: DirectedCallMediaStream | null;
+  previousTrack: DirectedCallMediaStreamTrack | null;
+  previousEndedListener: EventListener | null;
+  candidateStream: DirectedCallMediaStream;
+  candidateTrack: DirectedCallMediaStreamTrack;
+  committed: boolean;
+  rolledBack: boolean;
+  candidateCleanedUp: boolean;
+};
+export type DirectedCallScreenShareResult =
+  | { ok: true; stream: DirectedCallMediaStream | null; transaction: DirectedCallScreenShareTransactionIdentity }
+  | { ok: false; issue: ScreenShareIssue };
 
 export interface DirectedCallInitialMediaReadiness {
   readonly transportConnected: boolean;
@@ -341,8 +366,11 @@ export class DirectedCallWebRtcAdapter {
   private localScreenShareTrack: DirectedCallMediaStreamTrack | null = null;
   private localScreenShareTrackEndedListener: EventListener | null = null;
   private localScreenShareEndedHandler: DirectedCallLocalScreenShareEndedHandler | null = null;
-  private pendingScreenShare: Promise<boolean> | null = null;
+  private pendingScreenShare: Promise<DirectedCallScreenShareResult> | null = null;
+  private lastScreenShareIssue: ScreenShareIssue | null = null;
   private screenShareEpoch = 0;
+  private nextScreenShareOperationId = 0;
+  private screenShareReplacement: DirectedCallScreenShareReplacementTransaction | null = null;
 
   constructor(options: DirectedCallWebRtcAdapterOptions = {}) {
     const dependencies = defaultDependencies();
@@ -422,14 +450,24 @@ export class DirectedCallWebRtcAdapter {
     this.clearRemoteScreenShare(true);
   }
 
-  startScreenShare(): Promise<boolean> {
-    if (this.localScreenShareTrack) return Promise.resolve(true);
+  get screenShareIssue(): ScreenShareIssue | null {
+    return this.lastScreenShareIssue;
+  }
+
+  async startScreenShare(): Promise<boolean> {
+    const result = await this.startScreenShareResult();
+    if (result.ok) this.commitScreenShareReplacement(result.transaction);
+    return result.ok;
+  }
+
+  startScreenShareResult(): Promise<DirectedCallScreenShareResult> {
     if (this.pendingScreenShare) return this.pendingScreenShare;
 
     const epoch = this.epoch;
     const screenShareEpoch = ++this.screenShareEpoch;
     const operation = this.startScreenShareOperation(epoch, screenShareEpoch);
     this.pendingScreenShare = operation;
+    this.lastScreenShareIssue = null;
     void operation.then(() => {
       if (this.pendingScreenShare === operation) this.pendingScreenShare = null;
     }, () => {
@@ -441,6 +479,67 @@ export class DirectedCallWebRtcAdapter {
   stopScreenShare(): void {
     this.screenShareEpoch += 1;
     this.clearLocalScreenShare(false);
+  }
+
+  commitScreenShareReplacement(identity: DirectedCallScreenShareTransactionIdentity): boolean {
+    const replacement = this.screenShareReplacement;
+    if (!replacement || replacement.identity.operationId !== identity.operationId || replacement.identity.generation !== identity.generation || replacement.committed || replacement.rolledBack || replacement.candidateCleanedUp) return false;
+    replacement.committed = true;
+    this.screenShareReplacement = null;
+    const previousStream = replacement.previousStream;
+    this.localScreenShareStream = replacement.candidateStream;
+    this.localScreenShareTrack = replacement.candidateTrack;
+    this.localScreenShareEnabled = true;
+    const endedHandler = () => {
+      if (this.localScreenShareTrack !== replacement.candidateTrack) return;
+      this.clearLocalScreenShare(true);
+    };
+    this.localScreenShareTrackEndedListener = endedHandler as EventListener;
+    replacement.candidateTrack.addEventListener?.("ended", this.localScreenShareTrackEndedListener);
+    replacement.candidateTrack.onended = endedHandler;
+    this.updateScreenShareTransceiverDirection();
+    if (!previousStream || previousStream === replacement.candidateStream) return true;
+    if (replacement.previousTrack && replacement.previousEndedListener) replacement.previousTrack.removeEventListener?.("ended", replacement.previousEndedListener);
+    if (replacement.previousTrack) replacement.previousTrack.onended = null;
+    previousStream.getTracks().forEach((track) => track.stop());
+    return true;
+  }
+
+  async rollbackScreenShareReplacement(identity: DirectedCallScreenShareTransactionIdentity): Promise<boolean> {
+    const replacement = this.screenShareReplacement;
+    if (!replacement || replacement.identity.operationId !== identity.operationId || replacement.identity.generation !== identity.generation || replacement.committed || replacement.rolledBack) return false;
+    replacement.rolledBack = true;
+    this.screenShareReplacement = null;
+    if (this.localScreenShareTrackEndedListener) replacement.candidateTrack.removeEventListener?.("ended", this.localScreenShareTrackEndedListener);
+    replacement.candidateTrack.onended = null;
+    const previousLive = replacement.previousTrack?.readyState === "live";
+    if (this.screenShareTransceiver) {
+      await this.screenShareTransceiver.sender.replaceTrack(previousLive ? replacement.previousTrack : null).catch(() => undefined);
+    }
+    this.cleanupCandidate(replacement, identity);
+    this.localScreenShareStream = previousLive ? replacement.previousStream : null;
+    this.localScreenShareTrack = previousLive ? replacement.previousTrack : null;
+    this.localScreenShareEnabled = Boolean(previousLive && replacement.previousStream);
+    this.updateScreenShareTransceiverDirection();
+    return Boolean(previousLive && replacement.previousStream);
+  }
+
+  hasScreenShareReplacement(identity: DirectedCallScreenShareTransactionIdentity): boolean {
+    const replacement = this.screenShareReplacement;
+    return Boolean(replacement
+      && !replacement.committed
+      && !replacement.rolledBack
+      && replacement.identity.operationId === identity.operationId
+      && replacement.identity.generation === identity.generation);
+  }
+
+  private cleanupCandidate(transaction: DirectedCallScreenShareReplacementTransaction, identity: DirectedCallScreenShareTransactionIdentity): boolean {
+    if (transaction.identity.operationId !== identity.operationId || transaction.identity.generation !== identity.generation || transaction.committed || transaction.candidateCleanedUp) return false;
+    transaction.candidateCleanedUp = true;
+    transaction.candidateTrack.onended = null;
+    transaction.candidateStream.getTracks().forEach((track) => track.stop());
+    if (this.screenShareReplacement?.identity.operationId === transaction.identity.operationId && this.screenShareReplacement.identity.generation === transaction.identity.generation) this.screenShareReplacement = null;
+    return true;
   }
 
   setLocalAudioMuted(muted: boolean): boolean {
@@ -855,65 +954,67 @@ export class DirectedCallWebRtcAdapter {
     }));
   }
 
-  private async startScreenShareOperation(epoch: number, screenShareEpoch: number): Promise<boolean> {
+  private async startScreenShareOperation(epoch: number, screenShareEpoch: number): Promise<DirectedCallScreenShareResult> {
     let stream: DirectedCallMediaStream | null = null;
     let displayMediaPromise: Promise<DirectedCallMediaStream> | null = null;
+    let captureComplete = false;
+    let previousTrack: DirectedCallMediaStreamTrack | null = null;
+    let identity: DirectedCallScreenShareTransactionIdentity | null = null;
+    let transaction: DirectedCallScreenShareReplacementTransaction | null = null;
     try {
       // Start capture before waiting for async RTC configuration. This preserves the
       // pre-TURN-fetch screen-share lifecycle while peer setup continues in parallel.
-      displayMediaPromise = this.dependencies.getDisplayMedia!({ video: true, audio: false });
+      displayMediaPromise = captureScreenShare(this.dependencies.getDisplayMedia!);
       await this.ensureAudioPeer(epoch);
       if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) {
         stream = await displayMediaPromise;
         stream.getTracks().forEach((track) => track.stop());
-        return false;
+        return { ok: false, issue: { code: "cancelled", message: "" } };
       }
 
       stream = await displayMediaPromise;
       if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) {
         stream.getTracks().forEach((track) => track.stop());
-        return false;
+        return { ok: false, issue: { code: "cancelled", message: "" } };
       }
       const track = stream.getTracks().find((candidate) =>
         (candidate.kind === undefined || candidate.kind === "video") && candidate.readyState !== "ended",
       );
       if (!track || !this.peerConnection?.addTransceiver) {
-        stream.getTracks().forEach((candidate) => candidate.stop());
-        return false;
+        throw new ScreenShareCaptureError("no_source");
       }
+      captureComplete = true;
 
+      const previousStream = this.localScreenShareStream;
+      previousTrack = this.localScreenShareTrack ?? this.screenShareTransceiver?.sender.track ?? null;
+      const previousEndedListener = this.localScreenShareTrackEndedListener;
+      identity = { operationId: ++this.nextScreenShareOperationId, generation: epoch };
       this.localScreenShareEnabled = true;
       if (!this.ensureScreenShareTransceiver()) {
         this.localScreenShareEnabled = false;
         stream.getTracks().forEach((candidate) => candidate.stop());
-        return false;
+        return { ok: false, issue: { code: "replace_failed", message: "Couldn’t update screen sharing. Try again." } };
       }
       this.updateScreenShareTransceiverDirection();
       if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch || !this.screenShareTransceiver) {
         this.localScreenShareEnabled = false;
         this.updateScreenShareTransceiverDirection();
         stream.getTracks().forEach((candidate) => candidate.stop());
-        return false;
+        return { ok: false, issue: { code: "cancelled", message: "" } };
       }
+      transaction = { identity, previousStream, previousTrack, previousEndedListener, candidateStream: stream, candidateTrack: track, committed: false, rolledBack: false, candidateCleanedUp: false };
+      this.screenShareReplacement = transaction;
       await this.screenShareTransceiver.sender.replaceTrack(track);
       if (!this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) {
         this.localScreenShareEnabled = false;
         this.updateScreenShareTransceiverDirection();
-        this.detachScreenShareTrack();
-        stream.getTracks().forEach((candidate) => candidate.stop());
-        return false;
+        if (this.screenShareReplacement?.identity.operationId === identity.operationId) await this.rollbackScreenShareReplacement(identity);
+        else this.cleanupCandidate(transaction, identity);
+        return { ok: false, issue: { code: "cancelled", message: "" } };
       }
-      this.localScreenShareStream = stream;
-      this.localScreenShareTrack = track;
-      const endedHandler = () => {
-        if (this.localScreenShareTrack !== track) return;
-        this.clearLocalScreenShare(true);
-      };
-      this.localScreenShareTrackEndedListener = endedHandler as EventListener;
-      track.addEventListener?.("ended", this.localScreenShareTrackEndedListener);
-      return true;
+      return { ok: true, stream, transaction: identity };
     } catch (error) {
-      this.localScreenShareEnabled = false;
+      this.localScreenShareEnabled = Boolean(this.localScreenShareStream && this.localScreenShareTrack);
       this.updateScreenShareTransceiverDirection();
       // If peer setup became stale or failed before the capture promise was
       // consumed, still stop a late stream when the browser resolves it.
@@ -923,13 +1024,29 @@ export class DirectedCallWebRtcAdapter {
           () => undefined,
         );
       }
-      stream?.getTracks().forEach((candidate) => candidate.stop());
-      if (error instanceof DirectedCallWebRtcStaleError || !this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) return false;
-      return false;
+      const candidateWasAlreadyCleaned = transaction?.candidateCleanedUp ?? false;
+      if (transaction && identity) this.cleanupCandidate(transaction, identity);
+      else stream?.getTracks().forEach((candidate) => candidate.stop());
+      const currentScreenTransceiver = this.screenShareTransceiver;
+      if (!candidateWasAlreadyCleaned && captureComplete && previousTrack && currentScreenTransceiver && currentScreenTransceiver.sender.track !== previousTrack && (!this.screenShareReplacement || this.screenShareReplacement.identity.operationId === identity?.operationId)) {
+        await currentScreenTransceiver.sender.replaceTrack(previousTrack).catch(() => undefined);
+      }
+      if (error instanceof DirectedCallWebRtcStaleError || !this.isCurrent(epoch) || screenShareEpoch !== this.screenShareEpoch) {
+        return { ok: false, issue: { code: "cancelled", message: "" } };
+      }
+      const issue = classifyScreenShareError(error, captureComplete ? "replace" : "capture");
+      this.lastScreenShareIssue = issue;
+      return { ok: false, issue };
     }
   }
 
   private clearLocalScreenShare(notify: boolean): void {
+    const replacement = this.screenShareReplacement;
+    if (replacement) {
+      this.cleanupCandidate(replacement, replacement.identity);
+      replacement.rolledBack = true;
+    }
+    this.screenShareReplacement = null;
     const track = this.localScreenShareTrack;
     const stream = this.localScreenShareStream;
     this.localScreenShareTrack = null;
@@ -945,6 +1062,11 @@ export class DirectedCallWebRtcAdapter {
     }
     if (track) this.detachScreenShareTrack();
     stream?.getTracks().forEach((ownedTrack) => ownedTrack.stop());
+    if (replacement?.previousStream && replacement.previousStream !== stream) {
+      if (replacement.previousTrack && replacement.previousEndedListener) replacement.previousTrack.removeEventListener?.("ended", replacement.previousEndedListener);
+      if (replacement.previousTrack) replacement.previousTrack.onended = null;
+      replacement.previousStream.getTracks().forEach((ownedTrack) => ownedTrack.stop());
+    }
     if (notify) this.localScreenShareEndedHandler?.();
   }
 

@@ -73,6 +73,9 @@ export interface PersistentCallRuntimeValue {
   toggleDeafen: () => boolean;
   screenShareAvailable: boolean;
   isScreenSharing: boolean;
+  isScreenShareUpdating: boolean;
+  screenShareIssue: import("../utils/screenShare").ScreenShareIssue | null;
+  canRetryScreenShare: boolean;
   localScreenShareStream: DirectedCallMediaStream | null;
   remoteScreenShareAvailable: boolean;
   remoteScreenShareStream: DirectedCallMediaStream | null;
@@ -137,6 +140,9 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
       && typeof navigator !== "undefined"
       && typeof navigator.mediaDevices?.getDisplayMedia === "function",
     isScreenSharing: media.isLocalScreenShareActive,
+    isScreenShareUpdating: Boolean(media.isScreenShareUpdating),
+    screenShareIssue: media.screenShareIssue ?? null,
+    canRetryScreenShare: Boolean(media.canRetryScreenShare),
     localScreenShareStream: media.localScreenShareStream,
     remoteScreenShareAvailable: media.projection?.state === "active" && Boolean(media.remoteScreenShareStream),
     remoteScreenShareStream: media.remoteScreenShareStream,

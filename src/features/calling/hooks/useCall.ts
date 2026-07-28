@@ -17,6 +17,7 @@ import { mediaSettingsStore } from '@/shared/utils/mediaSettings';
 import { callMediaErrorMessage, classifyMicrophoneError } from '../utils/callMediaErrors';
 import { SpeakingDetector, type CallSpeakingProjection } from '../services/speakingDetector';
 import { legacyCallSoundEvent, type CallSoundEvent } from '../services/callSoundController';
+import { captureScreenShare, classifyScreenShareError, ScreenShareCaptureError, type ScreenShareIssue } from '../utils/screenShare';
 
 const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
     connectionState: 'unknown',
@@ -58,14 +59,6 @@ type PendingIncomingIceCandidate = {
 
 function incomingIceCandidateKey(candidate: CallIceCandidatePayload): string {
     return JSON.stringify(candidate);
-}
-
-function isExpectedScreenShareCancellation(error: unknown): boolean {
-    if (!(error instanceof Error)) return false;
-    return (
-        error.message === 'Screen share start was superseded by stop' ||
-        error.message === 'Screen share stopped because the peer was disposed'
-    );
 }
 
 function getErrorMessage(error: unknown): string {
@@ -152,28 +145,6 @@ function mapAcceptCallIssue(error: unknown): CallIssue {
     return buildCallIssue('Could not connect the call.');
 }
 
-function mapScreenShareIssue(error: unknown): CallIssue {
-    const message = getErrorMessage(error).toLowerCase();
-
-    if (message.includes('not supported')) {
-        return buildCallIssue('Screen sharing is not supported in this browser.');
-    }
-
-    if (classifyMicrophoneError(error, { audio: false, video: true }) === 'microphone_permission_denied') {
-        return buildCallIssue('Screen share permission denied.');
-    }
-
-    if (isTimedOutError(error)) {
-        return buildCallIssue('Screen share update timed out. Try again.');
-    }
-
-    if (message.includes('screen share did not provide a video track')) {
-        return buildCallIssue('Screen share failed. No video track was provided.');
-    }
-
-    return buildCallIssue('Screen share failed. Please try again.');
-}
-
 export function useCall(currentUserId: number): UseCallReturn {
     const socketManager = useAppStore((s) => s.socketManager);
     const currentUserCallRef = useAppStore((s) => s.currentUser?.public_id ?? s.currentUser?.id ?? null);
@@ -195,6 +166,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     const [seconds, setSeconds] = useState(0);
     const [diagnostics, setDiagnostics] = useState<CallDiagnostics>(EMPTY_CALL_DIAGNOSTICS);
     const [callIssue, setCallIssue] = useState<CallIssue | null>(null);
+    const [screenShareIssue, setScreenShareIssue] = useState<ScreenShareIssue | null>(null);
     const [isIncomingActionPending, setIsIncomingActionPending] = useState(false);
     const [callServiceStatus, setCallServiceStatus] = useState<CallServiceStatus>(
         callSignalingService.getReadinessStatus(),
@@ -219,6 +191,8 @@ export function useCall(currentUserId: number): UseCallReturn {
     const localScreenStreamRef = useRef<MediaStream | null>(null);
     const screenTrackRef = useRef<MediaStreamTrack | null>(null);
     const screenTrackEndedHandlerRef = useRef<(() => void) | null>(null);
+    const screenShareAttemptRef = useRef(0);
+    const screenShareOperationRef = useRef<Promise<void> | null>(null);
     const incomingActionPendingRef = useRef(false);
     const pendingIncomingIceRef = useRef<PendingIncomingIceCandidate[]>([]);
     const pendingIncomingIceKeysRef = useRef(new Set<string>());
@@ -252,6 +226,7 @@ export function useCall(currentUserId: number): UseCallReturn {
     }, []);
 
     const cleanupScreenShare = useCallback((options?: { stopTracks?: boolean }) => {
+        screenShareAttemptRef.current += 1;
         const shouldStopTracks = options?.stopTracks ?? true;
         const existingStream = localScreenStreamRef.current;
         const existingTrack = screenTrackRef.current;
@@ -262,6 +237,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         screenTrackEndedHandlerRef.current = null;
         setLocalScreenStream(null);
         setIsScreenSharing(false);
+        setIsScreenShareUpdating(false);
+        setScreenShareIssue(null);
 
         if (existingTrack && existingHandler) {
             if ('removeEventListener' in existingTrack) {
@@ -290,6 +267,8 @@ export function useCall(currentUserId: number): UseCallReturn {
     }, [remoteUserId]);
 
     const stopScreenShare = useCallback(() => {
+        screenShareAttemptRef.current += 1;
+        setScreenShareIssue(null);
         const service = webrtcRef.current;
         debugCall('[useCall] app stop sharing clicked', {
             has_service: Boolean(service),
@@ -300,7 +279,9 @@ export function useCall(currentUserId: number): UseCallReturn {
             setCallIssue(null);
         }).catch((err) => {
             console.warn('[useCall] Failed to stop transmitted screen share', err);
-            setCallIssue(mapScreenShareIssue(err));
+            const issue = classifyScreenShareError(err, 'renegotiation');
+            setScreenShareIssue(issue);
+            setCallIssue(buildCallIssue(issue.message));
         });
         cleanupScreenShare({ stopTracks: !service });
     }, [cleanupScreenShare]);
@@ -705,7 +686,9 @@ export function useCall(currentUserId: number): UseCallReturn {
                     setCallIssue(null);
                 }).catch((err) => {
                     console.error('[useCall] renegotiation failed', err);
-                    setCallIssue(mapScreenShareIssue(err));
+                    const issue = classifyScreenShareError(err, 'renegotiation');
+                    setScreenShareIssue(issue);
+                    setCallIssue(buildCallIssue(issue.message));
                 });
             }),
             callSignalingService.onHangUp((payload) => {
@@ -998,47 +981,86 @@ export function useCall(currentUserId: number): UseCallReturn {
     }, [isMuted]);
 
     const startScreenShare = useCallback(async () => {
-        const mediaDevices = navigator.mediaDevices;
-        if (!mediaDevices || typeof mediaDevices.getDisplayMedia !== 'function') {
-            console.warn('[useCall] Screen sharing is not supported in this environment');
-            setCallIssue(buildCallIssue('Screen sharing is not supported in this browser.'));
-            return;
-        }
+        if (screenShareOperationRef.current) return screenShareOperationRef.current;
+        const operation = (async () => {
+            const mediaDevices = navigator.mediaDevices;
+            if (!mediaDevices || typeof mediaDevices.getDisplayMedia !== 'function') {
+                const issue: ScreenShareIssue = { code: 'unsupported', message: 'Screen sharing is unavailable in this browser or desktop environment.' };
+                setScreenShareIssue(issue);
+                setCallIssue(buildCallIssue(issue.message));
+                return;
+            }
 
-        try {
             const service = webrtcRef.current;
-            cleanupScreenShare({ stopTracks: !service });
-            const stream = service
-                ? await service.startScreenShare(() => {
-                    cleanupScreenShare({ stopTracks: false });
-                })
-                : await mediaDevices.getDisplayMedia({
-                    video: true,
-                    audio: false,
-                });
-            const videoTrack = stream.getVideoTracks()[0] ?? null;
-            const handleEnded = () => {
-                cleanupScreenShare({ stopTracks: false });
-            };
-
-            if (videoTrack && !service) {
-                if ('addEventListener' in videoTrack) {
-                    videoTrack.addEventListener?.('ended', handleEnded);
+            if (!service) cleanupScreenShare({ stopTracks: true });
+            const attempt = screenShareAttemptRef.current;
+            setIsScreenShareUpdating(true);
+            try {
+                const result = service?.startScreenShareResult
+                    ? await service.startScreenShareResult(() => cleanupScreenShare({ stopTracks: false }))
+                    : { ok: true as const, stream: service
+                        ? await service.startScreenShare(() => cleanupScreenShare({ stopTracks: false }))
+                        : await captureScreenShare((constraints) => mediaDevices.getDisplayMedia(constraints)) };
+                if (attempt !== screenShareAttemptRef.current || (service && webrtcRef.current !== service)) {
+                    // A service result carries its current authoritative stream on
+                    // cancellation. The service has already disposed any candidate;
+                    // only direct fallback capture needs hook-owned late cleanup.
+                    if (!service) result.stream?.getTracks().forEach((track) => track.stop());
+                    return;
                 }
-                videoTrack.onended = handleEnded;
+                if (!result.ok) {
+                    if (result.stream) {
+                        localScreenStreamRef.current = result.stream;
+                        screenTrackRef.current = result.stream.getVideoTracks()[0] ?? null;
+                        setLocalScreenStream(result.stream);
+                        setIsScreenSharing(Boolean(screenTrackRef.current));
+                    } else {
+                        localScreenStreamRef.current = null;
+                        screenTrackRef.current = null;
+                        setLocalScreenStream(null);
+                        setIsScreenSharing(false);
+                    }
+                    if (result.issue.code !== 'cancelled') {
+                        setScreenShareIssue(result.issue);
+                        setCallIssue(buildCallIssue(result.issue.message));
+                    }
+                    return;
+                }
+                const stream = result.stream;
+                const videoTrack = stream.getVideoTracks()[0] ?? null;
+                if (!videoTrack) {
+                    stream.getTracks().forEach((track) => track.stop());
+                    throw new ScreenShareCaptureError('no_source');
+                }
+                const handleEnded = () => cleanupScreenShare({ stopTracks: false });
+                if (!service) {
+                    videoTrack.addEventListener?.('ended', handleEnded);
+                    videoTrack.onended = handleEnded;
+                }
+                screenTrackRef.current = videoTrack;
+                screenTrackEndedHandlerRef.current = service ? null : handleEnded;
+                localScreenStreamRef.current = stream;
+                setLocalScreenStream(stream);
+                setIsScreenSharing(true);
+                setScreenShareIssue(null);
+                setCallIssue(null);
+            } catch (err) {
+                if (attempt !== screenShareAttemptRef.current || (service && webrtcRef.current !== service)) return;
+                const issue = classifyScreenShareError(err);
+                if (issue.code !== 'cancelled') {
+                    console.warn('[useCall] Screen share was not started', err);
+                    setScreenShareIssue(issue);
+                    setCallIssue(buildCallIssue(issue.message));
+                }
+            } finally {
+                if (attempt === screenShareAttemptRef.current) setIsScreenShareUpdating(false);
             }
-
-            screenTrackRef.current = videoTrack;
-            screenTrackEndedHandlerRef.current = service ? null : handleEnded;
-            localScreenStreamRef.current = stream;
-            setLocalScreenStream(stream);
-            setIsScreenSharing(true);
-            setCallIssue(null);
-        } catch (err) {
-            if (!isExpectedScreenShareCancellation(err)) {
-                console.warn('[useCall] Screen share was not started', err);
-                setCallIssue(mapScreenShareIssue(err));
-            }
+        })();
+        screenShareOperationRef.current = operation;
+        try {
+            await operation;
+        } finally {
+            if (screenShareOperationRef.current === operation) screenShareOperationRef.current = null;
         }
     }, [cleanupScreenShare]);
 
@@ -1084,6 +1106,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         seconds,
         diagnostics,
         callIssue,
+        screenShareIssue,
         isIncomingActionPending,
         callSoundEvent,
         startCall,

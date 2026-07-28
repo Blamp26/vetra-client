@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 import { useCall } from './useCall';
 import { useAppStore } from "@/store";
 import { callSignalingService } from '../services/callSignalingService';
+import { buildScreenShareConstraints } from '../utils/screenShare';
 
 // ----------------------------------------------------------------------
 // Моки модулей
@@ -22,10 +23,7 @@ vi.mock('../services/webrtcService', () => {
         this.handleRenegotiation = vi.fn().mockResolvedValue(undefined);
         this.startScreenShare = vi.fn(async (onEnded?: () => void) => {
             this._screenStream?.getTracks?.().forEach((track: MediaStreamTrack) => track.stop());
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: true,
-                audio: false,
-            });
+            const stream = await navigator.mediaDevices.getDisplayMedia(buildScreenShareConstraints());
             const track = stream.getVideoTracks?.()[0];
             if (track && onEnded) {
                 track.addEventListener?.('ended', onEnded);
@@ -1424,10 +1422,7 @@ describe('useCall', () => {
                 await result.current.startScreenShare();
             });
 
-            expect(mockGetDisplayMedia).toHaveBeenCalledWith({
-                video: true,
-                audio: false,
-            });
+            expect(mockGetDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: false, video: expect.objectContaining({ width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 15, max: 30 }, cursor: 'motion' }) }));
             expect(result.current.isScreenSharing).toBe(true);
             expect(result.current.localScreenStream).toBe(stream);
             expect(track.addEventListener).toHaveBeenCalledWith('ended', expect.any(Function));
@@ -1459,6 +1454,23 @@ describe('useCall', () => {
             expect(track.stop).toHaveBeenCalled();
             expect(result.current.isScreenSharing).toBe(false);
             expect(result.current.localScreenStream).toBeNull();
+        });
+
+        it('ignores a rejected fallback capture after stop invalidates the attempt', async () => {
+            let rejectCapture!: (error: unknown) => void;
+            mockGetDisplayMedia.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectCapture = reject; }));
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+            const { result } = renderHook(() => useCall(currentUserId));
+            const start = result.current.startScreenShare();
+            await Promise.resolve();
+            act(() => result.current.stopScreenShare());
+            rejectCapture(new DOMException('arbitrary browser text', 'NotAllowedError'));
+            await act(async () => { await start; });
+
+            expect(result.current.screenShareIssue).toBeNull();
+            expect(result.current.callIssue).toBeNull();
+            expect(warnSpy).not.toHaveBeenCalled();
+            warnSpy.mockRestore();
         });
 
         it('active call stays active when stopScreenShare is used', async () => {
@@ -1694,8 +1706,7 @@ describe('useCall', () => {
 
             expect(result.current.isScreenSharing).toBe(false);
             expect(result.current.localScreenStream).toBeNull();
-            expect(result.current.callIssue?.message).toBe('Screen sharing is not supported in this browser.');
-            expect(warnSpy).toHaveBeenCalledWith('[useCall] Screen sharing is not supported in this environment');
+            expect(result.current.callIssue?.message).toBe('Screen sharing is unavailable in this browser or desktop environment.');
 
             warnSpy.mockRestore();
         });
@@ -1713,7 +1724,7 @@ describe('useCall', () => {
 
             expect(result.current.isScreenSharing).toBe(false);
             expect(result.current.localScreenStream).toBeNull();
-            expect(result.current.callIssue?.message).toBe('Screen share permission denied.');
+            expect(result.current.callIssue?.message).toBe('Screen sharing permission was denied. Allow screen capture access, then try again.');
             expect(warnSpy).toHaveBeenCalledWith('[useCall] Screen share was not started', error);
 
             warnSpy.mockRestore();
