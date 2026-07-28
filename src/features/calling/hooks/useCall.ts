@@ -16,6 +16,7 @@ import { debugCall } from '../utils/callDebug';
 import { mediaSettingsStore } from '@/shared/utils/mediaSettings';
 import { callMediaErrorMessage, classifyMicrophoneError } from '../utils/callMediaErrors';
 import { SpeakingDetector, type CallSpeakingProjection } from '../services/speakingDetector';
+import { legacyCallSoundEvent, type CallSoundEvent } from '../services/callSoundController';
 
 const EMPTY_CALL_DIAGNOSTICS: CallDiagnostics = {
     connectionState: 'unknown',
@@ -199,6 +200,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         callSignalingService.getReadinessStatus(),
     );
     const [speaking, setSpeaking] = useState<CallSpeakingProjection>({ localSpeaking: false, remoteSpeaking: false });
+    const [callSoundEvent, setCallSoundEvent] = useState<CallSoundEvent | null>(null);
 
     const callChannelRef = useRef<Channel | null>(null);
     const webrtcRef = useRef<WebRTCService | null>(null);
@@ -223,6 +225,13 @@ export function useCall(currentUserId: number): UseCallReturn {
     const deliveredIncomingIceKeysRef = useRef(new Set<string>());
     const incomingIceDeliveryPausedRef = useRef(false);
     const speakingDetectorRef = useRef<SpeakingDetector | null>(null);
+    const soundGenerationRef = useRef(0);
+
+    const emitSound = useCallback((event: CallSoundEvent) => {
+        setCallSoundEvent(event);
+    }, []);
+
+    const soundCallKey = useCallback(() => callIdRef.current ?? `legacy:${currentUserId}:${soundGenerationRef.current}`, [currentUserId]);
 
     const registerSpeakingStream = useCallback((role: "local" | "remote", stream: MediaStream | null) => {
         const detector = speakingDetectorRef.current ?? new SpeakingDetector({ onChange: setSpeaking });
@@ -431,6 +440,8 @@ export function useCall(currentUserId: number): UseCallReturn {
         offerSdpRef.current = null;
         incomingActionPendingRef.current = false;
 
+        const callKey = soundCallKey();
+        setCallSoundEvent(legacyCallSoundEvent(callKey, reason));
         statusRef.current = 'idle';
         setStatus('idle');
         setRemoteUserId(null);
@@ -456,13 +467,16 @@ export function useCall(currentUserId: number): UseCallReturn {
         clearPendingIncomingIce();
         if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
         const nextStatus = options?.status ?? 'ended';
+        setCallSoundEvent(nextStatus === 'ended'
+            ? { type: 'ended', callKey: soundCallKey(), reason: 'ended' }
+            : { type: 'failed', callKey: soundCallKey(), reason: 'connection_failed' });
         statusRef.current = nextStatus;
         setStatus(nextStatus);
         setCallIssue(options?.issue ?? null);
         endedTimerRef.current = setTimeout(() => {
             teardownCall();
         }, 2000);
-    }, [clearPendingIncomingIce, teardownCall]);
+    }, [clearPendingIncomingIce, soundCallKey, teardownCall]);
 
     const handleOffer = useCallback((payload: OfferPayload) => {
         debugCall('[useCall] receive offer', {
@@ -614,6 +628,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 setRemoteUsername((prev) => payload.from_username ?? prev);
                 statusRef.current = 'active';
                 setStatus('active');
+                emitSound({ type: 'connected', callKey: callIdRef.current ?? payload.call_id ?? soundCallKey() });
             }),
             callSignalingService.onIceCandidate((payload) => {
                 debugCall('[useCall] receive ICE', {
@@ -736,6 +751,8 @@ export function useCall(currentUserId: number): UseCallReturn {
                 setRemoteUserId(payload.from_user_id);
                 setRemoteUsername(payload.from_username);
                 setCallId(payload.call_id);
+                soundGenerationRef.current += 1;
+                emitSound({ type: 'ringing_started', callKey: payload.call_id, direction: 'incoming' });
             }),
             callSignalingService.onOffer(handleOffer),
             callSignalingService.onChannelClose((payload) => {
@@ -762,7 +779,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 signalingUnsubsRef.current = [];
             }
         };
-    }, [cleanupLocalCall, cleanupScreenShare, clearCallTimeout, socketManager, currentUserId, handleOffer, matchesIncomingIceContext, queueIncomingIce, resetAfterDelay, teardownCall]);
+    }, [cleanupLocalCall, cleanupScreenShare, clearCallTimeout, emitSound, socketManager, currentUserId, handleOffer, matchesIncomingIceContext, queueIncomingIce, resetAfterDelay, soundCallKey, teardownCall]);
 
     const startCall = useCallback((targetUserId: ResourceRef, targetUsername?: string) => {
         const channel = callChannelRef.current;
@@ -805,6 +822,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             return;
         }
 
+        soundGenerationRef.current += 1;
         statusRef.current = 'calling';
         clearPendingIncomingIce();
         hangUpSentRef.current = false;
@@ -812,6 +830,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         setCallIssue(null);
         setRemoteUserId(targetUserId);
         setRemoteUsername(targetUsername ?? null);
+        emitSound({ type: 'ringing_started', callKey: soundCallKey(), direction: 'outgoing' });
         remoteUserIdRef.current = targetUserId;
         callIdRef.current = null;
 
@@ -859,7 +878,7 @@ export function useCall(currentUserId: number): UseCallReturn {
                 console.error('[useCall] startCall failed', err);
                 cleanupLocalCall('start_call_failed', { issue });
             });
-    }, [cleanupLocalCall, clearPendingIncomingIce, currentUserId, registerSpeakingStream, registerSpeakingTrack]);
+    }, [cleanupLocalCall, clearPendingIncomingIce, currentUserId, emitSound, registerSpeakingStream, registerSpeakingTrack, soundCallKey]);
 
     const acceptCall = useCallback(() => {
         const channel = callChannelRef.current;
@@ -899,6 +918,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         clearCallTimeout();
         statusRef.current = 'active';
         setStatus('active');
+        emitSound({ type: 'connected', callKey: soundCallKey() });
         offerSdpRef.current = null;
         setDiagnostics(mapDiagnostics(service.getDiagnosticsSnapshot()));
 
@@ -914,7 +934,7 @@ export function useCall(currentUserId: number): UseCallReturn {
             console.error('[useCall] acceptCall failed', err);
             cleanupLocalCall('accept_call_failed', { issue: mapAcceptCallIssue(err) });
         });
-    }, [callId, clearCallTimeout, cleanupLocalCall, currentUserId, flushPendingIncomingIce, registerSpeakingStream, registerSpeakingTrack, remoteUserId, status]);
+    }, [callId, clearCallTimeout, cleanupLocalCall, currentUserId, emitSound, flushPendingIncomingIce, registerSpeakingStream, registerSpeakingTrack, remoteUserId, soundCallKey, status]);
 
     const rejectCall = useCallback(() => {
         const channel = callChannelRef.current;
@@ -1065,6 +1085,7 @@ export function useCall(currentUserId: number): UseCallReturn {
         diagnostics,
         callIssue,
         isIncomingActionPending,
+        callSoundEvent,
         startCall,
         startScreenShare,
         stopScreenShare,

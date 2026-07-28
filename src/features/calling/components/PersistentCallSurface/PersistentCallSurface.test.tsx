@@ -10,10 +10,11 @@ afterEach(() => {
   Reflect.deleteProperty(HTMLMediaElement.prototype, "setSinkId");
 });
 
-function renderSurface({ phase = "active", presentationOverrides = {}, mediaOverrides = {} }: {
+function renderSurface({ phase = "active", presentationOverrides = {}, mediaOverrides = {}, sound }: {
   phase?: string;
   presentationOverrides?: Record<string, unknown>;
   mediaOverrides?: Record<string, unknown>;
+  sound?: { autoplayBlocked: boolean; enableCallSounds: ReturnType<typeof vi.fn> };
 } = {}) {
   const media = {
     getSnapshot: () => ({ state: "signaling_ready", remoteAudioStream: null, localIssue: null, isMuted: false, canToggleMute: true, peerConnectionState: "connected" }),
@@ -48,7 +49,11 @@ function renderSurface({ phase = "active", presentationOverrides = {}, mediaOver
     hangup: vi.fn(),
     retryPendingAction: vi.fn(),
   } as any;
-  const result = render(<PersistentCallProvider runtime={{ presentation, media }}><PersistentCallSurface>{null}</PersistentCallSurface></PersistentCallProvider>);
+  const soundService = sound ? {
+    getSnapshot: () => sound,
+    subscribe: (listener: (value: typeof sound) => void) => { listener(sound); return () => undefined; },
+  } : undefined;
+  const result = render(<PersistentCallProvider runtime={{ presentation, media, sound: soundService as any }}><PersistentCallSurface>{null}</PersistentCallSurface></PersistentCallProvider>);
   return { media, presentation, ...result };
 }
 
@@ -124,5 +129,14 @@ describe("PersistentCallSurface", () => {
     incoming.unmount();
     renderSurface({ phase: "ringing", presentationOverrides: { participantRole: "initiator" } });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("exposes one accessible call-sound recovery action only while ringing or active", () => {
+    const enableCallSounds = vi.fn().mockResolvedValue(true);
+    const sound = { autoplayBlocked: true, enableCallSounds };
+    renderSurface({ phase: "ringing", sound });
+    expect(screen.getByRole("button", { name: "Enable call sounds" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Enable call sounds" }));
+    expect(enableCallSounds).toHaveBeenCalledTimes(1);
   });
 });

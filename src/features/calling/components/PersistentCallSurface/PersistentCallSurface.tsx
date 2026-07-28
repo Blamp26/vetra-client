@@ -67,6 +67,19 @@ export function PersistentCallSurface({ children }: { children: ReactNode }) {
           </Button>
         </div>
       )}
+      {call.sound.autoplayBlocked && (call.presentation.phase === "ringing" || call.presentation.phase === "active") && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-16 z-40 flex justify-center" data-testid="call-sound-recovery">
+          <Button
+            variant="secondary"
+            type="button"
+            className="pointer-events-auto"
+            onClick={() => { void call.sound.enableCallSounds(); }}
+            aria-label="Enable call sounds"
+          >
+            Enable call sounds
+          </Button>
+        </div>
+      )}
       {call.presentation.incomingModal.visible && (
         <IncomingCallModal
           callerName={call.presentation.incomingModal.callerDisplayName}

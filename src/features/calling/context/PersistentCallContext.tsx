@@ -9,6 +9,7 @@ import type { DirectedCallPresentationModel, PersistentPresentationSnapshot, Pre
 import type { CallAuthorityBackend, CallAuthorityState, CallAuthorityTraceEvent } from "../services/callAuthorityOwnership";
 import type { DirectedCallDiagnosticEntry } from "../services/directedCallDiagnostics";
 import { CallUxProjection, type CallUxSnapshot } from "../services/callUxProjection";
+import type { CallSoundController, CallSoundProjection } from "../services/callSoundController";
 
 function legacyUxSnapshot(snapshot: PersistentPresentationSnapshot): CallUxSnapshot {
   const context = snapshot.callId && (snapshot.peerPublicId || snapshot.phase === "active")
@@ -47,6 +48,7 @@ export interface PersistentCallRuntimeServices {
   presentation: DirectedCallPresentationModel;
   media: DirectedCallMediaCoordinator;
   uxProjection?: CallUxProjection;
+  sound?: CallSoundController;
 }
 
 export interface PersistentCallRuntimeValue {
@@ -76,6 +78,7 @@ export interface PersistentCallRuntimeValue {
   remoteScreenShareStream: DirectedCallMediaStream | null;
   startScreenShare: () => Promise<boolean>;
   stopScreenShare: () => Promise<boolean>;
+  sound: CallSoundProjection;
 }
 
 const PersistentCallContext = createContext<PersistentCallRuntimeValue | null>(null);
@@ -86,6 +89,7 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
   const [media, setMedia] = useState(() => runtime.media.getSnapshot());
   const hasUxProjection = Boolean(runtime.uxProjection);
   const [ux, setUx] = useState(() => runtime.uxProjection?.getSnapshot() ?? legacyUxSnapshot(runtime.presentation.getSnapshot()));
+  const [sound, setSound] = useState<CallSoundProjection>(() => runtime.sound?.getSnapshot() ?? { autoplayBlocked: false, enableCallSounds: async () => false });
 
   useEffect(() => {
     const unsubscribePresentation = runtime.presentation.subscribe((next) => {
@@ -97,6 +101,7 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
       if (!hasUxProjection) setUx(legacyUxSnapshot(runtime.presentation.getSnapshot()));
     });
     const unsubscribeUx = uxProjection.subscribe(setUx);
+    const unsubscribeSound = runtime.sound?.subscribe(setSound) ?? (() => undefined);
     setPresentation(runtime.presentation.getSnapshot());
     setMedia(runtime.media.getSnapshot());
     if (hasUxProjection) setUx(uxProjection.getSnapshot());
@@ -104,6 +109,7 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
       unsubscribePresentation();
       unsubscribeMedia();
       unsubscribeUx();
+      unsubscribeSound();
     };
   }, [hasUxProjection, runtime, uxProjection]);
 
@@ -136,7 +142,8 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
     remoteScreenShareStream: media.remoteScreenShareStream,
     startScreenShare: () => runtime.media.startScreenShare(),
     stopScreenShare: () => runtime.media.stopScreenShare(),
-  }), [media, presentation, runtime, ux]);
+    sound,
+  }), [media, presentation, runtime, sound, ux]);
 
   return <PersistentCallContext.Provider value={value}>{children}</PersistentCallContext.Provider>;
 }

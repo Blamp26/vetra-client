@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CallAuthorityOwnership } from "../services/callAuthorityOwnership";
 import type { User } from "@/shared/types";
 import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
+import { CallSoundController } from "../services/callSoundController";
 
 const mocks = vi.hoisted(() => ({
   startupFailure: null as Error | null,
@@ -25,11 +26,16 @@ const mocks = vi.hoisted(() => ({
   }),
   SignalTransport: vi.fn(class { dispose = vi.fn(); }),
   MediaCoordinator: vi.fn(class {
+    mediaSubscribers = new Set<(snapshot: { deafened: boolean }) => void>();
     start = vi.fn();
     dispose = vi.fn();
     switchAudioInput = vi.fn(() => Promise.resolve(false));
-    getSnapshot = vi.fn(() => ({ state: "idle", callId: null, participantRole: null, projection: null, generation: "test", remoteAudioStream: null, localIssue: null }));
-    subscribe = vi.fn(() => () => undefined);
+    getSnapshot = vi.fn(() => ({ state: "idle", callId: null, participantRole: null, projection: null, generation: "test", remoteAudioStream: null, localIssue: null, deafened: false }));
+    subscribe = vi.fn((listener: (snapshot: { deafened: boolean }) => void) => {
+      this.mediaSubscribers.add(listener);
+      return () => this.mediaSubscribers.delete(listener);
+    });
+    emitMediaSnapshot = (snapshot: { deafened: boolean }) => this.mediaSubscribers.forEach((listener) => listener(snapshot));
   }),
 }));
 
@@ -180,6 +186,19 @@ describe("CallRuntimeBoundary", () => {
     mediaSettingsStore.setInputDeviceId("later-mic");
     await Promise.resolve();
     expect(media.switchAudioInput).toHaveBeenCalledTimes(1);
+  });
+
+  it("projects persistent deafen changes to the existing call sound controller", async () => {
+    const soundProjection = vi.spyOn(CallSoundController.prototype, "setProjection");
+    renderBoundary("persistent", makeOwnership("owner"));
+    await waitFor(() => expect(mocks.Session).toHaveBeenCalledTimes(1));
+
+    const media = mocks.MediaCoordinator.mock.results[0]?.value as {
+      emitMediaSnapshot: (snapshot: { deafened: boolean }) => void;
+    };
+    media.emitMediaSnapshot({ deafened: true });
+    expect(soundProjection).toHaveBeenCalledWith({ deafened: true });
+    soundProjection.mockRestore();
   });
 
   it("starts the persistent runtime when a waiting non-owner later becomes owner", async () => {

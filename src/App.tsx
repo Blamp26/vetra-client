@@ -712,6 +712,20 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
         />
       )}
 
+      {call?.callSound?.autoplayBlocked && (resolvedStatus === "ringing" || resolvedStatus === "active" || resolvedStatus === "connected") && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center" data-testid="legacy-call-sound-recovery">
+          <Button
+            variant="secondary"
+            type="button"
+            className="pointer-events-auto"
+            onClick={() => { void call.callSound?.enableCallSounds(); }}
+            aria-label="Enable call sounds"
+          >
+            Enable call sounds
+          </Button>
+        </div>
+      )}
+
       <ToastHost />
       <PersistentCallDiagnosticsShortcut />
       <PersistentCallDebugPanel

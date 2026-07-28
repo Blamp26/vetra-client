@@ -11,6 +11,7 @@ import { DirectedCallPresentationModel } from "../services/directedCallPresentat
 import { DirectedCallSignalTransport } from "../services/directedCallSignalTransport";
 import { DirectedCallMediaCoordinator } from "../services/directedCallMediaCoordinator";
 import { CallUxProjection } from "../services/callUxProjection";
+import { CallSoundController, persistentCallSoundEvent } from "../services/callSoundController";
 import {
   PersistentCallBoundaryDebugProvider,
   PersistentCallProvider,
@@ -106,6 +107,8 @@ export function CallRuntimeBoundary({
   const [directedCallDiagnosticsEnabled, setDirectedCallDiagnosticsEnabled] = useState(isCallDebugEnabled);
   const [directedCallEventTimeline, setDirectedCallEventTimeline] = useState(() => getDirectedCallDiagnosticTimeline());
   const { preferences: mediaPreferences } = useMediaSettings();
+  const soundEnabled = useAppStore((state: RootState) => state.soundEnabled);
+  const outputVolume = useAppStore((state: RootState) => state.outputVolume);
   const noiseSuppression = useAppStore((state: RootState) => state.noiseSuppression);
   const echoCancellation = useAppStore((state: RootState) => state.echoCancellation);
   const autoGainControl = useAppStore((state: RootState) => state.autoGainControl);
@@ -146,6 +149,16 @@ export function CallRuntimeBoundary({
       autoGainControl,
     }));
   }, [autoGainControl, echoCancellation, mediaPreferences.inputDeviceId, noiseSuppression, persistentRuntime]);
+
+  useEffect(() => {
+    if (!persistentRuntime) return;
+    persistentRuntime.services.sound?.setProjection({
+      soundEnabled,
+      deafened: persistentRuntime.services.media.getSnapshot().deafened,
+      outputVolume,
+      outputDeviceId: mediaPreferences.outputDeviceId,
+    });
+  }, [mediaPreferences.outputDeviceId, outputVolume, persistentRuntime, soundEnabled]);
 
   useEffect(() => {
     const effectGeneration = ++effectGenerationRef.current;
@@ -211,19 +224,46 @@ export function CallRuntimeBoundary({
         );
         const uxProjection = new CallUxProjection();
         const runtimeGeneration = `${effectGeneration}:${deviceId}`;
+        const sound = new CallSoundController({
+          scopeKey: scope?.key ?? runtimeGeneration,
+          getOutputDeviceId: () => mediaSettingsStore.getSnapshot().preferences.outputDeviceId,
+          getOutputVolume: () => getState().outputVolume,
+          isSoundEnabled: () => getState().soundEnabled,
+          isDeafened: () => mediaCoordinator.getSnapshot().deafened,
+          setOutputDeviceId: (next) => mediaSettingsStore.setOutputDeviceId(next),
+          onOutputDeviceFallback: () => {
+            if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("vetra:toast", {
+              detail: { title: "Audio output switched to default", body: "Call sounds are using the system default device.", durationMs: 4000 },
+            }));
+          },
+          onDiagnostic: (event, details) => recordDirectedCallDiagnostic("failure", { failureKind: event, ...details }),
+        });
+        let previousSoundSnapshot = presentation.getSnapshot();
         uxProjection.handle({ type: "runtime_generation", generation: runtimeGeneration });
         uxProjection.handle({ type: "presentation_snapshot", snapshot: presentation.getSnapshot() });
         uxProjection.handle({ type: "media_snapshot", snapshot: mediaCoordinator.getSnapshot() });
-        const unsubscribeUxPresentation = presentation.subscribe((snapshot) => uxProjection.handle({ type: "presentation_snapshot", snapshot }));
-        const unsubscribeUxMedia = mediaCoordinator.subscribe((snapshot) => uxProjection.handle({ type: "media_snapshot", snapshot }));
+        const unsubscribeUxPresentation = presentation.subscribe((snapshot) => {
+          uxProjection.handle({ type: "presentation_snapshot", snapshot });
+          const event = persistentCallSoundEvent(
+            { callId: previousSoundSnapshot.callId, state: previousSoundSnapshot.canonicalState, participantRole: previousSoundSnapshot.participantRole },
+            { callId: snapshot.callId, canonicalState: snapshot.canonicalState, participantRole: snapshot.participantRole },
+          );
+          previousSoundSnapshot = snapshot;
+          if (event) sound.handle(event);
+        });
+        const unsubscribeUxMedia = mediaCoordinator.subscribe((snapshot) => {
+          uxProjection.handle({ type: "media_snapshot", snapshot });
+          sound.setProjection({ deafened: snapshot.deafened });
+        });
         const runtime: PersistentRuntime = {
           start: () => mediaCoordinator.start(),
-          services: { presentation, media: mediaCoordinator, uxProjection },
+          services: { presentation, media: mediaCoordinator, uxProjection, sound },
           dispose: () => {
             unsubscribeUxPresentation();
             unsubscribeUxMedia();
             uxProjection.handle({ type: "disposed" });
             mediaCoordinator.dispose();
+            sound.handle({ type: "disposed" });
             signalTransport.dispose();
             presentation.dispose();
             incoming.dispose();
