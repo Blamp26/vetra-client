@@ -1,9 +1,30 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PersistentCallProvider, usePersistentCall } from "./PersistentCallContext";
 import type { DirectedCallMediaCoordinatorSnapshot } from "../services/directedCallMediaCoordinator";
 import { CallUxProjection } from "../services/callUxProjection";
+
+const { appState, mediaPreferences, setOutputDeviceIdMock, playMock, setSinkIdMock } = vi.hoisted(() => ({
+  appState: {
+    outputVolume: 1,
+    callUserVolumes: {} as Record<string, number>,
+    mutedCallUserIds: {} as Record<string, true>,
+  },
+  mediaPreferences: { inputDeviceId: "default", outputDeviceId: "default" },
+  setOutputDeviceIdMock: vi.fn(),
+  playMock: vi.fn(),
+  setSinkIdMock: vi.fn(),
+}));
+
+vi.mock("@/store", () => ({
+  useAppStore: (selector: (state: unknown) => unknown) => selector(appState),
+}));
+
+vi.mock("@/shared/utils/mediaSettings", () => ({
+  useMediaSettings: () => ({ preferences: mediaPreferences, hydrated: true }),
+  mediaSettingsStore: { setOutputDeviceId: setOutputDeviceIdMock },
+}));
 
 const baseSnapshot = {
   state: "signaling_ready",
@@ -105,8 +126,77 @@ function renderRuntime(runtime: ReturnType<typeof makeRuntime>) {
 }
 
 describe("PersistentCallProvider screen-share exposure", () => {
+  beforeEach(() => {
+    appState.outputVolume = 1;
+    appState.callUserVolumes = {};
+    appState.mutedCallUserIds = {};
+    mediaPreferences.outputDeviceId = "default";
+    setOutputDeviceIdMock.mockReset();
+    playMock.mockReset().mockResolvedValue(undefined);
+    setSinkIdMock.mockReset().mockResolvedValue(undefined);
+    Object.defineProperty(HTMLMediaElement.prototype, "play", { configurable: true, value: playMock });
+    Object.defineProperty(HTMLMediaElement.prototype, "setSinkId", { configurable: true, value: setSinkIdMock });
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    Reflect.deleteProperty(HTMLMediaElement.prototype, "play");
+    Reflect.deleteProperty(HTMLMediaElement.prototype, "setSinkId");
+  });
+
+  it("mounts one persistent audio renderer, attaches published remote audio, and starts playback", () => {
+    const runtime = makeRuntime();
+    renderRuntime(runtime);
+
+    expect(screen.getAllByTestId("call-audio-renderer")).toHaveLength(1);
+    const remoteStream = {} as MediaStream;
+    act(() => runtime.media.emit({ ...baseSnapshot, remoteAudioStream: remoteStream }));
+
+    const audio = screen.getByTestId("call-audio-renderer") as HTMLAudioElement;
+    expect(audio.srcObject).toBe(remoteStream);
+    expect(playMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves deafen, global volume, and per-user mute settings", () => {
+    const runtime = makeRuntime({ ...baseSnapshot, remoteAudioStream: {} as MediaStream });
+    renderRuntime(runtime);
+    const audio = screen.getByTestId("call-audio-renderer") as HTMLAudioElement;
+    expect(audio.muted).toBe(false);
+
+    act(() => runtime.media.emit({ ...baseSnapshot, remoteAudioStream: {} as MediaStream, deafened: true } as any));
+    expect(audio.muted).toBe(true);
+
+    act(() => {
+      appState.outputVolume = 0;
+      runtime.media.emit({ ...baseSnapshot, remoteAudioStream: {} as MediaStream, deafened: false } as any);
+    });
+    expect(audio.muted).toBe(true);
+
+    act(() => {
+      appState.outputVolume = 1;
+      appState.mutedCallUserIds["string:44444444-4444-4444-8444-444444444444"] = true;
+      runtime.media.emit({ ...baseSnapshot, remoteAudioStream: {} as MediaStream, deafened: false } as any);
+    });
+    expect(audio.muted).toBe(true);
+
+    act(() => {
+      delete appState.mutedCallUserIds["string:44444444-4444-4444-8444-444444444444"];
+      runtime.media.emit({ ...baseSnapshot, remoteAudioStream: {} as MediaStream, deafened: false } as any);
+    });
+    expect(audio.muted).toBe(false);
+  });
+
+  it("falls back to the default output device when the selected device is missing", async () => {
+    mediaPreferences.outputDeviceId = "missing-speaker";
+    setSinkIdMock.mockImplementation((deviceId: string) => (
+      deviceId === "missing-speaker" ? Promise.reject(new DOMException("missing", "NotFoundError")) : Promise.resolve()
+    ));
+    const runtime = makeRuntime();
+    renderRuntime(runtime);
+
+    await vi.waitFor(() => expect(setOutputDeviceIdMock).toHaveBeenCalledWith("default"));
+    expect(setSinkIdMock).toHaveBeenNthCalledWith(1, "missing-speaker");
+    expect(setSinkIdMock).toHaveBeenNthCalledWith(2, "default");
   });
 
   it("gates capability by authoritative active projection and getDisplayMedia", () => {

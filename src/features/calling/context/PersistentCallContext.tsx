@@ -1,4 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAppStore, type RootState } from "@/store";
+import { CallAudioRenderer } from "@/features/calling/components/CallAudioRenderer/CallAudioRenderer";
+import { mediaSettingsStore, useMediaSettings } from "@/shared/utils/mediaSettings";
+import { serializeResourceRef } from "@/shared/utils/resourceRef";
 import type {
   DirectedCallMediaCoordinator,
   DirectedCallMediaCoordinatorSnapshot,
@@ -87,12 +91,34 @@ export interface PersistentCallRuntimeValue {
 const PersistentCallContext = createContext<PersistentCallRuntimeValue | null>(null);
 
 export function PersistentCallProvider({ runtime, children }: { runtime: PersistentCallRuntimeServices; children: ReactNode }) {
+  const { preferences } = useMediaSettings();
+  const outputVolume = useAppStore((state: RootState) => state.outputVolume);
+  const callUserVolumes = useAppStore((state: RootState) => state.callUserVolumes);
+  const mutedCallUserIds = useAppStore((state: RootState) => state.mutedCallUserIds);
+  const lastOutputDeviceFallbackRef = useRef<string | null>(null);
   const uxProjection = useMemo(() => runtime.uxProjection ?? new CallUxProjection(), [runtime]);
   const [presentation, setPresentation] = useState(() => runtime.presentation.getSnapshot());
   const [media, setMedia] = useState(() => runtime.media.getSnapshot());
   const hasUxProjection = Boolean(runtime.uxProjection);
   const [ux, setUx] = useState(() => runtime.uxProjection?.getSnapshot() ?? legacyUxSnapshot(runtime.presentation.getSnapshot()));
   const [sound, setSound] = useState<CallSoundProjection>(() => runtime.sound?.getSnapshot() ?? { autoplayBlocked: false, enableCallSounds: async () => false });
+  const handleOutputDeviceFallback = useCallback(
+    (missingDeviceId?: string) => {
+      mediaSettingsStore.setOutputDeviceId("default");
+      if (typeof window === "undefined") return;
+      if (missingDeviceId && lastOutputDeviceFallbackRef.current === missingDeviceId) return;
+
+      lastOutputDeviceFallbackRef.current = missingDeviceId ?? "unknown";
+      window.dispatchEvent(new CustomEvent("vetra:toast", {
+        detail: {
+          title: "Audio output switched to default",
+          body: "Your previous output device is unavailable, so call audio is using the system default device.",
+          durationMs: 4000,
+        },
+      }));
+    },
+    [],
+  );
 
   useEffect(() => {
     const unsubscribePresentation = runtime.presentation.subscribe((next) => {
@@ -151,7 +177,24 @@ export function PersistentCallProvider({ runtime, children }: { runtime: Persist
     sound,
   }), [media, presentation, runtime, sound, ux]);
 
-  return <PersistentCallContext.Provider value={value}>{children}</PersistentCallContext.Provider>;
+  const peerAudioPreferenceKey = presentation.peerPublicId
+    ? serializeResourceRef(presentation.peerPublicId)
+    : undefined;
+
+  return (
+    <PersistentCallContext.Provider value={value}>
+      <CallAudioRenderer
+        remoteStream={media.remoteAudioStream as MediaStream | null}
+        selectedOutputDeviceId={preferences.outputDeviceId}
+        deafened={media.deafened}
+        outputVolume={outputVolume}
+        callUserVolume={peerAudioPreferenceKey ? callUserVolumes?.[peerAudioPreferenceKey] ?? 100 : 100}
+        callUserMuted={peerAudioPreferenceKey ? Boolean(mutedCallUserIds?.[peerAudioPreferenceKey]) : false}
+        onOutputDeviceFallback={handleOutputDeviceFallback}
+      />
+      {children}
+    </PersistentCallContext.Provider>
+  );
 }
 
 export function PersistentCallBoundaryDebugProvider({
