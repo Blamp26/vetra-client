@@ -7,6 +7,8 @@ const { useAppStoreMock, settingsStoreState } = vi.hoisted(() => ({
   settingsStoreState: { current: null as any },
 }));
 
+let analyserByteValue = 0;
+
 const {
   getNotificationPermissionStatusMock,
   requestNotificationPermissionMock,
@@ -47,7 +49,7 @@ vi.mock("@/services/notifications", () => ({
   requestNotificationPermission: requestNotificationPermissionMock,
 }));
 
-import { SettingsPage } from "./SettingsPage";
+import { microphoneLevelPercent, SettingsPage } from "./SettingsPage";
 import { mediaSettingsStore } from "@/shared/utils/mediaSettings";
 import { startMediaDeviceObserver } from "@/shared/utils/mediaDeviceObserver";
 
@@ -56,7 +58,7 @@ class MockAudioContext {
     return {
       fftSize: 0,
       frequencyBinCount: 8,
-      getByteFrequencyData: (array: Uint8Array) => array.fill(0),
+      getByteFrequencyData: (array: Uint8Array) => array.fill(analyserByteValue),
     };
   }
 
@@ -77,6 +79,7 @@ describe("SettingsPage audio settings", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    analyserByteValue = 0;
     mediaSettingsStore.reset();
     getNotificationPermissionStatusMock.mockResolvedValue("granted");
     requestNotificationPermissionMock.mockResolvedValue(true);
@@ -283,6 +286,30 @@ describe("SettingsPage audio settings", () => {
     expect(screen.queryByRole("button", { name: "Allow microphone" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Refresh devices" })).not.toBeInTheDocument();
     expect(screen.queryByRole("progressbar", { name: "Input level" })).not.toBeInTheDocument();
+  });
+
+  it("normalizes a full-scale microphone analyser value across the meter", async () => {
+    analyserByteValue = 255;
+    render(<SettingsPage onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Voice & Audio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test microphone" }));
+
+    const progress = await screen.findByRole("progressbar", { name: "Input level" });
+    expect(screen.getByText("Input Level: 100%")).toBeInTheDocument();
+    expect(progress).toHaveAttribute("aria-valuenow", "100");
+    expect(progress).toHaveStyle({ width: "100%" });
+    expect(screen.queryByText(/\b(?:10[1-9]|1[1-9]\d|[2-9]\d{2,})%/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [0, 0],
+    [128, 50],
+    [255, 100],
+    [256, 100],
+    [-1, 0],
+    [Number.NaN, 0],
+  ])("clamps microphone level %s to %s percent", (rawLevel, expectedPercent) => {
+    expect(microphoneLevelPercent(rawLevel)).toBe(expectedPercent);
   });
 
   it("switches the microphone test action label while the test is active", async () => {

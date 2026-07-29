@@ -21,6 +21,12 @@ import {
   type NotificationPermissionStatus,
 } from '@/services/notifications';
 
+export function microphoneLevelPercent(rawLevel: number): number {
+  if (!Number.isFinite(rawLevel)) return 0;
+  const clampedLevel = Math.min(255, Math.max(0, rawLevel));
+  return Math.round((clampedLevel / 255) * 100);
+}
+
 function VoiceAudioSettings() {
   const {
     availableInputDevices, 
@@ -57,6 +63,7 @@ function VoiceAudioSettings() {
   const animationFrameRef = useRef<number | null>(null);
   const outputRoutingSupported = typeof HTMLMediaElement !== "undefined"
     && typeof (HTMLMediaElement.prototype as HTMLMediaElement & { setSinkId?: unknown }).setSinkId === "function";
+  const micLevelPercent = microphoneLevelPercent(micLevel);
 
   const stopMicTest = useCallback(() => {
     if (animationFrameRef.current !== null) {
@@ -213,16 +220,16 @@ function VoiceAudioSettings() {
             Changes apply to new calls and update the active call immediately.
           </p>
           {isMicTestActive && <div>
-            <div className="mb-1 text-xs text-muted-foreground">Input Level: {Math.round((micLevel / 128) * 100)}%</div>
+            <div className="mb-1 text-xs text-muted-foreground">Input Level: {micLevelPercent}%</div>
             <div className="h-1 w-full bg-muted">
               <div
                 role="progressbar"
                 aria-label="Input level"
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-valuenow={Math.round((micLevel / 128) * 100)}
+                aria-valuenow={micLevelPercent}
                 className="h-full bg-primary"
-                style={{ width: `${(micLevel / 128) * 100}%` }}
+                style={{ width: `${micLevelPercent}%` }}
               />
             </div>
           </div>}
