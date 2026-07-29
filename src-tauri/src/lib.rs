@@ -13,7 +13,8 @@ use tauri::{Manager, WindowEvent};
 #[cfg(target_os = "linux")]
 fn enable_linux_webrtc(window: &tauri::WebviewWindow) -> Result<(), String> {
     use std::sync::{Arc, Mutex};
-    use webkit2gtk::{SettingsExt, WebViewExt};
+    use webkit2gtk::glib::prelude::Cast;
+    use webkit2gtk::{PermissionRequestExt, SettingsExt, UserMediaPermissionRequest, WebViewExt};
 
     let error = Arc::new(Mutex::new(None));
     let error_for_callback = Arc::clone(&error);
@@ -26,6 +27,14 @@ fn enable_linux_webrtc(window: &tauri::WebviewWindow) -> Result<(), String> {
                 return;
             };
             settings.set_enable_webrtc(true);
+            webview.inner().connect_permission_request(|_, request| {
+                if let Some(request) = request.downcast_ref::<UserMediaPermissionRequest>() {
+                    request.allow();
+                    true
+                } else {
+                    false
+                }
+            });
         })
         .map_err(|error| format!("failed to access main webview: {error}"))?;
 
