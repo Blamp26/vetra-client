@@ -109,6 +109,7 @@ describe("connectSocket", () => {
   it("uses socket_ticket params when the ticket endpoint succeeds", async () => {
     createSocketTicket.mockResolvedValue({
       socket_ticket: "ticket-123",
+      client_protocol_version: "1",
       expires_in: 60,
     });
 
@@ -119,6 +120,7 @@ describe("connectSocket", () => {
     expect(socketInstances[0].connect).toHaveBeenCalledTimes(1);
     expect((socketInstances[0].opts.params as () => unknown)()).toEqual({
       socket_ticket: "ticket-123",
+      client_protocol_version: "1",
     });
   });
 
@@ -142,6 +144,7 @@ describe("connectSocket", () => {
 
     expect((socketInstances[0].opts.params as () => unknown)()).toEqual({
       token: "access-token",
+      client_protocol_version: "1",
     });
   });
 
@@ -152,6 +155,7 @@ describe("connectSocket", () => {
 
     expect((socketInstances[0].opts.params as () => unknown)()).toEqual({
       token: "access-token",
+      client_protocol_version: "1",
     });
   });
 
@@ -163,6 +167,7 @@ describe("connectSocket", () => {
       })
       .mockResolvedValueOnce({
         socket_ticket: "ticket-refreshed",
+        client_protocol_version: "1",
         expires_in: 60,
       });
 
@@ -173,6 +178,7 @@ describe("connectSocket", () => {
       expect(createSocketTicket).toHaveBeenCalledTimes(2);
       expect((socketInstances[0].opts.params as () => unknown)()).toEqual({
         socket_ticket: "ticket-refreshed",
+        client_protocol_version: "1",
       });
     });
   });

@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useAppStore } from '@/store';
-import { useMediaVisibility } from './MediaVisibilityContext';
+import React, { useEffect, useState, useRef } from "react";
+import { useAppStore } from "@/store";
+import { useMediaVisibility } from "./MediaVisibilityContext";
+import { clientProtocolHeaders } from "@/shared/clientProtocol";
 
 export interface AuthenticatedImageDiagnostics {
   naturalWidth: number;
@@ -18,15 +19,20 @@ interface AuthenticatedImageProps extends React.ImgHTMLAttributes<HTMLImageEleme
 
 const MEDIA_PRELOAD_MARGIN = 200;
 
-function isWithinVisibilityMargin(target: HTMLElement, root: HTMLElement | null): boolean {
+function isWithinVisibilityMargin(
+  target: HTMLElement,
+  root: HTMLElement | null,
+): boolean {
   const targetRect = target.getBoundingClientRect();
   const rootRect = root
     ? root.getBoundingClientRect()
     : { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight };
-  return targetRect.bottom >= rootRect.top - MEDIA_PRELOAD_MARGIN
-    && targetRect.top <= rootRect.bottom + MEDIA_PRELOAD_MARGIN
-    && targetRect.right >= rootRect.left - MEDIA_PRELOAD_MARGIN
-    && targetRect.left <= rootRect.right + MEDIA_PRELOAD_MARGIN;
+  return (
+    targetRect.bottom >= rootRect.top - MEDIA_PRELOAD_MARGIN &&
+    targetRect.top <= rootRect.bottom + MEDIA_PRELOAD_MARGIN &&
+    targetRect.right >= rootRect.left - MEDIA_PRELOAD_MARGIN &&
+    targetRect.left <= rootRect.right + MEDIA_PRELOAD_MARGIN
+  );
 }
 
 /**
@@ -45,7 +51,8 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const authToken = useAppStore((s) => s.authToken);
-  const { root: visibilityRoot, revision: visibilityRevision } = useMediaVisibility();
+  const { root: visibilityRoot, revision: visibilityRevision } =
+    useMediaVisibility();
   const objectUrlRef = useRef<string | null>(null);
   const requestKeyRef = useRef({ src, authToken });
 
@@ -57,32 +64,38 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
     setObjectUrl(null);
   }, []);
 
-  const notifyDiagnostics = React.useCallback((image: HTMLImageElement) => {
-    const diagnostics = {
-      naturalWidth: image.naturalWidth,
-      naturalHeight: image.naturalHeight,
-      renderedWidth: image.clientWidth,
-      renderedHeight: image.clientHeight,
-      devicePixelRatio: window.devicePixelRatio || 1,
-    };
+  const notifyDiagnostics = React.useCallback(
+    (image: HTMLImageElement) => {
+      const diagnostics = {
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+        renderedWidth: image.clientWidth,
+        renderedHeight: image.clientHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      };
 
-    onMediaDiagnostics?.(diagnostics);
+      onMediaDiagnostics?.(diagnostics);
 
-    if (
-      import.meta.env.DEV &&
-      diagnostics.renderedWidth > 0 &&
-      diagnostics.renderedHeight > 0 &&
-      (
-        diagnostics.naturalWidth < diagnostics.renderedWidth * diagnostics.devicePixelRatio * 0.9 ||
-        diagnostics.naturalHeight < diagnostics.renderedHeight * diagnostics.devicePixelRatio * 0.9
-      )
-    ) {
-      console.warn('[AuthenticatedImage] Rendered image source may be too small for the current tile.', {
-        src,
-        ...diagnostics,
-      });
-    }
-  }, [onMediaDiagnostics, src]);
+      if (
+        import.meta.env.DEV &&
+        diagnostics.renderedWidth > 0 &&
+        diagnostics.renderedHeight > 0 &&
+        (diagnostics.naturalWidth <
+          diagnostics.renderedWidth * diagnostics.devicePixelRatio * 0.9 ||
+          diagnostics.naturalHeight <
+            diagnostics.renderedHeight * diagnostics.devicePixelRatio * 0.9)
+      ) {
+        console.warn(
+          "[AuthenticatedImage] Rendered image source may be too small for the current tile.",
+          {
+            src,
+            ...diagnostics,
+          },
+        );
+      }
+    },
+    [onMediaDiagnostics, src],
+  );
 
   // Intersection Observer for lazy loading. The explicit MessageList root and
   // the geometry check cover WebViews that miss the first post-scroll update.
@@ -125,10 +138,13 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
     const loadImage = async () => {
       try {
         const response = await fetch(src, {
-          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+          headers: {
+            ...clientProtocolHeaders(),
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
         });
 
-        if (!response.ok) throw new Error('Failed to load image');
+        if (!response.ok) throw new Error("Failed to load image");
 
         const blob = await response.blob();
         if (!cancelled) {
@@ -139,7 +155,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
           setError(false);
         }
       } catch (err) {
-        console.error('[AuthenticatedImage] Error:', err);
+        console.error("[AuthenticatedImage] Error:", err);
         if (!cancelled) setError(true);
       }
     };
@@ -152,7 +168,10 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
   }, [src, authToken, isInView, revokeObjectUrl]);
 
   useEffect(() => {
-    if (requestKeyRef.current.src === src && requestKeyRef.current.authToken === authToken) {
+    if (
+      requestKeyRef.current.src === src &&
+      requestKeyRef.current.authToken === authToken
+    ) {
       return;
     }
 
@@ -166,7 +185,7 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
   useEffect(() => {
     if (!objectUrl || !imageRef.current) return;
-    if (typeof ResizeObserver === 'undefined') return;
+    if (typeof ResizeObserver === "undefined") return;
 
     const image = imageRef.current;
     const observer = new ResizeObserver(() => {
@@ -195,19 +214,31 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
 
     return (
       <div
-        aria-label={typeof props.alt === "string" ? props.alt : "Failed to load image"}
+        aria-label={
+          typeof props.alt === "string" ? props.alt : "Failed to load image"
+        }
         className={props.className}
-        style={{ display: "block", width: "100%", height: "100%", ...props.style }}
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          ...props.style,
+        }}
       />
     );
   }
 
   if (!objectUrl) {
     return (
-      <div 
+      <div
         ref={containerRef}
-        className={`${props.className ?? ""} bg-muted animate-pulse`.trim()} 
-        style={{ display: "block", width: "100%", height: "100%", ...props.style }} 
+        className={`${props.className ?? ""} bg-muted animate-pulse`.trim()}
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          ...props.style,
+        }}
       />
     );
   }
@@ -219,7 +250,12 @@ export const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({
       src={objectUrl}
       onLoad={handleLoad}
       onError={handleError}
-      style={{ display: "block", width: "100%", height: "100%", ...props.style }}
+      style={{
+        display: "block",
+        width: "100%",
+        height: "100%",
+        ...props.style,
+      }}
     />
   );
 };

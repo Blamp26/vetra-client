@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { API_BASE_URL } from "./base";
 import { authApi } from "./auth";
+import { CLIENT_PROTOCOL_HEADER } from "@/shared/clientProtocol";
 
 const { getStringMock, removeMock } = vi.hoisted(() => ({
   getStringMock: vi.fn(),
@@ -42,12 +43,16 @@ describe("TURN credential API", () => {
 
     await expect(authApi.getTurnCredentials()).resolves.toEqual(credentials);
 
-    expect(fetchMock).toHaveBeenCalledWith(`${API_BASE_URL}/auth/turn-credentials`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer auth-token",
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_BASE_URL}/auth/turn-credentials`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer auth-token",
+          [CLIENT_PROTOCOL_HEADER]: "1",
+        },
       },
-    });
+    );
   });
 });

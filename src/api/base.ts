@@ -1,16 +1,22 @@
 import { storage, STORAGE_KEYS } from "@/shared/utils/storage";
+import { clientProtocolHeaders } from "@/shared/clientProtocol";
 
-export function getDefaultApiBaseUrl(location: Pick<Location, "origin"> = window.location): string {
+export function getDefaultApiBaseUrl(
+  location: Pick<Location, "origin"> = window.location,
+): string {
   return `${location.origin}/api/v1`;
 }
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
 
 export class ApiError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public details?: Record<string, string[]>
+    public details?: Record<string, string[]>,
+    public code?: string,
+    public metadata?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiError";
@@ -22,6 +28,9 @@ type ErrorPayload = {
   message?: string;
   details?: Record<string, string[]>;
   errors?: Record<string, string[] | string> | string[] | string;
+  code?: string;
+  minimum_supported_protocol_version?: number;
+  current_client_protocol_version?: number | null;
 };
 
 export function unwrapApiResponse<T>(data: unknown): T {
@@ -52,6 +61,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
+      ...clientProtocolHeaders(),
       ...authHeader,
       ...options.headers,
     },
@@ -76,13 +86,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       storage.remove(STORAGE_KEYS.USER);
       // Перезагрузка бросает ApiError, которую поймает useAuth
     }
-    const payload = typeof data === "object" && data !== null ? (data as ErrorPayload) : null;
+    const payload =
+      typeof data === "object" && data !== null ? (data as ErrorPayload) : null;
     const details =
       payload?.details && typeof payload.details === "object"
         ? payload.details
         : undefined;
     const validationErrors =
-      payload?.errors && typeof payload.errors === "object" && !Array.isArray(payload.errors)
+      payload?.errors &&
+      typeof payload.errors === "object" &&
+      !Array.isArray(payload.errors)
         ? Object.fromEntries(
             Object.entries(payload.errors).map(([field, value]) => [
               field,
@@ -103,7 +116,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       (typeof data === "string" && data.trim() ? data : null) ||
       `Request failed: ${response.status}`;
 
-    throw new ApiError(message, response.status, details ?? validationErrors);
+    throw new ApiError(
+      message,
+      response.status,
+      details ?? validationErrors,
+      payload?.code ??
+        (payload?.error === "update_required" ? "update_required" : undefined),
+      payload &&
+        (payload.minimum_supported_protocol_version !== undefined ||
+          payload.current_client_protocol_version !== undefined)
+        ? {
+            minimum_supported_protocol_version:
+              payload.minimum_supported_protocol_version,
+            current_client_protocol_version:
+              payload.current_client_protocol_version,
+          }
+        : undefined,
+    );
   }
 
   return unwrapApiResponse<T>(data);
@@ -140,7 +169,7 @@ export function postFormData<T>(path: string, formData: FormData): Promise<T> {
 
   return request<T>(path, {
     method: "POST",
-    headers: authHeader,
+    headers: { ...clientProtocolHeaders(), ...authHeader },
     body: formData,
   });
 }

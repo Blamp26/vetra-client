@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, getDefaultApiBaseUrl, post, unwrapApiResponse } from "./base";
+import {
+  ApiError,
+  getDefaultApiBaseUrl,
+  post,
+  unwrapApiResponse,
+} from "./base";
+import { CLIENT_PROTOCOL_HEADER } from "@/shared/clientProtocol";
 
 const { getStringMock, removeMock } = vi.hoisted(() => ({
   getStringMock: vi.fn(),
@@ -54,7 +60,9 @@ describe("request error parsing", () => {
       ),
     });
 
-    await expect(post("/users/register", { username: "tester" })).rejects.toEqual(
+    await expect(
+      post("/users/register", { username: "tester" }),
+    ).rejects.toEqual(
       new ApiError("Username is already taken", 422, {
         username: ["has already been taken"],
       }),
@@ -87,9 +95,39 @@ describe("request error parsing", () => {
       ),
     });
 
-    await expect(post("/users/login", { username: "Blamp26" })).resolves.toEqual({
+    await expect(
+      post("/users/login", { username: "Blamp26" }),
+    ).resolves.toEqual({
       user: { id: 1, username: "Blamp26" },
       token: "token-123",
+    });
+    expect(fetchMock.mock.calls[0][1].headers[CLIENT_PROTOCOL_HEADER]).toBe(
+      "1",
+    );
+  });
+
+  it("maps update-required responses to a stable error code", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 426,
+      text: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          code: "update_required",
+          error: "update_required",
+          minimum_supported_protocol_version: 1,
+          current_client_protocol_version: 0,
+        }),
+      ),
+    });
+
+    await expect(
+      post("/users/login", { username: "old" }),
+    ).rejects.toMatchObject({
+      code: "update_required",
+      metadata: {
+        minimum_supported_protocol_version: 1,
+        current_client_protocol_version: 0,
+      },
     });
   });
 
@@ -105,7 +143,9 @@ describe("request error parsing", () => {
       ),
     });
 
-    await expect(post("/users/login", { username: "Blamp26" })).resolves.toEqual({
+    await expect(
+      post("/users/login", { username: "Blamp26" }),
+    ).resolves.toEqual({
       user: { id: 1, username: "Blamp26" },
       token: "token-raw",
     });

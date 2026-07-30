@@ -1,13 +1,40 @@
-import { useState, useRef, useEffect, useCallback, type KeyboardEvent, type ChangeEvent } from "react";
-import { FileText, ImagePlus, Mic, Paperclip, SendHorizonal, Square, X, Smile } from "lucide-react";
-import { useAppStore, type RootState } from "@/store"; 
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  type KeyboardEvent,
+  type ChangeEvent,
+} from "react";
+import {
+  FileText,
+  ImagePlus,
+  Mic,
+  Paperclip,
+  SendHorizonal,
+  Square,
+  X,
+  Smile,
+} from "lucide-react";
+import { useAppStore, type RootState } from "@/store";
 import { API_BASE_URL } from "@/api/base";
+import { clientProtocolHeaders } from "@/shared/clientProtocol";
 import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import { MessageText } from "@/shared/components/MessageText/MessageText";
 import { withFallbackRef } from "@/shared/utils/refs";
-import { isSafeExternalUrl, normalizeExternalUrl } from "@/shared/utils/externalLinks";
-import { applyMessageTextEdit, entitiesIntersectingRange, normalizeTextLinkEntities, serializeMessageEntitiesForRequest, trimTextAndEntities, type MessageTextEntity } from "@/shared/utils/textEntities";
+import {
+  isSafeExternalUrl,
+  normalizeExternalUrl,
+} from "@/shared/utils/externalLinks";
+import {
+  applyMessageTextEdit,
+  entitiesIntersectingRange,
+  normalizeTextLinkEntities,
+  serializeMessageEntitiesForRequest,
+  trimTextAndEntities,
+  type MessageTextEntity,
+} from "@/shared/utils/textEntities";
 import type { StickerMessage } from "@/shared/types";
 import {
   ALLOWED_ATTACHMENT_LABEL,
@@ -18,7 +45,10 @@ import {
   validateAttachmentFile,
 } from "../../utils/attachments";
 import { AttachmentReviewModal } from "./AttachmentReviewModal";
-import { ComposerContextMenu, type ComposerMenuItem } from "./ComposerContextMenu";
+import {
+  ComposerContextMenu,
+  type ComposerMenuItem,
+} from "./ComposerContextMenu";
 import { CreateLinkDialog } from "./CreateLinkDialog";
 import { ComposerTextDecoration } from "./ComposerTextDecoration";
 import {
@@ -85,7 +115,9 @@ function AttachmentSourceMenu({
       ref={menuRef}
       className={cn(
         "vt-attachment-review__menu absolute z-40 p-1.5",
-        placement === "composer" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2",
+        placement === "composer"
+          ? "bottom-full left-0 mb-2"
+          : "right-0 top-full mt-2",
       )}
       data-testid="attachment-source-menu"
       role="menu"
@@ -118,7 +150,11 @@ function AttachmentSourceMenu({
   );
 }
 
-interface ReplyTarget { id: number; content: string; author: string; }
+interface ReplyTarget {
+  id: number;
+  content: string;
+  author: string;
+}
 
 interface Props {
   onSend: (
@@ -131,52 +167,71 @@ interface Props {
       stickerId?: string | null;
     },
     replyToId?: number,
-  ) => Promise<void>; 
-   onTypingStart?: () => void; 
-   onTypingStop?: () => void; 
-   disabled?: boolean; 
-   replyTo?: ReplyTarget | null; 
-   onCancelReply?: () => void; 
+  ) => Promise<void>;
+  onTypingStart?: () => void;
+  onTypingStop?: () => void;
+  disabled?: boolean;
+  replyTo?: ReplyTarget | null;
+  onCancelReply?: () => void;
   focusBlocked?: boolean;
   onOpenPicker?: () => void;
   pickerOpen?: boolean;
-  onRegisterCustomEmojiInserter?: (inserter: (emoji: StickerMessage) => void) => void;
- } 
- 
- export function MessageInput({ 
-   onSend, 
-   onTypingStart, 
-   onTypingStop, 
-   disabled = false, 
-   replyTo, 
-   onCancelReply, 
- focusBlocked = false,
- onOpenPicker,
- pickerOpen = false,
- onRegisterCustomEmojiInserter,
+  onRegisterCustomEmojiInserter?: (
+    inserter: (emoji: StickerMessage) => void,
+  ) => void;
+}
+
+export function MessageInput({
+  onSend,
+  onTypingStart,
+  onTypingStop,
+  disabled = false,
+  replyTo,
+  onCancelReply,
+  focusBlocked = false,
+  onOpenPicker,
+  pickerOpen = false,
+  onRegisterCustomEmojiInserter,
 }: Props) {
   const [content, setContent] = useState("");
   const [entities, setEntities] = useState<MessageTextEntity[]>([]);
-  const [composerContextMenu, setComposerContextMenu] = useState<{ left: number; top: number; submenuOnLeft: boolean } | null>(null);
+  const [composerContextMenu, setComposerContextMenu] = useState<{
+    left: number;
+    top: number;
+    submenuOnLeft: boolean;
+  } | null>(null);
   const [formattingOpen, setFormattingOpen] = useState(false);
   const [activeMainMenuValue, setActiveMainMenuValue] = useState("");
-  const [activeFormattingValue, setActiveFormattingValue] = useState("create-link");
-  const [createLinkDialog, setCreateLinkDialog] = useState<{ start: number; end: number; selectedText: string } | null>(null);
+  const [activeFormattingValue, setActiveFormattingValue] =
+    useState("create-link");
+  const [createLinkDialog, setCreateLinkDialog] = useState<{
+    start: number;
+    end: number;
+    selectedText: string;
+  } | null>(null);
   const [createLinkUrl, setCreateLinkUrl] = useState("");
   const [createLinkInvalid, setCreateLinkInvalid] = useState(false);
-   const [isSending, setIsSending] = useState(false); 
-  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "error">("idle");
+  const [isSending, setIsSending] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<
+    "idle" | "uploading" | "error"
+  >("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadLabel, setUploadLabel] = useState<string | null>(null);
-  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
-  const [voiceRecordingState, setVoiceRecordingState] = useState<"idle" | "recording" | "processing">("idle");
+  const [pendingAttachments, setPendingAttachments] = useState<
+    PendingAttachment[]
+  >([]);
+  const [voiceRecordingState, setVoiceRecordingState] = useState<
+    "idle" | "recording" | "processing"
+  >("idle");
   const [voiceElapsedMs, setVoiceElapsedMs] = useState(0);
-  const [isComposerAttachmentMenuOpen, setIsComposerAttachmentMenuOpen] = useState(false);
-  const [isModalAttachmentMenuOpen, setIsModalAttachmentMenuOpen] = useState(false);
+  const [isComposerAttachmentMenuOpen, setIsComposerAttachmentMenuOpen] =
+    useState(false);
+  const [isModalAttachmentMenuOpen, setIsModalAttachmentMenuOpen] =
+    useState(false);
   const [focusRequest, setFocusRequest] = useState(0);
 
-   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentIdRef = useRef(0);
@@ -191,17 +246,23 @@ interface Props {
   const voiceStartedAtRef = useRef(0);
   const voiceDiscardRef = useRef(false);
   const voiceSendLockRef = useRef(false);
-  const selectionRef = useRef<{ start: number; end: number; selectedText: string } | null>(null);
- 
-   const editingMessage = useAppStore((s: RootState) => s.editingMessage); 
-   const cancelEditing = useAppStore((s: RootState) => s.cancelEditing); 
-  const socketManager = useAppStore((s: RootState) => s.socketManager); 
-  const activeChat = useAppStore((s: RootState) => s.activeChat); 
-  const conversationPreviews = useAppStore((s: RootState) => s.conversationPreviews);
+  const selectionRef = useRef<{
+    start: number;
+    end: number;
+    selectedText: string;
+  } | null>(null);
+
+  const editingMessage = useAppStore((s: RootState) => s.editingMessage);
+  const cancelEditing = useAppStore((s: RootState) => s.cancelEditing);
+  const socketManager = useAppStore((s: RootState) => s.socketManager);
+  const activeChat = useAppStore((s: RootState) => s.activeChat);
+  const conversationPreviews = useAppStore(
+    (s: RootState) => s.conversationPreviews,
+  );
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const authToken = useAppStore((s: RootState) => s.authToken);
- 
-   const isEditing = !!editingMessage; 
+
+  const isEditing = !!editingMessage;
   const isUploading = uploadStatus === "uploading";
   const activeChatKey = activeChat
     ? activeChat.type === "direct"
@@ -210,57 +271,78 @@ interface Props {
         ? `room:${activeChat.roomId}`
         : activeChat.type
     : null;
- 
-   useEffect(() => { 
-     if (isEditing && editingMessage) { 
-       setContent(editingMessage.content);
-       setEntities(normalizeTextLinkEntities(editingMessage.entities, editingMessage.content));
-       setTimeout(() => { 
-         textareaRef.current?.focus(); 
-       }, 10); 
-     } else if (!isEditing) { 
-       setContent("");
-       setEntities([]);
-     } 
-   }, [isEditing, editingMessage]); 
 
-  const insertCustomEmoji = useCallback((emoji: StickerMessage) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const alt = emoji.alt || emoji.emoji_tags[0] || "�";
-    const nextContent = content.slice(0, start) + alt + content.slice(end);
-    const delta = alt.length - (end - start);
-    const nextEntities = entities
-      .filter((entity) => entity.offset + entity.length <= start || entity.offset >= end)
-      .map((entity) => ({ ...entity, offset: entity.offset >= end ? entity.offset + delta : entity.offset }))
-      .concat({ type: "custom_emoji" as const, offset: start, length: alt.length, custom_emoji_id: emoji.id, alt, custom_emoji: { ...emoji, alt } });
-    textarea.value = nextContent;
-    textarea.setSelectionRange(start + alt.length, start + alt.length);
-    setContent(nextContent);
-    setEntities(normalizeTextLinkEntities(nextEntities, nextContent));
-    textarea.focus();
-  }, [content, entities]);
+  useEffect(() => {
+    if (isEditing && editingMessage) {
+      setContent(editingMessage.content);
+      setEntities(
+        normalizeTextLinkEntities(
+          editingMessage.entities,
+          editingMessage.content,
+        ),
+      );
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 10);
+    } else if (!isEditing) {
+      setContent("");
+      setEntities([]);
+    }
+  }, [isEditing, editingMessage]);
+
+  const insertCustomEmoji = useCallback(
+    (emoji: StickerMessage) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const alt = emoji.alt || emoji.emoji_tags[0] || "�";
+      const nextContent = content.slice(0, start) + alt + content.slice(end);
+      const delta = alt.length - (end - start);
+      const nextEntities = entities
+        .filter(
+          (entity) =>
+            entity.offset + entity.length <= start || entity.offset >= end,
+        )
+        .map((entity) => ({
+          ...entity,
+          offset: entity.offset >= end ? entity.offset + delta : entity.offset,
+        }))
+        .concat({
+          type: "custom_emoji" as const,
+          offset: start,
+          length: alt.length,
+          custom_emoji_id: emoji.id,
+          alt,
+          custom_emoji: { ...emoji, alt },
+        });
+      textarea.value = nextContent;
+      textarea.setSelectionRange(start + alt.length, start + alt.length);
+      setContent(nextContent);
+      setEntities(normalizeTextLinkEntities(nextEntities, nextContent));
+      textarea.focus();
+    },
+    [content, entities],
+  );
 
   useEffect(() => {
     onRegisterCustomEmojiInserter?.(insertCustomEmoji);
     return () => onRegisterCustomEmojiInserter?.(() => undefined);
   }, [insertCustomEmoji, onRegisterCustomEmojiInserter]);
- 
-  useEffect(() => { 
-    if (editingMessage && activeChat) { 
-      const sameChat = 
-        (editingMessage.chatType === 'direct' && 
-         activeChat.type === 'direct' && 
-         editingMessage.targetId === activeChat.partnerId) || 
-        (editingMessage.chatType === 'room' && 
-         activeChat.type === 'room' && 
-         editingMessage.targetId === activeChat.roomId); 
 
-      if (!sameChat) cancelEditing(); 
-    } 
-  }, [activeChat, editingMessage, cancelEditing]); 
+  useEffect(() => {
+    if (editingMessage && activeChat) {
+      const sameChat =
+        (editingMessage.chatType === "direct" &&
+          activeChat.type === "direct" &&
+          editingMessage.targetId === activeChat.partnerId) ||
+        (editingMessage.chatType === "room" &&
+          activeChat.type === "room" &&
+          editingMessage.targetId === activeChat.roomId);
+
+      if (!sameChat) cancelEditing();
+    }
+  }, [activeChat, editingMessage, cancelEditing]);
 
   useEffect(() => {
     pendingAttachmentsRef.current = pendingAttachments;
@@ -269,11 +351,19 @@ interface Props {
   useEffect(() => {
     if (!composerContextMenu) return;
     const focusMenu = window.requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>('[data-testid="composer-context-menu"]')?.focus();
+      document
+        .querySelector<HTMLElement>('[data-testid="composer-context-menu"]')
+        ?.focus();
     });
     const handleOutsidePointer = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (target instanceof Element && target.closest('[data-testid="composer-context-menu"], [data-testid="composer-formatting-submenu"]')) return;
+      if (
+        target instanceof Element &&
+        target.closest(
+          '[data-testid="composer-context-menu"], [data-testid="composer-formatting-submenu"]',
+        )
+      )
+        return;
       setComposerContextMenu(null);
       setFormattingOpen(false);
     };
@@ -302,21 +392,38 @@ interface Props {
   }, [pendingAttachments.length]);
 
   useEffect(() => {
-    if (!disabled && !isSending && !isUploading && !isEditing && voiceRecordingState === "idle") return;
+    if (
+      !disabled &&
+      !isSending &&
+      !isUploading &&
+      !isEditing &&
+      voiceRecordingState === "idle"
+    )
+      return;
     setIsComposerAttachmentMenuOpen(false);
     setIsModalAttachmentMenuOpen(false);
   }, [disabled, isEditing, isSending, isUploading, voiceRecordingState]);
 
   useEffect(() => {
-    logAttachmentDebug("modal.state", {
-      isOpen: pendingAttachments.length > 0,
-      itemCount: pendingAttachments.length,
-      photoCount: pendingAttachments.filter((attachment) => attachment.kind === "photo").length,
-      documentCount: pendingAttachments.filter((attachment) => attachment.kind !== "photo").length,
-    }, {
-      batchId: attachmentBatchIdRef.current,
-      table: pendingAttachments.map((attachment) => summarizeAttachmentLike(attachment)),
-    });
+    logAttachmentDebug(
+      "modal.state",
+      {
+        isOpen: pendingAttachments.length > 0,
+        itemCount: pendingAttachments.length,
+        photoCount: pendingAttachments.filter(
+          (attachment) => attachment.kind === "photo",
+        ).length,
+        documentCount: pendingAttachments.filter(
+          (attachment) => attachment.kind !== "photo",
+        ).length,
+      },
+      {
+        batchId: attachmentBatchIdRef.current,
+        table: pendingAttachments.map((attachment) =>
+          summarizeAttachmentLike(attachment),
+        ),
+      },
+    );
   }, [pendingAttachments]);
 
   useEffect(() => {
@@ -363,23 +470,32 @@ interface Props {
       isComposerAttachmentMenuOpen ||
       isModalAttachmentMenuOpen ||
       pendingAttachments.length > 0
-    ) return;
+    )
+      return;
 
     const activeElement = document.activeElement;
     if (
       activeElement &&
       activeElement !== textarea &&
       activeElement instanceof HTMLElement &&
-      activeElement.matches("input, textarea, [contenteditable=\"true\"]")
-    ) return;
+      activeElement.matches('input, textarea, [contenteditable="true"]')
+    )
+      return;
 
-    if (document.querySelector('[role="dialog"], [aria-modal="true"], [role="menu"]')) return;
+    if (
+      document.querySelector(
+        '[role="dialog"], [aria-modal="true"], [role="menu"]',
+      )
+    )
+      return;
 
     const frame = window.requestAnimationFrame(() => {
       if (
         textareaRef.current &&
         !textareaRef.current.disabled &&
-        !document.querySelector('[role="dialog"], [aria-modal="true"], [role="menu"]')
+        !document.querySelector(
+          '[role="dialog"], [aria-modal="true"], [role="menu"]',
+        )
       ) {
         textareaRef.current.focus({ preventScroll: true });
       }
@@ -401,18 +517,20 @@ interface Props {
     voiceRecordingState,
   ]);
 
-  const stopTyping = () => { onTypingStop?.() }; 
- 
+  const stopTyping = () => {
+    onTypingStop?.();
+  };
+
   const handleChange = (value: string) => {
     const edited = applyMessageTextEdit(entities, content, value);
     setEntities(edited.entities);
     setContent(edited.text);
     if (edited.text.trim().length > 0) {
-        onTypingStart?.(); 
-    } else { 
-        stopTyping(); 
-    } 
-   }; 
+      onTypingStart?.();
+    } else {
+      stopTyping();
+    }
+  };
 
   const captureSelection = () => {
     const textarea = textareaRef.current;
@@ -426,9 +544,15 @@ interface Props {
     return selection;
   };
 
-  const openCreateLinkDialog = (selection = selectionRef.current ?? captureSelection()) => {
+  const openCreateLinkDialog = (
+    selection = selectionRef.current ?? captureSelection(),
+  ) => {
     if (!selection) return;
-    const existing = entities.find((entity) => entity.offset <= selection.start && entity.offset + entity.length >= selection.end);
+    const existing = entities.find(
+      (entity) =>
+        entity.offset <= selection.start &&
+        entity.offset + entity.length >= selection.end,
+    );
     setCreateLinkDialog(selection);
     setCreateLinkUrl(existing?.type === "text_link" ? existing.url : "");
     setCreateLinkInvalid(false);
@@ -446,9 +570,19 @@ interface Props {
     }
     const { start, end } = createLinkDialog;
     const intersecting = entitiesIntersectingRange(entities, start, end);
-    const remaining = entities.filter((entity) => !intersecting.some((item) => item === entity));
+    const remaining = entities.filter(
+      (entity) => !intersecting.some((item) => item === entity),
+    );
     const next = normalizedUrl
-      ? [...remaining, { type: "text_link" as const, offset: start, length: end - start, url: normalizedUrl }]
+      ? [
+          ...remaining,
+          {
+            type: "text_link" as const,
+            offset: start,
+            length: end - start,
+            url: normalizedUrl,
+          },
+        ]
       : remaining;
     setEntities(normalizeTextLinkEntities(next, content));
     setCreateLinkDialog(null);
@@ -476,15 +610,26 @@ interface Props {
   const runClipboardCommand = async (cut: boolean) => {
     const textarea = textareaRef.current;
     if (!textarea || textarea.selectionStart === textarea.selectionEnd) return;
-    const selected = content.slice(textarea.selectionStart, textarea.selectionEnd);
-    try { await navigator.clipboard?.writeText(selected); } catch { /* clipboard permissions are optional */ }
+    const selected = content.slice(
+      textarea.selectionStart,
+      textarea.selectionEnd,
+    );
+    try {
+      await navigator.clipboard?.writeText(selected);
+    } catch {
+      /* clipboard permissions are optional */
+    }
     if (cut) replaceSelection("");
     closeComposerMenus();
   };
 
   const pasteFromClipboard = async () => {
     if (!navigator.clipboard?.readText) return;
-    try { replaceSelection(await navigator.clipboard.readText()); } catch { return; }
+    try {
+      replaceSelection(await navigator.clipboard.readText());
+    } catch {
+      return;
+    }
     closeComposerMenus();
   };
 
@@ -493,9 +638,15 @@ interface Props {
     const groupHeight = 373;
     const submenuOnLeft = clientX + groupWidth > window.innerWidth;
     const rawGroupLeft = submenuOnLeft ? clientX - 209 : clientX;
-    const groupLeft = Math.min(Math.max(0, rawGroupLeft), Math.max(0, window.innerWidth - groupWidth));
+    const groupLeft = Math.min(
+      Math.max(0, rawGroupLeft),
+      Math.max(0, window.innerWidth - groupWidth),
+    );
     const mainLeft = submenuOnLeft ? groupLeft + 209 : groupLeft;
-    const groupTop = Math.min(Math.max(0, clientY), Math.max(0, window.innerHeight - groupHeight));
+    const groupTop = Math.min(
+      Math.max(0, clientY),
+      Math.max(0, window.innerHeight - groupHeight),
+    );
     setComposerContextMenu({ left: mainLeft, top: groupTop, submenuOnLeft });
     setFormattingOpen(false);
     setActiveMainMenuValue("");
@@ -529,7 +680,11 @@ interface Props {
     setVoiceRecordingState("idle");
   };
 
-  const sendVoiceRecording = async (chunks: BlobPart[], mimeType: string, durationMs: number) => {
+  const sendVoiceRecording = async (
+    chunks: BlobPart[],
+    mimeType: string,
+    durationMs: number,
+  ) => {
     if (voiceSendLockRef.current || chunks.length === 0) return;
     voiceSendLockRef.current = true;
     setVoiceRecordingState("processing");
@@ -547,14 +702,21 @@ interface Props {
 
     try {
       const mediaFileId = await performUpload(voiceAttachment, 1, 1);
-      await onSend({ content: null, mediaFileId, mediaFileIds: null }, replyTo?.id);
+      await onSend(
+        { content: null, mediaFileId, mediaFileIds: null },
+        replyTo?.id,
+      );
       resetUploadState();
       resetVoiceRecording();
       handleSuccessfulSend();
     } catch (error) {
       console.error("Failed to send voice message:", error);
       setUploadStatus("error");
-      setUploadError(error instanceof AttachmentUploadError ? "Voice upload failed" : "Voice message send failed");
+      setUploadError(
+        error instanceof AttachmentUploadError
+          ? "Voice upload failed"
+          : "Voice message send failed",
+      );
       setUploadLabel(null);
       setVoiceRecordingState("idle");
     } finally {
@@ -587,9 +749,13 @@ interface Props {
       isUploading ||
       pendingAttachments.length > 0 ||
       voiceRecordingState !== "idle"
-    ) return;
+    )
+      return;
 
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
       setUploadStatus("error");
       setUploadError("Voice recording is not supported in this app");
       return;
@@ -629,7 +795,11 @@ interface Props {
         releaseVoiceStream();
         voiceChunksRef.current = [];
         if (discarded) return;
-        void sendVoiceRecording(chunks, recorder.mimeType || mimeType, durationMs);
+        void sendVoiceRecording(
+          chunks,
+          recorder.mimeType || mimeType,
+          durationMs,
+        );
       };
       recorder.start();
     } catch (error) {
@@ -637,7 +807,9 @@ interface Props {
       releaseVoiceStream();
       setVoiceRecordingState("idle");
       setUploadStatus("error");
-      setUploadError("Microphone permission was denied or no input device is available");
+      setUploadError(
+        "Microphone permission was denied or no input device is available",
+      );
     }
   };
 
@@ -658,14 +830,22 @@ interface Props {
     if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
   };
 
-  const clearPendingAttachments = (attachments = pendingAttachmentsRef.current) => {
-    logAttachmentDebug("queue.clear", {
-      itemCount: attachments.length,
-      localAttachmentIds: attachments.map((attachment) => attachment.id),
-    }, {
-      batchId: attachmentBatchIdRef.current,
-      table: attachments.map((attachment) => summarizeAttachmentLike(attachment)),
-    });
+  const clearPendingAttachments = (
+    attachments = pendingAttachmentsRef.current,
+  ) => {
+    logAttachmentDebug(
+      "queue.clear",
+      {
+        itemCount: attachments.length,
+        localAttachmentIds: attachments.map((attachment) => attachment.id),
+      },
+      {
+        batchId: attachmentBatchIdRef.current,
+        table: attachments.map((attachment) =>
+          summarizeAttachmentLike(attachment),
+        ),
+      },
+    );
     attachments.forEach(revokeAttachmentPreview);
     uploadedMediaFileIdsRef.current.clear();
     pendingAttachmentsRef.current = [];
@@ -688,14 +868,18 @@ interface Props {
         next.push(attachment);
       }
       pendingAttachmentsRef.current = next;
-      logAttachmentDebug("queue.remove", {
-        removedLocalAttachmentId: id,
-        itemCount: next.length,
-        localAttachmentIds: next.map((attachment) => attachment.id),
-      }, {
-        batchId: attachmentBatchIdRef.current,
-        table: next.map((attachment) => summarizeAttachmentLike(attachment)),
-      });
+      logAttachmentDebug(
+        "queue.remove",
+        {
+          removedLocalAttachmentId: id,
+          itemCount: next.length,
+          localAttachmentIds: next.map((attachment) => attachment.id),
+        },
+        {
+          batchId: attachmentBatchIdRef.current,
+          table: next.map((attachment) => summarizeAttachmentLike(attachment)),
+        },
+      );
       if (next.length === 0) {
         attachmentBatchIdRef.current = null;
         setIsModalAttachmentMenuOpen(false);
@@ -713,7 +897,9 @@ interface Props {
     let firstValidationError: string | null = null;
     const selectedFilesBatchId =
       attachmentBatchIdRef.current ??
-      (pendingAttachmentsRef.current.length === 0 ? createAttachmentBatchId() : null);
+      (pendingAttachmentsRef.current.length === 0
+        ? createAttachmentBatchId()
+        : null);
 
     if (selectedFilesBatchId && !attachmentBatchIdRef.current) {
       attachmentBatchIdRef.current = selectedFilesBatchId;
@@ -766,27 +952,37 @@ interface Props {
       });
     }
 
-    logAttachmentDebug("files.selected", {
-      selectedCount: files.length,
-      acceptedCount: validAttachments.length,
-      rejectedCount: files.length - validAttachments.length,
-      validationError: firstValidationError,
-    }, {
-      batchId: attachmentBatchIdRef.current,
-      table: selectedFileSummaries,
-    });
+    logAttachmentDebug(
+      "files.selected",
+      {
+        selectedCount: files.length,
+        acceptedCount: validAttachments.length,
+        rejectedCount: files.length - validAttachments.length,
+        validationError: firstValidationError,
+      },
+      {
+        batchId: attachmentBatchIdRef.current,
+        table: selectedFileSummaries,
+      },
+    );
 
     if (validAttachments.length > 0) {
       setPendingAttachments((current) => {
         const next = [...current, ...validAttachments];
         pendingAttachmentsRef.current = next;
-        logAttachmentDebug("queue.append", {
-          itemCount: next.length,
-          localAttachmentIds: next.map((attachment) => attachment.id),
-        }, {
-          batchId: attachmentBatchIdRef.current,
-          table: next.map((attachment) => summarizeAttachmentLike(attachment)),
-        });
+        logAttachmentDebug(
+          "queue.append",
+          {
+            itemCount: next.length,
+            localAttachmentIds: next.map((attachment) => attachment.id),
+          },
+          {
+            batchId: attachmentBatchIdRef.current,
+            table: next.map((attachment) =>
+              summarizeAttachmentLike(attachment),
+            ),
+          },
+        );
         return next;
       });
     }
@@ -815,14 +1011,18 @@ interface Props {
         next.push(attachment);
       }
       pendingAttachmentsRef.current = next;
-      logAttachmentDebug("queue.remove.sent", {
-        removedLocalAttachmentIds: attachmentIds,
-        remainingCount: next.length,
-        remainingLocalAttachmentIds: next.map((attachment) => attachment.id),
-      }, {
-        batchId: attachmentBatchIdRef.current,
-        table: next.map((attachment) => summarizeAttachmentLike(attachment)),
-      });
+      logAttachmentDebug(
+        "queue.remove.sent",
+        {
+          removedLocalAttachmentIds: attachmentIds,
+          remainingCount: next.length,
+          remainingLocalAttachmentIds: next.map((attachment) => attachment.id),
+        },
+        {
+          batchId: attachmentBatchIdRef.current,
+          table: next.map((attachment) => summarizeAttachmentLike(attachment)),
+        },
+      );
       if (next.length === 0) {
         attachmentBatchIdRef.current = null;
       }
@@ -843,7 +1043,8 @@ interface Props {
     } = {
       content: messageContent,
       mediaFileId: uploadedMediaFileIds[0] ?? null,
-      mediaFileIds: uploadedMediaFileIds.length > 1 ? uploadedMediaFileIds : null,
+      mediaFileIds:
+        uploadedMediaFileIds.length > 1 ? uploadedMediaFileIds : null,
     };
 
     if (debugMeta && isAttachmentDebugEnabled()) {
@@ -853,52 +1054,83 @@ interface Props {
     return payload;
   };
 
-  const handleSend = async () => { 
-    if ((!content.trim() && pendingAttachments.length === 0) || isSending || isUploading || sendLockRef.current) return; 
- 
-     stopTyping(); 
-     setIsComposerAttachmentMenuOpen(false);
-     setIsModalAttachmentMenuOpen(false);
-     sendLockRef.current = true;
-     setIsSending(true); 
-     let sendFailureMessage = "Message send failed";
- 
-     try { 
-       const trimmedData = trimTextAndEntities(content, entities);
-       const requestEntities = serializeMessageEntitiesForRequest(trimmedData.entities);
-       const trimmed = trimmedData.text;
-       if (pendingAttachments.length === 0 && isEditing && editingMessage && socketManager) { 
-         const { id, chatType, targetId } = editingMessage; 
- 
-         if (chatType === 'direct') { 
-           await socketManager.editMessage(
-             withFallbackRef(
-               targetId,
-               undefined,
-               conversationPreviews[targetId]
-                 ? { id: targetId, public_id: conversationPreviews[targetId].partner_public_id }
-                 : undefined,
-             ),
-             id,
-             trimmed,
-             requestEntities,
-           ); 
-         } else { 
-          await socketManager.editRoomMessage(targetId, id, trimmed, requestEntities);
-         } 
-         cancelEditing(); 
-         setContent("");
-         resetUploadState();
-       } else if (pendingAttachments.length === 0) { 
-        await onSend({ content: trimmed || null, ...(requestEntities.length > 0 ? { entities: requestEntities } : {}), mediaFileId: null }, replyTo?.id);
+  const handleSend = async () => {
+    if (
+      (!content.trim() && pendingAttachments.length === 0) ||
+      isSending ||
+      isUploading ||
+      sendLockRef.current
+    )
+      return;
+
+    stopTyping();
+    setIsComposerAttachmentMenuOpen(false);
+    setIsModalAttachmentMenuOpen(false);
+    sendLockRef.current = true;
+    setIsSending(true);
+    let sendFailureMessage = "Message send failed";
+
+    try {
+      const trimmedData = trimTextAndEntities(content, entities);
+      const requestEntities = serializeMessageEntitiesForRequest(
+        trimmedData.entities,
+      );
+      const trimmed = trimmedData.text;
+      if (
+        pendingAttachments.length === 0 &&
+        isEditing &&
+        editingMessage &&
+        socketManager
+      ) {
+        const { id, chatType, targetId } = editingMessage;
+
+        if (chatType === "direct") {
+          await socketManager.editMessage(
+            withFallbackRef(
+              targetId,
+              undefined,
+              conversationPreviews[targetId]
+                ? {
+                    id: targetId,
+                    public_id: conversationPreviews[targetId].partner_public_id,
+                  }
+                : undefined,
+            ),
+            id,
+            trimmed,
+            requestEntities,
+          );
+        } else {
+          await socketManager.editRoomMessage(
+            targetId,
+            id,
+            trimmed,
+            requestEntities,
+          );
+        }
+        cancelEditing();
+        setContent("");
+        resetUploadState();
+      } else if (pendingAttachments.length === 0) {
+        await onSend(
+          {
+            content: trimmed || null,
+            ...(requestEntities.length > 0
+              ? { entities: requestEntities }
+              : {}),
+            mediaFileId: null,
+          },
+          replyTo?.id,
+        );
         setContent("");
         resetUploadState();
         handleSuccessfulSend();
-       } else {
+      } else {
         // Freeze the current queue at send start so UI updates do not drop later units.
         const attachmentsToSend = await Promise.all(
           pendingAttachmentsRef.current.map(async (attachment) => {
-            if (attachment.kind !== "audio" || attachment.durationMs != null) return { ...attachment };
+            if (attachment.kind !== "audio" || attachment.durationMs != null)
+              return { ...attachment };
 
             try {
               const durationMs = await extractAudioDurationMs(attachment.file);
@@ -908,28 +1140,40 @@ interface Props {
             }
           }),
         );
-        const batchId = attachmentBatchIdRef.current ?? createAttachmentBatchId();
+        const batchId =
+          attachmentBatchIdRef.current ?? createAttachmentBatchId();
         attachmentBatchIdRef.current = batchId;
-        const sendUnits = buildAttachmentSendUnits(attachmentsToSend).map((unit) => ({
-          ...unit,
-          attachments: [...unit.attachments],
-        }));
+        const sendUnits = buildAttachmentSendUnits(attachmentsToSend).map(
+          (unit) => ({
+            ...unit,
+            attachments: [...unit.attachments],
+          }),
+        );
         const visualSelectionCount = attachmentsToSend.filter(
-          (attachment) => attachment.kind === "photo" || attachment.kind === "video",
+          (attachment) =>
+            attachment.kind === "photo" || attachment.kind === "video",
         ).length;
         const totalUploads = attachmentsToSend.length;
         const uploadController = new AbortController();
         uploadAbortControllerRef.current = uploadController;
 
-        logAttachmentDebug("send.click", {
-          queueCount: attachmentsToSend.length,
-          visualSelectionCount,
-          documentSelectionCount: attachmentsToSend.length - visualSelectionCount,
-          classification: visualSelectionCount > 1 ? "album-capable" : "single-or-mixed",
-        }, {
-          batchId,
-          table: attachmentsToSend.map((attachment) => summarizeAttachmentLike(attachment)),
-        });
+        logAttachmentDebug(
+          "send.click",
+          {
+            queueCount: attachmentsToSend.length,
+            visualSelectionCount,
+            documentSelectionCount:
+              attachmentsToSend.length - visualSelectionCount,
+            classification:
+              visualSelectionCount > 1 ? "album-capable" : "single-or-mixed",
+          },
+          {
+            batchId,
+            table: attachmentsToSend.map((attachment) =>
+              summarizeAttachmentLike(attachment),
+            ),
+          },
+        );
 
         const attachmentsToUpload = attachmentsToSend.filter(
           (attachment) => !uploadedMediaFileIdsRef.current.has(attachment.id),
@@ -939,30 +1183,40 @@ interface Props {
         if (attachmentsToUpload.length > 0) {
           const uploadedIds = await uploadAttachmentsBounded(
             attachmentsToUpload,
-            (attachment, index, signal) => performUpload(
-              attachment,
-              cachedUploadCount + index + 1,
-              totalUploads,
-              batchId,
-              `${batchId}:upload`,
-              signal,
-            ),
+            (attachment, index, signal) =>
+              performUpload(
+                attachment,
+                cachedUploadCount + index + 1,
+                totalUploads,
+                batchId,
+                `${batchId}:upload`,
+                signal,
+              ),
             {
               signal: uploadController.signal,
               onProgress: (completed) => {
-                setUploadProgress(Math.round(((cachedUploadCount + completed) / totalUploads) * 100));
+                setUploadProgress(
+                  Math.round(
+                    ((cachedUploadCount + completed) / totalUploads) * 100,
+                  ),
+                );
               },
             },
           );
 
           attachmentsToUpload.forEach((attachment, index) => {
-            uploadedMediaFileIdsRef.current.set(attachment.id, uploadedIds[index]);
+            uploadedMediaFileIdsRef.current.set(
+              attachment.id,
+              uploadedIds[index],
+            );
           });
         }
 
         for (const [unitIndex, unit] of sendUnits.entries()) {
           const uploadedMediaFileIds = unit.attachments.map((attachment) => {
-            const mediaFileId = uploadedMediaFileIdsRef.current.get(attachment.id);
+            const mediaFileId = uploadedMediaFileIdsRef.current.get(
+              attachment.id,
+            );
             if (!mediaFileId) throw new Error("Missing uploaded attachment");
             return mediaFileId;
           });
@@ -970,26 +1224,33 @@ interface Props {
           const debugMeta: AttachmentDebugMeta = {
             batchId,
             sendUnitId,
-            localAttachmentIds: unit.attachments.map((attachment) => attachment.id),
+            localAttachmentIds: unit.attachments.map(
+              (attachment) => attachment.id,
+            ),
             unitIndex,
             selectedAttachmentCount: attachmentsToSend.length,
           };
 
-          logAttachmentDebug("send.unit", {
-            unitIndex,
-            unitType: getAttachmentSendUnitType(unit),
-            fileCount: unit.attachments.length,
-            localAttachmentIds: debugMeta.localAttachmentIds,
-            expectedMediaFileIdsCount: unit.attachments.length,
-          }, {
-            batchId,
-            sendUnitId,
-            table: unit.attachments.map((attachment) => summarizeAttachmentLike(attachment)),
-          });
+          logAttachmentDebug(
+            "send.unit",
+            {
+              unitIndex,
+              unitType: getAttachmentSendUnitType(unit),
+              fileCount: unit.attachments.length,
+              localAttachmentIds: debugMeta.localAttachmentIds,
+              expectedMediaFileIdsCount: unit.attachments.length,
+            },
+            {
+              batchId,
+              sendUnitId,
+              table: unit.attachments.map((attachment) =>
+                summarizeAttachmentLike(attachment),
+              ),
+            },
+          );
 
           const shouldUseContent =
-            trimmed.length > 0 &&
-            unitIndex === sendUnits.length - 1;
+            trimmed.length > 0 && unitIndex === sendUnits.length - 1;
 
           sendFailureMessage =
             unit.kind === "visual" && uploadedMediaFileIds.length > 1
@@ -1002,37 +1263,51 @@ interface Props {
               shouldUseContent ? trimmed : null,
               debugMeta,
             ),
-            ...(shouldUseContent && requestEntities.length > 0 ? { entities: requestEntities } : {}),
+            ...(shouldUseContent && requestEntities.length > 0
+              ? { entities: requestEntities }
+              : {}),
           };
 
-          logAttachmentDebug("send.payload", {
-            contentPresent: Boolean(outgoingPayload.content),
-            mediaFileId: outgoingPayload.mediaFileId ?? null,
-            mediaFileIds: outgoingPayload.mediaFileIds ?? null,
-            media_file_id: outgoingPayload.mediaFileId ?? null,
-            media_file_ids: outgoingPayload.mediaFileIds ?? null,
-            attachmentCount: unit.attachments.length,
-            finalPayloadKeys: Object.keys(outgoingPayload).sort(),
-          }, {
-            batchId,
-            sendUnitId,
-          });
+          logAttachmentDebug(
+            "send.payload",
+            {
+              contentPresent: Boolean(outgoingPayload.content),
+              mediaFileId: outgoingPayload.mediaFileId ?? null,
+              mediaFileIds: outgoingPayload.mediaFileIds ?? null,
+              media_file_id: outgoingPayload.mediaFileId ?? null,
+              media_file_ids: outgoingPayload.mediaFileIds ?? null,
+              attachmentCount: unit.attachments.length,
+              finalPayloadKeys: Object.keys(outgoingPayload).sort(),
+            },
+            {
+              batchId,
+              sendUnitId,
+            },
+          );
 
           await onSend(
             outgoingPayload,
-            shouldUseContent || (unitIndex === 0 && trimmed.length === 0) ? replyTo?.id : undefined,
+            shouldUseContent || (unitIndex === 0 && trimmed.length === 0)
+              ? replyTo?.id
+              : undefined,
           );
 
-          logAttachmentDebug("send.result", {
-            status: "resolved",
-            fileCount: unit.attachments.length,
-            localAttachmentIds: debugMeta.localAttachmentIds,
-          }, {
-            batchId,
-            sendUnitId,
-          });
+          logAttachmentDebug(
+            "send.result",
+            {
+              status: "resolved",
+              fileCount: unit.attachments.length,
+              localAttachmentIds: debugMeta.localAttachmentIds,
+            },
+            {
+              batchId,
+              sendUnitId,
+            },
+          );
 
-          removeQueuedAttachments(unit.attachments.map((attachment) => attachment.id));
+          removeQueuedAttachments(
+            unit.attachments.map((attachment) => attachment.id),
+          );
 
           if (shouldUseContent) setContent("");
         }
@@ -1041,28 +1316,28 @@ interface Props {
         uploadAbortControllerRef.current = null;
         handleSuccessfulSend();
       }
-     } catch (err) { 
-       if (err instanceof DOMException && err.name === "AbortError") {
-         setUploadStatus("idle");
-         setUploadError(null);
-         setUploadLabel(null);
-         return;
-       }
-       console.error("Failed to send/edit:", err); 
-       setUploadStatus("error");
-       setUploadError(
-         err instanceof AttachmentUploadError
-           ? err.status === 429
-             ? "Upload rate limit exceeded. Please try again."
-             : "Upload failed"
-           : sendFailureMessage,
-       );
-       setUploadLabel(null);
-     } finally { 
-       sendLockRef.current = false;
-       setIsSending(false); 
-     } 
-  }; 
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setUploadStatus("idle");
+        setUploadError(null);
+        setUploadLabel(null);
+        return;
+      }
+      console.error("Failed to send/edit:", err);
+      setUploadStatus("error");
+      setUploadError(
+        err instanceof AttachmentUploadError
+          ? err.status === 429
+            ? "Upload rate limit exceeded. Please try again."
+            : "Upload failed"
+          : sendFailureMessage,
+      );
+      setUploadLabel(null);
+    } finally {
+      sendLockRef.current = false;
+      setIsSending(false);
+    }
+  };
 
   const performUpload = (
     attachment: PendingAttachment,
@@ -1078,23 +1353,35 @@ interface Props {
         return;
       }
 
-      logAttachmentDebug("upload.start", {
-        position,
-        total,
-        ...summarizeAttachmentLike(attachment),
-      }, {
-        batchId,
-        sendUnitId,
-      });
+      logAttachmentDebug(
+        "upload.start",
+        {
+          position,
+          total,
+          ...summarizeAttachmentLike(attachment),
+        },
+        {
+          batchId,
+          sendUnitId,
+        },
+      );
 
       setUploadStatus("uploading");
       setUploadProgress(0);
       setUploadError(null);
-      setUploadLabel(total > 1 ? `${attachment.file.name} (${position}/${total})` : attachment.file.name);
+      setUploadLabel(
+        total > 1
+          ? `${attachment.file.name} (${position}/${total})`
+          : attachment.file.name,
+      );
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${API_BASE_URL}/media`);
       xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
+      xhr.setRequestHeader(
+        "x-vetra-client-protocol-version",
+        clientProtocolHeaders()["x-vetra-client-protocol-version"],
+      );
       xhr.responseType = "json";
       let settled = false;
 
@@ -1117,55 +1404,86 @@ interface Props {
 
       xhr.onload = () => {
         if (xhr.status < 200 || xhr.status >= 300) {
-          logAttachmentDebug("upload.failure", {
-            statusCode: xhr.status,
-            ...summarizeAttachmentLike(attachment),
-            response: summarizeUnknownShape(xhr.response),
-          }, {
-            batchId,
-            sendUnitId,
-            level: "warn",
-          });
+          logAttachmentDebug(
+            "upload.failure",
+            {
+              statusCode: xhr.status,
+              ...summarizeAttachmentLike(attachment),
+              response: summarizeUnknownShape(xhr.response),
+            },
+            {
+              batchId,
+              sendUnitId,
+              level: "warn",
+            },
+          );
           const retryAfter = parseRetryAfterMs(
             typeof xhr.getResponseHeader === "function"
               ? xhr.getResponseHeader("Retry-After")
               : null,
           );
-          finish(() => reject(new AttachmentUploadError("Upload failed", xhr.status, retryAfter)));
+          finish(() =>
+            reject(
+              new AttachmentUploadError(
+                "Upload failed",
+                xhr.status,
+                retryAfter,
+              ),
+            ),
+          );
           return;
         }
         const response = xhr.response ?? {};
-        const mediaFileId = response?.data?.media_file_id ?? response?.media_file_id;
-        logAttachmentDebug("upload.success", {
-          mediaFileId: mediaFileId ?? null,
-          ...summarizeAttachmentLike(attachment),
-          response: summarizeUnknownShape(response),
-        }, {
-          batchId,
-          sendUnitId,
-        });
+        const mediaFileId =
+          response?.data?.media_file_id ?? response?.media_file_id;
+        logAttachmentDebug(
+          "upload.success",
+          {
+            mediaFileId: mediaFileId ?? null,
+            ...summarizeAttachmentLike(attachment),
+            response: summarizeUnknownShape(response),
+          },
+          {
+            batchId,
+            sendUnitId,
+          },
+        );
         if (!mediaFileId) {
-          finish(() => reject(new AttachmentUploadError("Upload response missing media id")));
+          finish(() =>
+            reject(
+              new AttachmentUploadError("Upload response missing media id"),
+            ),
+          );
           return;
         }
         finish(() => resolve(mediaFileId));
       };
 
       xhr.onerror = () => {
-        logAttachmentDebug("upload.failure", {
-          statusCode: xhr.status || null,
-          ...summarizeAttachmentLike(attachment),
-          response: summarizeUnknownShape(xhr.response),
-        }, {
-          batchId,
-          sendUnitId,
-          level: "warn",
-        });
-        finish(() => reject(new AttachmentUploadError("Upload failed", xhr.status || null)));
+        logAttachmentDebug(
+          "upload.failure",
+          {
+            statusCode: xhr.status || null,
+            ...summarizeAttachmentLike(attachment),
+            response: summarizeUnknownShape(xhr.response),
+          },
+          {
+            batchId,
+            sendUnitId,
+            level: "warn",
+          },
+        );
+        finish(() =>
+          reject(
+            new AttachmentUploadError("Upload failed", xhr.status || null),
+          ),
+        );
       };
 
       xhr.onabort = () => {
-        finish(() => reject(new DOMException("Upload cancelled", "AbortError")));
+        finish(() =>
+          reject(new DOMException("Upload cancelled", "AbortError")),
+        );
       };
 
       if (signal?.aborted) {
@@ -1206,7 +1524,7 @@ interface Props {
       .map((item) => item.getAsFile())
       .filter((file): file is File => file !== null);
     if (files.length === 0) return;
-    
+
     e.preventDefault();
     appendPendingAttachments(files);
   };
@@ -1227,218 +1545,373 @@ interface Props {
     if (isSending || isUploading) return;
     clearPendingAttachments();
   };
- 
-   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
-   const modifier = isMac ? "⌘" : "Ctrl+";
-   const shortcut = (key: string) => `${modifier}${key}`;
-   const selectedRangeIsUsable = () => {
-     const textarea = textareaRef.current;
-     return Boolean(textarea && textarea.selectionStart < textarea.selectionEnd && textarea.value.slice(textarea.selectionStart, textarea.selectionEnd).trim());
-   };
-   const mainItems: ComposerMenuItem[] = [
-     { value: "undo", label: "Undo", shortcut: shortcut("Z"), disabled: true },
-     { value: "redo", label: "Redo", shortcut: shortcut("Y"), disabled: true },
-     { value: "cut", label: "Cut", shortcut: shortcut("X"), action: () => void runClipboardCommand(true) },
-     { value: "copy", label: "Copy", shortcut: shortcut("C"), action: () => void runClipboardCommand(false) },
-     { value: "paste", label: "Paste", shortcut: shortcut("V"), disabled: !navigator.clipboard?.readText, action: () => void pasteFromClipboard() },
-     { value: "delete", label: "Delete", action: () => { replaceSelection(""); closeComposerMenus(); } },
-     { value: "formatting", label: "Formatting", hasSubmenu: true },
-     { value: "select-all", label: "Select All", shortcut: shortcut("A"), action: () => { textareaRef.current?.focus(); textareaRef.current?.select(); closeComposerMenus(); } },
-   ];
-   const formattingItems: ComposerMenuItem[] = [
-     { value: "bold", label: "Bold", shortcut: shortcut("B"), disabled: true },
-     { value: "italic", label: "Italic", shortcut: shortcut("I"), disabled: true },
-     { value: "underline", label: "Underline", shortcut: shortcut("U"), disabled: true },
-     { value: "strikethrough", label: "Strikethrough", shortcut: `${modifier}Shift+X`, disabled: true },
-     { value: "quote", label: "Quote", shortcut: `${modifier}Shift+.`, disabled: true },
-     { value: "monospace", label: "Monospace", shortcut: `${modifier}Shift+M`, disabled: true },
-     { value: "spoiler", label: "Spoiler", shortcut: `${modifier}Shift+P`, disabled: true },
-     { value: "create-link", label: "Create link", shortcut: shortcut("K"), disabled: !selectedRangeIsUsable(), action: () => openCreateLinkDialog() },
-     { value: "date", label: "Date", shortcut: `${modifier}Shift+D`, disabled: true },
-     { value: "clear-formatting", label: "Clear formatting", shortcut: `${modifier}Shift+N`, disabled: true },
-   ];
+
+  const isMac =
+    typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+  const modifier = isMac ? "⌘" : "Ctrl+";
+  const shortcut = (key: string) => `${modifier}${key}`;
+  const selectedRangeIsUsable = () => {
+    const textarea = textareaRef.current;
+    return Boolean(
+      textarea &&
+      textarea.selectionStart < textarea.selectionEnd &&
+      textarea.value
+        .slice(textarea.selectionStart, textarea.selectionEnd)
+        .trim(),
+    );
+  };
+  const mainItems: ComposerMenuItem[] = [
+    { value: "undo", label: "Undo", shortcut: shortcut("Z"), disabled: true },
+    { value: "redo", label: "Redo", shortcut: shortcut("Y"), disabled: true },
+    {
+      value: "cut",
+      label: "Cut",
+      shortcut: shortcut("X"),
+      action: () => void runClipboardCommand(true),
+    },
+    {
+      value: "copy",
+      label: "Copy",
+      shortcut: shortcut("C"),
+      action: () => void runClipboardCommand(false),
+    },
+    {
+      value: "paste",
+      label: "Paste",
+      shortcut: shortcut("V"),
+      disabled: !navigator.clipboard?.readText,
+      action: () => void pasteFromClipboard(),
+    },
+    {
+      value: "delete",
+      label: "Delete",
+      action: () => {
+        replaceSelection("");
+        closeComposerMenus();
+      },
+    },
+    { value: "formatting", label: "Formatting", hasSubmenu: true },
+    {
+      value: "select-all",
+      label: "Select All",
+      shortcut: shortcut("A"),
+      action: () => {
+        textareaRef.current?.focus();
+        textareaRef.current?.select();
+        closeComposerMenus();
+      },
+    },
+  ];
+  const formattingItems: ComposerMenuItem[] = [
+    { value: "bold", label: "Bold", shortcut: shortcut("B"), disabled: true },
+    {
+      value: "italic",
+      label: "Italic",
+      shortcut: shortcut("I"),
+      disabled: true,
+    },
+    {
+      value: "underline",
+      label: "Underline",
+      shortcut: shortcut("U"),
+      disabled: true,
+    },
+    {
+      value: "strikethrough",
+      label: "Strikethrough",
+      shortcut: `${modifier}Shift+X`,
+      disabled: true,
+    },
+    {
+      value: "quote",
+      label: "Quote",
+      shortcut: `${modifier}Shift+.`,
+      disabled: true,
+    },
+    {
+      value: "monospace",
+      label: "Monospace",
+      shortcut: `${modifier}Shift+M`,
+      disabled: true,
+    },
+    {
+      value: "spoiler",
+      label: "Spoiler",
+      shortcut: `${modifier}Shift+P`,
+      disabled: true,
+    },
+    {
+      value: "create-link",
+      label: "Create link",
+      shortcut: shortcut("K"),
+      disabled: !selectedRangeIsUsable(),
+      action: () => openCreateLinkDialog(),
+    },
+    {
+      value: "date",
+      label: "Date",
+      shortcut: `${modifier}Shift+D`,
+      disabled: true,
+    },
+    {
+      value: "clear-formatting",
+      label: "Clear formatting",
+      shortcut: `${modifier}Shift+N`,
+      disabled: true,
+    },
+  ];
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = textareaRef.current;
-    if (textarea && textarea.selectionStart === textarea.selectionEnd && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    if (
+      textarea &&
+      textarea.selectionStart === textarea.selectionEnd &&
+      (e.key === "ArrowLeft" || e.key === "ArrowRight")
+    ) {
       const caret = textarea.selectionStart;
-      const entity = entities.find((candidate) => candidate.type === "custom_emoji" && caret > candidate.offset && caret < candidate.offset + candidate.length);
+      const entity = entities.find(
+        (candidate) =>
+          candidate.type === "custom_emoji" &&
+          caret > candidate.offset &&
+          caret < candidate.offset + candidate.length,
+      );
       if (entity) {
         e.preventDefault();
-        const nextCaret = e.key === "ArrowLeft" ? entity.offset : entity.offset + entity.length;
+        const nextCaret =
+          e.key === "ArrowLeft" ? entity.offset : entity.offset + entity.length;
         textarea.setSelectionRange(nextCaret, nextCaret);
         return;
       }
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-       const selection = captureSelection();
-       if (selection) { e.preventDefault(); openCreateLinkDialog(selection); return; }
-     }
-     if (e.key === "Escape" && (composerContextMenu || createLinkDialog)) {
-       e.preventDefault();
-       if (createLinkDialog) setCreateLinkDialog(null);
-       closeComposerMenus();
-       return;
-     }
-     if (e.key === "Enter" && !e.shiftKey) { 
-       e.preventDefault(); 
-       if (pendingAttachments.length > 0) return;
-       handleSend(); 
-     } 
-     if (e.key === "Escape") {
-       if (isEditing) cancelEditing(); 
-       if (pendingAttachments.length > 0 && !isSending && !isUploading) clearPendingAttachments();
-     } 
-   }; 
- 
-   return ( 
-     <>
-     {pendingAttachments.length > 0 && (
-       <AttachmentReviewModal
-         batchId={attachmentBatchIdRef.current}
-         attachments={pendingAttachments}
-         content={content}
-         entities={entities}
-         isSending={isSending}
-         isUploading={isUploading}
-         uploadStatus={uploadStatus}
-         uploadProgress={uploadProgress}
-         uploadLabel={uploadLabel}
-         uploadError={uploadError}
-         isAddMenuOpen={isModalAttachmentMenuOpen}
-         addAttachmentMenu={
-           <AttachmentSourceMenu
-             placement="modal"
-             onClose={() => setIsModalAttachmentMenuOpen(false)}
-             onSelectMedia={openMediaPicker}
-             onSelectFile={openFilePicker}
-           />
-         }
-         onClose={handleCloseAttachmentReview}
-         onToggleAddMenu={handleModalAddClick}
-         onRemoveAttachment={removePendingAttachment}
-         onContentChange={handleChange}
-         onSend={handleSend}
-       />
-     )}
-     <div className="relative flex flex-col border-t border-border bg-[color:var(--vetra-shell-chat-bg,var(--color-card))]" data-testid="message-composer-shell">
-       {composerContextMenu && (
-         <ComposerContextMenu
-           left={composerContextMenu.left}
-           top={composerContextMenu.top}
-           submenuOnLeft={composerContextMenu.submenuOnLeft}
-           submenuOpen={formattingOpen}
-           activeMainValue={activeMainMenuValue}
-           activeSubmenuValue={activeFormattingValue}
-           onOpenSubmenu={() => {
-             setActiveMainMenuValue("formatting");
-             setActiveFormattingValue(formattingItems.find((item) => !item.disabled)?.value ?? "create-link");
-             setFormattingOpen(true);
-           }}
-           onMainActive={setActiveMainMenuValue}
-           onSubmenuActive={setActiveFormattingValue}
-           onClose={closeComposerMenus}
-           onCloseSubmenu={() => {
-             setFormattingOpen(false);
-             requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-menu-value="formatting"]')?.focus());
-           }}
-           mainItems={mainItems}
-           submenuItems={formattingItems}
-         />
-       )}
-       {createLinkDialog && (
-         <CreateLinkDialog
-           selectedText={createLinkDialog.selectedText}
-           url={createLinkUrl}
-           invalid={createLinkInvalid}
-           allowEmpty={entities.some((entity) => entity.offset <= createLinkDialog.start && entity.offset + entity.length >= createLinkDialog.end)}
-           onUrlChange={(value) => { setCreateLinkUrl(value); setCreateLinkInvalid(false); }}
-           onCreate={saveCreateLinkDialog}
-           onCancel={() => setCreateLinkDialog(null)}
-         />
-       )}
-       {isEditing && ( 
-         <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-2.5"> 
-           <div className="min-w-0 flex-1 text-xs">
-             <span className="font-medium">Editing</span>
-             <div className="h-5 min-w-0 max-w-md overflow-hidden whitespace-nowrap text-muted-foreground">
-               <MessageText text={editingMessage!.content} entities={editingMessage!.entities} context="edit-preview" />
-             </div>
-           </div>
-          <button className="vt-button min-h-8 px-3 py-0 text-xs" onClick={cancelEditing}>Cancel</button> 
-         </div> 
-       )} 
- 
-       {replyTo && !isEditing && ( 
-        <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-2.5">
-          <div className="flex flex-col text-xs">
-            <span className="font-medium">Reply to {replyTo.author}</span>
-            <span className="text-muted-foreground truncate max-w-md">
-              <EmojiText text={replyTo.content} />
-            </span>
-          </div>
-          <button className="vt-button min-h-8 px-3 py-0 text-xs" onClick={onCancelReply}>Cancel</button>
-        </div>
-       )}
+      const selection = captureSelection();
+      if (selection) {
+        e.preventDefault();
+        openCreateLinkDialog(selection);
+        return;
+      }
+    }
+    if (e.key === "Escape" && (composerContextMenu || createLinkDialog)) {
+      e.preventDefault();
+      if (createLinkDialog) setCreateLinkDialog(null);
+      closeComposerMenus();
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (pendingAttachments.length > 0) return;
+      handleSend();
+    }
+    if (e.key === "Escape") {
+      if (isEditing) cancelEditing();
+      if (pendingAttachments.length > 0 && !isSending && !isUploading)
+        clearPendingAttachments();
+    }
+  };
 
-       {voiceRecordingState !== "idle" && (
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-xs" data-testid="voice-recording-panel">
-          <span className={voiceRecordingState === "recording" ? "text-destructive" : "text-muted-foreground"}>
-            {voiceRecordingState === "recording"
-              ? `Recording ${formatVoiceDuration(voiceElapsedMs)}`
-              : "Preparing voice message..."}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              className="vt-button min-h-8 px-3 text-xs"
-              onClick={cancelVoiceRecording}
-              disabled={voiceRecordingState === "processing"}
-            >
-              <X className="mr-1 h-3.5 w-3.5" /> Cancel
-            </button>
-            <button
-              type="button"
-              className="vt-button vt-button--primary min-h-8 px-3 text-xs"
-              onClick={stopVoiceRecording}
-              disabled={voiceRecordingState !== "recording"}
-              aria-label="Stop and send voice message"
-            >
-              <Square className="mr-1 h-3.5 w-3.5" /> Stop and send
-            </button>
-          </div>
-        </div>
-       )}
-
-       {uploadStatus !== "idle" && pendingAttachments.length === 0 && (
-        <div className="border-b border-border px-4 py-2 text-[11px]">
-          {uploadStatus === "uploading" ? (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-medium">
-                  {uploadLabel ? `Uploading ${uploadLabel}` : "Uploading attachment"}
-                </span>
-                <span className="text-muted-foreground">{uploadProgress}%</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${uploadProgress}%` }} />
+  return (
+    <>
+      {pendingAttachments.length > 0 && (
+        <AttachmentReviewModal
+          batchId={attachmentBatchIdRef.current}
+          attachments={pendingAttachments}
+          content={content}
+          entities={entities}
+          isSending={isSending}
+          isUploading={isUploading}
+          uploadStatus={uploadStatus}
+          uploadProgress={uploadProgress}
+          uploadLabel={uploadLabel}
+          uploadError={uploadError}
+          isAddMenuOpen={isModalAttachmentMenuOpen}
+          addAttachmentMenu={
+            <AttachmentSourceMenu
+              placement="modal"
+              onClose={() => setIsModalAttachmentMenuOpen(false)}
+              onSelectMedia={openMediaPicker}
+              onSelectFile={openFilePicker}
+            />
+          }
+          onClose={handleCloseAttachmentReview}
+          onToggleAddMenu={handleModalAddClick}
+          onRemoveAttachment={removePendingAttachment}
+          onContentChange={handleChange}
+          onSend={handleSend}
+        />
+      )}
+      <div
+        className="relative flex flex-col border-t border-border bg-[color:var(--vetra-shell-chat-bg,var(--color-card))]"
+        data-testid="message-composer-shell"
+      >
+        {composerContextMenu && (
+          <ComposerContextMenu
+            left={composerContextMenu.left}
+            top={composerContextMenu.top}
+            submenuOnLeft={composerContextMenu.submenuOnLeft}
+            submenuOpen={formattingOpen}
+            activeMainValue={activeMainMenuValue}
+            activeSubmenuValue={activeFormattingValue}
+            onOpenSubmenu={() => {
+              setActiveMainMenuValue("formatting");
+              setActiveFormattingValue(
+                formattingItems.find((item) => !item.disabled)?.value ??
+                  "create-link",
+              );
+              setFormattingOpen(true);
+            }}
+            onMainActive={setActiveMainMenuValue}
+            onSubmenuActive={setActiveFormattingValue}
+            onClose={closeComposerMenus}
+            onCloseSubmenu={() => {
+              setFormattingOpen(false);
+              requestAnimationFrame(() =>
+                document
+                  .querySelector<HTMLButtonElement>(
+                    '[data-menu-value="formatting"]',
+                  )
+                  ?.focus(),
+              );
+            }}
+            mainItems={mainItems}
+            submenuItems={formattingItems}
+          />
+        )}
+        {createLinkDialog && (
+          <CreateLinkDialog
+            selectedText={createLinkDialog.selectedText}
+            url={createLinkUrl}
+            invalid={createLinkInvalid}
+            allowEmpty={entities.some(
+              (entity) =>
+                entity.offset <= createLinkDialog.start &&
+                entity.offset + entity.length >= createLinkDialog.end,
+            )}
+            onUrlChange={(value) => {
+              setCreateLinkUrl(value);
+              setCreateLinkInvalid(false);
+            }}
+            onCreate={saveCreateLinkDialog}
+            onCancel={() => setCreateLinkDialog(null)}
+          />
+        )}
+        {isEditing && (
+          <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-2.5">
+            <div className="min-w-0 flex-1 text-xs">
+              <span className="font-medium">Editing</span>
+              <div className="h-5 min-w-0 max-w-md overflow-hidden whitespace-nowrap text-muted-foreground">
+                <MessageText
+                  text={editingMessage!.content}
+                  entities={editingMessage!.entities}
+                  context="edit-preview"
+                />
               </div>
             </div>
-          ) : (
-            <span className="text-destructive">{uploadError}</span>
-          )}
-        </div>
-       )}
- 
-       <div
-         className="flex min-h-[46px] items-center gap-1 px-2 py-0.5 sm:px-3"
-         data-testid="message-composer-bar"
-       >
+            <button
+              className="vt-button min-h-8 px-3 py-0 text-xs"
+              onClick={cancelEditing}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {replyTo && !isEditing && (
+          <div className="flex items-center justify-between border-b border-border bg-muted/35 px-4 py-2.5">
+            <div className="flex flex-col text-xs">
+              <span className="font-medium">Reply to {replyTo.author}</span>
+              <span className="text-muted-foreground truncate max-w-md">
+                <EmojiText text={replyTo.content} />
+              </span>
+            </div>
+            <button
+              className="vt-button min-h-8 px-3 py-0 text-xs"
+              onClick={onCancelReply}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {voiceRecordingState !== "idle" && (
+          <div
+            className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-xs"
+            data-testid="voice-recording-panel"
+          >
+            <span
+              className={
+                voiceRecordingState === "recording"
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+              }
+            >
+              {voiceRecordingState === "recording"
+                ? `Recording ${formatVoiceDuration(voiceElapsedMs)}`
+                : "Preparing voice message..."}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                className="vt-button min-h-8 px-3 text-xs"
+                onClick={cancelVoiceRecording}
+                disabled={voiceRecordingState === "processing"}
+              >
+                <X className="mr-1 h-3.5 w-3.5" /> Cancel
+              </button>
+              <button
+                type="button"
+                className="vt-button vt-button--primary min-h-8 px-3 text-xs"
+                onClick={stopVoiceRecording}
+                disabled={voiceRecordingState !== "recording"}
+                aria-label="Stop and send voice message"
+              >
+                <Square className="mr-1 h-3.5 w-3.5" /> Stop and send
+              </button>
+            </div>
+          </div>
+        )}
+
+        {uploadStatus !== "idle" && pendingAttachments.length === 0 && (
+          <div className="border-b border-border px-4 py-2 text-[11px]">
+            {uploadStatus === "uploading" ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium">
+                    {uploadLabel
+                      ? `Uploading ${uploadLabel}`
+                      : "Uploading attachment"}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {uploadProgress}%
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width]"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <span className="text-destructive">{uploadError}</span>
+            )}
+          </div>
+        )}
+
+        <div
+          className="flex min-h-[46px] items-center gap-1 px-2 py-0.5 sm:px-3"
+          data-testid="message-composer-bar"
+        >
           <div className="relative shrink-0">
             <button
               type="button"
               onClick={handleAttachClick}
-              disabled={disabled || isSending || isEditing || isUploading || voiceRecordingState !== "idle"}
+              disabled={
+                disabled ||
+                isSending ||
+                isEditing ||
+                isUploading ||
+                voiceRecordingState !== "idle"
+              }
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors",
                 "hover:bg-accent hover:text-foreground focus-visible:outline-none",
@@ -1490,25 +1963,60 @@ interface Props {
                 "placeholder:text-muted-foreground/85 disabled:cursor-not-allowed disabled:opacity-60",
               )}
               data-testid="message-input-textarea"
-              placeholder={pendingAttachments.length > 0 ? "Review attachments in dialog" : "Message..."}
+              placeholder={
+                pendingAttachments.length > 0
+                  ? "Review attachments in dialog"
+                  : "Message..."
+              }
               value={content}
               onChange={(e) => handleChange(e.target.value)}
               onKeyDown={handleKeyDown}
               onContextMenu={openContextMenu}
               onPaste={handlePaste}
-              disabled={disabled || isSending || isUploading || pendingAttachments.length > 0 || voiceRecordingState !== "idle"}
+              disabled={
+                disabled ||
+                isSending ||
+                isUploading ||
+                pendingAttachments.length > 0 ||
+                voiceRecordingState !== "idle"
+              }
               rows={1}
               style={{ overflowY: "hidden" }}
               aria-label="Message composer"
             />
           </div>
 
-          <button type="button" onClick={onOpenPicker} disabled={disabled || isSending || isUploading || voiceRecordingState !== "idle"} aria-label="Open emoji and sticker picker" aria-pressed={pickerOpen} className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground", pickerOpen && "bg-accent text-foreground", "disabled:pointer-events-none disabled:opacity-60")}><Smile className="h-[18px] w-[18px]" /></button>
+          <button
+            type="button"
+            onClick={onOpenPicker}
+            disabled={
+              disabled ||
+              isSending ||
+              isUploading ||
+              voiceRecordingState !== "idle"
+            }
+            aria-label="Open emoji and sticker picker"
+            aria-pressed={pickerOpen}
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground",
+              pickerOpen && "bg-accent text-foreground",
+              "disabled:pointer-events-none disabled:opacity-60",
+            )}
+          >
+            <Smile className="h-[18px] w-[18px]" />
+          </button>
 
           <button
             type="button"
             onClick={() => void startVoiceRecording()}
-            disabled={disabled || isSending || isUploading || isEditing || pendingAttachments.length > 0 || voiceRecordingState !== "idle"}
+            disabled={
+              disabled ||
+              isSending ||
+              isUploading ||
+              isEditing ||
+              pendingAttachments.length > 0 ||
+              voiceRecordingState !== "idle"
+            }
             className={cn(
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors",
               "hover:bg-accent hover:text-foreground focus-visible:outline-none",
@@ -1522,22 +2030,27 @@ interface Props {
           <button
             type="button"
             onClick={handleSend}
-            disabled={pendingAttachments.length > 0 || (!content.trim() && pendingAttachments.length === 0) || disabled || isSending || isUploading || voiceRecordingState !== "idle"}
+            disabled={
+              pendingAttachments.length > 0 ||
+              (!content.trim() && pendingAttachments.length === 0) ||
+              disabled ||
+              isSending ||
+              isUploading ||
+              voiceRecordingState !== "idle"
+            }
             className={cn(
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
               "hover:bg-accent focus-visible:outline-none",
               "disabled:pointer-events-none disabled:opacity-60",
-              content.trim()
-                ? "text-primary"
-                : "text-muted-foreground",
+              content.trim() ? "text-primary" : "text-muted-foreground",
             )}
             aria-label={isSending ? "Sending..." : "Send"}
           >
             <SendHorizonal className="h-[18px] w-[18px]" />
             <span className="sr-only">{isSending ? "Sending..." : "Send"}</span>
           </button>
-       </div>
-     </div>
-     </>
-   ); 
- }
+        </div>
+      </div>
+    </>
+  );
+}

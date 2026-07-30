@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { connectSocket } from "@/services/socket";
 import { useAppStore } from "@/store";
 import { reconcileUnreadLists } from "@/features/messaging/services/unreadReconciliation";
+import { ApiError } from "@/api/base";
 
 /**
  * Re-fetches room previews, conversation previews, servers, and connects the
@@ -16,6 +17,9 @@ export function useAuthHydration() {
   const setRoomPreviews = useAppStore((s) => s.setRoomPreviews);
   const setServers = useAppStore((s) => s.setServers);
   const setServerChannels = useAppStore((s) => s.setServerChannels);
+  const setProtocolUpdateRequired = useAppStore(
+    (s) => s.setProtocolUpdateRequired,
+  );
 
   useEffect(() => {
     if (!currentUser || !authToken || socketManager !== null) return;
@@ -42,6 +46,10 @@ export function useAuthHydration() {
           setServerChannels,
         });
       } catch (err) {
+        if (err instanceof ApiError && err.code === "update_required") {
+          setProtocolUpdateRequired(true);
+          return;
+        }
         console.error("Hydration failed:", err);
       }
     })();
@@ -58,5 +66,6 @@ export function useAuthHydration() {
     setRoomPreviews,
     setServers,
     setServerChannels,
+    setProtocolUpdateRequired,
   ]);
 }

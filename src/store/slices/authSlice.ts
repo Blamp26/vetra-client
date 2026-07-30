@@ -1,7 +1,7 @@
-import { StateCreator } from 'zustand';
-import { User } from '@/shared/types';
-import { SocketManager } from '@/services/socket';
-import { storage, STORAGE_KEYS } from '@/shared/utils/storage';
+import { StateCreator } from "zustand";
+import { User } from "@/shared/types";
+import { SocketManager } from "@/services/socket";
+import { storage, STORAGE_KEYS } from "@/shared/utils/storage";
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 
@@ -16,35 +16,38 @@ function getStoredToken(): string | null {
 // ── Slice interface ───────────────────────────────────────────────────────────
 
 export interface AuthSlice {
-  currentUser:    User | null;
-  authToken:      string | null;   // ← новое поле
-  socketManager:  SocketManager | null;
+  currentUser: User | null;
+  authToken: string | null; // ← новое поле
+  socketManager: SocketManager | null;
+  protocolUpdateRequired: boolean;
 
-  setCurrentUser:    (user: User | null) => void;
-  setAuthToken:      (token: string | null) => void;   // ← новый метод
+  setCurrentUser: (user: User | null) => void;
+  setAuthToken: (token: string | null) => void; // ← новый метод
   /** Атомарно сохраняет и user, и token (при логине / регистрации) */
-  setAuthSession:    (user: User, token: string) => void;
+  setAuthSession: (user: User, token: string) => void;
   updateCurrentUser: (updates: Partial<User>) => void;
-  setSocketManager:  (manager: SocketManager | null) => void;
-  logout:            () => void;
+  setSocketManager: (manager: SocketManager | null) => void;
+  logout: () => void;
+  setProtocolUpdateRequired: (required: boolean) => void;
 }
 
 // ── Slice implementation ──────────────────────────────────────────────────────
 
 export const createAuthSlice: StateCreator<AuthSlice> = (set, get) => ({
-  currentUser:   getStoredUser(),
-  authToken:     getStoredToken(),
+  currentUser: getStoredUser(),
+  authToken: getStoredToken(),
   socketManager: null,
+  protocolUpdateRequired: false,
 
   setCurrentUser: (user) => {
     if (user) storage.set(STORAGE_KEYS.USER, user);
-    else      storage.remove(STORAGE_KEYS.USER);
+    else storage.remove(STORAGE_KEYS.USER);
     set({ currentUser: user });
   },
 
   setAuthToken: (token) => {
     if (token) storage.setString(STORAGE_KEYS.TOKEN, token);
-    else       storage.remove(STORAGE_KEYS.TOKEN);
+    else storage.remove(STORAGE_KEYS.TOKEN);
     set({ authToken: token });
   },
 
@@ -67,10 +70,18 @@ export const createAuthSlice: StateCreator<AuthSlice> = (set, get) => ({
     set({ socketManager: manager });
   },
 
+  setProtocolUpdateRequired: (required) =>
+    set({ protocolUpdateRequired: required }),
+
   logout: () => {
     get().socketManager?.disconnect();
     storage.remove(STORAGE_KEYS.USER);
     storage.remove(STORAGE_KEYS.TOKEN);
-    set({ currentUser: null, authToken: null, socketManager: null });
+    set({
+      currentUser: null,
+      authToken: null,
+      socketManager: null,
+      protocolUpdateRequired: false,
+    });
   },
 });

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CLIENT_PROTOCOL_HEADER } from "@/shared/clientProtocol";
 
 const { useAppStoreMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
@@ -28,7 +29,10 @@ class ImmediateIntersectionObserver {
   }
 
   observe(target: Element) {
-    this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as never);
+    this.callback(
+      [{ isIntersecting: true, target } as IntersectionObserverEntry],
+      this as never,
+    );
   }
 
   disconnect() {}
@@ -44,8 +48,9 @@ class ResizeObserverMock {
 describe("AuthenticatedVideo", () => {
   beforeEach(() => {
     useAppStoreMock.mockReset();
-    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
-      selector({ authToken: "secret-token" }),
+    useAppStoreMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
+        selector({ authToken: "secret-token" }),
     );
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
     vi.restoreAllMocks();
@@ -64,7 +69,14 @@ describe("AuthenticatedVideo", () => {
 
     const placeholder = container.firstChild as HTMLElement;
     expect(placeholder.tagName).toBe("DIV");
-    expect(placeholder).toHaveClass("h-full", "w-full", "object-cover", "rounded-[12px]", "bg-muted/50", "animate-pulse");
+    expect(placeholder).toHaveClass(
+      "h-full",
+      "w-full",
+      "object-cover",
+      "rounded-[12px]",
+      "bg-muted/50",
+      "animate-pulse",
+    );
     expect(placeholder).toHaveStyle({
       display: "block",
       width: "100%",
@@ -75,7 +87,9 @@ describe("AuthenticatedVideo", () => {
 
   it("fetches with auth, creates an object URL, renders a video, and reports metadata", async () => {
     vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
-    const createObjectUrlSpy = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:video-preview");
+    const createObjectUrlSpy = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:video-preview");
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       blob: async () => new Blob(["video-bytes"], { type: "video/mp4" }),
@@ -92,10 +106,15 @@ describe("AuthenticatedVideo", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByTestId("authenticated-video")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("authenticated-video")).toBeInTheDocument(),
+    );
 
     expect(fetch).toHaveBeenCalledWith("/api/v1/media/video-2", {
-      headers: { Authorization: "Bearer secret-token" },
+      headers: {
+        Authorization: "Bearer secret-token",
+        [CLIENT_PROTOCOL_HEADER]: "1",
+      },
     });
     expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
 
@@ -117,13 +136,15 @@ describe("AuthenticatedVideo", () => {
       height: "100%",
     });
     expect(video).toHaveAttribute("src", "blob:video-preview");
-    expect(diagnosticsSpy).toHaveBeenCalledWith(expect.objectContaining({
-      naturalWidth: 1280,
-      naturalHeight: 720,
-      renderedWidth: 320,
-      renderedHeight: 180,
-      duration: 42,
-    }));
+    expect(diagnosticsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        naturalWidth: 1280,
+        naturalHeight: 720,
+        renderedWidth: 320,
+        renderedHeight: 180,
+        duration: 42,
+      }),
+    );
   });
 
   it("shows a fallback on fetch error", async () => {
@@ -141,14 +162,20 @@ describe("AuthenticatedVideo", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.queryByTestId("authenticated-video")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("authenticated-video"),
+      ).not.toBeInTheDocument(),
+    );
     expect(container.firstChild).toBeInstanceOf(HTMLDivElement);
     expect(errorSpy).toHaveBeenCalled();
   });
 
   it("revokes the object URL on unmount", async () => {
     vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
-    const revokeSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const revokeSpy = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => {});
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:video-ok");
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
@@ -163,7 +190,9 @@ describe("AuthenticatedVideo", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByTestId("authenticated-video")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("authenticated-video")).toBeInTheDocument(),
+    );
     unmount();
 
     expect(revokeSpy).toHaveBeenCalledWith("blob:video-ok");
@@ -171,31 +200,62 @@ describe("AuthenticatedVideo", () => {
 
   it("loads immediately when IntersectionObserver is unavailable", async () => {
     vi.stubGlobal("IntersectionObserver", undefined);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["video"]) } as Response);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(["video"]),
+    } as Response);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:no-observer-video");
-    render(<AuthenticatedVideo src="/api/v1/media/no-observer-video" data-testid="no-observer-video" />);
+    render(
+      <AuthenticatedVideo
+        src="/api/v1/media/no-observer-video"
+        data-testid="no-observer-video"
+      />,
+    );
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
 
   it("uses the explicit scroll root for an immediate visibility check", async () => {
     vi.stubGlobal("IntersectionObserver", IdleIntersectionObserver);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["video"]) } as Response);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(["video"]),
+    } as Response);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:root-video");
     const root = document.createElement("div");
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      return this === root ? { top: 100, left: 0, right: 400, bottom: 300 } as DOMRect : { top: 200, left: 0, right: 100, bottom: 300 } as DOMRect;
-    });
-    render(<MediaVisibilityContext.Provider value={{ root, revision: 0 }}><AuthenticatedVideo src="/api/v1/media/root-video" data-testid="root-video" /></MediaVisibilityContext.Provider>);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        return this === root
+          ? ({ top: 100, left: 0, right: 400, bottom: 300 } as DOMRect)
+          : ({ top: 200, left: 0, right: 100, bottom: 300 } as DOMRect);
+      },
+    );
+    render(
+      <MediaVisibilityContext.Provider value={{ root, revision: 0 }}>
+        <AuthenticatedVideo
+          src="/api/v1/media/root-video"
+          data-testid="root-video"
+        />
+      </MediaVisibilityContext.Provider>,
+    );
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
 
   it("sets native looping and sticker-safe video properties", async () => {
     vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["webm"], { type: "video/webm" }) } as Response);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(["webm"], { type: "video/webm" }),
+    } as Response);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:sticker-loop");
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
 
-    render(<AuthenticatedVideo src="/api/v1/media/sticker" animatedSticker data-testid="sticker-video" />);
+    render(
+      <AuthenticatedVideo
+        src="/api/v1/media/sticker"
+        animatedSticker
+        data-testid="sticker-video"
+      />,
+    );
     const video = await screen.findByTestId("sticker-video");
 
     expect(video).toHaveProperty("loop", true);
@@ -206,13 +266,28 @@ describe("AuthenticatedVideo", () => {
 
   it("restarts a visible sticker safely after natural end without refetching", async () => {
     vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["webm"], { type: "video/webm" }) } as Response);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(["webm"], { type: "video/webm" }),
+    } as Response);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:sticker-ended");
-    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
 
-    render(<AuthenticatedVideo src="/api/v1/media/sticker" animatedSticker data-testid="sticker-ended" />);
+    render(
+      <AuthenticatedVideo
+        src="/api/v1/media/sticker"
+        animatedSticker
+        data-testid="sticker-ended"
+      />,
+    );
     const video = await screen.findByTestId("sticker-ended");
-    Object.defineProperty(video, "currentTime", { configurable: true, writable: true, value: 0.4 });
+    Object.defineProperty(video, "currentTime", {
+      configurable: true,
+      writable: true,
+      value: 0.4,
+    });
     fireEvent.ended(video);
 
     expect(video).toHaveProperty("currentTime", 0);

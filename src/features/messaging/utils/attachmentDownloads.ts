@@ -1,6 +1,7 @@
 import type { Attachment } from "@/shared/types";
 import { downloadDir, join } from "@tauri-apps/api/path";
 import { STORAGE_KEYS, storage } from "@/shared/utils/storage";
+import { clientProtocolHeaders } from "@/shared/clientProtocol";
 import { getAttachmentDisplayName, resolveAttachmentUrl } from "./attachments";
 
 type AttachmentDownloadOptions = {
@@ -38,14 +39,23 @@ function removeAttachmentDownloadPath(attachmentId: string) {
 }
 
 function normalizePathForComparison(path: string) {
-  return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "").toLowerCase();
+  return path
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "")
+    .toLowerCase();
 }
 
 async function isLegacyDownloadPath(path: string) {
   const downloadsPath = await downloadDir();
-  const legacyDirectory = normalizePathForComparison(await join(downloadsPath, LEGACY_DOWNLOAD_FOLDER));
+  const legacyDirectory = normalizePathForComparison(
+    await join(downloadsPath, LEGACY_DOWNLOAD_FOLDER),
+  );
   const normalizedPath = normalizePathForComparison(path);
-  return normalizedPath === legacyDirectory || normalizedPath.startsWith(`${legacyDirectory}/`);
+  return (
+    normalizedPath === legacyDirectory ||
+    normalizedPath.startsWith(`${legacyDirectory}/`)
+  );
 }
 
 async function getMappedAttachmentPath(attachmentId: string) {
@@ -64,8 +74,11 @@ async function fetchAttachmentBlobInternal(
   options: Pick<AttachmentDownloadOptions, "signal" | "onProgress"> = {},
 ): Promise<Blob> {
   const response = await fetch(url, {
-    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-    signal: options.signal,
+    headers: {
+      ...clientProtocolHeaders(),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    ...(options.signal ? { signal: options.signal } : {}),
   });
 
   if (!response.ok) {
@@ -78,14 +91,18 @@ async function fetchAttachmentBlobInternal(
 
   const totalBytesHeader = response.headers.get("content-length");
   const parsedTotalBytes = totalBytesHeader ? Number(totalBytesHeader) : NaN;
-  const totalBytes = Number.isFinite(parsedTotalBytes) && parsedTotalBytes >= 0
-    ? parsedTotalBytes
-    : null;
+  const totalBytes =
+    Number.isFinite(parsedTotalBytes) && parsedTotalBytes >= 0
+      ? parsedTotalBytes
+      : null;
   const reader = response.body?.getReader();
 
   if (!reader) {
     const blob = await response.blob();
-    options.onProgress?.({ loadedBytes: blob.size, totalBytes: totalBytes ?? blob.size });
+    options.onProgress?.({
+      loadedBytes: blob.size,
+      totalBytes: totalBytes ?? blob.size,
+    });
     return blob;
   }
 
@@ -124,9 +141,10 @@ function isTauriRuntime() {
 function sanitizeWindowsFileName(fileName: string) {
   const trimmed = fileName.trim() || "file";
   const extensionMatch = trimmed.match(/(\.[^.]*)$/);
-  const baseName = (extensionMatch ? trimmed.slice(0, -extensionMatch[1].length) : trimmed)
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
-    .replace(/[ .]+$/g, "") || "file";
+  const baseName =
+    (extensionMatch ? trimmed.slice(0, -extensionMatch[1].length) : trimmed)
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+      .replace(/[ .]+$/g, "") || "file";
   const extension = extensionMatch?.[1]
     ?.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
     .replace(/[ .]+$/g, "");
@@ -155,9 +173,8 @@ async function chooseAutomaticDownloadPath(
   const { baseName, extension } = splitFileName(fileName);
   let suffix = 0;
   while (true) {
-    const candidateName = suffix === 0
-      ? fileName
-      : `${baseName} (${suffix})${extension}`;
+    const candidateName =
+      suffix === 0 ? fileName : `${baseName} (${suffix})${extension}`;
     const candidatePath = await join(directory, candidateName);
     if (!(await exists(candidatePath))) return candidatePath;
     suffix += 1;
@@ -177,7 +194,9 @@ export async function fetchAttachmentBlob(
   return fetchAttachmentBlobInternal(url, authToken);
 }
 
-export async function getAttachmentLocalState(attachment: Attachment): Promise<boolean> {
+export async function getAttachmentLocalState(
+  attachment: Attachment,
+): Promise<boolean> {
   if (!isTauriRuntime()) return false;
   const mappedPath = await getMappedAttachmentPath(attachment.id);
   if (!mappedPath) return false;
@@ -201,32 +220,32 @@ export async function downloadAttachmentWithAuth({
     ]);
     const mappedPath = await getMappedAttachmentPath(attachment.id);
 
-    if (mappedPath && await exists(mappedPath)) {
+    if (mappedPath && (await exists(mappedPath))) {
       await openPath(mappedPath);
       return;
     }
 
     const directory = await getAutomaticDownloadDirectory();
-    const targetPath = mappedPath || await chooseAutomaticDownloadPath(
-      directory,
-      sanitizeWindowsFileName(getAttachmentDisplayName(attachment)),
-      exists,
-    );
-    const blob = await fetchAttachmentBlobInternal(
-      attachmentUrl,
-      authToken,
-      { signal, onProgress },
-    );
+    const targetPath =
+      mappedPath ||
+      (await chooseAutomaticDownloadPath(
+        directory,
+        sanitizeWindowsFileName(getAttachmentDisplayName(attachment)),
+        exists,
+      ));
+    const blob = await fetchAttachmentBlobInternal(attachmentUrl, authToken, {
+      signal,
+      onProgress,
+    });
     await writeFile(targetPath, new Uint8Array(await blob.arrayBuffer()));
     setAttachmentDownloadPath(attachment.id, targetPath);
     return;
   }
 
-  const blob = await fetchAttachmentBlobInternal(
-    attachmentUrl,
-    authToken,
-    { signal, onProgress },
-  );
+  const blob = await fetchAttachmentBlobInternal(attachmentUrl, authToken, {
+    signal,
+    onProgress,
+  });
   const fileName = getAttachmentDisplayName(attachment);
 
   const objectUrl = URL.createObjectURL(blob);

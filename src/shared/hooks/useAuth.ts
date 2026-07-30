@@ -13,6 +13,9 @@ export function useAuth() {
   const [error, setError] = useState<AuthError | null>(null);
   const setAuthSession = useAppStore((s) => s.setAuthSession);
   const logout = useAppStore((s) => s.logout);
+  const setProtocolUpdateRequired = useAppStore(
+    (s) => s.setProtocolUpdateRequired,
+  );
 
   const clearError = () => setError(null);
 
@@ -25,6 +28,7 @@ export function useAuth() {
       return user;
     } catch (err) {
       if (err instanceof ApiError) {
+        if (err.code === "update_required") setProtocolUpdateRequired(true);
         setError({ message: err.message, details: err.details });
       } else {
         setError({ message: "Registration failed." });
@@ -44,6 +48,7 @@ export function useAuth() {
       return user;
     } catch (err) {
       if (err instanceof ApiError) {
+        if (err.code === "update_required") setProtocolUpdateRequired(true);
         setError({ message: err.message, details: err.details });
       } else {
         setError({ message: "Login failed." });

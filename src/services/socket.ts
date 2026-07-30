@@ -20,6 +20,10 @@ import {
   summarizeMessageMedia,
 } from "@/features/messaging/utils/attachmentDebug";
 import { serializeMessageEntitiesForRequest } from "@/shared/utils/textEntities";
+import {
+  CLIENT_PROTOCOL_SOCKET_PARAM,
+  CLIENT_PROTOCOL_VERSION,
+} from "@/shared/clientProtocol";
 
 export function getDefaultSocketUrl(
   location: Pick<Location, "protocol" | "host"> = window.location,
@@ -337,7 +341,14 @@ async function resolveSocketAuthParams(
     if (hasSocketTicket(socket_ticket)) {
       return { socket_ticket };
     }
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "update_required"
+    ) {
+      throw error;
+    }
     // Keep compatibility with older deployments by falling back quietly.
   }
 
@@ -369,7 +380,10 @@ export async function connectSocket(
   };
 
   const socket = new Socket(SOCKET_URL, {
-    params: () => authParams,
+    params: () => ({
+      ...authParams,
+      [CLIENT_PROTOCOL_SOCKET_PARAM]: String(CLIENT_PROTOCOL_VERSION),
+    }),
     reconnectAfterMs: (tries: number) =>
       [1000, 2000, 5000, 10000][tries - 1] || 10000,
   });

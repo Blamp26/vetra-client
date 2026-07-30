@@ -4,6 +4,7 @@ import { useAppStore } from "@/store";
 import { Avatar } from "./Avatar";
 import { AuthenticatedVideo } from "./AuthenticatedVideo";
 import { formatVideoLightboxTimestamp } from "./videoLightboxDate";
+import { clientProtocolHeaders } from "@/shared/clientProtocol";
 
 interface VideoLightboxProps {
   src: string;
@@ -59,16 +60,25 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
       viewportSize.width * (isZoomed ? 0.985 : 0.96),
       isZoomed ? 1400 : 1152,
     );
-    const availableHeight = Math.max(240, viewportSize.height - (isZoomed ? 32 : 80));
-    const ratio = mediaSize.width > 0 && mediaSize.height > 0
-      ? mediaSize.width / mediaSize.height
-      : 1;
+    const availableHeight = Math.max(
+      240,
+      viewportSize.height - (isZoomed ? 32 : 80),
+    );
+    const ratio =
+      mediaSize.width > 0 && mediaSize.height > 0
+        ? mediaSize.width / mediaSize.height
+        : 1;
 
     const naturalWidth = mediaSize.width > 1 ? mediaSize.width : availableWidth;
-    const naturalHeight = mediaSize.height > 1 ? mediaSize.height : naturalWidth / ratio;
+    const naturalHeight =
+      mediaSize.height > 1 ? mediaSize.height : naturalWidth / ratio;
 
-    let width = isZoomed ? Math.min(naturalWidth, availableWidth) : availableWidth;
-    let height = isZoomed ? Math.min(naturalHeight, availableHeight) : width / ratio;
+    let width = isZoomed
+      ? Math.min(naturalWidth, availableWidth)
+      : availableWidth;
+    let height = isZoomed
+      ? Math.min(naturalHeight, availableHeight)
+      : width / ratio;
 
     if (isZoomed) {
       width = Math.max(width, Math.min(availableWidth, naturalWidth * 1.08));
@@ -85,20 +95,30 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
       height: Math.round(height),
       ratio,
     };
-  }, [isZoomed, mediaSize.height, mediaSize.width, viewportSize.height, viewportSize.width]);
+  }, [
+    isZoomed,
+    mediaSize.height,
+    mediaSize.width,
+    viewportSize.height,
+    viewportSize.width,
+  ]);
 
   const formattedTimestamp = useMemo(
     () => formatVideoLightboxTimestamp(createdAt),
     [createdAt],
   );
 
-  const actionButtonClassName = "inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-transparent text-white/82 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70";
+  const actionButtonClassName =
+    "inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-transparent text-white/82 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70";
 
   const handleDownload = async (event: React.MouseEvent) => {
     event.stopPropagation();
     try {
       const response = await fetch(src, {
-        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        headers: {
+          ...clientProtocolHeaders(),
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
       });
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -132,7 +152,9 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
           className="border-white/20 bg-white/10 text-white"
         />
         <div className="min-w-0">
-          <div className="truncate text-[15px] font-semibold leading-[1.2] text-white">{authorName}</div>
+          <div className="truncate text-[15px] font-semibold leading-[1.2] text-white">
+            {authorName}
+          </div>
           <div className="truncate pt-0.5 text-[12px] leading-[1.25] text-white/70">
             {formattedTimestamp}
           </div>
@@ -164,7 +186,11 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
             setIsZoomed((current) => !current);
           }}
         >
-          {isZoomed ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
+          {isZoomed ? (
+            <ZoomOut className="h-5 w-5" />
+          ) : (
+            <ZoomIn className="h-5 w-5" />
+          )}
         </button>
         <button
           type="button"
@@ -223,7 +249,10 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
             className="block h-full w-full bg-black object-contain"
             data-testid="video-lightbox-player"
             onMediaDiagnostics={(diagnostics) => {
-              if (diagnostics.naturalWidth > 0 && diagnostics.naturalHeight > 0) {
+              if (
+                diagnostics.naturalWidth > 0 &&
+                diagnostics.naturalHeight > 0
+              ) {
                 setMediaSize({
                   width: diagnostics.naturalWidth,
                   height: diagnostics.naturalHeight,

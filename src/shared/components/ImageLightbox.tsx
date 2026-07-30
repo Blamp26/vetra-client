@@ -5,6 +5,7 @@ import { useAppStore } from "@/store";
 import { AuthenticatedImage } from "./AuthenticatedImage";
 import { Avatar } from "./Avatar";
 import { formatVideoLightboxTimestamp } from "./videoLightboxDate";
+import { clientProtocolHeaders } from "@/shared/clientProtocol";
 
 interface ImageLightboxProps {
   src: string;
@@ -73,7 +74,10 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
           const nextX = mouseX - (mouseX - currentPosition.x) * ratio;
           const nextY = mouseY - (mouseY - currentPosition.y) * ratio;
           const limitX = Math.max(0, (rect.width * nextScale - rect.width) / 2);
-          const limitY = Math.max(0, (rect.height * nextScale - rect.height) / 2);
+          const limitY = Math.max(
+            0,
+            (rect.height * nextScale - rect.height) / 2,
+          );
 
           return {
             x: Math.max(-limitX, Math.min(nextX, limitX)),
@@ -94,7 +98,8 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
     [createdAt],
   );
 
-  const actionButtonClassName = "inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-transparent text-white/82 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70";
+  const actionButtonClassName =
+    "inline-flex h-10 w-10 items-center justify-center rounded-[10px] bg-transparent text-white/82 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70";
 
   const toggleZoom = () => {
     setIsZoomed((current) => {
@@ -111,7 +116,10 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
     if (scale <= 1) return;
     event.preventDefault();
     setIsDragging(true);
-    setDragStart({ x: event.clientX - position.x, y: event.clientY - position.y });
+    setDragStart({
+      x: event.clientX - position.x,
+      y: event.clientY - position.y,
+    });
   };
 
   const handleMouseMove = (event: React.MouseEvent) => {
@@ -135,7 +143,10 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
     event.stopPropagation();
     try {
       const response = await fetch(src, {
-        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        headers: {
+          ...clientProtocolHeaders(),
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
       });
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -172,7 +183,9 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
           className="border-white/20 bg-white/10 text-white"
         />
         <div className="min-w-0">
-          <div className="truncate text-[15px] font-semibold leading-[1.2] text-white">{authorName}</div>
+          <div className="truncate text-[15px] font-semibold leading-[1.2] text-white">
+            {authorName}
+          </div>
           <div className="truncate pt-0.5 text-[12px] leading-[1.25] text-white/70">
             {formattedTimestamp}
           </div>
@@ -204,7 +217,11 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
             toggleZoom();
           }}
         >
-          {isZoomed ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
+          {isZoomed ? (
+            <ZoomOut className="h-5 w-5" />
+          ) : (
+            <ZoomIn className="h-5 w-5" />
+          )}
         </button>
         <button
           type="button"
@@ -251,7 +268,11 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
           alt="Lightbox"
           className={cn(
             "max-h-[calc(100dvh-48px)] max-w-[min(96vw,1400px)] rounded-[14px] object-contain select-none",
-            scale > 1 ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-default",
+            scale > 1
+              ? isDragging
+                ? "cursor-grabbing"
+                : "cursor-grab"
+              : "cursor-default",
           )}
           style={{
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,

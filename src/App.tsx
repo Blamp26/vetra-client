@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { useAppStore } from "@/store";
 import { AuthPage } from "@/features/registration/AuthPage";
+import { UpdateRequiredScreen } from "@/features/registration/UpdateRequiredScreen";
 import { Sidebar } from "@/features/messaging/components/Sidebar";
 import { SidebarFooter } from "@/features/messaging/components/Sidebar/SidebarFooter";
 import { ChatWindow } from "@/features/messaging/components/ChatWindow/ChatWindow";
@@ -19,13 +24,22 @@ import { ToastHost } from "@/shared/components/ToastHost/ToastHost";
 import { EmptyPane } from "@/shared/components/EmptyPane";
 import { Button } from "@/shared/components/Button";
 import { DesktopTitleBar } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
-import { CallRuntimeBoundary, type PersistentCallAffordance } from "@/features/calling/context/CallRuntimeBoundary";
+import {
+  CallRuntimeBoundary,
+  type PersistentCallAffordance,
+} from "@/features/calling/context/CallRuntimeBoundary";
 import { PersistentCallSurface } from "@/features/calling/components/PersistentCallSurface/PersistentCallSurface";
 import { useOptionalPersistentCall } from "@/features/calling/context/PersistentCallContext";
-import { persistentCallSidebarModel, usePersistentCallElapsedSeconds } from "@/features/calling/components/PersistentCallSurface/PersistentCallViewModel";
+import {
+  persistentCallSidebarModel,
+  usePersistentCallElapsedSeconds,
+} from "@/features/calling/components/PersistentCallSurface/PersistentCallViewModel";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
 import { debugCall } from "@/features/calling/utils/callDebug";
-import { PersistentCallDebugPanel, PersistentCallDiagnosticsShortcut } from "@/features/calling/components/PersistentCallDebugPanel";
+import {
+  PersistentCallDebugPanel,
+  PersistentCallDiagnosticsShortcut,
+} from "@/features/calling/components/PersistentCallDebugPanel";
 import type { ActiveChat } from "@/shared/types";
 import { startMediaDeviceObserver } from "@/shared/utils/mediaDeviceObserver";
 
@@ -52,7 +66,9 @@ function getInitialLeftPaneWidth(): number {
 
   const storedMode = window.localStorage.getItem(LEFT_PANE_MODE_STORAGE_KEY);
   const storedWidth = window.localStorage.getItem(LEFT_PANE_STORAGE_KEY);
-  const parsedWidth = storedWidth ? Number.parseInt(storedWidth, 10) : Number.NaN;
+  const parsedWidth = storedWidth
+    ? Number.parseInt(storedWidth, 10)
+    : Number.NaN;
   const hasStoredWidth = Number.isFinite(parsedWidth);
 
   if (storedMode === "collapsed") {
@@ -71,7 +87,9 @@ function getInitialLeftPaneWidth(): number {
   }
 
   return resolveTextPaneWidth(
-    hasStoredWidth ? Math.max(parsedWidth, LEFT_TEXT_MIN_WIDTH) : LEFT_PANE_DEFAULT_WIDTH,
+    hasStoredWidth
+      ? Math.max(parsedWidth, LEFT_TEXT_MIN_WIDTH)
+      : LEFT_PANE_DEFAULT_WIDTH,
     window.innerWidth,
   );
 }
@@ -79,6 +97,7 @@ function getInitialLeftPaneWidth(): number {
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
   const socketManager = useAppStore((s) => s.socketManager);
+  const protocolUpdateRequired = useAppStore((s) => s.protocolUpdateRequired);
   useAuthHydration();
   useSocketEvents();
 
@@ -86,6 +105,10 @@ function App() {
     if (!currentUser) return;
     return startMediaDeviceObserver();
   }, [currentUser]);
+
+  if (protocolUpdateRequired) {
+    return <UpdateRequiredScreen />;
+  }
 
   if (!currentUser) {
     return <AuthPage />;
@@ -96,14 +119,26 @@ function App() {
       currentUser={currentUser}
       socketManager={socketManager}
       nonCallContent={<AppShell call={null} />}
-      persistentContent={(affordance) => <PersistentCallApplication affordance={affordance} />}
+      persistentContent={(affordance) => (
+        <PersistentCallApplication affordance={affordance} />
+      )}
     />
   );
 }
 
-function PersistentCallApplication({ affordance }: { affordance: PersistentCallAffordance }) {
-  const appShell = <AppShell call={null} persistentCallAffordance={affordance} />;
-  return affordance.state === "owner" ? <PersistentCallSurface>{appShell}</PersistentCallSurface> : appShell;
+function PersistentCallApplication({
+  affordance,
+}: {
+  affordance: PersistentCallAffordance;
+}) {
+  const appShell = (
+    <AppShell call={null} persistentCallAffordance={affordance} />
+  );
+  return affordance.state === "owner" ? (
+    <PersistentCallSurface>{appShell}</PersistentCallSurface>
+  ) : (
+    appShell
+  );
 }
 
 export interface AppShellProps {
@@ -113,13 +148,19 @@ export interface AppShellProps {
 
 export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const persistentCall = useOptionalPersistentCall();
-  const persistentSeconds = usePersistentCallElapsedSeconds(persistentCall?.presentation ?? null);
+  const persistentSeconds = usePersistentCallElapsedSeconds(
+    persistentCall?.presentation ?? null,
+  );
   const persistentSidebar = persistentCall
     ? persistentCallSidebarModel(persistentCall, persistentSeconds)
     : null;
-  const persistentPrePresentation = persistentCall?.ux.status.kind === "idle" && persistentCall.ux.actionBusy;
+  const persistentPrePresentation =
+    persistentCall?.ux.status.kind === "idle" && persistentCall.ux.actionBusy;
   const persistentCallIssue = persistentCall?.presentation.callIssue
-    ? { tone: "error" as const, message: persistentCall.presentation.callIssue.message }
+    ? {
+        tone: "error" as const,
+        message: persistentCall.presentation.callIssue.message,
+      }
     : null;
   const currentUser = useAppStore((s) => s.currentUser);
   const {
@@ -136,10 +177,12 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     isScreenShareUpdating = false,
     seconds = persistentSidebar?.seconds ?? 0,
     callIssue = persistentSidebar?.callIssue ?? persistentCallIssue,
-    isIncomingActionPending = persistentSidebar?.isIncomingActionPending ?? false,
+    isIncomingActionPending = persistentSidebar?.isIncomingActionPending ??
+      false,
   } = call ?? {};
   const resolvedStatus = call?.status ?? status;
-  const isResolvedActive = resolvedStatus === "active" || resolvedStatus === "connected";
+  const isResolvedActive =
+    resolvedStatus === "active" || resolvedStatus === "connected";
   const resolvedRemoteUsername = call?.remoteUsername ?? remoteUsername;
   const resolvedRemoteUserId = call?.remoteUserId ?? remoteUserId;
   const resolvedIsMuted = call?.isMuted ?? isMuted;
@@ -149,14 +192,18 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const resolvedCanToggleMute = call?.canToggleMute ?? canToggleMute;
   const resolvedCanToggleDeafen = call?.canToggleDeafen ?? canToggleDeafen;
   const resolvedCallIssue = call?.callIssue ?? callIssue;
-  const resolvedIncomingActionPending = call?.isIncomingActionPending ?? isIncomingActionPending;
+  const resolvedIncomingActionPending =
+    call?.isIncomingActionPending ?? isIncomingActionPending;
   const activeChat = useAppStore((s) => s.activeChat);
   const debugPeerUuidSource = persistentCall?.presentation.peerPublicId
-    ? "user" as const
+    ? ("user" as const)
     : activeChat?.type === "direct" && activeChat.partnerRef !== undefined
-      ? "partnerRef" as const
-      : "none" as const;
-  const debugPeerUuidValid = Boolean(persistentCall?.presentation.peerPublicId || (activeChat?.type === "direct" && activeChat.partnerRef !== undefined));
+      ? ("partnerRef" as const)
+      : ("none" as const);
+  const debugPeerUuidValid = Boolean(
+    persistentCall?.presentation.peerPublicId ||
+    (activeChat?.type === "direct" && activeChat.partnerRef !== undefined),
+  );
   const conversationPreviews = useAppStore((s) => s.conversationPreviews);
   const roomPreviews = useAppStore((s) => s.roomPreviews);
   const servers = useAppStore((s) => s.servers);
@@ -180,7 +227,10 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     routeHash,
   });
   const navigationStateInitializedRef = useRef(false);
-  const activeCallDirectChatRef = useRef<Extract<ActiveChat, { type: "direct" }> | null>(null);
+  const activeCallDirectChatRef = useRef<Extract<
+    ActiveChat,
+    { type: "direct" }
+  > | null>(null);
 
   useEffect(() => {
     leftPaneWidthRef.current = leftPaneWidth;
@@ -197,22 +247,34 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
 
   const persistLeftPaneWidth = useCallback((width: number) => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(LEFT_PANE_STORAGE_KEY, String(Math.round(width)));
+    window.localStorage.setItem(
+      LEFT_PANE_STORAGE_KEY,
+      String(Math.round(width)),
+    );
   }, []);
 
-  const updateLeftPaneWidth = useCallback((nextWidth: number) => {
-    const resolvedWidth = resolveTextPaneWidth(nextWidth, getAvailableShellWidth());
-    leftPaneWidthRef.current = resolvedWidth;
-    setLeftPaneWidth((previousWidth) => (
-      previousWidth === resolvedWidth ? previousWidth : resolvedWidth
-    ));
-    return resolvedWidth;
-  }, [getAvailableShellWidth]);
+  const updateLeftPaneWidth = useCallback(
+    (nextWidth: number) => {
+      const resolvedWidth = resolveTextPaneWidth(
+        nextWidth,
+        getAvailableShellWidth(),
+      );
+      leftPaneWidthRef.current = resolvedWidth;
+      setLeftPaneWidth((previousWidth) =>
+        previousWidth === resolvedWidth ? previousWidth : resolvedWidth,
+      );
+      return resolvedWidth;
+    },
+    [getAvailableShellWidth],
+  );
 
-  const updateLeftPaneFromPointer = useCallback((clientX: number) => {
-    const shellLeft = shellRef.current?.getBoundingClientRect().left ?? 0;
-    return updateLeftPaneWidth(clientX - shellLeft);
-  }, [updateLeftPaneWidth]);
+  const updateLeftPaneFromPointer = useCallback(
+    (clientX: number) => {
+      const shellLeft = shellRef.current?.getBoundingClientRect().left ?? 0;
+      return updateLeftPaneWidth(clientX - shellLeft);
+    },
+    [updateLeftPaneWidth],
+  );
 
   useEffect(() => {
     currentActiveChatKeyRef.current = currentActiveChatKey;
@@ -333,37 +395,43 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     ],
   );
   const activeChatHash = useMemo(
-    () =>
-      buildHashForActiveChat(activeChat, routeLookup),
-    [
-      activeChat,
-      routeLookup,
-    ],
+    () => buildHashForActiveChat(activeChat, routeLookup),
+    [activeChat, routeLookup],
   );
 
   const activeDirectChatMatchesRemote = useCallback(
     (chat: Extract<ActiveChat, { type: "direct" }>) => {
-      if (resolvedRemoteUserId === null || resolvedRemoteUserId === undefined) return false;
+      if (resolvedRemoteUserId === null || resolvedRemoteUserId === undefined)
+        return false;
 
       const remoteRef = String(resolvedRemoteUserId);
       return (
         remoteRef === String(chat.partnerId) ||
-        (chat.partnerRef !== undefined && remoteRef === String(chat.partnerRef)) ||
-        remoteRef === String(conversationPreviews[chat.partnerId]?.partner_public_id ?? "")
+        (chat.partnerRef !== undefined &&
+          remoteRef === String(chat.partnerRef)) ||
+        remoteRef ===
+          String(conversationPreviews[chat.partnerId]?.partner_public_id ?? "")
       );
     },
     [conversationPreviews, resolvedRemoteUserId],
   );
 
   useEffect(() => {
-    if ((resolvedStatus === "idle" && !persistentPrePresentation) || resolvedStatus === "ended" || resolvedStatus === "failed") {
+    if (
+      (resolvedStatus === "idle" && !persistentPrePresentation) ||
+      resolvedStatus === "ended" ||
+      resolvedStatus === "failed"
+    ) {
       activeCallDirectChatRef.current = null;
       return;
     }
 
     if (activeChat?.type !== "direct") return;
 
-    if ((resolvedStatus === "calling" || persistentPrePresentation) && !activeCallDirectChatRef.current) {
+    if (
+      (resolvedStatus === "calling" || persistentPrePresentation) &&
+      !activeCallDirectChatRef.current
+    ) {
       activeCallDirectChatRef.current = activeChat;
       return;
     }
@@ -371,10 +439,22 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     if (activeDirectChatMatchesRemote(activeChat)) {
       activeCallDirectChatRef.current = activeChat;
     }
-  }, [activeChat, activeDirectChatMatchesRemote, persistentPrePresentation, resolvedStatus]);
+  }, [
+    activeChat,
+    activeDirectChatMatchesRemote,
+    persistentPrePresentation,
+    resolvedStatus,
+  ]);
 
-  const activeCallChatTarget = useMemo((): Extract<ActiveChat, { type: "direct" }> | null => {
-    if (!isResolvedActive || resolvedRemoteUserId === null || resolvedRemoteUserId === undefined) {
+  const activeCallChatTarget = useMemo((): Extract<
+    ActiveChat,
+    { type: "direct" }
+  > | null => {
+    if (
+      !isResolvedActive ||
+      resolvedRemoteUserId === null ||
+      resolvedRemoteUserId === undefined
+    ) {
       return null;
     }
 
@@ -382,17 +462,30 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
       return activeCallDirectChatRef.current;
     }
 
-    if (typeof resolvedRemoteUserId === "number" || /^\d+$/.test(String(resolvedRemoteUserId))) {
+    if (
+      typeof resolvedRemoteUserId === "number" ||
+      /^\d+$/.test(String(resolvedRemoteUserId))
+    ) {
       const numericRemoteId = Number(resolvedRemoteUserId);
-      return { type: "direct", partnerId: numericRemoteId, partnerRef: numericRemoteId };
+      return {
+        type: "direct",
+        partnerId: numericRemoteId,
+        partnerRef: numericRemoteId,
+      };
     }
 
-    const resolved = resolveHashToActiveChat(`#/${resolvedRemoteUserId}`, routeLookup);
+    const resolved = resolveHashToActiveChat(
+      `#/${resolvedRemoteUserId}`,
+      routeLookup,
+    );
     if (resolved?.type === "direct") {
       return resolved;
     }
 
-    if (activeChat?.type === "direct" && activeDirectChatMatchesRemote(activeChat)) {
+    if (
+      activeChat?.type === "direct" &&
+      activeDirectChatMatchesRemote(activeChat)
+    ) {
       return activeChat;
     }
 
@@ -406,7 +499,10 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   ]);
 
   const activeCallChatHash = useMemo(
-    () => activeCallChatTarget ? buildHashForActiveChat(activeCallChatTarget, routeLookup) : null,
+    () =>
+      activeCallChatTarget
+        ? buildHashForActiveChat(activeCallChatTarget, routeLookup)
+        : null,
     [activeCallChatTarget, routeLookup],
   );
 
@@ -429,7 +525,10 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
       return;
     }
 
-    if (activeCallChatTarget && activeChatKey(activeCallChatTarget) === currentActiveChatKeyRef.current) {
+    if (
+      activeCallChatTarget &&
+      activeChatKey(activeCallChatTarget) === currentActiveChatKeyRef.current
+    ) {
       debugCall("[AppShell] return to call skipped", {
         reason: "already_on_call_chat",
         remoteUserId: resolvedRemoteUserId,
@@ -470,7 +569,8 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     // effects from undoing each other during an explicit chat switch.
     if (
       routeTarget &&
-      (!navigationStateInitializedRef.current || (routeChanged && !activeChanged)) &&
+      (!navigationStateInitializedRef.current ||
+        (routeChanged && !activeChanged)) &&
       routeTargetKey !== currentActiveChatKey
     ) {
       setActiveChat(routeTarget);
@@ -501,7 +601,11 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     const activeChanged = previous.activeChatKey !== currentActiveChatKey;
     const routeChanged = previous.routeHash !== routeHash;
 
-    if (activeChatHash && routeHash !== activeChatHash && (!routeChanged || activeChanged)) {
+    if (
+      activeChatHash &&
+      routeHash !== activeChatHash &&
+      (!routeChanged || activeChanged)
+    ) {
       navigateToHash(activeChatHash);
     }
   }, [
@@ -558,48 +662,61 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     return activeChat;
   }, [activeChat]);
 
-  const handleSplitterPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    isResizingRef.current = true;
-    setIsResizing(true);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    updateLeftPaneFromPointer(event.clientX);
-  }, [updateLeftPaneFromPointer]);
+  const handleSplitterPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      isResizingRef.current = true;
+      setIsResizing(true);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      updateLeftPaneFromPointer(event.clientX);
+    },
+    [updateLeftPaneFromPointer],
+  );
 
-  const handleSplitterKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    let nextWidth = leftPaneWidthRef.current;
+  const handleSplitterKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      let nextWidth = leftPaneWidthRef.current;
 
-    switch (event.key) {
-      case "ArrowLeft":
-        nextWidth = Math.max(LEFT_TEXT_MIN_WIDTH, leftPaneWidthRef.current - LEFT_PANE_KEYBOARD_STEP);
-        break;
-      case "ArrowRight":
-        nextWidth = leftPaneWidthRef.current + LEFT_PANE_KEYBOARD_STEP;
-        break;
-      case "Home":
-        nextWidth = LEFT_TEXT_MIN_WIDTH;
-        break;
-      case "End":
-        nextWidth = getTextPaneMaxWidth(getAvailableShellWidth());
-        break;
-      default:
-        return;
-    }
+      switch (event.key) {
+        case "ArrowLeft":
+          nextWidth = Math.max(
+            LEFT_TEXT_MIN_WIDTH,
+            leftPaneWidthRef.current - LEFT_PANE_KEYBOARD_STEP,
+          );
+          break;
+        case "ArrowRight":
+          nextWidth = leftPaneWidthRef.current + LEFT_PANE_KEYBOARD_STEP;
+          break;
+        case "Home":
+          nextWidth = LEFT_TEXT_MIN_WIDTH;
+          break;
+        case "End":
+          nextWidth = getTextPaneMaxWidth(getAvailableShellWidth());
+          break;
+        default:
+          return;
+      }
 
-    event.preventDefault();
-    const resolvedWidth = updateLeftPaneWidth(nextWidth);
-    persistLeftPaneWidth(resolvedWidth);
-  }, [getAvailableShellWidth, persistLeftPaneWidth, updateLeftPaneWidth]);
+      event.preventDefault();
+      const resolvedWidth = updateLeftPaneWidth(nextWidth);
+      persistLeftPaneWidth(resolvedWidth);
+    },
+    [getAvailableShellWidth, persistLeftPaneWidth, updateLeftPaneWidth],
+  );
 
   const handleSplitterDoubleClick = useCallback(() => {
     const resolvedWidth = updateLeftPaneWidth(LEFT_PANE_DEFAULT_WIDTH);
     persistLeftPaneWidth(resolvedWidth);
   }, [persistLeftPaneWidth, updateLeftPaneWidth]);
 
-  const shellStyle = useMemo(() => ({
-    "--vetra-left-pane-width": `${leftPaneWidth}px`,
-  }) as CSSProperties, [leftPaneWidth]);
+  const shellStyle = useMemo(
+    () =>
+      ({
+        "--vetra-left-pane-width": `${leftPaneWidth}px`,
+      }) as CSSProperties,
+    [leftPaneWidth],
+  );
 
   const dividerMaxWidth = getTextPaneMaxWidth(getAvailableShellWidth());
 
@@ -629,7 +746,9 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
           </div>
 
           <SidebarFooter
-            callStatus={resolvedStatus === "connected" ? "active" : resolvedStatus}
+            callStatus={
+              resolvedStatus === "connected" ? "active" : resolvedStatus
+            }
             callUxStatus={persistentCall?.ux.status.kind}
             remoteUsername={resolvedRemoteUsername}
             callSeconds={seconds}
@@ -643,12 +762,49 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
             isScreenShareUpdating={isScreenShareUpdating}
             callIssue={resolvedCallIssue}
             isIncomingActionPending={resolvedIncomingActionPending}
-            onMuteToggle={call?.toggleMute ?? (() => { persistentCall?.toggleMute(); })}
-            onDeafenToggle={call?.toggleDeafen ?? (() => { persistentCall?.toggleDeafen(); })}
-            onHangUp={call?.hangUp ?? (() => { void persistentCall?.hangup(); })}
-            onCancelCall={call ? undefined : persistentSidebar?.canCancel ? () => { void persistentCall?.cancel(); } : undefined}
-            onAcceptCall={call?.acceptCall ?? (persistentSidebar?.direction === "incoming" ? () => { void persistentCall?.accept(); } : undefined)}
-            onRejectCall={call?.rejectCall ?? (persistentSidebar?.direction === "incoming" ? () => { void persistentCall?.decline(); } : undefined)}
+            onMuteToggle={
+              call?.toggleMute ??
+              (() => {
+                persistentCall?.toggleMute();
+              })
+            }
+            onDeafenToggle={
+              call?.toggleDeafen ??
+              (() => {
+                persistentCall?.toggleDeafen();
+              })
+            }
+            onHangUp={
+              call?.hangUp ??
+              (() => {
+                void persistentCall?.hangup();
+              })
+            }
+            onCancelCall={
+              call
+                ? undefined
+                : persistentSidebar?.canCancel
+                  ? () => {
+                      void persistentCall?.cancel();
+                    }
+                  : undefined
+            }
+            onAcceptCall={
+              call?.acceptCall ??
+              (persistentSidebar?.direction === "incoming"
+                ? () => {
+                    void persistentCall?.accept();
+                  }
+                : undefined)
+            }
+            onRejectCall={
+              call?.rejectCall ??
+              (persistentSidebar?.direction === "incoming"
+                ? () => {
+                    void persistentCall?.decline();
+                  }
+                : undefined)
+            }
             callDirection={call ? undefined : persistentSidebar?.direction}
             canCancelCall={call ? undefined : persistentSidebar?.canCancel}
             canHangUpCall={call ? undefined : persistentSidebar?.canHangup}
@@ -691,7 +847,15 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
             <EmptyPane
               title="Pick a conversation"
               description="Select a chat or start a new one."
-              action={<Button variant="secondary" type="button" onClick={() => openModal("CREATE_PICKER")}>Start a new conversation</Button>}
+              action={
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => openModal("CREATE_PICKER")}
+                >
+                  Start a new conversation
+                </Button>
+              }
               density="workspace"
               className="flex flex-1 flex-col items-center justify-center px-8 py-10"
             />
@@ -712,19 +876,27 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
         />
       )}
 
-      {call?.callSound?.autoplayBlocked && (resolvedStatus === "ringing" || resolvedStatus === "active" || resolvedStatus === "connected") && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center" data-testid="legacy-call-sound-recovery">
-          <Button
-            variant="secondary"
-            type="button"
-            className="pointer-events-auto"
-            onClick={() => { void call.callSound?.enableCallSounds(); }}
-            aria-label="Enable call sounds"
+      {call?.callSound?.autoplayBlocked &&
+        (resolvedStatus === "ringing" ||
+          resolvedStatus === "active" ||
+          resolvedStatus === "connected") && (
+          <div
+            className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center"
+            data-testid="legacy-call-sound-recovery"
           >
-            Enable call sounds
-          </Button>
-        </div>
-      )}
+            <Button
+              variant="secondary"
+              type="button"
+              className="pointer-events-auto"
+              onClick={() => {
+                void call.callSound?.enableCallSounds();
+              }}
+              aria-label="Enable call sounds"
+            >
+              Enable call sounds
+            </Button>
+          </div>
+        )}
 
       <ToastHost />
       <PersistentCallDiagnosticsShortcut />
@@ -733,7 +905,9 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
         directChat={activeChat?.type === "direct"}
         peerUuidSource={debugPeerUuidSource}
         peerUuidValid={debugPeerUuidValid}
-        finalButtonPredicate={activeChat?.type === "direct" && debugPeerUuidValid}
+        finalButtonPredicate={
+          activeChat?.type === "direct" && debugPeerUuidValid
+        }
       />
     </div>
   );

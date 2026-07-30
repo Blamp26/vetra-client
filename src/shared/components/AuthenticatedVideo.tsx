@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/store";
 import { useMediaVisibility } from "./MediaVisibilityContext";
+import { clientProtocolHeaders } from "@/shared/clientProtocol";
 
 export interface AuthenticatedVideoDiagnostics {
   naturalWidth: number;
@@ -19,15 +20,20 @@ interface AuthenticatedVideoProps extends React.VideoHTMLAttributes<HTMLVideoEle
 
 const MEDIA_PRELOAD_MARGIN = 200;
 
-function isWithinVisibilityMargin(target: HTMLElement, root: HTMLElement | null): boolean {
+function isWithinVisibilityMargin(
+  target: HTMLElement,
+  root: HTMLElement | null,
+): boolean {
   const targetRect = target.getBoundingClientRect();
   const rootRect = root
     ? root.getBoundingClientRect()
     : { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight };
-  return targetRect.bottom >= rootRect.top - MEDIA_PRELOAD_MARGIN
-    && targetRect.top <= rootRect.bottom + MEDIA_PRELOAD_MARGIN
-    && targetRect.right >= rootRect.left - MEDIA_PRELOAD_MARGIN
-    && targetRect.left <= rootRect.right + MEDIA_PRELOAD_MARGIN;
+  return (
+    targetRect.bottom >= rootRect.top - MEDIA_PRELOAD_MARGIN &&
+    targetRect.top <= rootRect.bottom + MEDIA_PRELOAD_MARGIN &&
+    targetRect.right >= rootRect.left - MEDIA_PRELOAD_MARGIN &&
+    targetRect.left <= rootRect.right + MEDIA_PRELOAD_MARGIN
+  );
 }
 
 export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
@@ -45,37 +51,50 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const authToken = useAppStore((s) => s.authToken);
-  const { root: visibilityRoot, revision: visibilityRevision } = useMediaVisibility();
+  const { root: visibilityRoot, revision: visibilityRevision } =
+    useMediaVisibility();
   const [playbackVisible, setPlaybackVisible] = useState(true);
   const playbackVisibleRef = useRef(true);
   const playPromiseRef = useRef<Promise<void> | null>(null);
 
-  const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  const reducedMotion = () =>
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
   const playSafely = (video: HTMLVideoElement) => {
-    if (reducedMotion() || !playbackVisibleRef.current || !video.paused || playPromiseRef.current) return;
+    if (
+      reducedMotion() ||
+      !playbackVisibleRef.current ||
+      !video.paused ||
+      playPromiseRef.current
+    )
+      return;
     const pending = video.play();
     if (!pending || typeof pending.then !== "function") return;
     playPromiseRef.current = pending;
-    void pending.catch(() => undefined).finally(() => {
-      if (playPromiseRef.current === pending) playPromiseRef.current = null;
-    });
+    void pending
+      .catch(() => undefined)
+      .finally(() => {
+        if (playPromiseRef.current === pending) playPromiseRef.current = null;
+      });
   };
 
-  const notifyDiagnostics = React.useCallback((video: HTMLVideoElement) => {
-    const diagnostics = {
-      naturalWidth: video.videoWidth,
-      naturalHeight: video.videoHeight,
-      renderedWidth: video.clientWidth,
-      renderedHeight: video.clientHeight,
-      devicePixelRatio: window.devicePixelRatio || 1,
-      duration:
-        Number.isFinite(video.duration) && video.duration > 0
-          ? video.duration
-          : null,
-    };
+  const notifyDiagnostics = React.useCallback(
+    (video: HTMLVideoElement) => {
+      const diagnostics = {
+        naturalWidth: video.videoWidth,
+        naturalHeight: video.videoHeight,
+        renderedWidth: video.clientWidth,
+        renderedHeight: video.clientHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+        duration:
+          Number.isFinite(video.duration) && video.duration > 0
+            ? video.duration
+            : null,
+      };
 
-    onMediaDiagnostics?.(diagnostics);
-  }, [onMediaDiagnostics]);
+      onMediaDiagnostics?.(diagnostics);
+    },
+    [onMediaDiagnostics],
+  );
 
   useEffect(() => {
     if (objectUrl || error || isInView) return;
@@ -118,9 +137,16 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
       if (visible) playSafely(video);
       else if (!video.paused) video.pause();
     };
-    if (typeof IntersectionObserver === "undefined") { update(true); return; }
-    const observer = new IntersectionObserver(entries => update(Boolean(entries[0]?.isIntersecting)), { root: visibilityRoot, rootMargin: "0px" });
-    observer.observe(video); return () => observer.disconnect();
+    if (typeof IntersectionObserver === "undefined") {
+      update(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => update(Boolean(entries[0]?.isIntersecting)),
+      { root: visibilityRoot, rootMargin: "0px" },
+    );
+    observer.observe(video);
+    return () => observer.disconnect();
   }, [animatedSticker, objectUrl, visibilityRoot, visibilityRevision]);
 
   useEffect(() => {
@@ -141,7 +167,10 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
     const loadVideo = async () => {
       try {
         const response = await fetch(src, {
-          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+          headers: {
+            ...clientProtocolHeaders(),
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
         });
 
         if (!response.ok) throw new Error("Failed to load video");
@@ -188,7 +217,9 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
     return () => observer.disconnect();
   }, [notifyDiagnostics, objectUrl]);
 
-  const handleLoadedMetadata: React.ReactEventHandler<HTMLVideoElement> = (event) => {
+  const handleLoadedMetadata: React.ReactEventHandler<HTMLVideoElement> = (
+    event,
+  ) => {
     notifyDiagnostics(event.currentTarget);
     props.onLoadedMetadata?.(event);
   };
@@ -196,7 +227,8 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
   const handleEnded: React.ReactEventHandler<HTMLVideoElement> = (event) => {
     props.onEnded?.(event);
     const video = event.currentTarget;
-    if (!animatedSticker || !playbackVisibleRef.current || reducedMotion()) return;
+    if (!animatedSticker || !playbackVisibleRef.current || reducedMotion())
+      return;
     video.currentTime = 0;
     playSafely(video);
   };
@@ -204,9 +236,18 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
   if (error) {
     return (
       <div
-        aria-label={typeof props["aria-label"] === "string" ? props["aria-label"] : "Failed to load video"}
+        aria-label={
+          typeof props["aria-label"] === "string"
+            ? props["aria-label"]
+            : "Failed to load video"
+        }
         className={props.className}
-        style={{ display: "block", width: "100%", height: "100%", ...props.style }}
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          ...props.style,
+        }}
       />
     );
   }
@@ -216,7 +257,12 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
       <div
         ref={containerRef}
         className={`${props.className ?? ""} bg-muted/50 animate-pulse`.trim()}
-        style={{ display: "block", width: "100%", height: "100%", ...props.style }}
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          ...props.style,
+        }}
       />
     );
   }
@@ -234,7 +280,12 @@ export const AuthenticatedVideo: React.FC<AuthenticatedVideoProps> = ({
       onLoadedMetadata={handleLoadedMetadata}
       onEnded={animatedSticker ? handleEnded : props.onEnded}
       autoPlay={animatedSticker && playbackVisible && !reducedMotion()}
-      style={{ display: "block", width: "100%", height: "100%", ...props.style }}
+      style={{
+        display: "block",
+        width: "100%",
+        height: "100%",
+        ...props.style,
+      }}
     />
   );
 };

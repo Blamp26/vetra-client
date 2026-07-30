@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CLIENT_PROTOCOL_HEADER } from "@/shared/clientProtocol";
 
 const { useAppStoreMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
@@ -29,7 +30,10 @@ class ImmediateIntersectionObserver {
   }
 
   observe(target: Element) {
-    this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as never);
+    this.callback(
+      [{ isIntersecting: true, target } as IntersectionObserverEntry],
+      this as never,
+    );
   }
 
   disconnect() {}
@@ -45,8 +49,9 @@ class ResizeObserverMock {
 describe("AuthenticatedImage", () => {
   beforeEach(() => {
     useAppStoreMock.mockReset();
-    useAppStoreMock.mockImplementation((selector: (state: unknown) => unknown) =>
-      selector({ authToken: "secret-token" }),
+    useAppStoreMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
+        selector({ authToken: "secret-token" }),
     );
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
     vi.restoreAllMocks();
@@ -66,7 +71,14 @@ describe("AuthenticatedImage", () => {
 
     const placeholder = container.firstChild as HTMLElement;
     expect(placeholder.tagName).toBe("DIV");
-    expect(placeholder).toHaveClass("h-full", "w-full", "object-cover", "rounded-[12px]", "bg-muted", "animate-pulse");
+    expect(placeholder).toHaveClass(
+      "h-full",
+      "w-full",
+      "object-cover",
+      "rounded-[12px]",
+      "bg-muted",
+      "animate-pulse",
+    );
     expect(placeholder).toHaveStyle({
       display: "block",
       width: "100%",
@@ -82,7 +94,9 @@ describe("AuthenticatedImage", () => {
       ok: true,
       blob: async () => new Blob(["image-bytes"], { type: "image/jpeg" }),
     } as Response);
-    const revokeMock = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const revokeMock = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => {});
 
     const diagnosticsSpy = vi.fn();
 
@@ -95,9 +109,14 @@ describe("AuthenticatedImage", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByAltText("Loaded preview")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByAltText("Loaded preview")).toBeInTheDocument(),
+    );
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/media/photo-2", {
-      headers: { Authorization: "Bearer secret-token" },
+      headers: {
+        Authorization: "Bearer secret-token",
+        [CLIENT_PROTOCOL_HEADER]: "1",
+      },
     });
 
     const image = screen.getByAltText("Loaded preview");
@@ -110,21 +129,32 @@ describe("AuthenticatedImage", () => {
 
     fireEvent.load(image);
 
-    expect(image).toHaveClass("h-full", "w-full", "object-cover", "rounded-[12px]");
+    expect(image).toHaveClass(
+      "h-full",
+      "w-full",
+      "object-cover",
+      "rounded-[12px]",
+    );
     expect(image).toHaveStyle({
       display: "block",
       width: "100%",
       height: "100%",
     });
-    expect(diagnosticsSpy).toHaveBeenCalledWith(expect.objectContaining({
-      naturalWidth: 1600,
-      naturalHeight: 900,
-      renderedWidth: 320,
-      renderedHeight: 180,
-    }));
+    expect(diagnosticsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        naturalWidth: 1600,
+        naturalHeight: 900,
+        renderedWidth: 320,
+        renderedHeight: 180,
+      }),
+    );
 
-    const { unmount } = render(<AuthenticatedImage src="/api/v1/media/photo-3" alt="Second preview" />);
-    await waitFor(() => expect(screen.getByAltText("Second preview")).toBeInTheDocument());
+    const { unmount } = render(
+      <AuthenticatedImage src="/api/v1/media/photo-3" alt="Second preview" />,
+    );
+    await waitFor(() =>
+      expect(screen.getByAltText("Second preview")).toBeInTheDocument(),
+    );
     unmount();
     expect(revokeMock).toHaveBeenCalledWith("blob:preview");
   });
@@ -138,22 +168,42 @@ describe("AuthenticatedImage", () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:root-image");
     const root = document.createElement("div");
     let targetRect = { top: 900, left: 0, right: 100, bottom: 1000 };
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      return this === root ? { top: 100, left: 0, right: 400, bottom: 300 } as DOMRect : targetRect as DOMRect;
-    });
-    const view = render(<MediaVisibilityContext.Provider value={{ root, revision: 0 }}><AuthenticatedImage src="/api/v1/media/root-image" alt="Root image" /></MediaVisibilityContext.Provider>);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        return this === root
+          ? ({ top: 100, left: 0, right: 400, bottom: 300 } as DOMRect)
+          : (targetRect as DOMRect);
+      },
+    );
+    const view = render(
+      <MediaVisibilityContext.Provider value={{ root, revision: 0 }}>
+        <AuthenticatedImage src="/api/v1/media/root-image" alt="Root image" />
+      </MediaVisibilityContext.Provider>,
+    );
     await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
     expect(fetch).not.toHaveBeenCalled();
     targetRect = { top: 200, left: 0, right: 100, bottom: 300 };
-    view.rerender(<MediaVisibilityContext.Provider value={{ root, revision: 1 }}><AuthenticatedImage src="/api/v1/media/root-image" alt="Root image" /></MediaVisibilityContext.Provider>);
+    view.rerender(
+      <MediaVisibilityContext.Provider value={{ root, revision: 1 }}>
+        <AuthenticatedImage src="/api/v1/media/root-image" alt="Root image" />
+      </MediaVisibilityContext.Provider>,
+    );
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
 
   it("loads immediately when IntersectionObserver is unavailable", async () => {
     vi.stubGlobal("IntersectionObserver", undefined);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(["image"]),
+    } as Response);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:no-observer");
-    render(<AuthenticatedImage src="/api/v1/media/no-observer" alt="No observer image" />);
+    render(
+      <AuthenticatedImage
+        src="/api/v1/media/no-observer"
+        alt="No observer image"
+      />,
+    );
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
 
@@ -161,11 +211,16 @@ describe("AuthenticatedImage", () => {
     vi.stubGlobal("IntersectionObserver", ImmediateIntersectionObserver);
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network error"));
 
-    render(<Avatar name="Alice" src="/api/v1/users/alice/avatar" status="online" />);
+    render(
+      <Avatar name="Alice" src="/api/v1/users/alice/avatar" status="online" />,
+    );
 
     await waitFor(() => expect(screen.getByText("A")).toBeInTheDocument());
     expect(screen.getByText("A")).toHaveAttribute("data-slot", "avatar");
-    expect(screen.getByTestId("avatar-status-indicator")).toHaveAttribute("data-status", "online");
+    expect(screen.getByTestId("avatar-status-indicator")).toHaveAttribute(
+      "data-status",
+      "online",
+    );
   });
 
   it("uses the fallback when the browser rejects a decoded object URL", async () => {
@@ -187,6 +242,8 @@ describe("AuthenticatedImage", () => {
 
     const image = await waitFor(() => screen.getByAltText("Broken preview"));
     fireEvent.error(image);
-    await waitFor(() => expect(screen.getByTestId("image-fallback")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("image-fallback")).toBeInTheDocument(),
+    );
   });
 });
