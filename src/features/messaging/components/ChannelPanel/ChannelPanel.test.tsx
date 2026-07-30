@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChannelPanel } from "./ChannelPanel";
+import { ApiError } from "@/api/base";
 
 const { useAppStoreMock, getChannelsMock, createChannelMock, deleteRoomMock } =
   vi.hoisted(() => ({
@@ -177,6 +178,94 @@ describe("ChannelPanel states", () => {
     expect(
       screen.getByRole("dialog", { name: "Server settings" }),
     ).toBeInTheDocument();
+  });
+
+  it("exposes first-channel creation for an owner in an empty server", () => {
+    const state = makeState();
+    state.serverChannels = { 1: [] };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
+    );
+
+    render(<ChannelPanel serverId={1} />);
+
+    expect(
+      screen.getByRole("button", { name: "Create first channel" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not expose channel creation to an unauthorized member", () => {
+    const state = makeState();
+    state.currentUser = { id: 2 };
+    state.serverChannels = { 1: [] };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
+    );
+
+    render(<ChannelPanel serverId={1} />);
+
+    expect(
+      screen.queryByRole("button", { name: "Create channel" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create first channel" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("refreshes and selects the first channel after creation", async () => {
+    const channel = {
+      id: 9,
+      public_id: "channel-9",
+      name: "general",
+      created_by: 1,
+      server_id: 1,
+    };
+    const state = makeState();
+    state.serverChannels = { 1: [] };
+    createChannelMock.mockResolvedValue(channel);
+    getChannelsMock.mockResolvedValueOnce([channel]);
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
+    );
+
+    render(<ChannelPanel serverId={1} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create channel" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Channel name" }), {
+      target: { value: "general" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Create$/ }));
+
+    await waitFor(() =>
+      expect(state.setServerChannels).toHaveBeenCalledWith(1, [channel]),
+    );
+    expect(createChannelMock).toHaveBeenCalledWith(
+      "server-1",
+      "general",
+      undefined,
+    );
+    expect(state.setActiveChat).toHaveBeenCalled();
+  });
+
+  it("shows feature-disabled and forbidden creation errors", async () => {
+    const state = makeState();
+    state.serverChannels = { 1: [] };
+    createChannelMock.mockRejectedValueOnce(
+      new ApiError("feature_disabled", 403, undefined, "feature_disabled"),
+    );
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
+    );
+
+    render(<ChannelPanel serverId={1} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create channel" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Channel name" }), {
+      target: { value: "general" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Create$/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Channel creation is disabled.",
+    );
   });
 
   it("keeps inline channel creation compact and keyboard-cancellable", () => {

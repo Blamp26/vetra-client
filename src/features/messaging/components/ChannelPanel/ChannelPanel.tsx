@@ -15,6 +15,7 @@ import { TextInput } from "@/shared/components/Field";
 import { Button } from "@/shared/components/Button";
 import { IconButton } from "@/shared/components/IconButton";
 import { Avatar } from "@/shared/components/Avatar";
+import { ApiError } from "@/api/base";
 
 interface Props {
   serverId: number;
@@ -56,6 +57,7 @@ export function ChannelPanel({ serverId }: Props) {
 
   const server = servers[serverId];
   const isOwner = currentUser?.id === server?.owner_id;
+  const canCreateChannel = server?.can_manage === true || isOwner;
   const channels = serverChannels[serverId];
   const channelUnread = useAppStore((s: RootState) => s.channelUnread);
   const isLoading = channelsLoading[serverId] ?? false;
@@ -154,6 +156,10 @@ export function ChannelPanel({ serverId }: Props) {
       );
 
       addServerChannel(serverId, channel);
+      const refreshedChannels = await serversApi.getChannels(
+        serverRef(server) ?? serverId,
+      );
+      setServerChannels(serverId, refreshedChannels);
 
       upsertRoomPreview({
         id: channel.id,
@@ -196,9 +202,19 @@ export function ChannelPanel({ serverId }: Props) {
         });
       }
     } catch (err) {
-      setCreateError(
-        err instanceof Error ? err.message : "Failed to create channel.",
-      );
+      if (err instanceof ApiError) {
+        setCreateError(
+          err.code === "feature_disabled"
+            ? "Channel creation is disabled."
+            : err.code === "forbidden" || err.statusCode === 403
+              ? "You do not have permission to create channels."
+              : err.message,
+        );
+      } else {
+        setCreateError(
+          err instanceof Error ? err.message : "Failed to create channel.",
+        );
+      }
     } finally {
       setIsCreating(false);
     }
@@ -269,21 +285,23 @@ export function ChannelPanel({ serverId }: Props) {
           <h2 className="text-xs font-semibold text-muted-foreground">
             Channels
           </h2>
-          <IconButton
-            size="compact"
-            label="Create channel"
-            title="Create channel"
-            pressed={showCreate}
-            onClick={() => {
-              setShowCreate((v) => !v);
-              setCreateError(null);
-              setNewChannelName("");
-              setChannelAccess("all_members");
-              setSelectedRoleIds([]);
-            }}
-          >
-            <Plus className="h-4 w-4" />
-          </IconButton>
+          {canCreateChannel && (
+            <IconButton
+              size="compact"
+              label="Create channel"
+              title="Create channel"
+              pressed={showCreate}
+              onClick={() => {
+                setShowCreate((v) => !v);
+                setCreateError(null);
+                setNewChannelName("");
+                setChannelAccess("all_members");
+                setSelectedRoleIds([]);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+            </IconButton>
+          )}
         </div>
 
         {/* Inline create form */}
@@ -426,6 +444,24 @@ export function ChannelPanel({ serverId }: Props) {
           ) : !channels || channels.length === 0 ? (
             <EmptyPane
               title="No channels."
+              action={
+                canCreateChannel ? (
+                  <Button
+                    size="compact"
+                    variant="primary"
+                    type="button"
+                    onClick={() => {
+                      setShowCreate(true);
+                      setCreateError(null);
+                      setNewChannelName("");
+                      setChannelAccess("all_members");
+                      setSelectedRoleIds([]);
+                    }}
+                  >
+                    Create first channel
+                  </Button>
+                ) : undefined
+              }
               density="compact"
               titleLevel={3}
               className="px-4 py-8"
