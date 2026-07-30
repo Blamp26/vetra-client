@@ -42,6 +42,25 @@ export const serversApi = {
   getMembers(serverRef: ResourceRef): Promise<ServerMember[]> {
     return get<ServerMember[]>(`/servers/${serverRef}/members`);
   },
+  getOwnership(serverRef: ResourceRef): Promise<Server["ownership"]> {
+    return get(`/servers/${serverRef}/ownership`);
+  },
+  getOwnershipTargets(
+    serverRef: ResourceRef,
+  ): Promise<NonNullable<Server["ownership"]>["transfer_targets"]> {
+    return get(`/servers/${serverRef}/ownership/targets`);
+  },
+  transferOwnership(
+    serverRef: ResourceRef,
+    targetUserId: ResourceRef,
+  ): Promise<Server> {
+    return post(`/servers/${serverRef}/ownership/transfer`, {
+      target_user_id: targetUserId,
+    });
+  },
+  leave(serverRef: ResourceRef): Promise<void> {
+    return post(`/servers/${serverRef}/leave`, {});
+  },
 
   getRoles(serverRef: ResourceRef): Promise<ServerRole[]> {
     return get<ServerRole[]>(`/servers/${serverRef}/roles`);

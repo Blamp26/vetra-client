@@ -3,6 +3,7 @@ import { useAppStore, type RootState, getState } from "@/store";
 import type { Message, RoomMessageSummary } from "@/shared/types";
 import { showNotification } from "@/services/notifications";
 import { markReadViaChannel } from "@/services/socket";
+import { serversApi } from "@/api/servers";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   buildPreviewMessage,
@@ -74,6 +75,25 @@ export function useSocketEvents() {
     if (!socketManager || !currentUser) return;
 
     const unsubs: Array<() => void> = [];
+
+    if (typeof socketManager.onServerOwnerChanged === "function")
+      unsubs.push(
+        socketManager.onServerOwnerChanged(({ server_id, owner_id }) => {
+          const state = getState();
+          const server = state.servers[server_id];
+          if (!server) return;
+          state.upsertServer({
+            ...server,
+            owner_id,
+            ownerless: owner_id == null,
+            ownership: undefined,
+          });
+          void serversApi
+            .getList()
+            .then(state.setServers)
+            .catch(() => undefined);
+        }),
+      );
 
     const isWindowFocused = async () => {
       try {

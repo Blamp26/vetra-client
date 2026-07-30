@@ -59,7 +59,7 @@ export function ChannelPanel({ serverId }: Props) {
   const channelNameErrorId = useId();
 
   const server = servers[serverId];
-  const isOwner = currentUser?.id === server?.created_by;
+  const isOwner = currentUser?.id === server?.owner_id;
   const channels = serverChannels[serverId];
   const isLoading = channelsLoading[serverId] ?? false;
 

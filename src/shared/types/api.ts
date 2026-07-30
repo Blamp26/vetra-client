@@ -286,6 +286,23 @@ export interface Server {
   created_by_public_id?: string | null;
   inserted_at: string;
   can_manage?: boolean;
+  owner_id?: number | null;
+  owner_public_id?: string | null;
+  ownerless?: boolean;
+  ownership?: {
+    owner_id: number | null;
+    ownerless: boolean;
+    is_owner: boolean;
+    can_transfer: boolean;
+    can_leave: boolean;
+    can_delete: boolean;
+    transfer_targets: Array<{
+      id: number;
+      public_id?: string | null;
+      username: string;
+      display_name?: string | null;
+    }>;
+  };
 }
 
 export interface ServerMember {

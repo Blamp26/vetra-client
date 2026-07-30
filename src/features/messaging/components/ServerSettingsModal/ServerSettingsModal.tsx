@@ -23,7 +23,7 @@ import type { Server, ServerRole } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { Avatar } from "@/shared/components/Avatar";
 import { Plus, X, Trash2 } from "lucide-react";
-import { serverRef, userRef } from "@/shared/utils/refs";
+import { serverRef } from "@/shared/utils/refs";
 
 interface Props {
   server: Server;
@@ -228,7 +228,7 @@ function MembersPanel({ server, currentUser }: MembersPanelProps) {
   >();
   const memberInputId = useId();
   const searchErrorId = `${memberInputId}-error`;
-  const isOwner = currentUser?.id === server.created_by;
+  const isOwner = currentUser?.id === server.owner_id;
   const [roles, setRoles] = useState<ServerRole[]>([]);
   const [roleError, setRoleError] = useState<string | null>(null);
   useEffect(() => {
@@ -467,6 +467,84 @@ function MembersPanel({ server, currentUser }: MembersPanelProps) {
   );
 }
 
+function OwnershipPanel({ server, currentUser }: MembersPanelProps) {
+  const [targets, setTargets] = useState<
+    NonNullable<Server["ownership"]>["transfer_targets"]
+  >([]);
+  const [selected, setSelected] = useState<number | "">("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const ownership = server.ownership;
+  useEffect(() => {
+    if (!ownership?.can_transfer) return;
+    void serversApi
+      .getOwnershipTargets(serverRef(server) ?? server.id)
+      .then(setTargets)
+      .catch(() => setError("Could not load transfer targets."));
+  }, [ownership?.can_transfer, server.id]);
+  async function transfer() {
+    if (
+      selected === "" ||
+      !window.confirm("Transfer ownership? You will lose owner-only authority.")
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await serversApi.transferOwnership(
+        serverRef(server) ?? server.id,
+        selected,
+      );
+      window.location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ownership transfer failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-3">
+      <div className="text-sm font-medium">Ownership</div>
+      <p className="text-xs text-muted-foreground">
+        {ownership?.ownerless
+          ? "This server is ownerless."
+          : `Current owner: ${ownership?.owner_id ?? "unknown"}`}
+      </p>
+      {ownership?.can_transfer && currentUser && (
+        <div className="space-y-2">
+          <select
+            className="w-full border border-border bg-background p-2 text-sm"
+            value={selected}
+            onChange={(e) =>
+              setSelected(e.target.value ? Number(e.target.value) : "")
+            }
+          >
+            <option value="">Select a current member</option>
+            {targets.map((target) => (
+              <option key={target.id} value={target.id}>
+                {target.display_name || target.username}
+              </option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            disabled={busy || selected === ""}
+            loading={busy}
+            onClick={() => void transfer()}
+          >
+            Transfer ownership
+          </Button>
+        </div>
+      )}
+      {error && (
+        <div className="text-xs text-destructive" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ServerSettingsModal({ server, onClose }: Props) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const setActiveChat = useAppStore((s: RootState) => s.setActiveChat);
@@ -477,7 +555,7 @@ export function ServerSettingsModal({ server, onClose }: Props) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [showConfirmLeave, setShowConfirmLeave] = useState(false);
-  const isOwner = currentUser?.id === server.created_by;
+  const isOwner = currentUser?.id === server.owner_id;
   const titleId = useId();
   const membersTabRef = useRef<HTMLButtonElement>(null);
 
@@ -485,10 +563,7 @@ export function ServerSettingsModal({ server, onClose }: Props) {
     if (!currentUser) return;
     setLeaving(true);
     try {
-      await serversApi.removeMember(
-        serverRef(server) ?? server.id,
-        userRef(currentUser) ?? currentUser.id,
-      );
+      await serversApi.leave(serverRef(server) ?? server.id);
       const updated = await serversApi.getList();
       setServers(updated);
       const active = getState().activeChat;
@@ -608,37 +683,39 @@ export function ServerSettingsModal({ server, onClose }: Props) {
           <TabPanel value="members">
             <MembersPanel server={server} currentUser={currentUser} />
           </TabPanel>
-
           <TabPanel value="danger">
-            <div className="space-y-4">
-              <div className="text-sm">
-                <div className="font-medium text-destructive">
-                  {isOwner ? "Delete Server" : "Leave Server"}
+            <div className="space-y-6">
+              <OwnershipPanel server={server} currentUser={currentUser} />
+              <div className="border-t border-border pt-4 space-y-4">
+                <div className="text-sm">
+                  <div className="font-medium text-destructive">
+                    {isOwner ? "Delete Server" : "Leave Server"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {isOwner
+                      ? "Permanent deletion of all data."
+                      : "Lose access to all channels."}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {isOwner
-                    ? "Permanent deletion of all data."
-                    : "Lose access to all channels."}
-                </p>
+                {deleteError && (
+                  <div className="text-xs text-destructive" role="alert">
+                    {deleteError}
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="danger"
+                  loading={deleting || leaving}
+                  disabled={deleting || leaving}
+                  onClick={() =>
+                    isOwner
+                      ? setShowConfirmDelete(true)
+                      : setShowConfirmLeave(true)
+                  }
+                >
+                  {isOwner ? "Delete" : "Leave"}
+                </Button>
               </div>
-              {deleteError && (
-                <div className="text-xs text-destructive" role="alert">
-                  {deleteError}
-                </div>
-              )}
-              <Button
-                type="button"
-                variant="danger"
-                loading={deleting || leaving}
-                disabled={deleting || leaving}
-                onClick={() =>
-                  isOwner
-                    ? setShowConfirmDelete(true)
-                    : setShowConfirmLeave(true)
-                }
-              >
-                {isOwner ? "Delete" : "Leave"}
-              </Button>
             </div>
           </TabPanel>
         </div>
