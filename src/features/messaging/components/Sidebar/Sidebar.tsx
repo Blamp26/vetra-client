@@ -14,10 +14,16 @@ import {
   roomChatForPreview,
   serverChatForServer,
 } from "@/shared/utils/chatRoutes";
-import { getPresenceText, resolvePresenceStatus } from "@/shared/utils/presence";
+import {
+  getPresenceText,
+  resolvePresenceStatus,
+} from "@/shared/utils/presence";
 import { sortConversationItems } from "../../utils/conversationOrdering";
 import { getPreviewText } from "../../utils/attachments";
 import { EmptyPane } from "@/shared/components/EmptyPane";
+import { GroupSettingsModal } from "../GroupSettingsModal/GroupSettingsModal";
+import { Settings } from "lucide-react";
+import type { RoomPreview } from "@/shared/types";
 
 interface SidebarProps {
   isServerMode?: boolean;
@@ -45,7 +51,10 @@ type SidebarItem =
       unread: number;
     };
 
-export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarProps) {
+export function Sidebar({
+  isServerMode = false,
+  isCollapsed = false,
+}: SidebarProps) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const activeChat = useAppStore((s: RootState) => s.activeChat);
   const conversationPreviews = useAppStore(
@@ -63,6 +72,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
   const closeModal = useAppStore((s: RootState) => s.closeModal);
 
   const [showProfile, setShowProfile] = useState(false);
+  const [settingsRoom, setSettingsRoom] = useState<RoomPreview | null>(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -119,8 +129,7 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
   );
 
   const allItems = useMemo(
-    () =>
-      sortConversationItems([...directItems, ...roomItems]),
+    () => sortConversationItems([...directItems, ...roomItems]),
     [directItems, roomItems],
   );
 
@@ -181,21 +190,33 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
         </div>
       )}
 
-      <div className={cn("flex-1 overflow-y-auto", !isServerMode && !isCollapsed ? "py-1" : "px-3 py-3")}>
+      <div
+        className={cn(
+          "flex-1 overflow-y-auto",
+          !isServerMode && !isCollapsed ? "py-1" : "px-3 py-3",
+        )}
+      >
         {!hasListContent && !isServerMode ? (
           <EmptyPane
             title="No conversations"
-            description={isCollapsed ? undefined : "Start a direct chat or create a room to begin messaging."}
+            description={
+              isCollapsed
+                ? undefined
+                : "Start a direct chat or create a room to begin messaging."
+            }
             density="compact"
             align={isCollapsed ? "center" : "start"}
             titleLevel={3}
             className={cn(
               "mx-3 px-4 py-5",
-              isCollapsed && "px-1 py-3 text-center [&_.vt-empty-pane__title]:truncate",
+              isCollapsed &&
+                "px-1 py-3 text-center [&_.vt-empty-pane__title]:truncate",
             )}
           />
         ) : (
-          <div className={isServerMode || isCollapsed ? "space-y-1.5" : undefined}>
+          <div
+            className={isServerMode || isCollapsed ? "space-y-1.5" : undefined}
+          >
             {!isServerMode &&
               serverList.map((server) => {
                 const isActive = isServerActive(server.id);
@@ -211,7 +232,9 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
                     <Avatar
                       name={server.name}
                       size="medium"
-                      className={isCollapsed ? undefined : "h-[46px] w-[46px] text-base"}
+                      className={
+                        isCollapsed ? undefined : "h-[46px] w-[46px] text-base"
+                      }
                     />
                     {!isCollapsed && (
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -224,58 +247,86 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
             {allItems.map((item) => {
               const isActive = isItemActive(item);
               return (
-                <button
-                  key={`${item.kind}-${item.id}`}
-                  onClick={() => handleItemClick(item)}
-                  className={listRowClass(isActive, isServerMode || isCollapsed)}
-                  data-testid={`sidebar-item-${item.kind}-${item.id}`}
-                  data-state={isActive ? "active" : "inactive"}
-                  data-presence-status={item.kind === "direct" ? item.status ?? "offline" : undefined}
-                  title={
-                    isServerMode || isCollapsed
-                      ? item.name
-                      : item.kind === "direct"
-                        ? item.presenceText
-                        : undefined
-                  }
-                >
-                  <Avatar
-                    name={item.name}
-                    size="medium"
-                    className={isServerMode || isCollapsed ? undefined : "h-[46px] w-[46px] text-base"}
-                    status={
+                <div className="group relative" key={`${item.kind}-${item.id}`}>
+                  <button
+                    onClick={() => handleItemClick(item)}
+                    className={listRowClass(
+                      isActive,
+                      isServerMode || isCollapsed,
+                    )}
+                    data-testid={`sidebar-item-${item.kind}-${item.id}`}
+                    data-state={isActive ? "active" : "inactive"}
+                    data-presence-status={
                       item.kind === "direct"
-                        ? item.status || (item.isOnline ? "online" : "offline")
-                        : null
+                        ? (item.status ?? "offline")
+                        : undefined
                     }
-                  />
-                  {!isCollapsed && !isServerMode && (
-                    <div className="relative h-full min-w-0 flex-1">
-                      <span className="absolute left-0 right-12 top-[14px] truncate text-sm font-medium">
-                        {item.name}
+                    title={
+                      isServerMode || isCollapsed
+                        ? item.name
+                        : item.kind === "direct"
+                          ? item.presenceText
+                          : undefined
+                    }
+                  >
+                    <Avatar
+                      name={item.name}
+                      size="medium"
+                      className={
+                        isServerMode || isCollapsed
+                          ? undefined
+                          : "h-[46px] w-[46px] text-base"
+                      }
+                      status={
+                        item.kind === "direct"
+                          ? item.status ||
+                            (item.isOnline ? "online" : "offline")
+                          : null
+                      }
+                    />
+                    {!isCollapsed && !isServerMode && (
+                      <div className="relative h-full min-w-0 flex-1">
+                        <span className="absolute left-0 right-12 top-[14px] truncate text-sm font-medium">
+                          {item.name}
+                        </span>
+                        <span className="absolute right-[10px] top-[14px] text-[11px] text-muted-foreground">
+                          {formatPreviewTime(item.time)}
+                        </span>
+                        {item.kind === "direct" && item.presenceText && (
+                          <span className="sr-only">{item.presenceText}</span>
+                        )}
+                        <p className="absolute left-0 right-[10px] top-[34px] h-[18px] truncate text-xs text-muted-foreground">
+                          <EmojiText text={item.preview} size={12} />
+                        </p>
+                      </div>
+                    )}
+                    {(isServerMode || isCollapsed) && item.unread > 0 && (
+                      <span className="absolute right-1.5 top-1.5 flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
+                        {item.unread}
                       </span>
-                      <span className="absolute right-[10px] top-[14px] text-[11px] text-muted-foreground">
-                        {formatPreviewTime(item.time)}
+                    )}
+                    {!isCollapsed && !isServerMode && item.unread > 0 && (
+                      <span className="flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
+                        {item.unread}
                       </span>
-                      {item.kind === "direct" && item.presenceText && (
-                        <span className="sr-only">{item.presenceText}</span>
-                      )}
-                      <p className="absolute left-0 right-[10px] top-[34px] h-[18px] truncate text-xs text-muted-foreground">
-                        <EmojiText text={item.preview} size={12} />
-                      </p>
-                    </div>
-                  )}
-                  {(isServerMode || isCollapsed) && item.unread > 0 && (
-                    <span className="absolute right-1.5 top-1.5 flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
-                      {item.unread}
-                    </span>
-                  )}
-                  {!isCollapsed && !isServerMode && item.unread > 0 && (
-                    <span className="flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
-                      {item.unread}
-                    </span>
-                  )}
-                </button>
+                    )}
+                  </button>
+                  {item.kind === "room" &&
+                    !isCollapsed &&
+                    !isServerMode &&
+                    roomPreviews[item.id] && (
+                      <button
+                        aria-label={`Manage ${item.name}`}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSettingsRoom(roomPreviews[item.id]);
+                        }}
+                      >
+                        <Settings className="h-3 w-3" />
+                      </button>
+                    )}
+                </div>
               );
             })}
           </div>
@@ -299,6 +350,12 @@ export function Sidebar({ isServerMode = false, isCollapsed = false }: SidebarPr
         <ProfileModal
           user={currentUser}
           onClose={() => setShowProfile(false)}
+        />
+      )}
+      {settingsRoom && (
+        <GroupSettingsModal
+          room={settingsRoom}
+          onClose={() => setSettingsRoom(null)}
         />
       )}
     </div>
