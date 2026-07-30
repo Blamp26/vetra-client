@@ -3,6 +3,7 @@ import { useAppStore, type RootState } from "@/store";
 import { serversApi } from "@/api/servers";
 import { roomsApi } from "@/api/rooms";
 import { ServerSettingsModal } from "../ServerSettingsModal/ServerSettingsModal";
+import { ChannelAccessEditor } from "../ChannelAccessEditor/ChannelAccessEditor";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import type { Channel, ServerRole } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
@@ -40,6 +41,7 @@ export function ChannelPanel({ serverId }: Props) {
 
   const [showCreate, setShowCreate] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [accessChannel, setAccessChannel] = useState<Channel | null>(null);
   const [newChannelName, setNewChannelName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -460,6 +462,20 @@ export function ChannelPanel({ serverId }: Props) {
                       )}
                     </button>
 
+                    {server?.can_manage === true && (
+                      <IconButton
+                        size="compact"
+                        label={`Edit access for ${ch.name}`}
+                        title={`Edit access for ${ch.name}`}
+                        className="absolute right-7 top-1/2 -translate-y-1/2 opacity-60 group-hover/channel:opacity-100 focus-visible:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAccessChannel(ch);
+                        }}
+                      >
+                        <Settings className="h-3 w-3" />
+                      </IconButton>
+                    )}
                     {isOwner && (
                       <IconButton
                         size="compact"
@@ -487,6 +503,23 @@ export function ChannelPanel({ serverId }: Props) {
         <ServerSettingsModal
           server={server}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {accessChannel && server && (
+        <ChannelAccessEditor
+          server={server}
+          channel={accessChannel}
+          currentUserId={currentUser?.id}
+          onClose={() => setAccessChannel(null)}
+          onSelfRevoked={() => {
+            setAccessChannel(null);
+            if (
+              activeChat?.type === "channel" &&
+              activeChat.channelId === accessChannel.id
+            )
+              setActiveChat(null);
+          }}
         />
       )}
 

@@ -336,6 +336,12 @@ export interface ChannelAccess {
   room_id: number;
   server_id: number;
   overrides: ChannelAccessOverride[];
+  selected_member?: {
+    user_id: number;
+    inherited: string[];
+    effective: string[];
+    can_view: boolean;
+  } | null;
 }
 
 /** A Channel is a Room that belongs to a Server (server_id is non-null). */

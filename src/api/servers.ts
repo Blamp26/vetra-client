@@ -96,8 +96,13 @@ export const serversApi = {
   getChannelAccess(
     serverRef: ResourceRef,
     roomRef: ResourceRef,
+    memberRef?: ResourceRef,
   ): Promise<ChannelAccess> {
-    return get(`/servers/${serverRef}/channels/${roomRef}/access`);
+    const query =
+      memberRef == null
+        ? ""
+        : `?member_id=${encodeURIComponent(String(memberRef))}`;
+    return get(`/servers/${serverRef}/channels/${roomRef}/access${query}`);
   },
   updateEveryoneAccess(
     serverRef: ResourceRef,
