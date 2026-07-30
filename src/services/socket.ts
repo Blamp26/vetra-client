@@ -26,8 +26,7 @@ export function getDefaultSocketUrl(
   return `${socketProtocol}//${location.host}/socket`;
 }
 
-const SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL || getDefaultSocketUrl();
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || getDefaultSocketUrl();
 
 // ── Public handler types ──────────────────────────────────────────────────────
 
@@ -68,6 +67,11 @@ export type RoomTypingPayload = {
   sender_display_name?: string;
 };
 export type RoomTypingHandler = (payload: RoomTypingPayload) => void;
+export type RoomAccessRevokedHandler = (payload: {
+  room_id: number;
+  reason: string;
+}) => void;
+export type RoomAccessRevokedPayload = Parameters<RoomAccessRevokedHandler>[0];
 
 // <-- NEW: типы для событий серверов и комнат
 export type ServerMemberAddedHandler = (payload: {
@@ -129,20 +133,26 @@ export function buildSocketMessagePayload(
   extra: Record<string, unknown> = {},
 ) {
   const mediaFileIds =
-    payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
+    payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string =>
+      Boolean(mediaFileId),
+    ) ?? [];
   const primaryMediaFileId = payload.mediaFileId ?? mediaFileIds[0] ?? null;
   const groupedMediaFileIds = mediaFileIds.length > 1 ? mediaFileIds : null;
 
   return {
     ...extra,
     content: payload.content ?? null,
-    ...(payload.entities && payload.entities.length > 0 ? { entities: serializeMessageEntitiesForRequest(payload.entities) } : {}),
+    ...(payload.entities && payload.entities.length > 0
+      ? { entities: serializeMessageEntitiesForRequest(payload.entities) }
+      : {}),
     mediaFileId: primaryMediaFileId,
     mediaFileIds: groupedMediaFileIds,
     media_file_id: primaryMediaFileId,
     media_file_ids: groupedMediaFileIds,
     reply_to_id: payload.replyToId ?? null,
-    ...(payload.stickerId ? { sticker_id: payload.stickerId, stickerId: payload.stickerId } : {}),
+    ...(payload.stickerId
+      ? { sticker_id: payload.stickerId, stickerId: payload.stickerId }
+      : {}),
     ...(payload.gif ? { gif: payload.gif } : {}),
     ...(payload.forwardedFromMessageId != null
       ? { forwarded_from_message_id: payload.forwardedFromMessageId }
@@ -176,6 +186,7 @@ export interface SocketManager {
   onChannelCreated: (handler: ChannelCreatedHandler) => () => void;
   onRoomMessageGlobal: (handler: (message: Message) => void) => () => void;
   onRoomMessageSummary: (handler: RoomMessageSummaryHandler) => () => void;
+  onRoomAccessRevoked: (handler: RoomAccessRevokedHandler) => () => void;
 
   updateStatus: (status: "online" | "away" | "dnd" | "offline") => void;
   setActiveRoom: (roomRef: ResourceRef) => Promise<void>;
@@ -378,6 +389,7 @@ export async function connectSocket(
   const channelCreatedBus = makeEventBus<{ server_id: number; channel: any }>();
   const roomMessageGlobalBus = makeEventBus<Message>();
   const roomMessageSummaryBus = makeEventBus<RoomMessageSummary>();
+  const roomAccessRevokedBus = makeEventBus<RoomAccessRevokedPayload>();
 
   userChannel.on("new_message", (p: Message) => messageBus.emit(p));
 
@@ -470,6 +482,7 @@ export async function connectSocket(
 
   const roomChannels = new Map<number, Channel>();
   const roomBuses = new Map<number, RoomBus>();
+  const revokedRoomIds = new Set<number>();
 
   function ensureRoomBus(roomId: number): RoomBus {
     if (!roomBuses.has(roomId)) {
@@ -516,6 +529,7 @@ export async function connectSocket(
     onChannelCreated: (h) => channelCreatedBus.subscribe(h),
     onRoomMessageGlobal: (h) => roomMessageGlobalBus.subscribe(h),
     onRoomMessageSummary: (h) => roomMessageSummaryBus.subscribe(h),
+    onRoomAccessRevoked: (h) => roomAccessRevokedBus.subscribe(h),
 
     updateStatus: (status) => userChannel.push("update_status", { status }),
 
@@ -601,6 +615,9 @@ export async function connectSocket(
     },
 
     async joinRoomChannel(roomId, roomTopicRef = roomId) {
+      if (revokedRoomIds.has(roomId)) {
+        throw new Error(`Room access revoked for ${roomId}`);
+      }
       if (roomChannels.has(roomId)) return;
 
       const bus = ensureRoomBus(roomId);
@@ -621,6 +638,20 @@ export async function connectSocket(
       );
       channel.on("reaction_updated", (p: ReactionUpdatedPayload) =>
         bus.reactionUpdated.emit(p),
+      );
+      channel.on(
+        "channel_access_revoked",
+        (payload: { room_id?: number; reason?: string }) => {
+          const revokedRoomId = Number(payload?.room_id ?? roomId);
+          revokedRoomIds.add(revokedRoomId);
+          channel.leave();
+          if (roomChannels.get(revokedRoomId) === channel)
+            roomChannels.delete(revokedRoomId);
+          roomAccessRevokedBus.emit({
+            room_id: revokedRoomId,
+            reason: String(payload?.reason ?? "access_reduced"),
+          });
+        },
       );
 
       await new Promise<void>((resolve, reject) => {
@@ -643,6 +674,7 @@ export async function connectSocket(
     leaveRoomChannel(roomId) {
       roomChannels.get(roomId)?.leave();
       roomChannels.delete(roomId);
+      revokedRoomIds.delete(roomId);
     },
 
     sendRoomMessageViaChannel(roomId, payload) {
@@ -654,29 +686,41 @@ export async function connectSocket(
         }
         const debugMeta = payload.__attachmentDebug ?? null;
         const socketPayload = buildSocketMessagePayload(payload);
-        logAttachmentDebug("socket.send.room", {
-          roomId,
-          payloadKeys: Object.keys(socketPayload).sort(),
-          ...summarizeMessageMedia(socketPayload as Record<string, unknown>),
-        }, {
-          batchId: debugMeta?.batchId,
-          sendUnitId: debugMeta?.sendUnitId,
-        });
+        logAttachmentDebug(
+          "socket.send.room",
+          {
+            roomId,
+            payloadKeys: Object.keys(socketPayload).sort(),
+            ...summarizeMessageMedia(socketPayload as Record<string, unknown>),
+          },
+          {
+            batchId: debugMeta?.batchId,
+            sendUnitId: debugMeta?.sendUnitId,
+          },
+        );
         ch.push("send_message", socketPayload)
           .receive("ok", (p: Message) => {
-            logAttachmentDebug("socket.send.room.ok", {
-              roomId,
-              ...summarizeMessageMedia(p as unknown as Record<string, unknown>),
-            }, {
-              batchId: debugMeta?.batchId,
-              sendUnitId: debugMeta?.sendUnitId,
-            });
+            logAttachmentDebug(
+              "socket.send.room.ok",
+              {
+                roomId,
+                ...summarizeMessageMedia(
+                  p as unknown as Record<string, unknown>,
+                ),
+              },
+              {
+                batchId: debugMeta?.batchId,
+                sendUnitId: debugMeta?.sendUnitId,
+              },
+            );
             resolve(p);
           })
           .receive("error", (resp) =>
             reject(
               new Error(
-                resp?.reason ?? resp?.errors?.content?.[0] ?? "Failed to send room message",
+                resp?.reason ??
+                  resp?.errors?.content?.[0] ??
+                  "Failed to send room message",
               ),
             ),
           )
@@ -710,7 +754,11 @@ export async function connectSocket(
           reject(new Error(`Not joined room ${roomId}`));
           return;
         }
-        ch.push("edit_message", { message_id: messageId, content, entities: serializeMessageEntitiesForRequest(entities) })
+        ch.push("edit_message", {
+          message_id: messageId,
+          content,
+          entities: serializeMessageEntitiesForRequest(entities),
+        })
           .receive("ok", (p: MessageEditedPayload) => resolve(p))
           .receive("error", (r) =>
             reject(new Error(r?.reason ?? "Edit failed")),
@@ -774,29 +822,43 @@ export function sendMessageViaChannel(
     const socketPayload = buildSocketMessagePayload(payload, {
       recipient_id: recipientRef,
     });
-    logAttachmentDebug("socket.send.direct", {
-      recipientRef,
-      payloadKeys: Object.keys(socketPayload).sort(),
-      ...summarizeMessageMedia(socketPayload as Record<string, unknown>),
-    }, {
-      batchId: debugMeta?.batchId,
-      sendUnitId: debugMeta?.sendUnitId,
-    });
+    logAttachmentDebug(
+      "socket.send.direct",
+      {
+        recipientRef,
+        payloadKeys: Object.keys(socketPayload).sort(),
+        ...summarizeMessageMedia(socketPayload as Record<string, unknown>),
+      },
+      {
+        batchId: debugMeta?.batchId,
+        sendUnitId: debugMeta?.sendUnitId,
+      },
+    );
     channel
       .push("send_message", socketPayload)
       .receive("ok", (payload: Message) => {
-        logAttachmentDebug("socket.send.direct.ok", {
-          recipientRef,
-          ...summarizeMessageMedia(payload as unknown as Record<string, unknown>),
-        }, {
-          batchId: debugMeta?.batchId,
-          sendUnitId: debugMeta?.sendUnitId,
-        });
+        logAttachmentDebug(
+          "socket.send.direct.ok",
+          {
+            recipientRef,
+            ...summarizeMessageMedia(
+              payload as unknown as Record<string, unknown>,
+            ),
+          },
+          {
+            batchId: debugMeta?.batchId,
+            sendUnitId: debugMeta?.sendUnitId,
+          },
+        );
         resolve(payload);
       })
       .receive("error", (resp) =>
         reject(
-          new Error(resp?.reason ?? resp?.errors?.content?.[0] ?? "Failed to send message"),
+          new Error(
+            resp?.reason ??
+              resp?.errors?.content?.[0] ??
+              "Failed to send message",
+          ),
         ),
       )
       .receive("timeout", () => reject(new Error("Send message timed out")));

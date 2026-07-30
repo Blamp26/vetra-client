@@ -1,11 +1,13 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useAppStoreMock, getStateMock, showNotificationMock } = vi.hoisted(() => ({
-  useAppStoreMock: vi.fn(),
-  getStateMock: vi.fn(),
-  showNotificationMock: vi.fn(),
-}));
+const { useAppStoreMock, getStateMock, showNotificationMock } = vi.hoisted(
+  () => ({
+    useAppStoreMock: vi.fn(),
+    getStateMock: vi.fn(),
+    showNotificationMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/store", () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
@@ -29,7 +31,9 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
 
 import { useSocketEvents } from "./useSocketEvents";
 
-function makeSocketManager(handlers: Record<string, ((payload: any) => void) | null>) {
+function makeSocketManager(
+  handlers: Record<string, ((payload: any) => void) | null>,
+) {
   const subscribe =
     (key: string) =>
     (handler: (payload: any) => void): (() => void) => {
@@ -53,6 +57,7 @@ function makeSocketManager(handlers: Record<string, ((payload: any) => void) | n
     onLastSeen: subscribe("lastSeen"),
     onRoomMessageGlobal: subscribe("roomMessageGlobal"),
     onRoomMessageSummary: subscribe("roomMessageSummary"),
+    onRoomAccessRevoked: subscribe("roomAccessRevoked"),
     onRoomCreated: subscribe("roomCreated"),
     onRoomDeleted: subscribe("roomDeleted"),
     onChannelDeleted: subscribe("channelDeleted"),
@@ -97,6 +102,7 @@ function makeState() {
     setLastSeenAt: vi.fn(),
     setTyping: vi.fn(),
     clearTyping: vi.fn(),
+    clearTypingRoomMember: vi.fn(),
     editRoomMessage: vi.fn(),
     deleteRoomMessage: vi.fn(),
     upsertRoomPreview: vi.fn(),
@@ -126,8 +132,8 @@ describe("useSocketEvents", () => {
   it("uses room_message_summary for preview/unread updates without appending room messages", async () => {
     const { state, handlers } = makeState();
 
-    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
-      selector(state),
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
     );
     getStateMock.mockImplementation(() => state);
 
@@ -180,8 +186,8 @@ describe("useSocketEvents", () => {
   it("preserves attachment metadata for direct message preview upserts", async () => {
     const { state, handlers } = makeState();
 
-    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
-      selector(state),
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
     );
     getStateMock.mockImplementation(() => state);
 
@@ -237,8 +243,8 @@ describe("useSocketEvents", () => {
   it("keeps legacy user-channel new_room_message as preview/unread only", async () => {
     const { state, handlers } = makeState();
 
-    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
-      selector(state),
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
     );
     getStateMock.mockImplementation(() => state);
 
@@ -279,8 +285,8 @@ describe("useSocketEvents", () => {
   it("updates room sidebar preview to Photo for live photo-only room messages", async () => {
     const { state, handlers } = makeState();
 
-    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
-      selector(state),
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
     );
     getStateMock.mockImplementation(() => state);
 
@@ -327,8 +333,8 @@ describe("useSocketEvents", () => {
   it("updates room sidebar preview to File: report.pdf for live file-only room messages", async () => {
     const { state, handlers } = makeState();
 
-    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
-      selector(state),
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
     );
     getStateMock.mockImplementation(() => state);
 
@@ -375,8 +381,8 @@ describe("useSocketEvents", () => {
   it("updates room sidebar preview to text for live text plus attachment room messages", async () => {
     const { state, handlers } = makeState();
 
-    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
-      selector(state),
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
     );
     getStateMock.mockImplementation(() => state);
 
@@ -422,8 +428,8 @@ describe("useSocketEvents", () => {
   it("updates direct sidebar preview for live attachment-only direct messages", async () => {
     const { state, handlers } = makeState();
 
-    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
-      selector(state),
+    useAppStoreMock.mockImplementation(
+      (selector: (value: typeof state) => unknown) => selector(state),
     );
     getStateMock.mockImplementation(() => state);
 
