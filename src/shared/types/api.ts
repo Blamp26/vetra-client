@@ -3,13 +3,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface User {
-  id:           number;
-  public_id?:   string | null;
-  username:     string;        // уникальный логин
+  id: number;
+  public_id?: string | null;
+  username: string; // уникальный логин
   display_name: string | null; // никнейм (не уникальный)
-  bio:          string | null;
-  avatar_url:   string | null;
-  status:       'online' | 'away' | 'dnd' | 'offline';
+  bio: string | null;
+  avatar_url: string | null;
+  status: "online" | "away" | "dnd" | "offline";
   last_seen_at: string | null;
   inserted_at?: string;
 }
@@ -55,10 +55,10 @@ export interface Attachment {
 // Сгруппированная реакция для одного emoji на одном сообщении
 export interface MessageReactionGroup {
   reaction: string;
-  count:    number;
-  chosen:   boolean;
+  count: number;
+  chosen: boolean;
   /** @deprecated accepted while older cached payloads drain */
-  emoji?:   string;
+  emoji?: string;
   user_ids?: number[];
 }
 
@@ -70,36 +70,36 @@ export interface ForwardedAttribution {
 }
 
 export interface Message {
-  id:                      number;
-  content:                 string | null;
-  entities?:               MessageTextEntity[];
-  sender_id:               number;
-  sender_public_id?:       string | null;
-  recipient_id:            number | null;
-  recipient_public_id?:    string | null;
-  room_id:                 number | null;
-  room_public_id?:         string | null;
-  reply_to_id?:            number | null;
-  forwarded_from?:        ForwardedAttribution | null;
-  status:                  MessageStatus;
-  inserted_at:             string;
-  edited_at?:              string | null;
-  sender_username?:        string;
-  sender_display_name?:    string | null;
-  recipient_username?:     string;
+  id: number;
+  content: string | null;
+  entities?: MessageTextEntity[];
+  sender_id: number;
+  sender_public_id?: string | null;
+  recipient_id: number | null;
+  recipient_public_id?: string | null;
+  room_id: number | null;
+  room_public_id?: string | null;
+  reply_to_id?: number | null;
+  forwarded_from?: ForwardedAttribution | null;
+  status: MessageStatus;
+  inserted_at: string;
+  edited_at?: string | null;
+  sender_username?: string;
+  sender_display_name?: string | null;
+  recipient_username?: string;
   recipient_display_name?: string | null;
-  media_file_id?:          string | null;
-  mediaFileId?:             string | null;
-  media_file_ids?:         string[] | null;
-  mediaFileIds?:            string[] | null;
-  media_mime_type?:        string | null;
-  media_mime_types?:       string[] | null;
-  mediaMimeType?:          string | null;
-  mediaMimeTypes?:         string[] | null;
-  attachment?:             Attachment | null;
-  attachments?:            Attachment[] | null;
-  sender?:                 User;
-  reactions?:              MessageReactionGroup[];
+  media_file_id?: string | null;
+  mediaFileId?: string | null;
+  media_file_ids?: string[] | null;
+  mediaFileIds?: string[] | null;
+  media_mime_type?: string | null;
+  media_mime_types?: string[] | null;
+  mediaMimeType?: string | null;
+  mediaMimeTypes?: string[] | null;
+  attachment?: Attachment | null;
+  attachments?: Attachment[] | null;
+  sender?: User;
+  reactions?: MessageReactionGroup[];
   sticker?: StickerMessage | null;
   gif?: GifMessage | null;
 }
@@ -151,36 +151,36 @@ export interface StickerPack {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface MessageEditedPayload {
-  id:            number;
-  content:       string;
-  entities?:     MessageTextEntity[];
-  edited_at:     string;
+  id: number;
+  content: string;
+  entities?: MessageTextEntity[];
+  edited_at: string;
   recipient_id?: number | null;
   recipient_public_id?: string | null;
-  sender_id?:    number;
+  sender_id?: number;
   sender_public_id?: string | null;
-  room_id?:      number | null;
+  room_id?: number | null;
   room_public_id?: string | null;
 }
 
 export interface MessageDeletedPayload {
-  id:            number;
+  id: number;
   recipient_id?: number | null;
   recipient_public_id?: string | null;
-  sender_id?:    number;
+  sender_id?: number;
   sender_public_id?: string | null;
-  room_id?:      number | null;
+  room_id?: number | null;
   room_public_id?: string | null;
 }
 
 export interface ReactionUpdatedPayload {
   message_id: number;
-  reactions:  MessageReactionGroup[];
+  reactions: MessageReactionGroup[];
   partner_id?: number;
   partner_public_id?: string | null;
-  sender_id?:  number;
+  sender_id?: number;
   sender_public_id?: string | null;
-  room_id?:    number;
+  room_id?: number;
   room_public_id?: string | null;
   updated_at?: string;
 }
@@ -234,11 +234,11 @@ export interface PreviewMessage {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ConversationPreview {
-  partner_id:           number;
-  partner_public_id?:   string | null;
-  partner_username:     string;
+  partner_id: number;
+  partner_public_id?: string | null;
+  partner_username: string;
   partner_display_name: string | null;
-  unread_count:         number;
+  unread_count: number;
   last_message: PreviewMessage;
 }
 
@@ -285,16 +285,57 @@ export interface Server {
   created_by: number;
   created_by_public_id?: string | null;
   inserted_at: string;
+  can_manage?: boolean;
 }
 
 export interface ServerMember {
-  user_id:      number;
+  user_id: number;
   user_public_id?: string | null;
-  username:     string;
+  username: string;
   display_name: string | null;
-  avatar_url:   string | null;
-  joined_at:    string;
-  is_owner:     boolean;
+  avatar_url: string | null;
+  joined_at: string;
+  is_owner: boolean;
+  roles?: Array<{
+    id: number;
+    name: string;
+    position: number;
+    color?: string | null;
+  }>;
+}
+
+export interface ServerRole {
+  id: number;
+  name: string;
+  color?: string | null;
+  position: number;
+  permissions: string[];
+  is_everyone: boolean;
+  system_key?: string | null;
+  can_manage: boolean;
+  can_assign: boolean;
+}
+
+export interface PermissionCatalogItem {
+  key: string;
+  group: string;
+  editable: boolean;
+  scope: "server" | "channel";
+}
+
+export interface ChannelAccessOverride {
+  id: number;
+  role_id?: number | null;
+  member_user_id?: number | null;
+  allow: string[];
+  deny: string[];
+  provenance: string;
+}
+
+export interface ChannelAccess {
+  room_id: number;
+  server_id: number;
+  overrides: ChannelAccessOverride[];
 }
 
 /** A Channel is a Room that belongs to a Server (server_id is non-null). */

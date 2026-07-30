@@ -4,7 +4,7 @@ import { serversApi } from "@/api/servers";
 import { roomsApi } from "@/api/rooms";
 import { ServerSettingsModal } from "../ServerSettingsModal/ServerSettingsModal";
 import { ConfirmModal } from "@/shared/components/ConfirmModal";
-import type { Channel } from "@/shared/types";
+import type { Channel, ServerRole } from "@/shared/types";
 import { cn } from "@/shared/utils/cn";
 import { Settings, Trash2, Plus } from "lucide-react";
 import { channelChatForChannel } from "@/shared/utils/chatRoutes";
@@ -20,34 +20,45 @@ interface Props {
 }
 
 export function ChannelPanel({ serverId }: Props) {
-  const servers              = useAppStore((s: RootState) => s.servers);
-  const serverChannels       = useAppStore((s: RootState) => s.serverChannels);
-  const channelsLoading      = useAppStore((s: RootState) => s.channelsLoading);
-  const setServerChannels    = useAppStore((s: RootState) => s.setServerChannels);
-  const addServerChannel     = useAppStore((s: RootState) => s.addServerChannel);
-  const setChannelsLoading   = useAppStore((s: RootState) => s.setChannelsLoading);
-  const setActiveChat        = useAppStore((s: RootState) => s.setActiveChat);
-  const activeChat           = useAppStore((s: RootState) => s.activeChat);
-  const upsertRoomPreview    = useAppStore((s: RootState) => s.upsertRoomPreview);
-  const socketManager        = useAppStore((s: RootState) => s.socketManager);
-  const currentUser          = useAppStore((s: RootState) => s.currentUser);
-  const channelUnread        = useAppStore((s: RootState) => s.channelUnread);
-  const resetChannelUnread   = useAppStore((s: RootState) => s.resetChannelUnread);
+  const servers = useAppStore((s: RootState) => s.servers);
+  const serverChannels = useAppStore((s: RootState) => s.serverChannels);
+  const channelsLoading = useAppStore((s: RootState) => s.channelsLoading);
+  const setServerChannels = useAppStore((s: RootState) => s.setServerChannels);
+  const addServerChannel = useAppStore((s: RootState) => s.addServerChannel);
+  const setChannelsLoading = useAppStore(
+    (s: RootState) => s.setChannelsLoading,
+  );
+  const setActiveChat = useAppStore((s: RootState) => s.setActiveChat);
+  const activeChat = useAppStore((s: RootState) => s.activeChat);
+  const upsertRoomPreview = useAppStore((s: RootState) => s.upsertRoomPreview);
+  const socketManager = useAppStore((s: RootState) => s.socketManager);
+  const currentUser = useAppStore((s: RootState) => s.currentUser);
+  const channelUnread = useAppStore((s: RootState) => s.channelUnread);
+  const resetChannelUnread = useAppStore(
+    (s: RootState) => s.resetChannelUnread,
+  );
 
-  const [showCreate,      setShowCreate]      = useState(false);
-  const [showSettings,    setShowSettings]    = useState(false);
-  const [newChannelName,  setNewChannelName]  = useState("");
-  const [isCreating,      setIsCreating]      = useState(false);
-  const [createError,     setCreateError]     = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
-  const [isDeleting,      setIsDeleting]      = useState(false);
-  const [channelsLoadError, setChannelsLoadError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [channelsLoadError, setChannelsLoadError] = useState<string | null>(
+    null,
+  );
+  const [channelAccess, setChannelAccess] = useState<
+    "all_members" | "selected_roles"
+  >("all_members");
+  const [selectableRoles, setSelectableRoles] = useState<ServerRole[]>([]);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([]);
   const channelRequestGeneration = useRef(0);
   const channelNameErrorId = useId();
 
-  const server    = servers[serverId];
-  const isOwner   = currentUser?.id === server?.created_by;
-  const channels  = serverChannels[serverId];
+  const server = servers[serverId];
+  const isOwner = currentUser?.id === server?.created_by;
+  const channels = serverChannels[serverId];
   const isLoading = channelsLoading[serverId] ?? false;
 
   const loadChannels = useCallback(() => {
@@ -74,26 +85,44 @@ export function ChannelPanel({ serverId }: Props) {
   useEffect(() => {
     setChannelsLoadError(null);
     if (channels === undefined) loadChannels();
-    return () => { channelRequestGeneration.current += 1; };
+    return () => {
+      channelRequestGeneration.current += 1;
+    };
   }, [channels, loadChannels, serverId]);
+
+  useEffect(() => {
+    if (!showCreate || !server) return;
+    if (typeof serversApi.getRoles !== "function") return;
+    void serversApi
+      .getRoles(serverRef(server) ?? serverId)
+      .then((roles) =>
+        setSelectableRoles(roles.filter((role) => !role.is_everyone)),
+      )
+      .catch(() => setSelectableRoles([]));
+  }, [showCreate, server, serverId]);
 
   const handleChannelClick = async (channel: Channel) => {
     resetChannelUnread(channel.id);
     if (server) {
       setActiveChat(channelChatForChannel(server, channel));
     } else {
-      setActiveChat(
-        {
-          type: "channel",
-          channelId: channel.id,
-          serverId,
-          channelRef: roomRef(channel),
-          serverRef: serverRef(server) ?? serverId,
-        },
-      );
+      setActiveChat({
+        type: "channel",
+        channelId: channel.id,
+        serverId,
+        channelRef: roomRef(channel),
+        serverRef: serverRef(server) ?? serverId,
+      });
     }
     if (socketManager) {
-      try { await socketManager.joinRoomChannel(channel.id, roomRef(channel) ?? channel.id); } catch { /* non-critical */ }
+      try {
+        await socketManager.joinRoomChannel(
+          channel.id,
+          roomRef(channel) ?? channel.id,
+        );
+      } catch {
+        /* non-critical */
+      }
     }
   };
 
@@ -101,14 +130,30 @@ export function ChannelPanel({ serverId }: Props) {
     if (!currentUser) return;
 
     const trimmed = newChannelName.trim();
-    if (!trimmed) { setCreateError("Channel name is required."); return; }
-    if (trimmed.length > 100) { setCreateError("Max 100 characters."); return; }
+    if (!trimmed) {
+      setCreateError("Channel name is required.");
+      return;
+    }
+    if (trimmed.length > 100) {
+      setCreateError("Max 100 characters.");
+      return;
+    }
 
     setIsCreating(true);
     setCreateError(null);
 
     try {
-      const channel = await serversApi.createChannel(serverRef(server) ?? serverId, trimmed);
+      if (channelAccess === "selected_roles" && selectedRoleIds.length === 0) {
+        setCreateError("Select at least one role or choose all members.");
+        return;
+      }
+      const channel = await serversApi.createChannel(
+        serverRef(server) ?? serverId,
+        trimmed,
+        channelAccess === "selected_roles"
+          ? { mode: "selected_roles", roleIds: selectedRoleIds }
+          : undefined,
+      );
 
       addServerChannel(serverId, channel);
 
@@ -127,26 +172,35 @@ export function ChannelPanel({ serverId }: Props) {
       });
 
       if (socketManager) {
-        try { await socketManager.joinRoomChannel(channel.id, roomRef(channel) ?? channel.id); } catch { /* non-critical */ }
+        try {
+          await socketManager.joinRoomChannel(
+            channel.id,
+            roomRef(channel) ?? channel.id,
+          );
+        } catch {
+          /* non-critical */
+        }
       }
 
       setNewChannelName("");
+      setSelectedRoleIds([]);
+      setChannelAccess("all_members");
       setShowCreate(false);
       if (server) {
         setActiveChat(channelChatForChannel(server, channel));
       } else {
-        setActiveChat(
-          {
-            type: "channel",
-            channelId: channel.id,
-            serverId,
-            channelRef: roomRef(channel) ?? channel.id,
-            serverRef: serverRef(server) ?? serverId,
-          },
-        );
+        setActiveChat({
+          type: "channel",
+          channelId: channel.id,
+          serverId,
+          channelRef: roomRef(channel) ?? channel.id,
+          serverRef: serverRef(server) ?? serverId,
+        });
       }
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create channel.");
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to create channel.",
+      );
     } finally {
       setIsCreating(false);
     }
@@ -158,10 +212,15 @@ export function ChannelPanel({ serverId }: Props) {
     try {
       await roomsApi.delete(roomRef(channelToDelete) ?? channelToDelete.id);
 
-      const updatedChannels = (serverChannels[serverId] || []).filter(ch => ch.id !== channelToDelete.id);
+      const updatedChannels = (serverChannels[serverId] || []).filter(
+        (ch) => ch.id !== channelToDelete.id,
+      );
       setServerChannels(serverId, updatedChannels);
 
-      if (activeChat?.type === "channel" && activeChat.channelId === channelToDelete.id) {
+      if (
+        activeChat?.type === "channel" &&
+        activeChat.channelId === channelToDelete.id
+      ) {
         setActiveChat(null);
       }
       setChannelToDelete(null);
@@ -177,11 +236,16 @@ export function ChannelPanel({ serverId }: Props) {
     activeChat?.type === "channel" && activeChat.serverId === serverId
       ? activeChat.channelId
       : null;
-  const createValidationError = createError === "Channel name is required." || createError === "Max 100 characters.";
+  const createValidationError =
+    createError === "Channel name is required." ||
+    createError === "Max 100 characters.";
 
   return (
     <>
-      <div data-testid="channel-panel" className="w-full min-w-0 bg-background border-r border-border flex-shrink-0 flex flex-col overflow-hidden h-full">
+      <div
+        data-testid="channel-panel"
+        className="w-full min-w-0 bg-background border-r border-border flex-shrink-0 flex flex-col overflow-hidden h-full"
+      >
         {/* Header */}
         <div className="p-3 border-b border-border flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -204,13 +268,21 @@ export function ChannelPanel({ serverId }: Props) {
 
         {/* Section label + add button */}
         <div className="flex items-center justify-between px-3 py-2">
-          <h2 className="text-xs font-semibold text-muted-foreground">Channels</h2>
+          <h2 className="text-xs font-semibold text-muted-foreground">
+            Channels
+          </h2>
           <IconButton
             size="compact"
             label="Create channel"
             title="Create channel"
             pressed={showCreate}
-            onClick={() => { setShowCreate((v) => !v); setCreateError(null); setNewChannelName(""); }}
+            onClick={() => {
+              setShowCreate((v) => !v);
+              setCreateError(null);
+              setNewChannelName("");
+              setChannelAccess("all_members");
+              setSelectedRoleIds([]);
+            }}
           >
             <Plus className="h-4 w-4" />
           </IconButton>
@@ -220,7 +292,11 @@ export function ChannelPanel({ serverId }: Props) {
         {showCreate && (
           <div className="px-3 pb-3 border-b border-border flex-shrink-0">
             {createError && (
-              <div id={createValidationError ? channelNameErrorId : undefined} role="alert" className="mb-2 text-xs text-destructive">
+              <div
+                id={createValidationError ? channelNameErrorId : undefined}
+                role="alert"
+                className="mb-2 text-xs text-destructive"
+              >
                 {createError}
               </div>
             )}
@@ -233,14 +309,69 @@ export function ChannelPanel({ serverId }: Props) {
               value={newChannelName}
               maxLength={100}
               invalid={createValidationError}
-              aria-describedby={createValidationError ? channelNameErrorId : undefined}
+              aria-describedby={
+                createValidationError ? channelNameErrorId : undefined
+              }
               autoFocus
-              onChange={(e) => { setNewChannelName(e.target.value); setCreateError(null); }}
+              onChange={(e) => {
+                setNewChannelName(e.target.value);
+                setCreateError(null);
+              }}
               onKeyDown={(e) => {
-                if (e.key === "Enter")  handleCreateChannel();
-                if (e.key === "Escape") { setShowCreate(false); setNewChannelName(""); }
+                if (e.key === "Enter") handleCreateChannel();
+                if (e.key === "Escape") {
+                  setShowCreate(false);
+                  setNewChannelName("");
+                }
               }}
             />
+            <fieldset className="mt-2 space-y-1 text-xs">
+              <legend className="font-medium">Channel access</legend>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name={`channel-access-${serverId}`}
+                  checked={channelAccess === "all_members"}
+                  onChange={() => setChannelAccess("all_members")}
+                />
+                All server members
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name={`channel-access-${serverId}`}
+                  checked={channelAccess === "selected_roles"}
+                  onChange={() => setChannelAccess("selected_roles")}
+                />
+                Selected roles
+              </label>
+              {channelAccess === "selected_roles" && (
+                <div className="ml-5 space-y-1">
+                  {selectableRoles.length ? (
+                    selectableRoles.map((role) => (
+                      <label key={role.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedRoleIds.includes(role.id)}
+                          onChange={(e) =>
+                            setSelectedRoleIds((ids) =>
+                              e.target.checked
+                                ? [...ids, role.id]
+                                : ids.filter((id) => id !== role.id),
+                            )
+                          }
+                        />
+                        {role.name}
+                      </label>
+                    ))
+                  ) : (
+                    <span className="text-muted-foreground">
+                      No selectable roles.
+                    </span>
+                  )}
+                </div>
+              )}
+            </fieldset>
             <div className="flex gap-2 mt-2">
               <Button
                 size="compact"
@@ -256,7 +387,10 @@ export function ChannelPanel({ serverId }: Props) {
                 size="compact"
                 variant="secondary"
                 className="flex-1 py-1 text-xs text-muted-foreground"
-                onClick={() => { setShowCreate(false); setNewChannelName(""); }}
+                onClick={() => {
+                  setShowCreate(false);
+                  setNewChannelName("");
+                }}
                 disabled={isCreating}
               >
                 Cancel
@@ -266,16 +400,38 @@ export function ChannelPanel({ serverId }: Props) {
         )}
 
         {/* Channel list */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-1" aria-busy={isLoading}>
+        <div
+          className="flex-1 overflow-y-auto p-2 space-y-1"
+          aria-busy={isLoading}
+        >
           {isLoading ? (
-            <div className="py-8 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading...</div>
+            <div
+              className="py-8 text-center text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              Loading...
+            </div>
           ) : channelsLoadError ? (
             <div className="py-8 text-center px-4" role="alert">
               <p className="text-xs text-destructive">{channelsLoadError}</p>
-              <Button size="compact" variant="secondary" className="mt-3" onClick={loadChannels} disabled={isLoading}>Retry</Button>
+              <Button
+                size="compact"
+                variant="secondary"
+                className="mt-3"
+                onClick={loadChannels}
+                disabled={isLoading}
+              >
+                Retry
+              </Button>
             </div>
           ) : !channels || channels.length === 0 ? (
-            <EmptyPane title="No channels." density="compact" titleLevel={3} className="px-4 py-8" />
+            <EmptyPane
+              title="No channels."
+              density="compact"
+              titleLevel={3}
+              className="px-4 py-8"
+            />
           ) : (
             <div className="space-y-1">
               {channels.map((ch) => {
@@ -288,12 +444,16 @@ export function ChannelPanel({ serverId }: Props) {
                         "group flex items-center gap-2 w-full rounded-[8px] px-2 py-2 pr-10 text-left text-sm transition-colors",
                         activeChannelId === ch.id
                           ? "bg-accent/70 text-foreground"
-                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                       )}
-                      data-state={activeChannelId === ch.id ? "active" : "inactive"}
+                      data-state={
+                        activeChannelId === ch.id ? "active" : "inactive"
+                      }
                       onClick={() => handleChannelClick(ch)}
                     >
-                      <span className="text-muted-foreground opacity-50">#</span>
+                      <span className="text-muted-foreground opacity-50">
+                        #
+                      </span>
                       <span className="flex-1 truncate">{ch.name}</span>
                       {hasUnread && (
                         <div className="w-1.5 h-1.5 bg-primary shrink-0" />
