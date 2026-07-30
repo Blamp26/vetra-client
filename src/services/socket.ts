@@ -103,6 +103,12 @@ export type ChannelDeletedHandler = (payload: {
   channel_id: number;
 }) => void;
 export type RoomCreatedHandler = (room: any) => void;
+export type GroupGovernanceChangedHandler = (payload: {
+  room_id: number;
+  user_id?: number | null;
+  actor_id?: number | null;
+  event: string;
+}) => void;
 export type ChannelCreatedHandler = (payload: {
   server_id: number;
   channel: any;
@@ -182,6 +188,9 @@ export interface SocketManager {
   onServerDeleted: (handler: ServerDeletedHandler) => () => void;
   onRoomMemberAdded: (handler: RoomMemberAddedHandler) => () => void;
   onRoomMemberRemoved: (handler: RoomMemberRemovedHandler) => () => void;
+  onGroupGovernanceChanged: (
+    handler: GroupGovernanceChangedHandler,
+  ) => () => void;
   onRoomDeleted: (handler: RoomDeletedHandler) => () => void;
   onChannelDeleted: (handler: ChannelDeletedHandler) => () => void;
   onRoomCreated: (handler: RoomCreatedHandler) => () => void;
@@ -385,6 +394,12 @@ export async function connectSocket(
     user_id: number;
   }>();
   const roomDeletedBus = makeEventBus<{ room_id: number }>();
+  const groupGovernanceChangedBus = makeEventBus<{
+    room_id: number;
+    user_id?: number | null;
+    actor_id?: number | null;
+    event: string;
+  }>();
   const channelDeletedBus = makeEventBus<{
     server_id: number;
     channel_id: number;
@@ -440,6 +455,9 @@ export async function connectSocket(
   userChannel.on("room_member_added", (p) => roomMemberAddedBus.emit(p));
   userChannel.on("room_member_removed", (p) => roomMemberRemovedBus.emit(p));
   userChannel.on("room_deleted", (p) => roomDeletedBus.emit(p));
+  userChannel.on("group_governance_changed", (p) =>
+    groupGovernanceChangedBus.emit(p),
+  );
   userChannel.on("channel_deleted", (p) => channelDeletedBus.emit(p));
   userChannel.on("room_created", (p) => roomCreatedBus.emit(p));
   userChannel.on("new_room_message", (payload: Message) => {
@@ -641,6 +659,7 @@ export async function connectSocket(
     onServerDeleted: (h) => serverDeletedBus.subscribe(h),
     onRoomMemberAdded: (h) => roomMemberAddedBus.subscribe(h),
     onRoomMemberRemoved: (h) => roomMemberRemovedBus.subscribe(h),
+    onGroupGovernanceChanged: (h) => groupGovernanceChangedBus.subscribe(h),
     onRoomDeleted: (h) => roomDeletedBus.subscribe(h),
     onChannelDeleted: (h) => channelDeletedBus.subscribe(h),
     onRoomCreated: (h) => roomCreatedBus.subscribe(h),

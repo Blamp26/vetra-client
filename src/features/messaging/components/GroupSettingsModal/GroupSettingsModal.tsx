@@ -6,6 +6,7 @@ import {
 } from "@/api/rooms";
 import { roomRef } from "@/shared/utils/refs";
 import type { RoomPreview } from "@/shared/types";
+import { useAppStore, type RootState } from "@/store";
 
 const ADMIN_RIGHTS = [
   "change_group_info",
@@ -45,6 +46,12 @@ export function GroupSettingsModal({
   const [adminRights, setAdminRights] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [overrideDraft, setOverrideDraft] = useState<
+    Record<string, "inherit" | "allow" | "deny">
+  >({});
+  const socketManager = useAppStore((s: RootState) => s.socketManager);
+  const currentUser = useAppStore((s: RootState) => s.currentUser);
   const ref = roomRef(room) ?? room.id;
   const reload = () =>
     roomsApi
@@ -52,6 +59,11 @@ export function GroupSettingsModal({
       .then((next) => {
         setState(next);
         setDefaults(next.defaults);
+        setSelected((current) =>
+          current
+            ? (next.members.find((member) => member.id === current.id) ?? null)
+            : null,
+        );
       })
       .catch((e) =>
         setError(
@@ -60,7 +72,35 @@ export function GroupSettingsModal({
       );
   useEffect(() => {
     void reload();
-  }, [room.id]);
+    const unsubscribe = socketManager?.onGroupGovernanceChanged((event) => {
+      if (event.room_id !== room.id) return;
+      if (
+        event.event === "group_deleted" ||
+        ((event.event === "member_removed" || event.event === "member_left") &&
+          event.user_id === currentUser?.id)
+      ) {
+        onClose();
+        return;
+      }
+      void reload();
+    });
+    return unsubscribe;
+  }, [room.id, socketManager, currentUser?.id, onClose]);
+  useEffect(() => {
+    if (!memberQuery.trim()) {
+      void reload();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void roomsApi
+        .governanceMembers(ref, memberQuery.trim())
+        .then((members) =>
+          setState((current) => (current ? { ...current, members } : current)),
+        )
+        .catch(() => undefined);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [memberQuery, room.id, ref]);
   const admins = useMemo(
     () => state?.members.filter((m) => m.role === "admin") ?? [],
     [state],
@@ -69,6 +109,70 @@ export function GroupSettingsModal({
     () => state?.members.filter((m) => m.role === "member") ?? [],
     [state],
   );
+  const beginMemberEdit = (member: GovernanceMember) => {
+    setSelected(member);
+    setOverrideDraft(
+      Object.fromEntries(
+        MEMBER_RIGHTS.map((right) => [
+          right,
+          member.deny_permissions.includes(right)
+            ? "deny"
+            : member.allow_permissions.includes(right)
+              ? "allow"
+              : "inherit",
+        ]),
+      ),
+    );
+  };
+  const saveOverride = async () => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await roomsApi.updateOverride(
+        ref,
+        selected.id,
+        MEMBER_RIGHTS.filter((right) => overrideDraft[right] === "allow"),
+        MEMBER_RIGHTS.filter((right) => overrideDraft[right] === "deny"),
+      );
+      await reload();
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Member restriction update failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const removeSelected = async () => {
+    if (
+      !selected ||
+      selected.role !== "member" ||
+      !window.confirm("Remove this member from the group?")
+    )
+      return;
+    setBusy(true);
+    try {
+      await roomsApi.removeMember(ref, selected.id);
+      setSelected(null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Member removal failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const clearSelectedOverride = async () => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await roomsApi.clearOverride(ref, selected.id);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not clear override.");
+    } finally {
+      setBusy(false);
+    }
+  };
   const saveDefaults = async () => {
     setBusy(true);
     setError(null);
@@ -222,11 +326,19 @@ export function GroupSettingsModal({
             )}
             {tab === "members" && (
               <div className="space-y-2">
+                <label className="block text-sm">
+                  <span className="sr-only">Search members</span>
+                  <input
+                    value={memberQuery}
+                    onChange={(event) => setMemberQuery(event.target.value)}
+                    placeholder="Search members"
+                  />
+                </label>
                 {ordinary.map((m) => (
                   <button
                     key={m.id}
                     className="block w-full rounded border p-2 text-left"
-                    onClick={() => setSelected(m)}
+                    onClick={() => beginMemberEdit(m)}
                   >
                     {m.display_name ?? m.username}{" "}
                     <span className="text-xs text-muted-foreground">
@@ -236,11 +348,79 @@ export function GroupSettingsModal({
                   </button>
                 ))}
                 {selected?.role === "member" && (
-                  <p className="text-sm">
-                    Explicit allows:{" "}
-                    {selected.allow_permissions.join(", ") || "none"}. Denies:{" "}
-                    {selected.deny_permissions.join(", ") || "none"}.
-                  </p>
+                  <div className="rounded border p-3">
+                    <p className="mb-2 text-sm">
+                      Effective:{" "}
+                      {selected.effective_permissions?.join(", ") || "none"}
+                    </p>
+                    {MEMBER_RIGHTS.map((right) => (
+                      <label
+                        key={right}
+                        className="flex items-center justify-between text-sm"
+                      >
+                        <span>{right}</span>
+                        <select
+                          aria-label={`${right} override`}
+                          value={overrideDraft[right] ?? "inherit"}
+                          onChange={(event) =>
+                            setOverrideDraft((current) => ({
+                              ...current,
+                              [right]: event.target.value as
+                                | "inherit"
+                                | "allow"
+                                | "deny",
+                            }))
+                          }
+                        >
+                          <option value="inherit">Inherit</option>
+                          <option value="allow">Allow</option>
+                          <option value="deny">Deny</option>
+                        </select>
+                      </label>
+                    ))}
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        disabled={
+                          busy ||
+                          !(
+                            state.role === "owner" ||
+                            state.capabilities.includes(
+                              "manage_member_permissions",
+                            )
+                          )
+                        }
+                        onClick={() => void saveOverride()}
+                      >
+                        Save restrictions
+                      </button>
+                      <button
+                        disabled={
+                          busy ||
+                          !(
+                            state.role === "owner" ||
+                            state.capabilities.includes(
+                              "manage_member_permissions",
+                            )
+                          )
+                        }
+                        onClick={() => void clearSelectedOverride()}
+                      >
+                        Clear override
+                      </button>
+                      <button
+                        disabled={
+                          busy ||
+                          !(
+                            state.role === "owner" ||
+                            state.capabilities.includes("remove_members")
+                          )
+                        }
+                        onClick={() => void removeSelected()}
+                      >
+                        Remove member
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -270,14 +450,17 @@ export function GroupSettingsModal({
         <div className="mt-5 flex justify-end">
           <button
             onClick={() => {
-              if (
-                state?.role !== "owner" &&
-                window.confirm("Leave this group?")
-              )
+              if (state?.role === "owner") {
+                setError("owner_cannot_leave");
+                return;
+              }
+              if (window.confirm("Leave this group?"))
                 roomsApi
                   .leave(ref)
                   .then(onClose)
-                  .catch((e) => setError(e.message));
+                  .catch((e) =>
+                    setError(e instanceof Error ? e.message : "Leave failed."),
+                  );
             }}
           >
             Leave group

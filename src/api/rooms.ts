@@ -43,6 +43,17 @@ export const roomsApi = {
   governance(roomRef: ResourceRef): Promise<GroupGovernance> {
     return get<GroupGovernance>(`/rooms/${roomRef}/governance`);
   },
+  governanceMembers(
+    roomRef: ResourceRef,
+    query?: string,
+    limit = 50,
+  ): Promise<GovernanceMember[]> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (query) params.set("q", query);
+    return get<GovernanceMember[]>(
+      `/rooms/${roomRef}/governance/members?${params}`,
+    );
+  },
   updateDefaults(
     roomRef: ResourceRef,
     permissions: string[],
@@ -76,6 +87,9 @@ export const roomsApi = {
       {},
     );
   },
+  removeMember(roomRef: ResourceRef, userRef: ResourceRef) {
+    return del<void>(`/rooms/${roomRef}/members/${userRef}`);
+  },
   updateOverride(
     roomRef: ResourceRef,
     userRef: ResourceRef,
@@ -85,6 +99,11 @@ export const roomsApi = {
     return put<GovernanceMember>(
       `/rooms/${roomRef}/governance/members/${userRef}/override`,
       { allow, deny },
+    );
+  },
+  clearOverride(roomRef: ResourceRef, userRef: ResourceRef) {
+    return del<void>(
+      `/rooms/${roomRef}/governance/members/${userRef}/override`,
     );
   },
   leave(roomRef: ResourceRef) {
@@ -102,6 +121,7 @@ export interface GovernanceMember {
   allow_permissions: string[];
   deny_permissions: string[];
   effective_permissions?: string[];
+  can_manage?: boolean;
 }
 export interface GroupGovernance {
   role: "owner" | "admin" | "member";
