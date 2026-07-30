@@ -2,6 +2,7 @@ import { useEffect, useCallback, useMemo, useRef } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { messagesApi } from "@/api/messages";
 import { roomsApi } from "@/api/rooms";
+import { reconcileUnreadLists } from "@/features/messaging/services/unreadReconciliation";
 import { markReadViaChannel, sendMessageViaChannel } from "@/services/socket";
 import { useMessagePagination } from "@/shared/hooks/useMessagePagination";
 import { withFallbackRef } from "@/shared/utils/refs";
@@ -49,6 +50,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
     (s: RootState) => s.setConversationHasMore,
   );
   const resetUnread = useAppStore((s: RootState) => s.resetUnread);
+  const setUnreadState = useAppStore((s: RootState) => s.setUnreadState);
   const upsertPreview = useAppStore((s: RootState) => s.upsertPreview);
 
   const initRoomConversation = useAppStore(
@@ -74,6 +76,10 @@ export function useUnifiedMessages(context: ChatContext | null) {
   const setRoomUnreadState = useAppStore(
     (s: RootState) => s.setRoomUnreadState,
   );
+  const setPreviews = useAppStore((s: RootState) => s.setPreviews);
+  const setRoomPreviews = useAppStore((s: RootState) => s.setRoomPreviews);
+  const setServers = useAppStore((s: RootState) => s.setServers);
+  const setServerChannels = useAppStore((s: RootState) => s.setServerChannels);
   const resetRoomUnread = useAppStore((s: RootState) => s.resetRoomUnread);
   const resetChannelUnread = useAppStore(
     (s: RootState) => s.resetChannelUnread,
@@ -243,11 +249,19 @@ export function useUnifiedMessages(context: ChatContext | null) {
       }
 
       markedReadKeysRef.current.add(readKey);
-      markReadViaChannel(
+      const markReadRequest = markReadViaChannel(
         socketManager.userChannel,
         directTargetRef ?? directPartnerId,
       );
-      resetUnread(directPartnerId);
+      if (markReadRequest && typeof markReadRequest.then === "function") {
+        void markReadRequest
+          .then((state) =>
+            setUnreadState(directPartnerId, state.unread_count, state.cursor),
+          )
+          .catch(() => undefined);
+      } else {
+        resetUnread(directPartnerId);
+      }
     } else {
       if (roomId === null) return;
       let cancelled = false;
@@ -299,6 +313,17 @@ export function useUnifiedMessages(context: ChatContext | null) {
       const unsubDeleted = socketManager.onRoomMessageDeleted(roomId, (p) =>
         deleteRoomMessage(p),
       );
+      const unsubUnreadInvalidated =
+        typeof socketManager.onRoomUnreadInvalidated === "function"
+          ? socketManager.onRoomUnreadInvalidated(roomId, () => {
+              void reconcileUnreadLists({
+                setPreviews,
+                setRoomPreviews,
+                setServers,
+                setServerChannels,
+              }).catch(() => undefined);
+            })
+          : () => undefined;
       const unsubReaction = socketManager.onRoomReactionUpdated(roomId, (p) =>
         toggleRoomReaction(p),
       );
@@ -309,6 +334,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
         unsubMessage();
         unsubEdited();
         unsubDeleted();
+        unsubUnreadInvalidated();
         unsubReaction();
         socketManager.leaveRoomChannel(roomId);
       };
@@ -324,7 +350,12 @@ export function useUnifiedMessages(context: ChatContext | null) {
     messages.length,
     roomTargetRef,
     resetUnread,
+    setUnreadState,
     setRoomUnreadState,
+    setPreviews,
+    setRoomPreviews,
+    setServers,
+    setServerChannels,
     resetRoomUnread,
     resetChannelUnread,
     appendRoomMessage,

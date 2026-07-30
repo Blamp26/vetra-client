@@ -262,7 +262,6 @@ describe("ChannelPanel states", () => {
     expect(row.querySelector(".h-1\\.5.w-1\\.5")).toBeInTheDocument();
     fireEvent.click(row);
 
-    expect(state.resetChannelUnread).toHaveBeenCalledWith(8);
     expect(state.setActiveChat).toHaveBeenCalled();
     (state as any).activeChat = { type: "channel", channelId: 8, serverId: 1 };
     view.rerender(<ChannelPanel serverId={1} />);

@@ -252,6 +252,10 @@ export interface Room {
   server_id: number | null;
   server_public_id?: string | null;
   inserted_at: string;
+  unread_count?: number;
+  read_cursor?: number | null;
+  last_message_at?: string | null;
+  last_message?: PreviewMessage | null;
 }
 
 export interface RoomPreview {

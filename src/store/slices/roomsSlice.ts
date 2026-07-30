@@ -305,6 +305,12 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (
     set((state: any) => {
       const existing = state.roomPreviews[roomId];
       if (!existing) return state;
+      if (
+        existing.read_cursor != null &&
+        cursor != null &&
+        cursor < existing.read_cursor
+      )
+        return state;
       return {
         roomPreviews: {
           ...state.roomPreviews,

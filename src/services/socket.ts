@@ -75,8 +75,9 @@ export type RoomAccessRevokedHandler = (payload: {
 }) => void;
 export type RoomAccessRevokedPayload = Parameters<RoomAccessRevokedHandler>[0];
 export type UnreadStateUpdated = {
-  conversation_type: "room";
-  room_id: number;
+  conversation_type: "room" | "dm";
+  room_id?: number;
+  partner_id?: number;
   cursor: number | null;
   unread_count: number;
 };
@@ -266,6 +267,10 @@ export interface SocketManager {
     roomId: number,
     handler: ReactionUpdatedHandler,
   ) => () => void;
+  onRoomUnreadInvalidated: (
+    roomId: number,
+    handler: (payload: { room_id: number }) => void,
+  ) => () => void;
   editRoomMessage: (
     roomId: number,
     messageId: number,
@@ -314,6 +319,7 @@ interface RoomBus {
   messageEdited: ReturnType<typeof makeEventBus<MessageEditedPayload>>;
   messageDeleted: ReturnType<typeof makeEventBus<MessageDeletedPayload>>;
   reactionUpdated: ReturnType<typeof makeEventBus<ReactionUpdatedPayload>>;
+  unreadInvalidated: ReturnType<typeof makeEventBus<{ room_id: number }>>;
 }
 
 type SocketAuthParams = { socket_ticket: string } | { token: string };
@@ -553,6 +559,7 @@ export async function connectSocket(
         messageEdited: makeEventBus<MessageEditedPayload>(),
         messageDeleted: makeEventBus<MessageDeletedPayload>(),
         reactionUpdated: makeEventBus<ReactionUpdatedPayload>(),
+        unreadInvalidated: makeEventBus<{ room_id: number }>(),
       });
     }
     return roomBuses.get(roomId)!;
@@ -583,6 +590,9 @@ export async function connectSocket(
     );
     channel.on("reaction_updated", (p: ReactionUpdatedPayload) =>
       bus.reactionUpdated.emit(p),
+    );
+    channel.on("unread_state_invalidated", (p: { room_id: number }) =>
+      bus.unreadInvalidated.emit(p),
     );
     channel.on(
       "channel_access_revoked",
@@ -874,6 +884,8 @@ export async function connectSocket(
       ensureRoomBus(roomId).messageDeleted.subscribe(h),
     onRoomReactionUpdated: (roomId, h) =>
       ensureRoomBus(roomId).reactionUpdated.subscribe(h),
+    onRoomUnreadInvalidated: (roomId, h) =>
+      ensureRoomBus(roomId).unreadInvalidated.subscribe(h),
 
     editRoomMessage(roomId, messageId, content, entities = []) {
       return new Promise((resolve, reject) => {
@@ -997,8 +1009,21 @@ export function sendMessageViaChannel(
 export function markReadViaChannel(
   channel: Channel,
   partnerRef: ResourceRef,
-): void {
-  channel.push("mark_read", { partner_id: partnerRef });
+): Promise<{
+  user_id: number;
+  partner_id: number;
+  unread_count: number;
+  cursor: number | null;
+}> {
+  return new Promise((resolve, reject) => {
+    channel
+      .push("mark_read", { partner_id: partnerRef })
+      .receive("ok", resolve)
+      .receive("error", (resp) =>
+        reject(new Error(resp?.reason ?? "Failed to mark DM read")),
+      )
+      .receive("timeout", () => reject(new Error("DM mark-read timed out")));
+  });
 }
 
 export function markRoomReadViaChannel(

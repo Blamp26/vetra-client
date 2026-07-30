@@ -15,8 +15,12 @@ import { mergeEditedMessageEntities } from "@/shared/utils/textEntities";
 function mergeReactions(existing: any[], incoming: any[]) {
   return incoming.map((item) => {
     const key = item.reaction ?? item.emoji;
-    const old = existing.find((candidate) => (candidate.reaction ?? candidate.emoji) === key);
-    return item.chosen === undefined && old ? { ...item, chosen: old.chosen } : item;
+    const old = existing.find(
+      (candidate) => (candidate.reaction ?? candidate.emoji) === key,
+    );
+    return item.chosen === undefined && old
+      ? { ...item, chosen: old.chosen }
+      : item;
   });
 }
 
@@ -83,13 +87,18 @@ function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
     byId.set(
       message.id,
       existing
-        ? { ...existing, ...message, reactions: message.reactions ?? existing.reactions }
+        ? {
+            ...existing,
+            ...message,
+            reactions: message.reactions ?? existing.reactions,
+          }
         : { ...message, reactions: message.reactions ?? [] },
     );
   });
 
   return Array.from(byId.values()).sort((a, b) => {
-    const timeDifference = parseMessageTime(a.inserted_at) - parseMessageTime(b.inserted_at);
+    const timeDifference =
+      parseMessageTime(a.inserted_at) - parseMessageTime(b.inserted_at);
     return timeDifference !== 0 ? timeDifference : a.id - b.id;
   });
 }
@@ -138,6 +147,11 @@ export interface MessagesSlice {
   updateMessagesStatus: (messageIds: number[], status: MessageStatus) => void;
   setPreviews: (previews: ConversationPreview[]) => void;
   upsertPreview: (preview: ConversationPreview) => void;
+  setUnreadState: (
+    partnerId: number,
+    count: number,
+    cursor?: number | null,
+  ) => void;
   resetUnread: (partnerId: number) => void;
   toggleDirectReaction: (payload: any) => void;
 }
@@ -231,7 +245,9 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
   appendMessage: (partnerId, message) =>
     set((state: any) => {
       const conv = state.conversations[partnerId] ?? DEFAULT_CONV;
-      const existing = conv.messages.find((current: Message) => current.id === message.id);
+      const existing = conv.messages.find(
+        (current: Message) => current.id === message.id,
+      );
       if (existing === message) return state;
       return {
         conversations: patchConv(state.conversations, partnerId, {
@@ -258,7 +274,14 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
       return { conversations };
     }),
 
-  editMessage: ({ id, content, entities, edited_at, recipient_id, sender_id }) =>
+  editMessage: ({
+    id,
+    content,
+    entities,
+    edited_at,
+    recipient_id,
+    sender_id,
+  }) =>
     set((state: any) => {
       const currentId = state.currentUser?.id;
       const partnerId =
@@ -276,7 +299,16 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
         conversations: patchConv(state.conversations, partnerId, {
           messages: conv.messages.map((m: Message) =>
             m.id === id
-              ? { ...m, content, entities: mergeEditedMessageEntities(m.entities, entities, content), edited_at: edited_at ?? m.edited_at }
+              ? {
+                  ...m,
+                  content,
+                  entities: mergeEditedMessageEntities(
+                    m.entities,
+                    entities,
+                    content,
+                  ),
+                  edited_at: edited_at ?? m.edited_at,
+                }
               : m,
           ),
         }),
@@ -360,10 +392,6 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
   upsertPreview: (preview) =>
     set((state: any) => {
       const existing = state.conversationPreviews[preview.partner_id];
-      const newUnread =
-        preview.unread_count === 0
-          ? 0
-          : (existing?.unread_count ?? 0) + (preview.unread_count ?? 0);
 
       return {
         conversationPreviews: {
@@ -371,7 +399,26 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
           [preview.partner_id]: {
             ...(existing ?? {}),
             ...preview,
-            unread_count: newUnread,
+            unread_count: existing?.unread_count ?? preview.unread_count ?? 0,
+          },
+        },
+      };
+    }),
+
+  setUnreadState: (partnerId, count, cursor) =>
+    set((state: any) => {
+      const existing = state.conversationPreviews[partnerId];
+      if (!existing) return state;
+      const currentCursor = existing.read_cursor;
+      if (currentCursor != null && cursor != null && cursor < currentCursor)
+        return state;
+      return {
+        conversationPreviews: {
+          ...state.conversationPreviews,
+          [partnerId]: {
+            ...existing,
+            unread_count: Math.max(0, count),
+            read_cursor: cursor ?? currentCursor,
           },
         },
       };
@@ -407,7 +454,12 @@ export const createMessagesSlice: StateCreator<any, [], [], MessagesSlice> = (
       return {
         conversations: patchConv(state.conversations, targetPartnerId, {
           messages: conv.messages.map((m: Message) =>
-            m.id === message_id ? { ...m, reactions: mergeReactions(m.reactions ?? [], reactions) } : m,
+            m.id === message_id
+              ? {
+                  ...m,
+                  reactions: mergeReactions(m.reactions ?? [], reactions),
+                }
+              : m,
           ),
         }),
       };

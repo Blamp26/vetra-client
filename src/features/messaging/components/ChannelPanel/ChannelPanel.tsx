@@ -34,10 +34,6 @@ export function ChannelPanel({ serverId }: Props) {
   const upsertRoomPreview = useAppStore((s: RootState) => s.upsertRoomPreview);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
-  const channelUnread = useAppStore((s: RootState) => s.channelUnread);
-  const resetChannelUnread = useAppStore(
-    (s: RootState) => s.resetChannelUnread,
-  );
 
   const [showCreate, setShowCreate] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -61,6 +57,7 @@ export function ChannelPanel({ serverId }: Props) {
   const server = servers[serverId];
   const isOwner = currentUser?.id === server?.owner_id;
   const channels = serverChannels[serverId];
+  const channelUnread = useAppStore((s: RootState) => s.channelUnread);
   const isLoading = channelsLoading[serverId] ?? false;
 
   const loadChannels = useCallback(() => {
@@ -104,7 +101,6 @@ export function ChannelPanel({ serverId }: Props) {
   }, [showCreate, server, serverId]);
 
   const handleChannelClick = async (channel: Channel) => {
-    resetChannelUnread(channel.id);
     if (server) {
       setActiveChat(channelChatForChannel(server, channel));
     } else {
@@ -437,7 +433,8 @@ export function ChannelPanel({ serverId }: Props) {
           ) : (
             <div className="space-y-1">
               {channels.map((ch) => {
-                const hasUnread = (channelUnread[ch.id] ?? 0) > 0;
+                const hasUnread =
+                  (ch.unread_count ?? channelUnread[ch.id] ?? 0) > 0;
 
                 return (
                   <div key={ch.id} className="relative group/channel">

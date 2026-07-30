@@ -1,9 +1,7 @@
 import { useEffect } from "react";
-import { messagesApi } from "@/api/messages";
-import { roomsApi } from "@/api/rooms";
-import { serversApi } from "@/api/servers";
 import { connectSocket } from "@/services/socket";
 import { useAppStore } from "@/store";
+import { reconcileUnreadLists } from "@/features/messaging/services/unreadReconciliation";
 
 /**
  * Re-fetches room previews, conversation previews, servers, and connects the
@@ -17,6 +15,7 @@ export function useAuthHydration() {
   const setPreviews = useAppStore((s) => s.setPreviews);
   const setRoomPreviews = useAppStore((s) => s.setRoomPreviews);
   const setServers = useAppStore((s) => s.setServers);
+  const setServerChannels = useAppStore((s) => s.setServerChannels);
 
   useEffect(() => {
     if (!currentUser || !authToken || socketManager !== null) return;
@@ -36,11 +35,12 @@ export function useAuthHydration() {
         }
         setSocketManager(manager);
 
-        await Promise.allSettled([
-          messagesApi.getList().then(setPreviews),
-          roomsApi.getList().then(setRoomPreviews),
-          serversApi.getList().then(setServers),
-        ]);
+        await reconcileUnreadLists({
+          setPreviews,
+          setRoomPreviews,
+          setServers,
+          setServerChannels,
+        });
       } catch (err) {
         console.error("Hydration failed:", err);
       }
@@ -57,5 +57,6 @@ export function useAuthHydration() {
     setPreviews,
     setRoomPreviews,
     setServers,
+    setServerChannels,
   ]);
 }

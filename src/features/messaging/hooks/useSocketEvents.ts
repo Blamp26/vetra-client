@@ -4,6 +4,7 @@ import type { Message, RoomMessageSummary } from "@/shared/types";
 import { showNotification } from "@/services/notifications";
 import { markReadViaChannel } from "@/services/socket";
 import { serversApi } from "@/api/servers";
+import { reconcileUnreadLists } from "@/features/messaging/services/unreadReconciliation";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   buildPreviewMessage,
@@ -33,12 +34,13 @@ export function useSocketEvents() {
     addServerChannel,
     removeRoom,
     setActiveChat,
-    incrementChannelUnread,
     setMessageReactions,
-    resetUnread,
-    incrementRoomUnread,
-    resetRoomUnread,
+    setUnreadState,
     setRoomUnreadState,
+    setPreviews,
+    setRoomPreviews,
+    setServers,
+    setServerChannels,
     updateMessagesStatus,
   } = useAppStore(
     (s: RootState) => ({
@@ -62,12 +64,13 @@ export function useSocketEvents() {
       addServerChannel: s.addServerChannel,
       removeRoom: s.removeRoom,
       setActiveChat: s.setActiveChat,
-      incrementChannelUnread: s.incrementChannelUnread,
       setMessageReactions: s.setMessageReactions,
-      resetUnread: s.resetUnread,
-      incrementRoomUnread: s.incrementRoomUnread,
-      resetRoomUnread: s.resetRoomUnread,
+      setUnreadState: s.setUnreadState,
       setRoomUnreadState: s.setRoomUnreadState,
+      setPreviews: s.setPreviews,
+      setRoomPreviews: s.setRoomPreviews,
+      setServers: s.setServers,
+      setServerChannels: s.setServerChannels,
       updateMessagesStatus: s.updateMessagesStatus,
     }),
     true,
@@ -77,6 +80,27 @@ export function useSocketEvents() {
     if (!socketManager || !currentUser) return;
 
     const unsubs: Array<() => void> = [];
+    let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
+    let reconciliationGeneration = 0;
+    const runReconciliation = () => {
+      const generation = ++reconciliationGeneration;
+      void reconcileUnreadLists({
+        setPreviews,
+        setRoomPreviews,
+        setServers,
+        setServerChannels,
+        isCurrent: () => generation === reconciliationGeneration,
+      }).catch(() => undefined);
+    };
+    const scheduleReconciliation = () => {
+      if (reconciliationTimer) clearTimeout(reconciliationTimer);
+      reconciliationTimer = setTimeout(() => {
+        reconciliationTimer = undefined;
+        runReconciliation();
+      }, 40);
+    };
+    if (socketManager.socket?.onOpen)
+      socketManager.socket.onOpen(runReconciliation);
 
     if (typeof socketManager.onServerOwnerChanged === "function")
       unsubs.push(
@@ -160,16 +184,6 @@ export function useSocketEvents() {
       });
     };
 
-    const trackRoomUnread = (roomId: number, delta = 1) => {
-      const preview = getState().roomPreviews[roomId];
-
-      if (preview?.server_id != null) {
-        incrementChannelUnread(roomId);
-      } else {
-        incrementRoomUnread(roomId, delta);
-      }
-    };
-
     const notifyRoomActivity = (
       roomId: number,
       roomPublicId: string | number | null | undefined,
@@ -203,13 +217,23 @@ export function useSocketEvents() {
 
               if (isActive && focused) {
                 // Если чат активен и окно в фокусе — помечаем сразу как прочитанное
-                markReadViaChannel(
+                const request = markReadViaChannel(
                   socketManager.userChannel,
                   msg.sender_id === currentUser.id
                     ? (msg.recipient_public_id ?? partnerId)
                     : (msg.sender_public_id ?? partnerId),
                 );
-                resetUnread(partnerId);
+                if (request && typeof request.then === "function") {
+                  void request
+                    .then((state) =>
+                      setUnreadState(
+                        partnerId,
+                        state.unread_count,
+                        state.cursor,
+                      ),
+                    )
+                    .catch(() => undefined);
+                }
               } else {
                 // Иначе увеличиваем счетчик непрочитанных в превью
                 upsertPreview({
@@ -217,7 +241,7 @@ export function useSocketEvents() {
                   partner_public_id: msg.sender_public_id,
                   partner_username: msg.sender_username || "Unknown",
                   partner_display_name: msg.sender_display_name || null,
-                  unread_count: 1, // Store will increment this
+                  unread_count: 0,
                   last_message: buildPreviewMessage(msg),
                 });
 
@@ -256,11 +280,22 @@ export function useSocketEvents() {
     if (typeof socketManager.onUnreadStateUpdated === "function") {
       unsubs.push(
         socketManager.onUnreadStateUpdated((payload) => {
-          setRoomUnreadState(
-            payload.room_id,
-            payload.unread_count,
-            payload.cursor,
-          );
+          if (
+            payload.conversation_type === "dm" &&
+            payload.partner_id != null
+          ) {
+            setUnreadState(
+              payload.partner_id,
+              payload.unread_count,
+              payload.cursor,
+            );
+          } else if (payload.room_id != null) {
+            setRoomUnreadState(
+              payload.room_id,
+              payload.unread_count,
+              payload.cursor,
+            );
+          }
         }),
       );
     }
@@ -270,16 +305,30 @@ export function useSocketEvents() {
       const state = getState();
       const active = state.activeChat;
       if (active?.type === "direct" && active.partnerId) {
-        markReadViaChannel(
+        const request = markReadViaChannel(
           socketManager.userChannel,
           active.partnerRef ?? active.partnerId,
         );
-        resetUnread(active.partnerId);
+        if (request && typeof request.then === "function") {
+          void request
+            .then((state) =>
+              setUnreadState(
+                active.partnerId,
+                state.unread_count,
+                state.cursor,
+              ),
+            )
+            .catch(() => undefined);
+        }
       }
     };
 
     window.addEventListener("focus", handleFocus);
     unsubs.push(() => window.removeEventListener("focus", handleFocus));
+    unsubs.push(() => {
+      if (reconciliationTimer) clearTimeout(reconciliationTimer);
+      reconciliationGeneration += 1;
+    });
 
     unsubs.push(socketManager.onMessageEdited((p) => editMessage(p)));
     unsubs.push(socketManager.onMessageDeleted((p) => deleteMessage(p)));
@@ -325,13 +374,10 @@ export function useSocketEvents() {
         if (!roomId) return;
 
         updateRoomPreviewFromMessage(msg);
+        scheduleReconciliation();
 
         if (msg.sender_id !== currentUser.id) {
           const active = isActiveRoom(roomId);
-
-          if (!active) {
-            trackRoomUnread(roomId);
-          }
 
           isWindowFocused().then(async (focused) => {
             if (!active || !focused) {
@@ -350,12 +396,12 @@ export function useSocketEvents() {
     unsubs.push(
       socketManager.onRoomMessageSummary((summary) => {
         updateRoomPreviewFromSummary(summary);
+        scheduleReconciliation();
 
         if (summary.sender_id !== currentUser.id) {
           const active = isActiveRoom(summary.room_id);
 
           if (!active) {
-            trackRoomUnread(summary.room_id, summary.unread_delta ?? 1);
           }
 
           isWindowFocused().then(async (focused) => {
@@ -385,7 +431,6 @@ export function useSocketEvents() {
         removeRoom(room_id);
         const active = getState().activeChat;
         if (active?.type === "room" && active.roomId === room_id) {
-          resetRoomUnread(room_id);
           setActiveChat(null);
         }
       }),
@@ -508,13 +553,10 @@ export function useSocketEvents() {
     upsertServer,
     removeServer,
     addServerChannel,
-    incrementChannelUnread,
-    incrementRoomUnread,
     setActiveChat,
     setMessageReactions,
     updateMessagesStatus,
-    resetUnread,
-    resetRoomUnread,
+    setUnreadState,
     setRoomUnreadState,
   ]);
 }

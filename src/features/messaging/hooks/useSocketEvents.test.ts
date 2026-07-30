@@ -178,8 +178,6 @@ describe("useSocketEvents", () => {
         }),
       }),
     );
-    expect(state.incrementChannelUnread).toHaveBeenCalledWith(9);
-    expect(state.incrementRoomUnread).not.toHaveBeenCalled();
     expect(state.appendRoomMessage).not.toHaveBeenCalled();
   });
 
@@ -278,7 +276,6 @@ describe("useSocketEvents", () => {
         }),
       }),
     );
-    expect(state.incrementChannelUnread).toHaveBeenCalledWith(9);
     expect(state.appendRoomMessage).not.toHaveBeenCalled();
   });
 
