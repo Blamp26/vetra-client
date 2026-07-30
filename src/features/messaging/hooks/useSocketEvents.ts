@@ -38,6 +38,7 @@ export function useSocketEvents() {
     resetUnread,
     incrementRoomUnread,
     resetRoomUnread,
+    setRoomUnreadState,
     updateMessagesStatus,
   } = useAppStore(
     (s: RootState) => ({
@@ -66,6 +67,7 @@ export function useSocketEvents() {
       resetUnread: s.resetUnread,
       incrementRoomUnread: s.incrementRoomUnread,
       resetRoomUnread: s.resetRoomUnread,
+      setRoomUnreadState: s.setRoomUnreadState,
       updateMessagesStatus: s.updateMessagesStatus,
     }),
     true,
@@ -250,6 +252,18 @@ export function useSocketEvents() {
         }
       }),
     );
+
+    if (typeof socketManager.onUnreadStateUpdated === "function") {
+      unsubs.push(
+        socketManager.onUnreadStateUpdated((payload) => {
+          setRoomUnreadState(
+            payload.room_id,
+            payload.unread_count,
+            payload.cursor,
+          );
+        }),
+      );
+    }
 
     // Авто-прочтение при фокусе окна
     const handleFocus = async () => {
@@ -501,5 +515,6 @@ export function useSocketEvents() {
     updateMessagesStatus,
     resetUnread,
     resetRoomUnread,
+    setRoomUnreadState,
   ]);
 }

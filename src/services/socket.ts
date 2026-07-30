@@ -74,6 +74,12 @@ export type RoomAccessRevokedHandler = (payload: {
   reason: string;
 }) => void;
 export type RoomAccessRevokedPayload = Parameters<RoomAccessRevokedHandler>[0];
+export type UnreadStateUpdated = {
+  conversation_type: "room";
+  room_id: number;
+  cursor: number | null;
+  unread_count: number;
+};
 
 // <-- NEW: типы для событий серверов и комнат
 export type ServerMemberAddedHandler = (payload: {
@@ -204,10 +210,21 @@ export interface SocketManager {
   onRoomMessageGlobal: (handler: (message: Message) => void) => () => void;
   onRoomMessageSummary: (handler: RoomMessageSummaryHandler) => () => void;
   onRoomAccessRevoked: (handler: RoomAccessRevokedHandler) => () => void;
+  onUnreadStateUpdated: (
+    handler: (payload: UnreadStateUpdated) => void,
+  ) => () => void;
 
   updateStatus: (status: "online" | "away" | "dnd" | "offline") => void;
   setActiveRoom: (roomRef: ResourceRef) => Promise<void>;
   clearActiveRoom: () => Promise<void>;
+  markRoomRead: (
+    roomId: number,
+    messageId: number,
+  ) => Promise<{
+    room_id: number;
+    cursor: number | null;
+    unread_count: number;
+  }>;
 
   sendTypingStart: (recipientRef: ResourceRef) => void;
   sendTypingStop: (recipientRef: ResourceRef) => void;
@@ -420,6 +437,7 @@ export async function connectSocket(
   const roomMessageGlobalBus = makeEventBus<Message>();
   const roomMessageSummaryBus = makeEventBus<RoomMessageSummary>();
   const roomAccessRevokedBus = makeEventBus<RoomAccessRevokedPayload>();
+  const unreadStateUpdatedBus = makeEventBus<UnreadStateUpdated>();
 
   userChannel.on("new_message", (p: Message) => messageBus.emit(p));
 
@@ -481,6 +499,9 @@ export async function connectSocket(
   userChannel.on("room_message_summary", (payload: RoomMessageSummary) => {
     roomMessageSummaryBus.emit(payload);
   });
+  userChannel.on("unread_state_updated", (payload: UnreadStateUpdated) =>
+    unreadStateUpdatedBus.emit(payload),
+  );
 
   // Normalize channel_created payload: backend sometimes wraps the channel as { data: {...} }
   userChannel.on("channel_created", (p) => {
@@ -683,6 +704,7 @@ export async function connectSocket(
     onRoomMessageGlobal: (h) => roomMessageGlobalBus.subscribe(h),
     onRoomMessageSummary: (h) => roomMessageSummaryBus.subscribe(h),
     onRoomAccessRevoked: (h) => roomAccessRevokedBus.subscribe(h),
+    onUnreadStateUpdated: (h) => unreadStateUpdatedBus.subscribe(h),
 
     updateStatus: (status) => userChannel.push("update_status", { status }),
 
@@ -712,6 +734,13 @@ export async function connectSocket(
             reject(new Error("Active room clear timed out")),
           );
       });
+    },
+
+    markRoomRead(roomId, messageId) {
+      const channel = roomChannels.get(roomId);
+      if (!channel)
+        return Promise.reject(new Error("Room channel is not joined"));
+      return markRoomReadViaChannel(channel, messageId);
     },
 
     sendTypingStart: (recipientRef) =>
@@ -970,4 +999,19 @@ export function markReadViaChannel(
   partnerRef: ResourceRef,
 ): void {
   channel.push("mark_read", { partner_id: partnerRef });
+}
+
+export function markRoomReadViaChannel(
+  channel: Channel,
+  messageId: number,
+): Promise<{ room_id: number; cursor: number | null; unread_count: number }> {
+  return new Promise((resolve, reject) => {
+    channel
+      .push("mark_read", { message_id: messageId })
+      .receive("ok", resolve)
+      .receive("error", (resp) =>
+        reject(new Error(resp?.reason ?? "Failed to mark room read")),
+      )
+      .receive("timeout", () => reject(new Error("Room mark-read timed out")));
+  });
 }

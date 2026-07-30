@@ -24,6 +24,7 @@ import { EmptyPane } from "@/shared/components/EmptyPane";
 import { GroupSettingsModal } from "../GroupSettingsModal/GroupSettingsModal";
 import { Settings } from "lucide-react";
 import type { RoomPreview } from "@/shared/types";
+import { formatUnreadCount } from "../../utils/unread";
 
 interface SidebarProps {
   isServerMode?: boolean;
@@ -301,13 +302,19 @@ export function Sidebar({
                       </div>
                     )}
                     {(isServerMode || isCollapsed) && item.unread > 0 && (
-                      <span className="absolute right-1.5 top-1.5 flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
-                        {item.unread}
+                      <span
+                        aria-label={`${item.unread} unread messages`}
+                        className="absolute right-1.5 top-1.5 flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground"
+                      >
+                        {formatUnreadCount(item.unread)}
                       </span>
                     )}
                     {!isCollapsed && !isServerMode && item.unread > 0 && (
-                      <span className="flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground">
-                        {item.unread}
+                      <span
+                        aria-label={`${item.unread} unread messages`}
+                        className="flex min-w-5 justify-center rounded-full bg-primary px-1.5 py-1 text-[10px] font-semibold leading-none text-primary-foreground"
+                      >
+                        {formatUnreadCount(item.unread)}
                       </span>
                     )}
                   </button>

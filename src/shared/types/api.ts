@@ -239,6 +239,7 @@ export interface ConversationPreview {
   partner_username: string;
   partner_display_name: string | null;
   unread_count: number;
+  read_cursor?: number | null;
   last_message: PreviewMessage;
 }
 

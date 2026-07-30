@@ -5,8 +5,14 @@ import { roomsApi } from "@/api/rooms";
 import { markReadViaChannel, sendMessageViaChannel } from "@/services/socket";
 import { useMessagePagination } from "@/shared/hooks/useMessagePagination";
 import { withFallbackRef } from "@/shared/utils/refs";
-import { buildPreviewMessage, getMessageAttachments } from "../utils/attachments";
-import { logAttachmentDebug, summarizeMessageMedia } from "../utils/attachmentDebug";
+import {
+  buildPreviewMessage,
+  getMessageAttachments,
+} from "../utils/attachments";
+import {
+  logAttachmentDebug,
+  summarizeMessageMedia,
+} from "../utils/attachmentDebug";
 import type { MessageTextEntity } from "@/shared/types";
 
 export type ChatContext =
@@ -65,8 +71,13 @@ export function useUnifiedMessages(context: ChatContext | null) {
     (s: RootState) => s.toggleRoomReaction,
   );
   const upsertRoomPreview = useAppStore((s: RootState) => s.upsertRoomPreview);
+  const setRoomUnreadState = useAppStore(
+    (s: RootState) => s.setRoomUnreadState,
+  );
   const resetRoomUnread = useAppStore((s: RootState) => s.resetRoomUnread);
-  const resetChannelUnread = useAppStore((s: RootState) => s.resetChannelUnread);
+  const resetChannelUnread = useAppStore(
+    (s: RootState) => s.resetChannelUnread,
+  );
 
   const isRoom = context?.type === "room";
   const id = context ? (isRoom ? context.roomId : context.partnerId) : null;
@@ -83,7 +94,8 @@ export function useUnifiedMessages(context: ChatContext | null) {
       : undefined;
   const roomPreviewPublicId =
     roomId !== null ? roomPreviews[roomId]?.public_id : undefined;
-  const roomIsServer = roomId !== null ? roomPreviews[roomId]?.server_id != null : false;
+  const roomIsServer =
+    roomId !== null ? roomPreviews[roomId]?.server_id != null : false;
 
   const directTargetRef = useMemo(
     () =>
@@ -129,7 +141,12 @@ export function useUnifiedMessages(context: ChatContext | null) {
     (limit: number, beforeId?: number, signal?: AbortSignal) => {
       if (!id || !currentUser || !contextType) return Promise.resolve([]);
       if (contextType === "room" && roomId !== null) {
-        return roomsApi.getMessages(roomTargetRef ?? roomId, limit, beforeId, signal);
+        return roomsApi.getMessages(
+          roomTargetRef ?? roomId,
+          limit,
+          beforeId,
+          signal,
+        );
       } else {
         return messagesApi.getConversation(
           directTargetRef ?? directPartnerId!,
@@ -188,17 +205,17 @@ export function useUnifiedMessages(context: ChatContext | null) {
     prependMessages,
   ]);
 
-  const conversationKey =
-    contextType && id ? `${contextType}:${id}` : null;
+  const conversationKey = contextType && id ? `${contextType}:${id}` : null;
 
-  const { messages, isLoading, hasMore, loadMore, initialHistoryLoaded } = useMessagePagination(
-    id,
-    currentUser?.id ?? null,
-    conversation,
-    fetchPage,
-    actions!,
-    conversationKey,
-  );
+  const { messages, isLoading, hasMore, loadMore, initialHistoryLoaded } =
+    useMessagePagination(
+      id,
+      currentUser?.id ?? null,
+      conversation,
+      fetchPage,
+      actions!,
+      conversationKey,
+    );
 
   const markedReadKeysRef = useRef<Set<string>>(new Set());
 
@@ -217,7 +234,11 @@ export function useUnifiedMessages(context: ChatContext | null) {
 
     if (contextType === "direct" && directPartnerId !== null) {
       const readKey = `direct:${directPartnerId}`;
-      if (isLoading || messages.length === 0 || markedReadKeysRef.current.has(readKey)) {
+      if (
+        isLoading ||
+        messages.length === 0 ||
+        markedReadKeysRef.current.has(readKey)
+      ) {
         return;
       }
 
@@ -234,21 +255,42 @@ export function useUnifiedMessages(context: ChatContext | null) {
       const unsubMessage = socketManager.onRoomMessage(roomId, (message) =>
         appendRoomMessage(roomId, message),
       );
+      // Compatibility for older test/dummy socket managers. The production
+      // manager always exposes markRoomRead and only clears after validation.
+      if (typeof socketManager.markRoomRead !== "function") {
+        if (roomIsServer) resetChannelUnread(roomId);
+        else resetRoomUnread(roomId);
+      }
       void socketManager
         .joinRoomChannel(roomId, roomTargetRef ?? roomId)
         .then(() => {
           if (cancelled) return;
           void socketManager.setActiveRoom(roomTargetRef ?? roomId);
+          const tail = messages.reduce(
+            (max, message) => Math.max(max, message.id),
+            0,
+          );
+          if (tail > 0) {
+            if (typeof socketManager.markRoomRead === "function") {
+              void socketManager
+                .markRoomRead(roomId, tail)
+                .then((state) =>
+                  setRoomUnreadState(roomId, state.unread_count, state.cursor),
+                )
+                .catch(() => undefined);
+            } else if (roomIsServer) {
+              resetChannelUnread(roomId);
+            } else {
+              resetRoomUnread(roomId);
+            }
+          } else if (typeof socketManager.markRoomRead !== "function") {
+            if (roomIsServer) resetChannelUnread(roomId);
+            else resetRoomUnread(roomId);
+          }
         })
         .catch(() => {
           // Room join errors are already surfaced by message send/load failures.
         });
-
-      if (roomIsServer) {
-        resetChannelUnread(roomId);
-      } else {
-        resetRoomUnread(roomId);
-      }
 
       // Local room events that aren't global (edited, deleted, reactions)
       const unsubEdited = socketManager.onRoomMessageEdited(roomId, (p) =>
@@ -281,8 +323,8 @@ export function useUnifiedMessages(context: ChatContext | null) {
     isLoading,
     messages.length,
     roomTargetRef,
-    roomIsServer,
     resetUnread,
+    setRoomUnreadState,
     resetRoomUnread,
     resetChannelUnread,
     appendRoomMessage,
@@ -311,22 +353,36 @@ export function useUnifiedMessages(context: ChatContext | null) {
       if (!id || !socketManager || !currentUser || !contextType) return;
       const trimmed = payload.content?.trim() ?? "";
       const content = trimmed.length > 0 ? trimmed : null;
-      const mediaFileIds = payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string => Boolean(mediaFileId)) ?? [];
+      const mediaFileIds =
+        payload.mediaFileIds?.filter((mediaFileId): mediaFileId is string =>
+          Boolean(mediaFileId),
+        ) ?? [];
       const primaryMediaFileId = payload.mediaFileId ?? mediaFileIds[0] ?? null;
       const debugMeta = payload.__attachmentDebug ?? null;
-      if (!content && !primaryMediaFileId && mediaFileIds.length === 0 && !payload.stickerId && !payload.gif) return;
+      if (
+        !content &&
+        !primaryMediaFileId &&
+        mediaFileIds.length === 0 &&
+        !payload.stickerId &&
+        !payload.gif
+      )
+        return;
 
-      logAttachmentDebug("sendMessage.prepare", {
-        contextType,
-        targetId: id,
-        replyToId: replyToId ?? null,
-        contentPresent: Boolean(content),
-        mediaFileId: primaryMediaFileId,
-        mediaFileIds,
-      }, {
-        batchId: debugMeta?.batchId,
-        sendUnitId: debugMeta?.sendUnitId,
-      });
+      logAttachmentDebug(
+        "sendMessage.prepare",
+        {
+          contextType,
+          targetId: id,
+          replyToId: replyToId ?? null,
+          contentPresent: Boolean(content),
+          mediaFileId: primaryMediaFileId,
+          mediaFileIds,
+        },
+        {
+          batchId: debugMeta?.batchId,
+          sendUnitId: debugMeta?.sendUnitId,
+        },
+      );
 
       if (contextType === "room" && roomId !== null) {
         const message = await socketManager.sendRoomMessageViaChannel(roomId, {
@@ -341,41 +397,69 @@ export function useUnifiedMessages(context: ChatContext | null) {
         });
         const normalizedAttachments = getMessageAttachments(message);
         const rawGroupedMediaIdsLength =
-          (Array.isArray(message.media_file_ids) ? message.media_file_ids.length : 0) ||
-          (Array.isArray(message.mediaFileIds) ? message.mediaFileIds.length : 0);
-        logAttachmentDebug("sendMessage.response", {
-          contextType,
-          targetId: roomId,
-          ...summarizeMessageMedia(message as unknown as Record<string, unknown>),
-          normalizedAttachmentsLength: normalizedAttachments.length,
-        }, {
-          batchId: debugMeta?.batchId,
-          sendUnitId: debugMeta?.sendUnitId,
-        });
-        if ((debugMeta?.localAttachmentIds?.length ?? 0) > 1 && rawGroupedMediaIdsLength <= 1) {
-          logAttachmentDebug("warning.raw-response-single-media-id", {
+          (Array.isArray(message.media_file_ids)
+            ? message.media_file_ids.length
+            : 0) ||
+          (Array.isArray(message.mediaFileIds)
+            ? message.mediaFileIds.length
+            : 0);
+        logAttachmentDebug(
+          "sendMessage.response",
+          {
             contextType,
             targetId: roomId,
-            localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
-            response: summarizeMessageMedia(message as unknown as Record<string, unknown>),
-          }, {
-            batchId: debugMeta?.batchId,
-            sendUnitId: debugMeta?.sendUnitId,
-            level: "warn",
-          });
-        }
-        if ((debugMeta?.localAttachmentIds?.length ?? 0) > 1 && normalizedAttachments.length <= 1) {
-          logAttachmentDebug("warning.socket-response-missing-album", {
-            contextType,
-            targetId: roomId,
-            localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
-            response: summarizeMessageMedia(message as unknown as Record<string, unknown>),
+            ...summarizeMessageMedia(
+              message as unknown as Record<string, unknown>,
+            ),
             normalizedAttachmentsLength: normalizedAttachments.length,
-          }, {
+          },
+          {
             batchId: debugMeta?.batchId,
             sendUnitId: debugMeta?.sendUnitId,
-            level: "warn",
-          });
+          },
+        );
+        if (
+          (debugMeta?.localAttachmentIds?.length ?? 0) > 1 &&
+          rawGroupedMediaIdsLength <= 1
+        ) {
+          logAttachmentDebug(
+            "warning.raw-response-single-media-id",
+            {
+              contextType,
+              targetId: roomId,
+              localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
+              response: summarizeMessageMedia(
+                message as unknown as Record<string, unknown>,
+              ),
+            },
+            {
+              batchId: debugMeta?.batchId,
+              sendUnitId: debugMeta?.sendUnitId,
+              level: "warn",
+            },
+          );
+        }
+        if (
+          (debugMeta?.localAttachmentIds?.length ?? 0) > 1 &&
+          normalizedAttachments.length <= 1
+        ) {
+          logAttachmentDebug(
+            "warning.socket-response-missing-album",
+            {
+              contextType,
+              targetId: roomId,
+              localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
+              response: summarizeMessageMedia(
+                message as unknown as Record<string, unknown>,
+              ),
+              normalizedAttachmentsLength: normalizedAttachments.length,
+            },
+            {
+              batchId: debugMeta?.batchId,
+              sendUnitId: debugMeta?.sendUnitId,
+              level: "warn",
+            },
+          );
         }
         appendRoomMessage(roomId, message);
         upsertRoomPreview({
@@ -401,41 +485,69 @@ export function useUnifiedMessages(context: ChatContext | null) {
         );
         const normalizedAttachments = getMessageAttachments(message);
         const rawGroupedMediaIdsLength =
-          (Array.isArray(message.media_file_ids) ? message.media_file_ids.length : 0) ||
-          (Array.isArray(message.mediaFileIds) ? message.mediaFileIds.length : 0);
-        logAttachmentDebug("sendMessage.response", {
-          contextType,
-          targetId: directPartnerId,
-          ...summarizeMessageMedia(message as unknown as Record<string, unknown>),
-          normalizedAttachmentsLength: normalizedAttachments.length,
-        }, {
-          batchId: debugMeta?.batchId,
-          sendUnitId: debugMeta?.sendUnitId,
-        });
-        if ((debugMeta?.localAttachmentIds?.length ?? 0) > 1 && rawGroupedMediaIdsLength <= 1) {
-          logAttachmentDebug("warning.raw-response-single-media-id", {
+          (Array.isArray(message.media_file_ids)
+            ? message.media_file_ids.length
+            : 0) ||
+          (Array.isArray(message.mediaFileIds)
+            ? message.mediaFileIds.length
+            : 0);
+        logAttachmentDebug(
+          "sendMessage.response",
+          {
             contextType,
             targetId: directPartnerId,
-            localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
-            response: summarizeMessageMedia(message as unknown as Record<string, unknown>),
-          }, {
-            batchId: debugMeta?.batchId,
-            sendUnitId: debugMeta?.sendUnitId,
-            level: "warn",
-          });
-        }
-        if ((debugMeta?.localAttachmentIds?.length ?? 0) > 1 && normalizedAttachments.length <= 1) {
-          logAttachmentDebug("warning.socket-response-missing-album", {
-            contextType,
-            targetId: directPartnerId,
-            localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
-            response: summarizeMessageMedia(message as unknown as Record<string, unknown>),
+            ...summarizeMessageMedia(
+              message as unknown as Record<string, unknown>,
+            ),
             normalizedAttachmentsLength: normalizedAttachments.length,
-          }, {
+          },
+          {
             batchId: debugMeta?.batchId,
             sendUnitId: debugMeta?.sendUnitId,
-            level: "warn",
-          });
+          },
+        );
+        if (
+          (debugMeta?.localAttachmentIds?.length ?? 0) > 1 &&
+          rawGroupedMediaIdsLength <= 1
+        ) {
+          logAttachmentDebug(
+            "warning.raw-response-single-media-id",
+            {
+              contextType,
+              targetId: directPartnerId,
+              localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
+              response: summarizeMessageMedia(
+                message as unknown as Record<string, unknown>,
+              ),
+            },
+            {
+              batchId: debugMeta?.batchId,
+              sendUnitId: debugMeta?.sendUnitId,
+              level: "warn",
+            },
+          );
+        }
+        if (
+          (debugMeta?.localAttachmentIds?.length ?? 0) > 1 &&
+          normalizedAttachments.length <= 1
+        ) {
+          logAttachmentDebug(
+            "warning.socket-response-missing-album",
+            {
+              contextType,
+              targetId: directPartnerId,
+              localAttachmentIds: debugMeta?.localAttachmentIds ?? [],
+              response: summarizeMessageMedia(
+                message as unknown as Record<string, unknown>,
+              ),
+              normalizedAttachmentsLength: normalizedAttachments.length,
+            },
+            {
+              batchId: debugMeta?.batchId,
+              sendUnitId: debugMeta?.sendUnitId,
+              level: "warn",
+            },
+          );
         }
         appendMessage(directPartnerId!, message);
         upsertPreview({
@@ -478,5 +590,12 @@ export function useUnifiedMessages(context: ChatContext | null) {
     ],
   );
 
-  return { messages, isLoading, hasMore, loadMore, initialHistoryLoaded, sendMessage };
+  return {
+    messages,
+    isLoading,
+    hasMore,
+    loadMore,
+    initialHistoryLoaded,
+    sendMessage,
+  };
 }

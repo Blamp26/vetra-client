@@ -1,26 +1,30 @@
-import { StateCreator } from 'zustand';
-import { 
-  Message, 
-  RoomPreview, 
-  MessageEditedPayload, 
+import { StateCreator } from "zustand";
+import {
+  Message,
+  RoomPreview,
+  MessageEditedPayload,
   MessageDeletedPayload,
   ConversationState,
-  DEFAULT_CONV
-} from '@/shared/types';
-import { mergeEditedMessageEntities } from '@/shared/utils/textEntities';
+  DEFAULT_CONV,
+} from "@/shared/types";
+import { mergeEditedMessageEntities } from "@/shared/utils/textEntities";
 
 function mergeReactions(existing: any[], incoming: any[]) {
   return incoming.map((item) => {
     const key = item.reaction ?? item.emoji;
-    const old = existing.find((candidate) => (candidate.reaction ?? candidate.emoji) === key);
-    return item.chosen === undefined && old ? { ...item, chosen: old.chosen } : item;
+    const old = existing.find(
+      (candidate) => (candidate.reaction ?? candidate.emoji) === key,
+    );
+    return item.chosen === undefined && old
+      ? { ...item, chosen: old.chosen }
+      : item;
   });
 }
 
 function patchConv(
   record: Record<number, ConversationState>,
-  id:     number,
-  patch:  Partial<ConversationState>,
+  id: number,
+  patch: Partial<ConversationState>,
 ): Record<number, ConversationState> {
   return {
     ...record,
@@ -50,13 +54,18 @@ function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
     byId.set(
       message.id,
       existing
-        ? { ...existing, ...message, reactions: message.reactions ?? existing.reactions }
+        ? {
+            ...existing,
+            ...message,
+            reactions: message.reactions ?? existing.reactions,
+          }
         : { ...message, reactions: message.reactions ?? [] },
     );
   });
 
   return Array.from(byId.values()).sort((a, b) => {
-    const timeDifference = parseMessageTime(a.inserted_at) - parseMessageTime(b.inserted_at);
+    const timeDifference =
+      parseMessageTime(a.inserted_at) - parseMessageTime(b.inserted_at);
     return timeDifference !== 0 ? timeDifference : a.id - b.id;
   });
 }
@@ -77,7 +86,10 @@ export interface RoomsSlice {
   roomConversations: Record<number, ConversationState>;
   roomReactionVersions: Record<number, string>;
   typingRoomMemberIds: Set<number>;
-  typingRoomMemberInfo: Record<number, { username: string; display_name: string | null }>;
+  typingRoomMemberInfo: Record<
+    number,
+    { username: string; display_name: string | null }
+  >;
 
   setRoomPreviews: (previews: RoomPreview[]) => void;
   upsertRoomPreview: (preview: any) => void;
@@ -91,16 +103,27 @@ export interface RoomsSlice {
   setRoomConversationHasMore: (roomId: number, hasMore: boolean) => void;
   setTypingRoomMember: (userId: number) => void;
   clearTypingRoomMember: (userId: number) => void;
-  setTypingRoomMemberInfo: (userId: number, info: { username: string; display_name: string | null }) => void;
+  setTypingRoomMemberInfo: (
+    userId: number,
+    info: { username: string; display_name: string | null },
+  ) => void;
   clearTypingRoomMemberInfo: (userId: number) => void;
   incrementRoomUnread: (roomId: number, delta?: number) => void;
   resetRoomUnread: (roomId: number) => void;
+  setRoomUnreadState: (
+    roomId: number,
+    count: number,
+    cursor?: number | null,
+  ) => void;
   removeRoom: (roomId: number) => void;
   removeServerChannel: (serverId: number, channelId: number) => void;
   toggleRoomReaction: (payload: any) => void;
 }
 
-export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get) => ({
+export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (
+  set,
+  get,
+) => ({
   roomPreviews: {},
   roomConversations: {},
   roomReactionVersions: {},
@@ -156,7 +179,9 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
   appendRoomMessage: (roomId, message) =>
     set((state: any) => {
       const conv = state.roomConversations[roomId] ?? DEFAULT_CONV;
-      const existing = conv.messages.find((current: Message) => current.id === message.id);
+      const existing = conv.messages.find(
+        (current: Message) => current.id === message.id,
+      );
       if (existing === message) return state;
       return {
         roomConversations: patchConv(state.roomConversations, roomId, {
@@ -173,7 +198,18 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
       return {
         roomConversations: patchConv(state.roomConversations, room_id, {
           messages: conv.messages.map((m: Message) =>
-            m.id === id ? { ...m, content, entities: mergeEditedMessageEntities(m.entities, entities, content), edited_at: edited_at ?? m.edited_at } : m
+            m.id === id
+              ? {
+                  ...m,
+                  content,
+                  entities: mergeEditedMessageEntities(
+                    m.entities,
+                    entities,
+                    content,
+                  ),
+                  edited_at: edited_at ?? m.edited_at,
+                }
+              : m,
           ),
         }),
       };
@@ -213,12 +249,18 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
       return { roomConversations };
     }),
 
-  setTypingRoomMember:   (userId) => set((state: any) => ({ typingRoomMemberIds: patchSet(state.typingRoomMemberIds, userId, true)  })),
-  clearTypingRoomMember: (userId) => set((state: any) => ({ typingRoomMemberIds: patchSet(state.typingRoomMemberIds, userId, false) })),
+  setTypingRoomMember: (userId) =>
+    set((state: any) => ({
+      typingRoomMemberIds: patchSet(state.typingRoomMemberIds, userId, true),
+    })),
+  clearTypingRoomMember: (userId) =>
+    set((state: any) => ({
+      typingRoomMemberIds: patchSet(state.typingRoomMemberIds, userId, false),
+    })),
 
   setTypingRoomMemberInfo: (userId, info) =>
     set((state: any) => ({
-      typingRoomMemberInfo: { ...state.typingRoomMemberInfo, [userId]: info }
+      typingRoomMemberInfo: { ...state.typingRoomMemberInfo, [userId]: info },
     })),
 
   clearTypingRoomMemberInfo: (userId) =>
@@ -259,16 +301,32 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
       };
     }),
 
+  setRoomUnreadState: (roomId, count, cursor) =>
+    set((state: any) => {
+      const existing = state.roomPreviews[roomId];
+      if (!existing) return state;
+      return {
+        roomPreviews: {
+          ...state.roomPreviews,
+          [roomId]: {
+            ...existing,
+            unread_count: Math.max(0, count),
+            read_cursor: cursor ?? existing.read_cursor,
+          },
+        },
+      };
+    }),
+
   removeRoom: (roomId) =>
     set((state: any) => {
       const { [roomId]: _, ...restPreviews } = state.roomPreviews;
       const { [roomId]: __, ...restConvs } = state.roomConversations;
-      
+
       // Also try to remove from serverChannels if it exists in any server
       const serverChannels = { ...state.serverChannels };
       let changed = false;
-      
-      Object.keys(serverChannels).forEach(serverId => {
+
+      Object.keys(serverChannels).forEach((serverId) => {
         const sid = Number(serverId);
         const channels = serverChannels[sid];
         if (channels && channels.some((c: any) => c.id === roomId)) {
@@ -280,7 +338,7 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
       return {
         roomPreviews: restPreviews,
         roomConversations: restConvs,
-        ...(changed ? { serverChannels } : {})
+        ...(changed ? { serverChannels } : {}),
       };
     }),
 
@@ -288,12 +346,12 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
     set((state: any) => {
       const channels = state.serverChannels[serverId];
       if (!channels) return state;
-      
+
       return {
         serverChannels: {
           ...state.serverChannels,
-          [serverId]: channels.filter((c: any) => c.id !== channelId)
-        }
+          [serverId]: channels.filter((c: any) => c.id !== channelId),
+        },
       };
     }),
 
@@ -301,14 +359,20 @@ export const createRoomsSlice: StateCreator<any, [], [], RoomsSlice> = (set, get
     set((state: any) => {
       if (!room_id) return state;
       const previousVersion = (state.roomReactionVersions ?? {})[message_id];
-      if (updated_at && previousVersion && updated_at <= previousVersion) return state;
+      if (updated_at && previousVersion && updated_at <= previousVersion)
+        return state;
       const conv = state.roomConversations[room_id];
       if (!conv) return state;
-      
+
       return {
         roomConversations: patchConv(state.roomConversations, room_id, {
           messages: conv.messages.map((m: Message) =>
-            m.id === message_id ? { ...m, reactions: mergeReactions(m.reactions ?? [], reactions) } : m
+            m.id === message_id
+              ? {
+                  ...m,
+                  reactions: mergeReactions(m.reactions ?? [], reactions),
+                }
+              : m,
           ),
         }),
         roomReactionVersions: updated_at
