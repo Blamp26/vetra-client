@@ -2,6 +2,8 @@
 
 import { Socket, Channel } from "phoenix";
 import { authApi } from "@/api/auth";
+import { roomsApi } from "@/api/rooms";
+import { serversApi } from "@/api/servers";
 import type {
   Message,
   MessageStatus,
@@ -314,6 +316,7 @@ export async function connectSocket(
   let authParams = await resolveSocketAuthParams(token);
   let allowAuthRefresh = true;
   let authRefreshInFlight: Promise<void> | null = null;
+  let closeRoomChannels: () => void = () => undefined;
 
   const refreshSocketAuthParams = () => {
     if (!allowAuthRefresh || authRefreshInFlight) return authRefreshInFlight;
@@ -339,6 +342,7 @@ export async function connectSocket(
 
   socket.onClose(() => {
     void refreshSocketAuthParams();
+    closeRoomChannels();
   });
 
   socket.connect();
@@ -483,6 +487,8 @@ export async function connectSocket(
   const roomChannels = new Map<number, Channel>();
   const roomBuses = new Map<number, RoomBus>();
   const revokedRoomIds = new Set<number>();
+  const roomTopics = new Map<number, ResourceRef>();
+  let reconcilingRooms = false;
 
   function ensureRoomBus(roomId: number): RoomBus {
     if (!roomBuses.has(roomId)) {
@@ -497,6 +503,118 @@ export async function connectSocket(
     }
     return roomBuses.get(roomId)!;
   }
+
+  async function joinRoomChannelInternal(
+    roomId: number,
+    roomTopicRef: ResourceRef = roomId,
+  ) {
+    if (revokedRoomIds.has(roomId)) {
+      throw new Error(`Room access revoked for ${roomId}`);
+    }
+    if (roomChannels.has(roomId)) return;
+
+    const bus = ensureRoomBus(roomId);
+    const channel = socket.channel(`room:${roomTopicRef}`, {});
+
+    channel.on("new_room_message", (p: Message) => bus.message.emit(p));
+    channel.on("typing_start", (p: RoomTypingPayload) =>
+      bus.typingStart.emit(p),
+    );
+    channel.on("typing_stop", (p: RoomTypingPayload) => bus.typingStop.emit(p));
+    channel.on("message_edited", (p: MessageEditedPayload) =>
+      bus.messageEdited.emit(p),
+    );
+    channel.on("message_deleted", (p: MessageDeletedPayload) =>
+      bus.messageDeleted.emit(p),
+    );
+    channel.on("reaction_updated", (p: ReactionUpdatedPayload) =>
+      bus.reactionUpdated.emit(p),
+    );
+    channel.on(
+      "channel_access_revoked",
+      (payload: { room_id?: number; reason?: string }) => {
+        const revokedRoomId = Number(payload?.room_id ?? roomId);
+        revokedRoomIds.add(revokedRoomId);
+        roomTopics.delete(revokedRoomId);
+        channel.leave();
+        if (roomChannels.get(revokedRoomId) === channel)
+          roomChannels.delete(revokedRoomId);
+        roomAccessRevokedBus.emit({
+          room_id: revokedRoomId,
+          reason: String(payload?.reason ?? "access_reduced"),
+        });
+      },
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      channel
+        .join()
+        .receive("ok", () => resolve())
+        .receive("error", (resp) =>
+          reject(new Error(String(resp?.reason ?? "Room channel join failed"))),
+        )
+        .receive("timeout", () =>
+          reject(new Error("Room channel join timed out")),
+        );
+    });
+
+    roomChannels.set(roomId, channel);
+    roomTopics.set(roomId, roomTopicRef);
+  }
+
+  async function reconcileRoomChannels() {
+    if (reconcilingRooms) return;
+    reconcilingRooms = true;
+
+    const desired = [...roomTopics.entries()];
+    roomChannels.forEach((channel) => channel.leave());
+    roomChannels.clear();
+
+    try {
+      const authorized = new Set<number>();
+      const rooms = await roomsApi.getList();
+      rooms.forEach((room) => authorized.add(room.id));
+
+      const servers = await serversApi.getList();
+      const channelLists = await Promise.all(
+        servers.map((server) =>
+          serversApi.getChannels(server.public_id ?? server.id),
+        ),
+      );
+      channelLists.flat().forEach((channel) => authorized.add(channel.id));
+
+      for (const [roomId, roomTopicRef] of desired) {
+        if (authorized.has(roomId)) {
+          await joinRoomChannelInternal(roomId, roomTopicRef);
+        } else {
+          roomTopics.delete(roomId);
+          roomAccessRevokedBus.emit({
+            room_id: roomId,
+            reason: "reconnect_reconciliation",
+          });
+        }
+      }
+    } catch {
+      // A failed reconciliation must not restore cached protected topics.
+      for (const [roomId] of desired) {
+        roomTopics.delete(roomId);
+        roomAccessRevokedBus.emit({
+          room_id: roomId,
+          reason: "reconnect_reconciliation_failed",
+        });
+      }
+    } finally {
+      reconcilingRooms = false;
+    }
+  }
+
+  closeRoomChannels = () => {
+    roomChannels.forEach((channel) => channel.leave());
+    roomChannels.clear();
+  };
+  socket.onOpen(() => {
+    void reconcileRoomChannels();
+  });
 
   // ── Return SocketManager ──────────────────────────────────────────────────
 
@@ -614,66 +732,12 @@ export async function connectSocket(
       });
     },
 
-    async joinRoomChannel(roomId, roomTopicRef = roomId) {
-      if (revokedRoomIds.has(roomId)) {
-        throw new Error(`Room access revoked for ${roomId}`);
-      }
-      if (roomChannels.has(roomId)) return;
-
-      const bus = ensureRoomBus(roomId);
-      const channel = socket.channel(`room:${roomTopicRef}`, {});
-
-      channel.on("new_room_message", (p: Message) => bus.message.emit(p));
-      channel.on("typing_start", (p: RoomTypingPayload) =>
-        bus.typingStart.emit(p),
-      );
-      channel.on("typing_stop", (p: RoomTypingPayload) =>
-        bus.typingStop.emit(p),
-      );
-      channel.on("message_edited", (p: MessageEditedPayload) =>
-        bus.messageEdited.emit(p),
-      );
-      channel.on("message_deleted", (p: MessageDeletedPayload) =>
-        bus.messageDeleted.emit(p),
-      );
-      channel.on("reaction_updated", (p: ReactionUpdatedPayload) =>
-        bus.reactionUpdated.emit(p),
-      );
-      channel.on(
-        "channel_access_revoked",
-        (payload: { room_id?: number; reason?: string }) => {
-          const revokedRoomId = Number(payload?.room_id ?? roomId);
-          revokedRoomIds.add(revokedRoomId);
-          channel.leave();
-          if (roomChannels.get(revokedRoomId) === channel)
-            roomChannels.delete(revokedRoomId);
-          roomAccessRevokedBus.emit({
-            room_id: revokedRoomId,
-            reason: String(payload?.reason ?? "access_reduced"),
-          });
-        },
-      );
-
-      await new Promise<void>((resolve, reject) => {
-        channel
-          .join()
-          .receive("ok", () => resolve())
-          .receive("error", (resp) =>
-            reject(
-              new Error(String(resp?.reason ?? "Room channel join failed")),
-            ),
-          )
-          .receive("timeout", () =>
-            reject(new Error("Room channel join timed out")),
-          );
-      });
-
-      roomChannels.set(roomId, channel);
-    },
+    joinRoomChannel: joinRoomChannelInternal,
 
     leaveRoomChannel(roomId) {
       roomChannels.get(roomId)?.leave();
       roomChannels.delete(roomId);
+      roomTopics.delete(roomId);
       revokedRoomIds.delete(roomId);
     },
 
@@ -804,6 +868,7 @@ export async function connectSocket(
       callSignalingService.disconnect();
       roomChannels.forEach((ch) => ch.leave());
       roomChannels.clear();
+      roomTopics.clear();
       userChannel.leave();
       socket.disconnect();
     },

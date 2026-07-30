@@ -41,6 +41,7 @@ const {
       this.closeHandler = callback;
       return 2;
     });
+    onOpen = vi.fn();
     errorHandler?: () => void;
     closeHandler?: () => void;
 
@@ -85,15 +86,15 @@ import {
 
 describe("getDefaultSocketUrl", () => {
   it("uses ws for same-origin HTTP deployments", () => {
-    expect(getDefaultSocketUrl({ protocol: "http:", host: "146.120.249.160" })).toBe(
-      "ws://146.120.249.160/socket",
-    );
+    expect(
+      getDefaultSocketUrl({ protocol: "http:", host: "146.120.249.160" }),
+    ).toBe("ws://146.120.249.160/socket");
   });
 
   it("uses wss for same-origin HTTPS deployments", () => {
-    expect(getDefaultSocketUrl({ protocol: "https:", host: "146.120.249.160" })).toBe(
-      "wss://146.120.249.160/socket",
-    );
+    expect(
+      getDefaultSocketUrl({ protocol: "https:", host: "146.120.249.160" }),
+    ).toBe("wss://146.120.249.160/socket");
   });
 });
 
@@ -180,18 +181,16 @@ describe("connectSocket", () => {
 describe("buildSocketMessagePayload", () => {
   it("includes both legacy and grouped media keys for a four-photo album payload", () => {
     expect(
-      buildSocketMessagePayload(
-        {
-          content: null,
-          mediaFileId: "media-photo-1",
-          mediaFileIds: [
-            "media-photo-1",
-            "media-photo-2",
-            "media-photo-3",
-            "media-photo-4",
-          ],
-        },
-      ),
+      buildSocketMessagePayload({
+        content: null,
+        mediaFileId: "media-photo-1",
+        mediaFileIds: [
+          "media-photo-1",
+          "media-photo-2",
+          "media-photo-3",
+          "media-photo-4",
+        ],
+      }),
     ).toEqual({
       content: null,
       mediaFileId: "media-photo-1",
