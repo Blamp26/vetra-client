@@ -77,16 +77,11 @@ export const createAuthSlice: StateCreator<AuthSlice> = (set, get) => ({
     get().socketManager?.disconnect();
     storage.remove(STORAGE_KEYS.USER);
     storage.remove(STORAGE_KEYS.TOKEN);
-    (set as any)({
+    set({
       currentUser: null,
       authToken: null,
       socketManager: null,
       protocolUpdateRequired: false,
-      activeChat: null,
-      railContext: { type: "conversations" },
-      lastConversationChat: null,
-      lastServerContext: null,
-      lastChannelIdByServer: {},
     });
   },
 });

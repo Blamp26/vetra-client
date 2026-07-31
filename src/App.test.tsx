@@ -15,17 +15,11 @@ const {
   useAppStoreMock: vi.fn(),
   setActiveChatMock: vi.fn(),
   useCallMock: vi.fn(),
-  getStateMock: vi.fn(() => ({
-    refreshDevices: vi.fn().mockResolvedValue({ committed: false }),
-  })),
+  getStateMock: vi.fn(() => ({ refreshDevices: vi.fn().mockResolvedValue({ committed: false }) })),
   startObserverMock: vi.fn(() => vi.fn()),
   audioMounts: { current: 0 },
   audioUnmounts: { current: 0 },
-  persistentAudioState: {
-    muted: undefined as boolean | undefined,
-    deafened: undefined as boolean | undefined,
-    effectiveMuted: undefined as boolean | undefined,
-  },
+  persistentAudioState: { muted: undefined as boolean | undefined, deafened: undefined as boolean | undefined, effectiveMuted: undefined as boolean | undefined },
 }));
 
 function makeCallState(overrides = {}) {
@@ -68,32 +62,20 @@ vi.mock("@/shared/utils/mediaDeviceObserver", () => ({
 
 vi.mock("./features/calling/context/CallRuntimeBoundary", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
-  const { PersistentCallProvider } = await vi.importActual<
-    typeof import("./features/calling/context/PersistentCallContext")
-  >("./features/calling/context/PersistentCallContext");
+  const { PersistentCallProvider } = await vi.importActual<typeof import("./features/calling/context/PersistentCallContext")>("./features/calling/context/PersistentCallContext");
   const presentationListeners = new Set<(snapshot: any) => void>();
   const mediaListeners = new Set<(snapshot: any) => void>();
   const runtime: any = {
     presentation: {
       getSnapshot: () => {
         const call = useCallMock(1);
-        const phase =
-          call.status === "active"
-            ? "active"
-            : call.status === "ringing"
-              ? "ringing"
-              : call.status === "idle"
-                ? "idle"
-                : "calling";
+        const phase = call.status === "active" ? "active" : call.status === "ringing" ? "ringing" : call.status === "idle" ? "idle" : "calling";
         return {
           disposed: false,
           phase,
           callId: call.callId ?? "test-call",
           participantRole: null,
-          peerPublicId:
-            call.remoteUserId === null || call.remoteUserId === undefined
-              ? null
-              : String(call.remoteUserId),
+          peerPublicId: call.remoteUserId === null || call.remoteUserId === undefined ? null : String(call.remoteUserId),
           peerUsername: call.remoteUsername,
           canonicalState: null,
           stateVersion: null,
@@ -110,73 +92,42 @@ vi.mock("./features/calling/context/CallRuntimeBoundary", async () => {
           incomingModal: { visible: false },
         };
       },
-      subscribe: (listener: () => void) => {
-        presentationListeners.add(listener);
-        return () => presentationListeners.delete(listener);
-      },
-      startCall: vi.fn(),
-      accept: vi.fn(),
-      decline: vi.fn(),
-      cancelCall: vi.fn(),
-      hangup: vi.fn(),
-      retryPendingAction: vi.fn(),
+      subscribe: (listener: () => void) => { presentationListeners.add(listener); return () => presentationListeners.delete(listener); },
+      startCall: vi.fn(), accept: vi.fn(), decline: vi.fn(), cancelCall: vi.fn(), hangup: vi.fn(), retryPendingAction: vi.fn(),
     },
     media: {
-      getSnapshot: () => ({
-        state: "active",
-        remoteAudioStream: useCallMock(1).remoteStream,
-        localIssue: null,
-        isMuted: false,
-        canToggleMute: true,
-        ...persistentAudioState,
-      }),
-      subscribe: (listener: () => void) => {
-        mediaListeners.add(listener);
-        return () => mediaListeners.delete(listener);
-      },
+      getSnapshot: () => ({ state: "active", remoteAudioStream: useCallMock(1).remoteStream, localIssue: null, isMuted: false, canToggleMute: true, ...persistentAudioState }),
+      subscribe: (listener: () => void) => { mediaListeners.add(listener); return () => mediaListeners.delete(listener); },
       toggleMute: vi.fn(),
     },
   };
   return {
-    CallRuntimeBoundary: ({
-      persistentContent,
-    }: {
-      persistentContent: (affordance: { state: "owner" }) => React.ReactNode;
-    }) => {
+    CallRuntimeBoundary: ({ persistentContent }: { persistentContent: (affordance: { state: "owner" }) => React.ReactNode }) => {
       const call = useCallMock(1);
       React.useEffect(() => {
-        presentationListeners.forEach((listener) =>
-          listener(runtime.presentation.getSnapshot()),
-        );
-        mediaListeners.forEach((listener) =>
-          listener(runtime.media.getSnapshot()),
-        );
+        presentationListeners.forEach((listener) => listener(runtime.presentation.getSnapshot()));
+        mediaListeners.forEach((listener) => listener(runtime.media.getSnapshot()));
       }, [call.status, call.remoteUserId, call.remoteStream]);
-      return React.createElement(PersistentCallProvider, {
-        runtime,
-        children: persistentContent({ state: "owner" }),
-      });
+      return React.createElement(
+        PersistentCallProvider,
+        { runtime, children: persistentContent({ state: "owner" }) },
+      );
     },
   };
 });
 
-vi.mock(
-  "./features/calling/components/PersistentCallSurface/PersistentRemoteAudioRenderer",
-  async () => {
-    const React = await vi.importActual<typeof import("react")>("react");
-    return {
-      PersistentRemoteAudioRenderer: () => {
-        React.useEffect(() => {
-          audioMounts.current += 1;
-          return () => {
-            audioUnmounts.current += 1;
-          };
-        }, []);
-        return <div data-testid="call-audio-renderer">audio-active</div>;
-      },
-    };
-  },
-);
+vi.mock("./features/calling/components/PersistentCallSurface/PersistentRemoteAudioRenderer", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  return {
+    PersistentRemoteAudioRenderer: () => {
+      React.useEffect(() => {
+        audioMounts.current += 1;
+        return () => { audioUnmounts.current += 1; };
+      }, []);
+      return <div data-testid="call-audio-renderer">audio-active</div>;
+    },
+  };
+});
 
 vi.mock("@/shared/hooks/useAuthHydration", () => ({
   useAuthHydration: vi.fn(),
@@ -207,9 +158,7 @@ vi.mock("@/features/messaging/components/Sidebar/SidebarFooter", () => ({
     effectiveMuted?: boolean;
   }) => (
     <div>
-      <output data-testid="sidebar-effective-muted">
-        {String(effectiveMuted)}
-      </output>
+      <output data-testid="sidebar-effective-muted">{String(effectiveMuted)}</output>
       <button onClick={onOpenSettings}>open settings</button>
       {callStatus === "active" && (
         <button onClick={onReturnToCall}>return to call</button>
@@ -219,39 +168,28 @@ vi.mock("@/features/messaging/components/Sidebar/SidebarFooter", () => ({
 }));
 
 vi.mock("@/features/messaging/components/ChatWindow/ChatWindow", async () => {
-  const { useOptionalPersistentCall } = await vi.importActual<
-    typeof import("@/features/calling/context/PersistentCallContext")
-  >("@/features/calling/context/PersistentCallContext");
+  const { useOptionalPersistentCall } = await vi.importActual<typeof import("@/features/calling/context/PersistentCallContext")>("@/features/calling/context/PersistentCallContext");
   return {
-    ChatWindow: ({
-      activeChat,
-      call,
-    }: {
-      activeChat: {
-        type: string;
-        partnerId?: number;
-        partnerRef?: string | number;
-      };
-      call: { status: string; remoteUserId: number | string | null } | null;
-    }) => {
-      const persistentCall = useOptionalPersistentCall();
-      const remoteUserId =
-        call?.remoteUserId ?? persistentCall?.presentation.peerPublicId;
-      const isActive =
-        call?.status === "active" ||
-        persistentCall?.presentation.phase === "active";
-      return (
-        <div>
-          chat
-          {isActive &&
-            activeChat.type === "direct" &&
-            (String(activeChat.partnerId) === String(remoteUserId) ||
-              String(activeChat.partnerRef) === String(remoteUserId)) && (
-              <div data-testid="active-call-dock" />
-            )}
-        </div>
-      );
-    },
+  ChatWindow: ({
+    activeChat,
+    call,
+  }: {
+    activeChat: { type: string; partnerId?: number; partnerRef?: string | number };
+    call: { status: string; remoteUserId: number | string | null } | null;
+  }) => {
+    const persistentCall = useOptionalPersistentCall();
+    const remoteUserId = call?.remoteUserId ?? persistentCall?.presentation.peerPublicId;
+    const isActive = call?.status === "active" || persistentCall?.presentation.phase === "active";
+    return <div>
+      chat
+      {isActive &&
+        activeChat.type === "direct" &&
+        (String(activeChat.partnerId) === String(remoteUserId) ||
+          String(activeChat.partnerRef) === String(remoteUserId)) && (
+          <div data-testid="active-call-dock" />
+        )}
+    </div>;
+  },
   };
 });
 
@@ -281,9 +219,6 @@ function makeState() {
   return {
     currentUser: { id: 1, username: "tester" },
     activeChat: null as any,
-    railContext: { type: "conversations" as const } as
-      | { type: "conversations" }
-      | { type: "server"; serverId: number },
     conversationPreviews: {},
     roomPreviews: {},
     servers: {
@@ -318,61 +253,40 @@ describe("App hash sync", () => {
     Object.defineProperty(navigator, "locks", {
       configurable: true,
       value: {
-        request: async (
-          name: string,
-          _options: unknown,
-          callback: (lock: { name: string }) => unknown,
-        ) => callback({ name }),
+        request: async (name: string, _options: unknown, callback: (lock: { name: string }) => unknown) =>
+          callback({ name }),
       },
     });
   });
 
   it("starts the device observer only for the authenticated app and cleans it up", () => {
     const state = makeState();
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
-    );
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
 
     const view = render(<App />);
 
     expect(startObserverMock).toHaveBeenCalledOnce();
-    const cleanup = startObserverMock.mock.results[0]?.value as ReturnType<
-      typeof vi.fn
-    >;
+    const cleanup = startObserverMock.mock.results[0]?.value as ReturnType<typeof vi.fn>;
     view.unmount();
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it("renders the conversation EmptyPane and opens the picker once", () => {
     const state = makeState();
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
-    );
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
 
     render(<App />);
 
-    const heading = screen.getByRole("heading", {
-      name: "Pick a conversation",
-    });
+    const heading = screen.getByRole("heading", { name: "Pick a conversation" });
     const emptyPane = heading.closest('[data-density="workspace"]');
     expect(heading).toBeInTheDocument();
     expect(emptyPane).toBeInTheDocument();
-    expect(emptyPane).not.toHaveClass(
-      "[&_.vt-empty-pane__title]:text-[1.625rem]",
-    );
-    expect(emptyPane).not.toHaveClass(
-      "[&_.vt-empty-pane__title]:font-semibold",
-    );
-    expect(emptyPane).not.toHaveClass(
-      "[&_.vt-empty-pane__title]:tracking-tight",
-    );
-    expect(
-      screen.getByText("Select a chat or start a new one."),
-    ).toBeInTheDocument();
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:text-[1.625rem]");
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:font-semibold");
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:tracking-tight");
+    expect(screen.getByText("Select a chat or start a new one.")).toBeInTheDocument();
     expect(screen.queryByText("Inbox")).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Start a new conversation" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Start a new conversation" }));
     expect(state.openModal).toHaveBeenCalledOnce();
     expect(state.openModal).toHaveBeenCalledWith("CREATE_PICKER");
   });
@@ -380,10 +294,7 @@ describe("App hash sync", () => {
   it("renders a channel-selection EmptyPane without the workspace kicker", () => {
     const state = makeState();
     state.activeChat = { type: "server", serverId: 1, serverRef: 1 };
-    state.railContext = { type: "server", serverId: 1 };
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
-    );
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
 
     render(<App />);
 
@@ -391,68 +302,52 @@ describe("App hash sync", () => {
     const emptyPane = heading.closest('[data-density="workspace"]');
     expect(heading).toBeInTheDocument();
     expect(emptyPane).toBeInTheDocument();
-    expect(emptyPane).not.toHaveClass(
-      "[&_.vt-empty-pane__title]:text-[1.625rem]",
-    );
-    expect(emptyPane).not.toHaveClass(
-      "[&_.vt-empty-pane__title]:font-semibold",
-    );
-    expect(emptyPane).not.toHaveClass(
-      "[&_.vt-empty-pane__title]:tracking-tight",
-    );
-    expect(
-      screen.getByText("Open any channel to start messaging."),
-    ).toBeInTheDocument();
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:text-[1.625rem]");
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:font-semibold");
+    expect(emptyPane).not.toHaveClass("[&_.vt-empty-pane__title]:tracking-tight");
+    expect(screen.getByText("Open any channel to start messaging.")).toBeInTheDocument();
     expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Start a new conversation" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start a new conversation" })).not.toBeInTheDocument();
   });
 
   it("resolves a channel hash to a channel active chat directly", async () => {
     const state = makeState();
     window.location.hash = "#/s/1/1";
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
 
     await waitFor(() =>
-      expect(setActiveChatMock).toHaveBeenCalledWith({
-        type: "channel",
-        serverId: 1,
-        channelId: 1,
-        serverRef: "1",
-        channelRef: "1",
-      }),
+      expect(setActiveChatMock).toHaveBeenCalledWith(
+        {
+          type: "channel",
+          serverId: 1,
+          channelId: 1,
+          serverRef: "1",
+          channelRef: "1",
+        },
+      ),
     );
 
-    expect(setActiveChatMock).not.toHaveBeenCalledWith({
-      type: "server",
-      serverId: 1,
-      serverRef: "1",
-    });
+    expect(setActiveChatMock).not.toHaveBeenCalledWith(
+      { type: "server", serverId: 1, serverRef: "1" },
+    );
   });
 
   it("uses the default persisted shell width token on first render", () => {
     const state = makeState();
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
 
-    expect(
-      screen
-        .getByTestId("app-shell")
-        .style.getPropertyValue("--vetra-left-pane-width"),
-    ).toBe("408px");
-    expect(
-      screen.getByRole("separator", { name: "Resize sidebar" }),
-    ).toHaveAttribute("aria-valuenow", "408");
+    expect(screen.getByTestId("app-shell").style.getPropertyValue("--vetra-left-pane-width")).toBe("408px");
+    expect(screen.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "408");
   });
 
   it("restores a persisted sidebar width from localStorage", () => {
@@ -460,20 +355,14 @@ describe("App hash sync", () => {
     window.localStorage.setItem("vetra:left-pane-mode", "text");
     window.localStorage.setItem("vetra:left-pane-width", "512");
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
 
-    expect(
-      screen
-        .getByTestId("app-shell")
-        .style.getPropertyValue("--vetra-left-pane-width"),
-    ).toBe("512px");
-    expect(
-      screen.getByRole("separator", { name: "Resize sidebar" }),
-    ).toHaveAttribute("aria-valuenow", "512");
+    expect(screen.getByTestId("app-shell").style.getPropertyValue("--vetra-left-pane-width")).toBe("512px");
+    expect(screen.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "512");
   });
 
   it("migrates a saved collapsed mode to the text minimum width", () => {
@@ -481,47 +370,35 @@ describe("App hash sync", () => {
     window.localStorage.setItem("vetra:left-pane-mode", "collapsed");
     window.localStorage.setItem("vetra:left-pane-width", "148");
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
 
-    expect(
-      screen
-        .getByTestId("app-shell")
-        .style.getPropertyValue("--vetra-left-pane-width"),
-    ).toBe("333px");
-    expect(
-      screen.getByRole("separator", { name: "Resize sidebar" }),
-    ).toHaveAttribute("aria-valuenow", "333");
+    expect(screen.getByTestId("app-shell").style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
+    expect(screen.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "333");
   });
 
   it("migrates legacy collapsed widths to the text minimum width", () => {
     const state = makeState();
     window.localStorage.setItem("vetra:left-pane-width", "139");
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
 
-    expect(
-      screen
-        .getByTestId("app-shell")
-        .style.getPropertyValue("--vetra-left-pane-width"),
-    ).toBe("333px");
-    expect(
-      screen.getByRole("separator", { name: "Resize sidebar" }),
-    ).toHaveAttribute("aria-valuenow", "333");
+    expect(screen.getByTestId("app-shell").style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
+    expect(screen.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "333");
   });
 
   it("stops at the text minimum when dragging left", () => {
     const state = makeState();
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
@@ -533,15 +410,11 @@ describe("App hash sync", () => {
     expect(document.body.dataset.vtShellResizing).toBe("true");
 
     fireEvent.pointerMove(window, { clientX: 320, pointerId: 1 });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      "333px",
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
     expect(divider).toHaveAttribute("aria-valuenow", "333");
 
     fireEvent.pointerMove(window, { clientX: 200, pointerId: 1 });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      "333px",
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
     expect(divider).toHaveAttribute("aria-valuenow", "333");
 
     fireEvent.pointerUp(window, { pointerId: 1 });
@@ -553,8 +426,8 @@ describe("App hash sync", () => {
     const state = makeState();
     window.localStorage.setItem("vetra:left-pane-width", "333");
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
@@ -564,14 +437,10 @@ describe("App hash sync", () => {
 
     fireEvent.pointerDown(divider, { button: 0, clientX: 333, pointerId: 1 });
     fireEvent.pointerMove(window, { clientX: 200, pointerId: 1 });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      "333px",
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
 
     fireEvent.pointerMove(window, { clientX: 360, pointerId: 1 });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      "360px",
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("360px");
 
     fireEvent.pointerUp(window, { pointerId: 1 });
     expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("360");
@@ -585,8 +454,8 @@ describe("App hash sync", () => {
       value: 1920,
     });
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
@@ -595,43 +464,29 @@ describe("App hash sync", () => {
     const divider = screen.getByRole("separator", { name: "Resize sidebar" });
 
     fireEvent.keyDown(divider, { key: "ArrowLeft" });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      "392px",
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("392px");
     expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("392");
 
     for (let index = 0; index < 4; index += 1) {
       fireEvent.keyDown(divider, { key: "ArrowLeft" });
     }
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      "333px",
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
 
     fireEvent.keyDown(divider, { key: "ArrowLeft" });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      "333px",
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
     expect(window.localStorage.getItem("vetra:left-pane-width")).toBe("333");
 
     fireEvent.keyDown(divider, { key: "ArrowRight" });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      "349px",
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("349px");
 
     fireEvent.keyDown(divider, { key: "Home" });
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      "333px",
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe("333px");
 
     fireEvent.keyDown(divider, { key: "End" });
     const responsiveMaxWidth = String(window.innerWidth - 380);
-    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(
-      `${responsiveMaxWidth}px`,
-    );
+    expect(shell.style.getPropertyValue("--vetra-left-pane-width")).toBe(`${responsiveMaxWidth}px`);
     expect(divider).toHaveAttribute("aria-valuemax", responsiveMaxWidth);
-    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe(
-      responsiveMaxWidth,
-    );
+    expect(window.localStorage.getItem("vetra:left-pane-width")).toBe(responsiveMaxWidth);
 
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
@@ -644,8 +499,8 @@ describe("App hash sync", () => {
     state.activeChat = { type: "server", serverId: 1, serverRef: 1 };
     window.location.hash = "#/s/1";
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     const view = render(<App />);
@@ -664,11 +519,9 @@ describe("App hash sync", () => {
 
     await waitFor(() => expect(window.location.hash).toBe("#/s/1/1"));
 
-    expect(setActiveChatMock).not.toHaveBeenCalledWith({
-      type: "server",
-      serverId: 1,
-      serverRef: "1",
-    });
+    expect(setActiveChatMock).not.toHaveBeenCalledWith(
+      { type: "server", serverId: 1, serverRef: "1" },
+    );
   });
 
   it("lets an explicit active-chat switch win over the previous route", async () => {
@@ -694,8 +547,8 @@ describe("App hash sync", () => {
     } as any;
     window.location.hash = "#/2";
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     const view = render(<App />);
@@ -704,11 +557,9 @@ describe("App hash sync", () => {
     view.rerender(<App />);
 
     await waitFor(() => expect(window.location.hash).toBe("#/user-3"));
-    expect(setActiveChatMock).not.toHaveBeenCalledWith({
-      type: "direct",
-      partnerId: 2,
-      partnerRef: "user-2",
-    });
+    expect(setActiveChatMock).not.toHaveBeenCalledWith(
+      { type: "direct", partnerId: 2, partnerRef: "user-2" },
+    );
   });
 
   it("keeps the explicit settings hash stable instead of restoring the active chat route", async () => {
@@ -720,8 +571,8 @@ describe("App hash sync", () => {
     };
     window.location.hash = "#/settings";
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
@@ -740,17 +591,13 @@ describe("App hash sync", () => {
     };
     window.location.hash = "#/a0d2a839-4b37-441e-958e-6d4369e94de9";
 
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "open settings" }),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "open settings" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "open settings" }));
 
     await waitFor(() => expect(window.location.hash).toBe("#/settings"));
@@ -778,33 +625,23 @@ describe("App hash sync", () => {
         startCall,
       }),
     );
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("call-audio-renderer")).toBeInTheDocument(),
-    );
-    expect(screen.getByTestId("call-audio-renderer").textContent).toBe(
-      "audio-active",
-    );
-    expect(
-      screen.queryByTestId("persistent-call-surface"),
-    ).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("call-audio-renderer")).toBeInTheDocument());
+    expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
+    expect(screen.queryByTestId("persistent-call-surface")).not.toBeInTheDocument();
     await waitFor(() => expect(audioMounts.current).toBe(1));
 
     fireEvent.click(screen.getByRole("button", { name: "open settings" }));
 
     await waitFor(() => expect(window.location.hash).toBe("#/settings"));
     expect(screen.getByText("settings")).toBeTruthy();
-    expect(
-      screen.queryByTestId("persistent-call-surface"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("call-audio-renderer").textContent).toBe(
-      "audio-active",
-    );
+    expect(screen.queryByTestId("persistent-call-surface")).not.toBeInTheDocument();
+    expect(screen.getByTestId("call-audio-renderer").textContent).toBe("audio-active");
     await waitFor(() => expect(audioMounts.current).toBe(1));
     expect(audioUnmounts.current).toBe(0);
     expect(startCall).not.toHaveBeenCalled();
@@ -819,25 +656,12 @@ describe("App hash sync", () => {
     persistentAudioState.muted = false;
     persistentAudioState.deafened = true;
 
-    useCallMock.mockReturnValue(
-      makeCallState({
-        status: "active",
-        remoteStream,
-        remoteUsername: "Partner",
-        remoteUserId: 2,
-      }),
-    );
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
-    );
+    useCallMock.mockReturnValue(makeCallState({ status: "active", remoteStream, remoteUsername: "Partner", remoteUserId: 2 }));
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
 
     render(<App />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("sidebar-effective-muted")).toHaveTextContent(
-        "true",
-      ),
-    );
+    await waitFor(() => expect(screen.getByTestId("sidebar-effective-muted")).toHaveTextContent("true"));
   });
 
   it("derives persistent effective mute as false when both preferences are false and omitted", async () => {
@@ -848,25 +672,12 @@ describe("App hash sync", () => {
     persistentAudioState.muted = false;
     persistentAudioState.deafened = false;
 
-    useCallMock.mockReturnValue(
-      makeCallState({
-        status: "active",
-        remoteStream,
-        remoteUsername: "Partner",
-        remoteUserId: 2,
-      }),
-    );
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
-    );
+    useCallMock.mockReturnValue(makeCallState({ status: "active", remoteStream, remoteUsername: "Partner", remoteUserId: 2 }));
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
 
     render(<App />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("sidebar-effective-muted")).toHaveTextContent(
-        "false",
-      ),
-    );
+    await waitFor(() => expect(screen.getByTestId("sidebar-effective-muted")).toHaveTextContent("false"));
   });
 
   it("returns from Settings to the persistent active call direct chat", async () => {
@@ -888,8 +699,8 @@ describe("App hash sync", () => {
         seconds: 42,
       }),
     );
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     const view = render(<App />);
@@ -897,11 +708,7 @@ describe("App hash sync", () => {
     expect(screen.getByText("settings")).toBeTruthy();
     expect(screen.queryByTestId("active-call-dock")).toBeNull();
     await waitFor(() => expect(audioMounts.current).toBe(1));
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "return to call" }),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "return to call" })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "return to call" }));
 
@@ -917,9 +724,7 @@ describe("App hash sync", () => {
     state.activeChat = { type: "direct", partnerId: 2, partnerRef: "2" };
     view.rerender(<App />);
 
-    expect(
-      screen.queryByTestId("persistent-call-surface"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("persistent-call-surface")).not.toBeInTheDocument();
     expect(audioMounts.current).toBe(1);
     expect(audioUnmounts.current).toBe(0);
   });
@@ -940,19 +745,15 @@ describe("App hash sync", () => {
         remoteUserId: 2,
       }),
     );
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
 
     expect(screen.queryByTestId("active-call-dock")).toBeNull();
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "return to call" }),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "return to call" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "return to call" }));
 
     await waitFor(() => expect(window.location.hash).toBe("#/2"));
@@ -980,17 +781,13 @@ describe("App hash sync", () => {
     window.location.hash = "#/2";
 
     useCallMock.mockReturnValue(callState);
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     const view = render(<App />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "open settings" }),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "open settings" })).toBeInTheDocument());
     Object.assign(callState, {
       status: "active",
       remoteUserId: "alice-public-id",
@@ -1002,11 +799,7 @@ describe("App hash sync", () => {
     };
     view.rerender(<App />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "open settings" }),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "open settings" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "open settings" }));
     await waitFor(() => expect(window.location.hash).toBe("#/settings"));
     expect(screen.getByText("settings")).toBeTruthy();
@@ -1038,17 +831,13 @@ describe("App hash sync", () => {
         remoteUserId: 2,
       }),
     );
-    useAppStoreMock.mockImplementation(
-      (selector: (value: typeof state) => unknown) => selector(state),
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) =>
+      selector(state),
     );
 
     render(<App />);
 
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId("persistent-call-surface"),
-      ).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("persistent-call-surface")).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "return to call" }));
 
