@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -124,15 +124,26 @@ describe("Sidebar attachment previews", () => {
     state.conversationPreviews = {} as typeof state.conversationPreviews;
     state.roomPreviews = {} as typeof state.roomPreviews;
     useAppStoreMock.mockImplementation(
-      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
     );
 
     render(<Sidebar />);
 
-    expect(screen.getByRole("heading", { name: "No conversations" })).toBeInTheDocument();
-    expect(screen.getByText("Start a direct chat or create a room to begin messaging.")).toBeInTheDocument();
-    expect(screen.queryByText("No conversations", { selector: ".vt-kicker" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /start a new/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "No conversations" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Start a direct chat or create a room to begin messaging.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No conversations", { selector: ".vt-kicker" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /start a new/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("uses server-provided preview text for direct and room items", async () => {
@@ -144,10 +155,6 @@ describe("Sidebar attachment previews", () => {
     );
 
     render(<Sidebar />);
-
-    await waitFor(() => {
-      expect(getListMock).toHaveBeenCalledTimes(1);
-    });
 
     expect(screen.getByText("Photo")).toBeInTheDocument();
     expect(screen.getByText("File: report.pdf")).toBeInTheDocument();
@@ -163,20 +170,24 @@ describe("Sidebar attachment previews", () => {
 
     render(<Sidebar />);
 
-    await waitFor(() => {
-      expect(getListMock).toHaveBeenCalledTimes(1);
-    });
-
     expect(screen.getByTestId("user-search")).toBeInTheDocument();
     expect(screen.queryByText("Messages")).not.toBeInTheDocument();
     expect(screen.queryByText("Inbox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open sidebar menu" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "New" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open sidebar menu" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps DM rows selectable with selected and unread indicators", async () => {
     const state = makeState();
-    state.activeChat = { type: "direct", partnerId: 2, partnerRef: "user-public-id" };
+    state.activeChat = {
+      type: "direct",
+      partnerId: 2,
+      partnerRef: "user-public-id",
+    };
     state.onlineUserIds = new Set<number>([2]);
     state.userStatuses = { 2: "online" };
 
@@ -204,7 +215,7 @@ describe("Sidebar attachment previews", () => {
     });
   });
 
-  it("renders servers as chat-like rows and preserves server navigation", async () => {
+  it("keeps servers out of the conversations context", async () => {
     const state = makeState();
     state.servers = {
       5: {
@@ -222,19 +233,15 @@ describe("Sidebar attachment previews", () => {
 
     render(<Sidebar />);
 
-    expect(screen.queryByText("Servers")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Create server" })).not.toBeInTheDocument();
-
-    const serverRow = await screen.findByTestId("sidebar-item-server-5");
-    expect(serverRow).toHaveClass("h-[62px]");
-    expect(serverRow).not.toHaveTextContent("No messages");
-
-    fireEvent.click(serverRow);
-    expect(state.setActiveChat).toHaveBeenCalledWith({
-      type: "server",
-      serverId: 5,
-      serverRef: 5,
-    });
+    expect(
+      screen.queryByTestId("sidebar-item-server-5"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "New chat" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "New group" }),
+    ).toBeInTheDocument();
   });
 
   it("uses the compact Telegram-like search row and avatar sizing", async () => {
@@ -250,41 +257,38 @@ describe("Sidebar attachment previews", () => {
     const directRow = await screen.findByTestId("sidebar-item-direct-2");
     const search = screen.getByTestId("user-search");
 
-    expect(search.parentElement).toHaveClass("h-[54px]", "px-[11px]", "pt-[9px]");
-    expect(search.parentElement).not.toHaveClass("border-b");
+    expect(search.parentElement).toHaveClass("border-b", "px-[11px]", "py-2");
     expect(directRow).toHaveClass("px-[10px]", "gap-[11px]");
     expect(directRow).toHaveAttribute("data-state", "inactive");
-    expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
+    expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass(
+      "h-[46px]",
+      "w-[46px]",
+    );
   });
 
-  it("hides search while collapsed or in server mode", async () => {
+  it("hides search while collapsed", async () => {
     const state = makeState();
 
     useAppStoreMock.mockImplementation(
-      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
     );
 
-    const { rerender } = render(<Sidebar isCollapsed />);
-    expect(screen.queryByTestId("user-search")).not.toBeInTheDocument();
-
-    rerender(<Sidebar isServerMode />);
+    render(<Sidebar isCollapsed />);
     expect(screen.queryByTestId("user-search")).not.toBeInTheDocument();
   });
 
-  it("keeps unread badges compact and visible in collapsed and server modes", async () => {
+  it("keeps unread badges compact and visible in collapsed mode", async () => {
     const state = makeState();
 
     useAppStoreMock.mockImplementation(
-      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+      (selector: (value: ReturnType<typeof makeState>) => unknown) =>
+        selector(state),
     );
 
-    const { rerender } = render(<Sidebar isCollapsed />);
+    render(<Sidebar isCollapsed />);
     const collapsedBadge = screen.getByText("1");
     expect(collapsedBadge).toHaveClass("min-w-5", "rounded-full");
-
-    rerender(<Sidebar isServerMode />);
-    const serverBadge = screen.getByText("1");
-    expect(serverBadge).toHaveClass("min-w-5", "rounded-full");
   });
 
   it("uses measured geometry for regular conversation content", async () => {
@@ -298,18 +302,29 @@ describe("Sidebar attachment previews", () => {
     render(<Sidebar />);
 
     const directRow = await screen.findByTestId("sidebar-item-direct-2");
-    const textColumn = directRow.querySelector(".relative.h-full.min-w-0.flex-1");
+    const textColumn = directRow.querySelector(
+      ".relative.h-full.min-w-0.flex-1",
+    );
 
     expect(directRow).toHaveClass("h-[62px]", "gap-[11px]", "px-[10px]");
     expect(directRow).not.toHaveClass("absolute");
-    expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
+    expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass(
+      "h-[46px]",
+      "w-[46px]",
+    );
     expect(textColumn).toBeInTheDocument();
     expect(textColumn).toHaveClass("relative", "h-full", "min-w-0", "flex-1");
-    expect(textColumn?.querySelector(".top-\\[14px\\].truncate"))
-      .toHaveClass("left-0", "right-12");
-    expect(textColumn?.querySelector(".top-\\[14px\\].text-\\[11px\\]"))
-      .toHaveClass("right-[10px]");
-    expect(textColumn?.querySelector(".top-\\[34px\\]"))
-      .toHaveClass("left-0", "right-[10px]", "h-[18px]");
+    expect(textColumn?.querySelector(".top-\\[14px\\].truncate")).toHaveClass(
+      "left-0",
+      "right-12",
+    );
+    expect(
+      textColumn?.querySelector(".top-\\[14px\\].text-\\[11px\\]"),
+    ).toHaveClass("right-[10px]");
+    expect(textColumn?.querySelector(".top-\\[34px\\]")).toHaveClass(
+      "left-0",
+      "right-[10px]",
+      "h-[18px]",
+    );
   });
 });

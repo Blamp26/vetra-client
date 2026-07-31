@@ -8,7 +8,11 @@ import { useAppStore } from "@/store";
 import { AuthPage } from "@/features/registration/AuthPage";
 import { UpdateRequiredScreen } from "@/features/registration/UpdateRequiredScreen";
 import { Sidebar } from "@/features/messaging/components/Sidebar";
+import { NavigationRail } from "@/features/messaging/components/NavigationRail/NavigationRail";
 import { SidebarFooter } from "@/features/messaging/components/Sidebar/SidebarFooter";
+import { CreateRoomModal } from "@/features/messaging/components/CreateRoomModal/CreateRoomModal";
+import { CreateServerModal } from "@/features/messaging/components/CreateServerModal/CreateServerModal";
+import { CreatePickerModal } from "@/features/messaging/components/CreatePickerModal/CreatePickerModal";
 import { ChatWindow } from "@/features/messaging/components/ChatWindow/ChatWindow";
 import { ChannelPanel } from "@/features/messaging/components/ChannelPanel/ChannelPanel";
 import { SettingsPage } from "@/features/settings/components/SettingsPage/SettingsPage";
@@ -195,6 +199,11 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const resolvedIncomingActionPending =
     call?.isIncomingActionPending ?? isIncomingActionPending;
   const activeChat = useAppStore((s) => s.activeChat);
+  const railContext =
+    useAppStore((s) => s.railContext) ??
+    (activeChat?.type === "server" || activeChat?.type === "channel"
+      ? { type: "server" as const, serverId: activeChat.serverId }
+      : { type: "conversations" as const });
   const debugPeerUuidSource = persistentCall?.presentation.peerPublicId
     ? ("user" as const)
     : activeChat?.type === "direct" && activeChat.partnerRef !== undefined
@@ -211,6 +220,8 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const searchResults = useAppStore((s) => s.searchResults);
   const setActiveChat = useAppStore((s) => s.setActiveChat);
   const openModal = useAppStore((s) => s.openModal);
+  const activeModal = useAppStore((s) => s.activeModal);
+  const closeModal = useAppStore((s) => s.closeModal);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const leftPaneWidthRef = useRef(LEFT_PANE_DEFAULT_WIDTH);
   const isResizingRef = useRef(false);
@@ -629,22 +640,8 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     navigationStateInitializedRef.current = true;
   }, [currentActiveChatKey, routeHash]);
 
-  const lastServerIdRef = useRef<number | null>(null);
-
-  const showChannelPanel =
-    activeChat?.type === "server" || activeChat?.type === "channel";
-
-  const channelPanelServerId =
-    activeChat?.type === "server"
-      ? activeChat.serverId
-      : activeChat?.type === "channel"
-        ? activeChat.serverId
-        : null;
-
-  if (channelPanelServerId !== null) {
-    lastServerIdRef.current = channelPanelServerId;
-  }
-  const persistedServerId = lastServerIdRef.current;
+  const showChannelPanel = railContext.type === "server";
+  const channelPanelServerId = showChannelPanel ? railContext.serverId : null;
 
   const chatTarget = useMemo(() => {
     if (activeChat?.type === "channel") {
@@ -736,13 +733,15 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
           data-pane-mode="text"
         >
           <div className="flex flex-1 overflow-hidden">
-            <Sidebar isServerMode={showChannelPanel} />
+            <NavigationRail />
 
-            {showChannelPanel && persistedServerId !== null && (
-              <div className="w-[320px] border-l border-border bg-[var(--vetra-shell-chat-bg)]">
-                <ChannelPanel serverId={persistedServerId} />
-              </div>
-            )}
+            <div className="min-w-0 flex-1 overflow-hidden">
+              {railContext.type === "conversations" ? (
+                <Sidebar />
+              ) : channelPanelServerId !== null ? (
+                <ChannelPanel serverId={channelPanelServerId} />
+              ) : null}
+            </div>
           </div>
 
           <SidebarFooter
@@ -836,7 +835,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
               call={call}
               persistentCallAffordance={persistentCallAffordance}
             />
-          ) : !isSettingsRoute && activeChat?.type === "server" ? (
+          ) : !isSettingsRoute && railContext.type === "server" ? (
             <EmptyPane
               title="Choose a channel"
               description="Open any channel to start messaging."
@@ -866,6 +865,20 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
           <SettingsPage onClose={() => navigateToHash(activeChatHash || "#")} />
         )}
       </div>
+
+      {activeModal === "CREATE_ROOM" && (
+        <CreateRoomModal onClose={closeModal} />
+      )}
+      {activeModal === "CREATE_SERVER" && (
+        <CreateServerModal onClose={closeModal} />
+      )}
+      {activeModal === "CREATE_PICKER" && (
+        <CreatePickerModal
+          onClose={closeModal}
+          onPickServer={() => openModal("CREATE_SERVER")}
+          onPickGroup={() => openModal("CREATE_ROOM")}
+        />
+      )}
 
       {call && resolvedStatus === "ringing" && (
         <IncomingCallModal
