@@ -6,7 +6,7 @@ import { Theme } from "@/themes";
 import { storage, STORAGE_KEYS } from "@/shared/utils/storage";
 import { sameActiveChat } from "@/shared/utils/chatRoutes";
 
-export type ModalType = "CREATE_PICKER" | "CREATE_SERVER" | "CREATE_ROOM";
+export type ModalType = "CREATE_PICKER" | "CREATE_SERVER" | "CREATE_ROOM" | "CREATE_BROADCAST_CHANNEL";
 
 export interface UISlice {
   activeChat: ActiveChat | null;
