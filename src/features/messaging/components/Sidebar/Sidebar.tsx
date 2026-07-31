@@ -25,6 +25,8 @@ import { GroupSettingsModal } from "../GroupSettingsModal/GroupSettingsModal";
 import { Settings } from "lucide-react";
 import type { RoomPreview } from "@/shared/types";
 import { formatUnreadCount } from "../../utils/unread";
+import { broadcastChannelsApi } from "@/api/broadcastChannels";
+import { CreateBroadcastChannelModal } from "@/features/broadcastChannels/components/CreateBroadcastChannelModal";
 
 interface SidebarProps {
   isServerMode?: boolean;
@@ -71,6 +73,8 @@ export function Sidebar({
   const activeModal = useAppStore((s: RootState) => s.activeModal);
   const openModal = useAppStore((s: RootState) => s.openModal);
   const closeModal = useAppStore((s: RootState) => s.closeModal);
+  const broadcastChannels = useAppStore((s: RootState) => s.broadcastChannels ?? {});
+  const setBroadcastSubscriptions = useAppStore((s: RootState) => s.setBroadcastSubscriptions);
 
   const [showProfile, setShowProfile] = useState(false);
   const [settingsRoom, setSettingsRoom] = useState<RoomPreview | null>(null);
@@ -82,6 +86,11 @@ export function Sidebar({
       .then(setServers)
       .catch((err) => console.error("Failed to load servers:", err));
   }, [currentUser, setServers]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    broadcastChannelsApi.subscribed().then(setBroadcastSubscriptions).catch(() => undefined);
+  }, [currentUser, setBroadcastSubscriptions]);
 
   const directItems: SidebarItem[] = useMemo(
     () =>
@@ -219,6 +228,14 @@ export function Sidebar({
             className={isServerMode || isCollapsed ? "space-y-1.5" : undefined}
           >
             {!isServerMode &&
+              Object.values(broadcastChannels).map((channel) => {
+                const active = window.location.hash.includes(`/broadcast/${channel.public_id}`);
+                return <button key={channel.public_id} type="button" onClick={() => { window.location.hash = `#/broadcast/${channel.public_id}`; }} className={listRowClass(active, isCollapsed)} data-testid={`sidebar-item-broadcast-${channel.public_id}`} title={channel.display_name}>
+                  <Avatar name={channel.display_name} size="medium" />
+                  {!isCollapsed && <span className="min-w-0 flex-1 truncate text-sm font-medium">{channel.display_name}</span>}
+                </button>;
+              })}
+            {!isServerMode &&
               serverList.map((server) => {
                 const isActive = isServerActive(server.id);
                 return (
@@ -351,8 +368,10 @@ export function Sidebar({
           onClose={closeModal}
           onPickServer={() => openModal("CREATE_SERVER")}
           onPickGroup={() => openModal("CREATE_ROOM")}
+          onPickBroadcastChannel={() => openModal("CREATE_BROADCAST_CHANNEL")}
         />
       )}
+      {activeModal === "CREATE_BROADCAST_CHANNEL" && <CreateBroadcastChannelModal onClose={closeModal} />}
       {showProfile && currentUser && (
         <ProfileModal
           user={currentUser}

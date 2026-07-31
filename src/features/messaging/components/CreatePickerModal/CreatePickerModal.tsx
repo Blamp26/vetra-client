@@ -7,9 +7,10 @@ interface Props {
   onPickServer: () => void;
   onPickGroup: () => void;
   onClose: () => void;
+  onPickBroadcastChannel?: () => void;
 }
 
-export function CreatePickerModal({ onPickServer, onPickGroup, onClose }: Props) {
+export function CreatePickerModal({ onPickServer, onPickGroup, onPickBroadcastChannel, onClose }: Props) {
   const titleId = useId();
   const serverButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -37,6 +38,11 @@ export function CreatePickerModal({ onPickServer, onPickGroup, onClose }: Props)
         >
           <div className="text-sm font-normal">Create server</div>
           <div className="text-xs text-muted-foreground">Community space with channels.</div>
+        </button>
+
+        <button type="button" className="w-full rounded-md p-3 text-left hover:bg-accent" onClick={onPickBroadcastChannel}>
+          <div className="text-sm font-normal">Create broadcast channel</div>
+          <div className="text-xs text-muted-foreground">One-way publication feed for subscribers.</div>
         </button>
 
         <button

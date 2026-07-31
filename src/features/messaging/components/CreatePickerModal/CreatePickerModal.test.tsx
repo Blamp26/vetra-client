@@ -36,7 +36,7 @@ describe("CreatePickerModal", () => {
     render(<CreatePickerModal onPickServer={onPickServer} onPickGroup={onPickGroup} onClose={onClose} />);
 
     const choices = screen.getAllByRole("button").filter((button) => button.textContent?.includes("Create"));
-    expect(choices).toHaveLength(2);
+    expect(choices).toHaveLength(3);
     choices.forEach((choice) => expect(choice).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /Create group/ }));
     expect(onPickGroup).toHaveBeenCalledOnce();

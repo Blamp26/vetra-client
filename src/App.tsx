@@ -42,6 +42,9 @@ import {
 } from "@/features/calling/components/PersistentCallDebugPanel";
 import type { ActiveChat } from "@/shared/types";
 import { startMediaDeviceObserver } from "@/shared/utils/mediaDeviceObserver";
+import { BroadcastChannelWorkspace } from "@/features/broadcastChannels/components/BroadcastChannelWorkspace";
+import { BroadcastInviteView } from "@/features/broadcastChannels/components/BroadcastInviteView";
+import { isReservedBroadcastRootName } from "@/features/broadcastChannels/rootNames";
 
 const LEFT_PANE_STORAGE_KEY = "vetra:left-pane-width";
 const LEFT_PANE_MODE_STORAGE_KEY = "vetra:left-pane-mode";
@@ -372,6 +375,14 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
       searchResults,
     ],
   );
+  const broadcastRoute = useMemo(() => {
+    const raw = routeHash.replace(/^#\/?/, "").split("/").filter(Boolean);
+    if (raw[0] === "broadcast" && raw[1]) return { channelId: raw[1], publicationId: raw[2] };
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/invite/") && window.location.pathname.split("/")[2]) return { inviteToken: window.location.pathname.split("/")[2] };
+    if (typeof window !== "undefined" && (window.location.pathname === "/api" || window.location.pathname.startsWith("/api/") || window.location.pathname === "/assets" || window.location.pathname.startsWith("/assets/"))) return null;
+    if (typeof window !== "undefined" && window.location.pathname.length > 1 && !isReservedBroadcastRootName(window.location.pathname.split("/")[1] ?? "")) return { channelId: undefined, publicationId: undefined };
+    return null;
+  }, [routeHash]);
   const routeTargetKey = activeChatKey(routeTarget);
   const isSettingsRoute = routeTarget?.type === "settings";
   const routeLookup = useMemo(
@@ -830,7 +841,9 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
         />
 
         <div className="flex min-w-0 flex-1 overflow-hidden bg-[var(--vetra-shell-chat-bg)]">
-          {!isSettingsRoute && chatTarget ? (
+          {broadcastRoute && "inviteToken" in broadcastRoute ? <BroadcastInviteView token={broadcastRoute.inviteToken ?? ""} /> : broadcastRoute ? (
+            <BroadcastChannelWorkspace channelId={broadcastRoute.channelId} publicationId={broadcastRoute.publicationId} />
+          ) : !isSettingsRoute && chatTarget ? (
             <ChatWindow
               activeChat={chatTarget}
               call={call}
