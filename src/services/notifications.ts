@@ -100,3 +100,17 @@ export async function showNotification(
     console.error('[Notifications] showNotification failed:', e);
   }
 }
+
+const broadcastNotificationKeys = new Set<string>();
+
+export async function showBroadcastNotification(payload: { idempotency_key?: string; channel_public_id?: string; publication_public_id?: string; channel_display_name?: string }) {
+  const key = payload.idempotency_key;
+  if (!key || broadcastNotificationKeys.has(key)) return;
+  broadcastNotificationKeys.add(key);
+  const channelId = payload.channel_public_id;
+  const publicationId = payload.publication_public_id;
+  await showNotification(payload.channel_display_name ?? "Channel update", {
+    body: "New publication",
+    onClick: channelId ? () => { window.location.hash = `#/broadcast/${channelId}${publicationId ? `/${publicationId}` : ""}`; } : undefined,
+  });
+}

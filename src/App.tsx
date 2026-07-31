@@ -44,6 +44,8 @@ import type { ActiveChat } from "@/shared/types";
 import { startMediaDeviceObserver } from "@/shared/utils/mediaDeviceObserver";
 import { BroadcastChannelWorkspace } from "@/features/broadcastChannels/components/BroadcastChannelWorkspace";
 import { BroadcastInviteView } from "@/features/broadcastChannels/components/BroadcastInviteView";
+import { subscribeBroadcastUserEvents } from "@/features/broadcastChannels/services/broadcastRealtime";
+import { showBroadcastNotification } from "@/services/notifications";
 import { isReservedBroadcastRootName } from "@/features/broadcastChannels/rootNames";
 
 const LEFT_PANE_STORAGE_KEY = "vetra:left-pane-width";
@@ -100,9 +102,21 @@ function getInitialLeftPaneWidth(): number {
 function App() {
   const currentUser = useAppStore((s) => s.currentUser);
   const socketManager = useAppStore((s) => s.socketManager);
+  const setBroadcastUnread = useAppStore((s) => s.setBroadcastUnread);
   const protocolUpdateRequired = useAppStore((s) => s.protocolUpdateRequired);
   useAuthHydration();
   useSocketEvents();
+
+  useEffect(() => {
+    if (!currentUser || !socketManager) return;
+    return subscribeBroadcastUserEvents(socketManager, {
+      onUnread: (payload) => {
+        const event = payload as { channel_public_id?: string; eligible?: boolean };
+        if (event.channel_public_id && event.eligible !== false) setBroadcastUnread(event.channel_public_id, true);
+      },
+      onNotification: (payload) => { void showBroadcastNotification(payload as Parameters<typeof showBroadcastNotification>[0]); },
+    });
+  }, [currentUser, setBroadcastUnread, socketManager]);
 
   useEffect(() => {
     if (!currentUser) return;

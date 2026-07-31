@@ -5,6 +5,7 @@ import { storage } from "@/shared/utils/storage";
 import { Button } from "@/shared/components/Button";
 import { EmptyPane } from "@/shared/components/EmptyPane";
 import type { BroadcastChannel, BroadcastGovernanceState, BroadcastPublication } from "../types";
+import { joinBroadcastTopic } from "../services/broadcastRealtime";
 import { BroadcastChannelManagementPanel } from "./BroadcastChannelManagementPanel";
 import { postFormData } from "@/api/base";
 
@@ -40,6 +41,7 @@ export function BroadcastChannelWorkspace({ channelId, publicationId }: { channe
   const [auditRows, setAuditRows] = useState<Array<{ action_type: string; timestamp: string; actor: { display_name: string }; metadata: Record<string, unknown> }>>([]);
   const [auditCursor, setAuditCursor] = useState<string | null>(null);
   const accountKey = currentUser?.public_id ?? currentUser?.username ?? "account";
+  const socketManager = useAppStore((s) => s.socketManager);
   const activeChannel = channel ?? (resolvedChannelId ? getState().broadcastChannels[resolvedChannelId] : undefined);
 
   useEffect(() => {
@@ -65,6 +67,14 @@ export function BroadcastChannelWorkspace({ channelId, publicationId }: { channe
     return () => { cancelled = true; };
   }, [accountKey, channelId, setChannel, setFeed, setSubscription]);
 
+  useEffect(() => {
+    if (!activeChannel?.realtime_topic || !resolvedChannelId) return;
+    return joinBroadcastTopic(socketManager, activeChannel.realtime_topic, {
+      onPublication: () => { void broadcastChannelsApi.feed(resolvedChannelId).then((page) => setFeed(resolvedChannelId, page.publications, page.next_cursor)).catch(() => undefined); },
+      onChanged: () => { void broadcastChannelsApi.feed(resolvedChannelId).then((page) => setFeed(resolvedChannelId, page.publications, page.next_cursor)).catch(() => undefined); },
+      onRevoked: () => { setUnavailable(true); getState().clearBroadcastChannel(resolvedChannelId); }
+    });
+  }, [activeChannel?.realtime_topic, resolvedChannelId, setFeed, socketManager]);
 
   useEffect(() => { const id = resolvedChannelId; if (!id) return; const unread = getState().broadcastUnread[id]; if (unread) setSubscription(id, { status: "active", muted: Boolean(getState().broadcastSubscriptions[id]?.muted), unread: true }); }, [resolvedChannelId, setSubscription]);
 
