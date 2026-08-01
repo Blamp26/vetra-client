@@ -8,6 +8,12 @@ vi.mock("@/api/base", () => ({
 import { get, post, put } from "@/api/base";
 
 describe("broadcast channel API contracts", () => {
+  it("requests a profile by immutable public ID", async () => {
+    vi.mocked(get).mockResolvedValueOnce({ public_id: "a14e6268-ad65-452e-8cdf-80cb691458ac" });
+    await broadcastChannelsApi.get("a14e6268-ad65-452e-8cdf-80cb691458ac");
+    expect(get).toHaveBeenCalledWith("/broadcast-channels/a14e6268-ad65-452e-8cdf-80cb691458ac");
+  });
+
   it("uses immutable identifiers for audit and settings", async () => {
     vi.mocked(get).mockResolvedValueOnce({ events: [], next_cursor: null });
     await broadcastChannelsApi.audit("channel-public", "opaque-cursor");

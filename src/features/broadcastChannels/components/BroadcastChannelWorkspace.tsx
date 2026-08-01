@@ -11,15 +11,15 @@ import { postFormData } from "@/api/base";
 
 function draftKey(account: string, channel: string) { return `vetra:broadcast-draft:${account}:${channel}`; }
 
-export function BroadcastChannelWorkspace({ channelId, publicationId }: { channelId?: string; publicationId?: string }) {
+export function BroadcastChannelWorkspace({ channelPublicId, publicationId }: { channelPublicId?: string; publicationId?: string }) {
   const currentUser = useAppStore((s) => s.currentUser);
-  const [resolvedChannelId, setResolvedChannelId] = useState(channelId);
+  const [resolvedChannelId, setResolvedChannelId] = useState(channelPublicId);
   const [resolvedChannel, setResolvedChannel] = useState<BroadcastChannel | null>(null);
   const broadcastChannels = useAppStore((s) => s.broadcastChannels);
   const broadcastPublications = useAppStore((s) => s.broadcastPublications);
   const broadcastCursors = useAppStore((s) => s.broadcastCursors);
-  const channel = channelId ? broadcastChannels[channelId] : undefined;
-  const feedKey = channelId ?? resolvedChannelId;
+  const channel = channelPublicId ? broadcastChannels[channelPublicId] : undefined;
+  const feedKey = channelPublicId ?? resolvedChannelId;
   const publications = feedKey ? broadcastPublications[feedKey] ?? [] : [];
   const cursor = feedKey ? broadcastCursors[feedKey] : null;
   const setChannel = useAppStore((s) => s.setBroadcastChannel);
@@ -50,7 +50,11 @@ export function BroadcastChannelWorkspace({ channelId, publicationId }: { channe
     async function load() {
       setLoading(true); setUnavailable(false); setResolvedChannel(null);
       try {
-        const resolved: BroadcastChannel = channelId ? await broadcastChannelsApi.get(channelId) : await broadcastChannelsApi.resolveUsername(window.location.pathname.slice(1));
+        if (channelPublicId !== undefined && !channelPublicId.trim()) {
+          setUnavailable(true);
+          return;
+        }
+        const resolved: BroadcastChannel = channelPublicId ? await broadcastChannelsApi.get(channelPublicId) : await broadcastChannelsApi.resolveUsername(window.location.pathname.slice(1));
         if (cancelled) return;
         setResolvedChannelId(resolved.public_id); setResolvedChannel(resolved); setChannel(resolved);
         const [feed, subscription, currentGovernance, pinned] = await Promise.all([broadcastChannelsApi.feed(resolved.public_id), broadcastChannelsApi.subscription(resolved.public_id).catch(() => null), broadcastChannelsApi.governance(resolved.public_id).catch(() => null), broadcastChannelsApi.pinned(resolved.public_id).catch(() => [])]);
@@ -66,7 +70,7 @@ export function BroadcastChannelWorkspace({ channelId, publicationId }: { channe
     }
     void load();
     return () => { cancelled = true; };
-  }, [accountKey, channelId, setChannel, setFeed, setSubscription]);
+  }, [accountKey, channelPublicId, setChannel, setFeed, setSubscription]);
 
   useEffect(() => {
     if (!activeChannel?.realtime_topic || !resolvedChannelId) return;

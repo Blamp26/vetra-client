@@ -11,6 +11,7 @@ const {
   audioMounts,
   audioUnmounts,
   persistentAudioState,
+  broadcastWorkspaceProps,
 } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
   setActiveChatMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
   audioMounts: { current: 0 },
   audioUnmounts: { current: 0 },
   persistentAudioState: { muted: undefined as boolean | undefined, deafened: undefined as boolean | undefined, effectiveMuted: undefined as boolean | undefined },
+  broadcastWorkspaceProps: { current: null as { channelPublicId?: string; publicationId?: string } | null },
 }));
 
 function makeCallState(overrides = {}) {
@@ -145,6 +147,13 @@ vi.mock("@/features/messaging/components/Sidebar", () => ({
   Sidebar: () => <div>sidebar</div>,
 }));
 
+vi.mock("@/features/broadcastChannels/components/BroadcastChannelWorkspace", () => ({
+  BroadcastChannelWorkspace: (props: { channelPublicId?: string; publicationId?: string }) => {
+    broadcastWorkspaceProps.current = props;
+    return <div data-testid="broadcast-workspace-probe">{props.channelPublicId}</div>;
+  },
+}));
+
 vi.mock("@/features/messaging/components/Sidebar/SidebarFooter", () => ({
   SidebarFooter: ({
     callStatus,
@@ -248,6 +257,7 @@ describe("App hash sync", () => {
     persistentAudioState.muted = undefined;
     persistentAudioState.deafened = undefined;
     persistentAudioState.effectiveMuted = undefined;
+    broadcastWorkspaceProps.current = null;
     window.location.hash = "#";
     window.localStorage.clear();
     Object.defineProperty(navigator, "locks", {
@@ -335,6 +345,19 @@ describe("App hash sync", () => {
     expect(setActiveChatMock).not.toHaveBeenCalledWith(
       { type: "server", serverId: 1, serverRef: "1" },
     );
+  });
+
+  it("passes the immutable broadcast public ID from the real hash route to the workspace", async () => {
+    const state = makeState();
+    const publicId = "a14e6268-ad65-452e-8cdf-80cb691458ac";
+    window.location.hash = `#/broadcast/${publicId}`;
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByTestId("broadcast-workspace-probe")).toHaveTextContent(publicId));
+    expect(broadcastWorkspaceProps.current).toEqual({ channelPublicId: publicId, publicationId: undefined });
+    expect(broadcastWorkspaceProps.current?.channelPublicId).not.toBeUndefined();
   });
 
   it("uses the default persisted shell width token on first render", () => {

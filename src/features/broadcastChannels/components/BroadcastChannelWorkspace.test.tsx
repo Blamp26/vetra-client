@@ -62,7 +62,7 @@ describe("broadcast channel sidebar-to-workspace navigation", () => {
   });
 
   it("renders a subscribed channel from the immutable public ID even before the cache write is visible", async () => {
-    render(<BroadcastChannelWorkspace channelId={channel.public_id} />);
+    render(<BroadcastChannelWorkspace channelPublicId={channel.public_id} />);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "TestBroadcast" })).toBeInTheDocument());
     expect(api.get).toHaveBeenCalledWith(channel.public_id);

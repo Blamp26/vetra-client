@@ -55,6 +55,11 @@ const LEFT_PANE_DEFAULT_WIDTH = 408;
 const RIGHT_PANE_MIN_WIDTH = 380;
 const LEFT_PANE_KEYBOARD_STEP = 16;
 
+type BroadcastRoute =
+  | { channelPublicId: string; publicationId?: string }
+  | { inviteToken: string }
+  | { channelPublicId?: undefined; publicationId?: undefined };
+
 function getTextPaneMaxWidth(availableWidth: number) {
   return Math.max(LEFT_TEXT_MIN_WIDTH, availableWidth - RIGHT_PANE_MIN_WIDTH);
 }
@@ -389,12 +394,12 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
       searchResults,
     ],
   );
-  const broadcastRoute = useMemo(() => {
+  const broadcastRoute = useMemo<BroadcastRoute | null>(() => {
     const raw = routeHash.replace(/^#\/?/, "").split("/").filter(Boolean);
-    if (raw[0] === "broadcast" && raw[1]) return { channelId: raw[1], publicationId: raw[2] };
+    if (raw[0] === "broadcast" && raw[1]) return { channelPublicId: raw[1], publicationId: raw[2] };
     if (typeof window !== "undefined" && window.location.pathname.startsWith("/invite/") && window.location.pathname.split("/")[2]) return { inviteToken: window.location.pathname.split("/")[2] };
     if (typeof window !== "undefined" && (window.location.pathname === "/api" || window.location.pathname.startsWith("/api/") || window.location.pathname === "/assets" || window.location.pathname.startsWith("/assets/"))) return null;
-    if (typeof window !== "undefined" && window.location.pathname.length > 1 && !isReservedBroadcastRootName(window.location.pathname.split("/")[1] ?? "")) return { channelId: undefined, publicationId: undefined };
+    if (typeof window !== "undefined" && window.location.pathname.length > 1 && !isReservedBroadcastRootName(window.location.pathname.split("/")[1] ?? "")) return { channelPublicId: undefined, publicationId: undefined };
     return null;
   }, [routeHash]);
   const routeTargetKey = activeChatKey(routeTarget);
@@ -856,7 +861,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
 
         <div className="flex min-w-0 flex-1 overflow-hidden bg-[var(--vetra-shell-chat-bg)]">
           {broadcastRoute && "inviteToken" in broadcastRoute ? <BroadcastInviteView token={broadcastRoute.inviteToken ?? ""} /> : broadcastRoute ? (
-            <BroadcastChannelWorkspace channelId={broadcastRoute.channelId} publicationId={broadcastRoute.publicationId} />
+            <BroadcastChannelWorkspace channelPublicId={broadcastRoute.channelPublicId} publicationId={broadcastRoute.publicationId} />
           ) : !isSettingsRoute && chatTarget ? (
             <ChatWindow
               activeChat={chatTarget}
