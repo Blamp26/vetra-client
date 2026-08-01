@@ -51,6 +51,18 @@ describe("broadcast channel API contracts", () => {
     await expect(broadcastChannelsApi.get(profile.public_id)).resolves.toEqual(profile);
   });
 
+  it("types pinned publications as an envelope", async () => {
+    const page = {
+      channel: { public_id: "a14e6268-ad65-452e-8cdf-80cb691458ac" },
+      publications: [],
+      next_cursor: null,
+    };
+    vi.mocked(get).mockResolvedValueOnce(page);
+
+    await expect(broadcastChannelsApi.pinned("a14e6268-ad65-452e-8cdf-80cb691458ac")).resolves.toEqual(page);
+    expect(get).toHaveBeenCalledWith("/broadcast-channels/a14e6268-ad65-452e-8cdf-80cb691458ac/publications/pinned");
+  });
+
   it("uses immutable identifiers for audit and settings", async () => {
     vi.mocked(get).mockResolvedValueOnce({ events: [], next_cursor: null });
     await broadcastChannelsApi.audit("channel-public", "opaque-cursor");

@@ -53,12 +53,13 @@ describe("broadcast channel sidebar-to-workspace navigation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.broadcastChannels = {};
+    state.broadcastPublications = {};
     api.get.mockResolvedValue(channel);
     api.resolveUsername.mockResolvedValue(channel);
     api.feed.mockResolvedValue({ channel, publications: [], next_cursor: null });
     api.subscription.mockResolvedValue(null);
     api.governance.mockResolvedValue(null);
-    api.pinned.mockResolvedValue([]);
+    api.pinned.mockResolvedValue({ channel, publications: [], next_cursor: null });
   });
 
   it("renders a subscribed channel from the immutable public ID even before the cache write is visible", async () => {
@@ -80,5 +81,52 @@ describe("broadcast channel sidebar-to-workspace navigation", () => {
     expect(api.feed).toHaveBeenCalledWith(channel.public_id);
 
     window.history.replaceState(null, "", "/");
+  });
+
+  it("loads the pinned envelope without making the channel unavailable", async () => {
+    render(<BroadcastChannelWorkspace channelPublicId={channel.public_id} />);
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "TestBroadcast" })).toBeInTheDocument());
+    expect(api.pinned).toHaveBeenCalledWith(channel.public_id);
+    expect(screen.queryByText("Channel unavailable")).not.toBeInTheDocument();
+  });
+
+  it("keeps the channel visible when the optional pinned request fails", async () => {
+    api.pinned.mockRejectedValueOnce(new Error("pinned unavailable"));
+
+    render(<BroadcastChannelWorkspace channelPublicId={channel.public_id} />);
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "TestBroadcast" })).toBeInTheDocument());
+    expect(screen.queryByText("Channel unavailable")).not.toBeInTheDocument();
+  });
+
+  it("marks publication IDs from the pinned envelope", async () => {
+    const publication = {
+      public_id: "publication-public-id",
+      channel_public_id: channel.public_id,
+      display_identity: "channel" as const,
+      content: "Pinned update",
+      content_type: "text" as const,
+      created_at: "2026-08-01T10:00:00Z",
+      deleted: false,
+      author: { display_name: "TestBroadcast" },
+      media: [],
+    };
+    api.feed.mockResolvedValueOnce({ channel, publications: [publication], next_cursor: null });
+    api.governance.mockResolvedValueOnce({ role: "owner", capabilities: [] });
+    api.pinned.mockResolvedValueOnce({ channel, publications: [publication], next_cursor: null });
+    state.broadcastPublications = { [channel.public_id]: [publication] };
+
+    render(<BroadcastChannelWorkspace channelPublicId={channel.public_id} />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Unpin" })).toBeInTheDocument());
+  });
+
+  it("renders unavailable when the profile request fails", async () => {
+    api.get.mockRejectedValueOnce(new Error("not found"));
+
+    render(<BroadcastChannelWorkspace channelPublicId={channel.public_id} />);
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Channel unavailable" })).toBeInTheDocument());
   });
 });

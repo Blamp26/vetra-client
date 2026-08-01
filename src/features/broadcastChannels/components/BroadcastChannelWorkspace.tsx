@@ -57,12 +57,21 @@ export function BroadcastChannelWorkspace({ channelPublicId, publicationId }: { 
         const resolved: BroadcastChannel = channelPublicId ? await broadcastChannelsApi.get(channelPublicId) : await broadcastChannelsApi.resolveUsername(window.location.pathname.slice(1));
         if (cancelled) return;
         setResolvedChannelId(resolved.public_id); setResolvedChannel(resolved); setChannel(resolved);
-        const [feed, subscription, currentGovernance, pinned] = await Promise.all([broadcastChannelsApi.feed(resolved.public_id), broadcastChannelsApi.subscription(resolved.public_id).catch(() => null), broadcastChannelsApi.governance(resolved.public_id).catch(() => null), broadcastChannelsApi.pinned(resolved.public_id).catch(() => [])]);
+        const [feed, subscription, currentGovernance] = await Promise.all([broadcastChannelsApi.feed(resolved.public_id), broadcastChannelsApi.subscription(resolved.public_id).catch(() => null), broadcastChannelsApi.governance(resolved.public_id).catch(() => null)]);
         if (cancelled) return;
         setFeed(resolved.public_id, feed.publications, feed.next_cursor);
         if (subscription) setSubscription(resolved.public_id, subscription);
         setGovernance(currentGovernance);
-        setPinnedIds(new Set(pinned.map((item) => item.public_id)));
+        setLoading(false);
+        try {
+          const pinned = await broadcastChannelsApi.pinned(resolved.public_id);
+          if (!cancelled) {
+            const pinnedPublications = Array.isArray(pinned?.publications) ? pinned.publications : [];
+            setPinnedIds(new Set(pinnedPublications.map((item) => item.public_id)));
+          }
+        } catch {
+          if (!cancelled) setPinnedIds(new Set());
+        }
         const saved = storage.getString(draftKey(accountKey, resolved.public_id));
         setDraft(saved ?? "");
       } catch { if (!cancelled) setUnavailable(true); }
@@ -108,7 +117,7 @@ export function BroadcastChannelWorkspace({ channelPublicId, publicationId }: { 
   async function loadAudit(next: string | null = null) { if (!resolvedChannelId) return; try { const page = await broadcastChannelsApi.audit(resolvedChannelId, next); setAuditRows((rows) => next ? [...rows, ...page.events] : page.events); setAuditCursor(page.next_cursor); setAudit(true); } catch { setAudit(false); } }
   async function refreshChannel() { if (!resolvedChannelId) return; const next = await broadcastChannelsApi.get(resolvedChannelId); setResolvedChannel(next); setChannel(next); setGovernance(await broadcastChannelsApi.governance(resolvedChannelId).catch(() => null)); }
   async function deletePublication(publicationId: string) { if (!resolvedChannelId) return; setBusy(true); try { await broadcastChannelsApi.removePublication(resolvedChannelId, publicationId); const page = await broadcastChannelsApi.feed(resolvedChannelId); setFeed(resolvedChannelId, page.publications, page.next_cursor); } catch {} finally { setBusy(false); } }
-  async function pinPublication(publicationId: string, pinned: boolean) { if (!resolvedChannelId) return; setBusy(true); try { if (pinned) await broadcastChannelsApi.unpin(resolvedChannelId, publicationId); else await broadcastChannelsApi.pin(resolvedChannelId, publicationId); const next = await broadcastChannelsApi.pinned(resolvedChannelId); setPinnedIds(new Set(next.map((item) => item.public_id))); } catch {} finally { setBusy(false); } }
+  async function pinPublication(publicationId: string, pinned: boolean) { if (!resolvedChannelId) return; setBusy(true); try { if (pinned) await broadcastChannelsApi.unpin(resolvedChannelId, publicationId); else await broadcastChannelsApi.pin(resolvedChannelId, publicationId); const next = await broadcastChannelsApi.pinned(resolvedChannelId); setPinnedIds(new Set(next.publications.map((item) => item.public_id))); } catch {} finally { setBusy(false); } }
   async function editPublication(publication: BroadcastPublication) { if (!resolvedChannelId || publication.deleted) return; const content = window.prompt("Edit publication", publication.content ?? ""); if (content === null) return; setBusy(true); try { const next = await broadcastChannelsApi.edit(resolvedChannelId, publication.public_id, { content }); setFeed(resolvedChannelId, publications.map((item) => item.public_id === next.public_id ? next : item), cursor); } catch {} finally { setBusy(false); } }
   async function forwardPublication() { if (!resolvedChannelId || !forwarding || !forwardDestination) return; setBusy(true); try { await broadcastChannelsApi.forward(resolvedChannelId, forwarding, forwardType, forwardDestination); setForwarding(null); setForwardDestination(""); } catch {} finally { setBusy(false); } }
 

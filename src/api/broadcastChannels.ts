@@ -2,6 +2,7 @@ import { del, get, post, put } from "@/api/base";
 import type { BroadcastAdmin, BroadcastAuditEvent, BroadcastChannel, BroadcastChannelSummary, BroadcastGovernanceState, BroadcastInvite, BroadcastJoinRequest, BroadcastOwnershipState, BroadcastPublication, BroadcastSubscriber, BroadcastSubscription, SubscribedBroadcastChannelResponse } from "@/features/broadcastChannels/types";
 
 export interface BroadcastFeed { channel: BroadcastChannel; publications: BroadcastPublication[]; next_cursor: string | null; }
+export interface BroadcastPinnedPage { channel: BroadcastChannel; publications: BroadcastPublication[]; next_cursor: string | null; }
 export interface BroadcastAuditPage { events: BroadcastAuditEvent[]; next_cursor: string | null; }
 
 export const broadcastChannelsApi = {
@@ -22,7 +23,7 @@ export const broadcastChannelsApi = {
   publish: (id: string, body: Record<string, unknown>) => post<BroadcastPublication>(`/broadcast-channels/${encodeURIComponent(id)}/publications`, body),
   edit: (id: string, publicationId: string, body: Record<string, unknown>) => put<BroadcastPublication>(`/broadcast-channels/${encodeURIComponent(id)}/publications/${encodeURIComponent(publicationId)}`, body),
   removePublication: (id: string, publicationId: string) => del<{ deleted: boolean }>(`/broadcast-channels/${encodeURIComponent(id)}/publications/${encodeURIComponent(publicationId)}`),
-  pinned: (id: string) => get<BroadcastPublication[]>(`/broadcast-channels/${encodeURIComponent(id)}/publications/pinned`),
+  pinned: (id: string) => get<BroadcastPinnedPage>(`/broadcast-channels/${encodeURIComponent(id)}/publications/pinned`),
   pin: (id: string, publicationId: string) => post<BroadcastPublication>(`/broadcast-channels/${encodeURIComponent(id)}/publications/${encodeURIComponent(publicationId)}/pin`, {}),
   unpin: (id: string, publicationId: string) => del<BroadcastPublication>(`/broadcast-channels/${encodeURIComponent(id)}/publications/${encodeURIComponent(publicationId)}/pin`),
   subscription: (id: string) => get<BroadcastSubscription>(`/broadcast-channels/${encodeURIComponent(id)}/subscription`),
