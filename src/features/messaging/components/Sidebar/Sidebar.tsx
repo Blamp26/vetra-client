@@ -11,6 +11,7 @@ import { Avatar } from "@/shared/components/Avatar";
 import { cn } from "@/shared/utils/cn";
 import { EmojiText } from "@/shared/components/Emoji/Emoji";
 import {
+  buildHashForActiveChat,
   roomChatForPreview,
   serverChatForServer,
 } from "@/shared/utils/chatRoutes";
@@ -23,7 +24,7 @@ import { getPreviewText } from "../../utils/attachments";
 import { EmptyPane } from "@/shared/components/EmptyPane";
 import { GroupSettingsModal } from "../GroupSettingsModal/GroupSettingsModal";
 import { Settings } from "lucide-react";
-import type { RoomPreview } from "@/shared/types";
+import type { ActiveChat, RoomPreview } from "@/shared/types";
 import { formatUnreadCount } from "../../utils/unread";
 import { broadcastChannelsApi } from "@/api/broadcastChannels";
 import { CreateBroadcastChannelModal } from "@/features/broadcastChannels/components/CreateBroadcastChannelModal";
@@ -31,6 +32,8 @@ import { CreateBroadcastChannelModal } from "@/features/broadcastChannels/compon
 interface SidebarProps {
   isServerMode?: boolean;
   isCollapsed?: boolean;
+  activeBroadcastChannelPublicId?: string | null;
+  onNavigateToHash?: (nextHash: string) => void;
 }
 
 type SidebarItem =
@@ -57,6 +60,8 @@ type SidebarItem =
 export function Sidebar({
   isServerMode = false,
   isCollapsed = false,
+  activeBroadcastChannelPublicId = null,
+  onNavigateToHash,
 }: SidebarProps) {
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const activeChat = useAppStore((s: RootState) => s.activeChat);
@@ -146,6 +151,7 @@ export function Sidebar({
   const serverList = useMemo(() => Object.values(servers), [servers]);
 
   const isItemActive = (item: SidebarItem): boolean => {
+    if (activeBroadcastChannelPublicId) return false;
     if (!activeChat) return false;
     if (item.kind === "direct")
       return activeChat.type === "direct" && activeChat.partnerId === item.id;
@@ -153,15 +159,31 @@ export function Sidebar({
   };
 
   const isServerActive = (serverId: number): boolean => {
+    if (activeBroadcastChannelPublicId) return false;
     if (!activeChat) return false;
     if (activeChat.type === "server") return activeChat.serverId === serverId;
     if (activeChat.type === "channel") return activeChat.serverId === serverId;
     return false;
   };
 
+  const navigateToChat = (chat: ActiveChat) => {
+    onNavigateToHash?.(
+      buildHashForActiveChat(chat, {
+        activeChat,
+        currentUser,
+        conversationPreviews,
+        roomPreviews,
+        servers,
+        serverChannels: {},
+        searchResults: { users: [], servers: [] },
+      }),
+    );
+    setActiveChat(chat);
+  };
+
   const handleItemClick = (item: SidebarItem) => {
     if (item.kind === "direct") {
-      setActiveChat({
+      navigateToChat({
         type: "direct",
         partnerId: item.id,
         partnerRef: conversationPreviews[item.id]?.partner_public_id ?? item.id,
@@ -169,9 +191,9 @@ export function Sidebar({
     } else {
       const roomPreview = roomPreviews[item.id];
       if (roomPreview) {
-        setActiveChat(roomChatForPreview(roomPreview));
+        navigateToChat(roomChatForPreview(roomPreview));
       } else {
-        setActiveChat({ type: "room", roomId: item.id });
+        navigateToChat({ type: "room", roomId: item.id });
       }
     }
   };
@@ -229,8 +251,8 @@ export function Sidebar({
           >
             {!isServerMode &&
               Object.values(broadcastChannels).map((channel) => {
-                const active = window.location.hash.includes(`/broadcast/${channel.public_id}`);
-                return <button key={channel.public_id} type="button" onClick={() => { window.location.hash = `#/broadcast/${channel.public_id}`; }} className={listRowClass(active, isCollapsed)} data-testid={`sidebar-item-broadcast-${channel.public_id}`} title={channel.display_name}>
+                const active = activeBroadcastChannelPublicId === channel.public_id;
+                return <button key={channel.public_id} type="button" onClick={() => onNavigateToHash?.(`#/broadcast/${channel.public_id}`)} className={listRowClass(active, isCollapsed)} data-testid={`sidebar-item-broadcast-${channel.public_id}`} data-state={active ? "active" : "inactive"} title={channel.display_name}>
                   <Avatar name={channel.display_name} size="medium" />
                   {!isCollapsed && <span className="min-w-0 flex-1 truncate text-sm font-medium">{channel.display_name}</span>}
                 </button>;
@@ -241,7 +263,7 @@ export function Sidebar({
                 return (
                   <button
                     key={server.id}
-                    onClick={() => setActiveChat(serverChatForServer(server))}
+                    onClick={() => navigateToChat(serverChatForServer(server))}
                     className={listRowClass(isActive, isCollapsed)}
                     data-testid={`sidebar-item-server-${server.id}`}
                     data-state={isActive ? "active" : "inactive"}

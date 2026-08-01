@@ -12,6 +12,7 @@ const {
   audioUnmounts,
   persistentAudioState,
   broadcastWorkspaceProps,
+  sidebarProps,
 } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
   setActiveChatMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   audioUnmounts: { current: 0 },
   persistentAudioState: { muted: undefined as boolean | undefined, deafened: undefined as boolean | undefined, effectiveMuted: undefined as boolean | undefined },
   broadcastWorkspaceProps: { current: null as { channelPublicId?: string; publicationId?: string } | null },
+  sidebarProps: { current: null as { activeBroadcastChannelPublicId?: string | null; onNavigateToHash?: (nextHash: string) => void } | null },
 }));
 
 function makeCallState(overrides = {}) {
@@ -144,7 +146,10 @@ vi.mock("@/features/registration/AuthPage", () => ({
 }));
 
 vi.mock("@/features/messaging/components/Sidebar", () => ({
-  Sidebar: () => <div>sidebar</div>,
+  Sidebar: (props: { activeBroadcastChannelPublicId?: string | null; onNavigateToHash?: (nextHash: string) => void }) => {
+    sidebarProps.current = props;
+    return <button data-testid="sidebar-room-reselect" onClick={() => props.onNavigateToHash?.("#/r/room-public-id")}>sidebar</button>;
+  },
 }));
 
 vi.mock("@/features/broadcastChannels/components/BroadcastChannelWorkspace", () => ({
@@ -258,6 +263,7 @@ describe("App hash sync", () => {
     persistentAudioState.deafened = undefined;
     persistentAudioState.effectiveMuted = undefined;
     broadcastWorkspaceProps.current = null;
+    sidebarProps.current = null;
     window.location.hash = "#";
     window.localStorage.clear();
     Object.defineProperty(navigator, "locks", {
@@ -358,6 +364,74 @@ describe("App hash sync", () => {
     await waitFor(() => expect(screen.getByTestId("broadcast-workspace-probe")).toHaveTextContent(publicId));
     expect(broadcastWorkspaceProps.current).toEqual({ channelPublicId: publicId, publicationId: undefined });
     expect(broadcastWorkspaceProps.current?.channelPublicId).not.toBeUndefined();
+  });
+
+  it("passes the parsed broadcast route authority to the sidebar and does not restore stale chat state", async () => {
+    const state = makeState();
+    state.activeChat = { type: "room", roomId: 7 };
+    const publicId = "channel-public-id";
+    window.location.hash = `#/broadcast/${publicId}`;
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState");
+
+    render(<App />);
+
+    await waitFor(() => expect(sidebarProps.current?.activeBroadcastChannelPublicId).toBe(publicId));
+    expect(window.location.hash).toBe(`#/broadcast/${publicId}`);
+    expect(setActiveChatMock).not.toHaveBeenCalled();
+    expect(replaceStateSpy).not.toHaveBeenCalled();
+    replaceStateSpy.mockRestore();
+  });
+
+  it("allows an explicit active-chat change to leave a broadcast route", async () => {
+    const state = makeState();
+    state.activeChat = { type: "room", roomId: 7 };
+    state.conversationPreviews = {
+      2: {
+        partner_id: 2,
+        partner_public_id: "user-2",
+        partner_username: "user-2",
+        partner_display_name: "User 2",
+        unread_count: 0,
+        last_message: null,
+      },
+    } as any;
+    window.location.hash = "#/broadcast/channel-public-id";
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+
+    const view = render(<App />);
+    state.activeChat = { type: "direct", partnerId: 2, partnerRef: "user-2" };
+    view.rerender(<App />);
+
+    await waitFor(() => expect(window.location.hash).toBe("#/user-2"));
+  });
+
+  it("reselects the cached ordinary room from broadcast through one explicit navigation", async () => {
+    const state = makeState();
+    state.activeChat = { type: "room", roomId: 7, roomRef: "room-public-id" };
+    state.roomPreviews = {
+      7: { id: 7, public_id: "room-public-id", name: "grouptest1", created_by: 1, server_id: null, inserted_at: "2026-06-29T10:00:00Z", unread_count: 0, last_message_at: null, last_message: null },
+    } as any;
+    window.location.hash = "#/broadcast/channel-public-id";
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+
+    const view = render(<App />);
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState");
+    await waitFor(() => expect(screen.getByTestId("broadcast-workspace-probe")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("sidebar-room-reselect"));
+    await waitFor(() => expect(window.location.hash).toBe("#/r/room-public-id"));
+    expect(screen.getByText("chat")).toBeInTheDocument();
+    expect(replaceStateSpy).toHaveBeenCalledTimes(1);
+
+    window.location.hash = "#/broadcast/channel-public-id";
+    view.rerender(<App />);
+    await waitFor(() => expect(screen.getByTestId("broadcast-workspace-probe")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("sidebar-room-reselect"));
+    await waitFor(() => expect(window.location.hash).toBe("#/r/room-public-id"));
+    expect(screen.getByText("chat")).toBeInTheDocument();
+    expect(replaceStateSpy).toHaveBeenCalledTimes(2);
+    replaceStateSpy.mockRestore();
   });
 
   it("uses the default persisted shell width token on first render", () => {

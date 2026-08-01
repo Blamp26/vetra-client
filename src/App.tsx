@@ -402,6 +402,11 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     if (typeof window !== "undefined" && window.location.pathname.length > 1 && !isReservedBroadcastRootName(window.location.pathname.split("/")[1] ?? "")) return { channelPublicId: undefined, publicationId: undefined };
     return null;
   }, [routeHash]);
+  const activeBroadcastChannelPublicId =
+    broadcastRoute && "channelPublicId" in broadcastRoute
+      ? broadcastRoute.channelPublicId ?? null
+      : null;
+  const isBroadcastChannelRoute = activeBroadcastChannelPublicId !== null;
   const routeTargetKey = activeChatKey(routeTarget);
   const isSettingsRoute = routeTarget?.type === "settings";
   const routeLookup = useMemo(
@@ -588,6 +593,9 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     if (isSettingsRoute) {
       return;
     }
+    if (isBroadcastChannelRoute) {
+      return;
+    }
 
     const previous = previousNavigationStateRef.current;
     const activeChanged = previous.activeChatKey !== currentActiveChatKey;
@@ -611,6 +619,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     routeTarget,
     routeTargetKey,
     isSettingsRoute,
+    isBroadcastChannelRoute,
     setActiveChat,
   ]);
 
@@ -631,6 +640,12 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     const activeChanged = previous.activeChatKey !== currentActiveChatKey;
     const routeChanged = previous.routeHash !== routeHash;
 
+    // Keep a broadcast route authoritative until an explicit ordinary-chat
+    // selection changes activeChat, so stale activeChat cannot replace it.
+    if (isBroadcastChannelRoute && !activeChanged) {
+      return;
+    }
+
     if (
       activeChatHash &&
       routeHash !== activeChatHash &&
@@ -644,6 +659,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
     activeCallChatHash,
     currentActiveChatKey,
     isSettingsRoute,
+    isBroadcastChannelRoute,
     navigateToHash,
     routeHash,
     routeTarget,
@@ -766,7 +782,11 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
           data-pane-mode="text"
         >
           <div className="flex flex-1 overflow-hidden">
-            <Sidebar isServerMode={showChannelPanel} />
+            <Sidebar
+              isServerMode={showChannelPanel}
+              activeBroadcastChannelPublicId={activeBroadcastChannelPublicId}
+              onNavigateToHash={navigateToHash}
+            />
 
             {showChannelPanel && persistedServerId !== null && (
               <div className="w-[320px] border-l border-border bg-[var(--vetra-shell-chat-bg)]">

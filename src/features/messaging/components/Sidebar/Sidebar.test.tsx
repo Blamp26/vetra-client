@@ -160,13 +160,13 @@ describe("Sidebar attachment previews", () => {
       (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
     );
 
-    render(<Sidebar />);
+    const navigateToHash = vi.fn();
+    render(<Sidebar onNavigateToHash={navigateToHash} />);
 
     const row = await screen.findByTestId("sidebar-item-broadcast-channel-public-id");
     fireEvent.click(row);
 
-    expect(window.location.hash).toBe("#/broadcast/channel-public-id");
-    window.history.replaceState(null, "", "/");
+    expect(navigateToHash).toHaveBeenCalledWith("#/broadcast/channel-public-id");
   });
 
   it("renders distinct stable keys and navigates exact production subscribed summaries", async () => {
@@ -191,7 +191,8 @@ describe("Sidebar attachment previews", () => {
       (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
     );
 
-    render(<Sidebar />);
+    const navigateToHash = vi.fn();
+    render(<Sidebar onNavigateToHash={navigateToHash} />);
 
     const first = await screen.findByTestId("sidebar-item-broadcast-a14e6268-ad65-452e-8cdf-80cb691458ac");
     const second = await screen.findByTestId("sidebar-item-broadcast-b25f7379-be76-563f-9ef1-91dc792569bd");
@@ -199,9 +200,8 @@ describe("Sidebar attachment previews", () => {
     expect(second).toHaveTextContent("SecondBroadcast");
 
     fireEvent.click(first);
-    expect(window.location.hash).toBe("#/broadcast/a14e6268-ad65-452e-8cdf-80cb691458ac");
-    expect(window.location.hash).not.toContain("undefined");
-    window.history.replaceState(null, "", "/");
+    expect(navigateToHash).toHaveBeenCalledWith("#/broadcast/a14e6268-ad65-452e-8cdf-80cb691458ac");
+    expect(navigateToHash).not.toHaveBeenCalledWith(expect.stringContaining("undefined"));
   });
 
   it("uses server-provided preview text for direct and room items", async () => {
@@ -270,6 +270,51 @@ describe("Sidebar attachment previews", () => {
       type: "direct",
       partnerId: 2,
       partnerRef: "user-public-id",
+    });
+  });
+
+  it("selects the active broadcast and suppresses stale ordinary selection", async () => {
+    const state = makeState();
+    state.activeChat = { type: "room", roomId: 7 };
+    state.broadcastChannels = {
+      "channel-public-id": {
+        public_id: "channel-public-id",
+        display_name: "TestBroadcast",
+        username: "testbroadcast",
+        visibility: "public",
+        status: "active",
+        subscriber_count: 1,
+      },
+    } as any;
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    render(<Sidebar activeBroadcastChannelPublicId="channel-public-id" />);
+
+    const broadcastRow = await screen.findByTestId("sidebar-item-broadcast-channel-public-id");
+    const roomRow = await screen.findByTestId("sidebar-item-room-7");
+    expect(broadcastRow).toHaveAttribute("data-state", "active");
+    expect(roomRow).toHaveAttribute("data-state", "inactive");
+  });
+
+  it("navigates a cached ordinary room explicitly through the App callback", async () => {
+    const state = makeState();
+    state.activeChat = { type: "room", roomId: 7, roomRef: "room-public-id" };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+    const navigateToHash = vi.fn();
+
+    render(<Sidebar onNavigateToHash={navigateToHash} />);
+    fireEvent.click(await screen.findByTestId("sidebar-item-room-7"));
+
+    expect(navigateToHash).toHaveBeenCalledTimes(1);
+    expect(navigateToHash).toHaveBeenCalledWith("#/r/room-public-id");
+    expect(state.setActiveChat).toHaveBeenCalledWith({
+      type: "room",
+      roomId: 7,
+      roomRef: "room-public-id",
     });
   });
 
