@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { ArrowLeft, ChevronRight, KeyRound, LogOut, Plus, Shield, Trash2, Users } from "lucide-react";
 import {
   roomsApi,
   type GovernanceMember,
@@ -7,6 +8,8 @@ import {
 import { roomRef } from "@/shared/utils/refs";
 import type { RoomPreview } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
+import { Dialog } from "@/shared/components/Dialog";
+import { IconButton } from "@/shared/components/IconButton";
 
 const ADMIN_RIGHTS = [
   "change_group_info",
@@ -33,14 +36,14 @@ const MEMBER_RIGHTS = [
 export function GroupSettingsModal({
   room,
   onClose,
+  onAddMember,
 }: {
   room: RoomPreview;
   onClose: () => void;
+  onAddMember?: () => void;
 }) {
+  const titleId = useId();
   const [state, setState] = useState<GroupGovernance | null>(null);
-  const [tab, setTab] = useState<"admins" | "members" | "permissions">(
-    "admins",
-  );
   const [selected, setSelected] = useState<GovernanceMember | null>(null);
   const [defaults, setDefaults] = useState<string[]>([]);
   const [adminRights, setAdminRights] = useState<string[]>([]);
@@ -50,6 +53,7 @@ export function GroupSettingsModal({
   const [overrideDraft, setOverrideDraft] = useState<
     Record<string, "inherit" | "allow" | "deny">
   >({});
+  const [view, setView] = useState<"overview" | "admins" | "members" | "permissions">("overview");
   const socketManager = useAppStore((s: RootState) => s.socketManager);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const ref = roomRef(room) ?? room.id;
@@ -212,48 +216,63 @@ export function GroupSettingsModal({
     values.includes(value)
       ? values.filter((v) => v !== value)
       : [...values, value];
+  const canInvite = state?.role === "owner" || state?.capabilities.includes("invite_members");
+  const canManagePermissions = state?.role === "owner" || state?.capabilities.includes("manage_member_permissions");
+  const canRemoveMembers = state?.role === "owner" || state?.capabilities.includes("remove_members");
+  const leaveGroup = () => {
+    if (state?.role === "owner") {
+      setError("owner_cannot_leave");
+      return;
+    }
+    if (window.confirm("Leave this group?")) {
+      void roomsApi.leave(ref).then(onClose).catch((e) => setError(e instanceof Error ? e.message : "Leave failed."));
+    }
+  };
+  const deleteGroup = () => {
+    if (state?.role !== "owner" || !window.confirm("Delete this group?")) return;
+    setBusy(true);
+    void roomsApi.delete(ref).then(onClose).catch((e) => setError(e instanceof Error ? e.message : "Delete failed.")).finally(() => setBusy(false));
+  };
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      role="dialog"
-      aria-label={`Manage ${room.name}`}
-    >
-      <div className="w-full max-w-lg rounded-lg bg-background p-5 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{room.name} settings</h2>
-          <button onClick={onClose} aria-label="Close">
-            ×
-          </button>
+    <Dialog open onClose={onClose} labelledBy={titleId} className="w-[min(366px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-hidden rounded-xl p-0">
+      <div className="flex max-h-[calc(100vh-32px)] min-h-0 flex-col" data-testid="group-management-dialog">
+        <div className="shrink-0 border-b border-border px-[22px] py-4">
+          <div className="flex items-center justify-between gap-3">
+            {view === "overview" ? <span className="w-8" aria-hidden="true" /> : <IconButton label="Back to group management" size="compact" onClick={() => setView("overview")}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></IconButton>}
+            <h2 id={titleId} className="truncate text-base font-semibold">Manage group</h2>
+            <IconButton label="Close group management" size="compact" onClick={onClose}><span aria-hidden="true">×</span></IconButton>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary text-lg font-semibold text-primary-foreground">{room.name.slice(0, 1).toUpperCase()}</div>
+            <div className="min-w-0"><p className="truncate text-sm font-medium">{room.name}</p><p className="text-xs text-muted-foreground">{state?.members.length ?? room.members?.length ?? 0} members</p></div>
+          </div>
         </div>
         {error && (
-          <div role="alert" className="mb-3 text-sm text-destructive">
+          <div role="alert" className="mx-[22px] mt-3 text-sm text-destructive">
             {error}
           </div>
         )}
         {!state ? (
-          <p>Loading…</p>
+          <p className="px-[22px] py-6 text-sm text-muted-foreground" role="status">Loading…</p>
         ) : (
-          <>
-            <div className="mb-4 flex gap-2">
-              {(["admins", "members", "permissions"] as const).map((key) => (
-                <button
-                  key={key}
-                  className={
-                    tab === key
-                      ? "font-semibold underline"
-                      : "text-muted-foreground"
-                  }
-                  onClick={() => setTab(key)}
-                >
-                  {key === "admins"
-                    ? "Administrators"
-                    : key === "members"
-                      ? "Members"
-                      : "Member permissions"}
-                </button>
-              ))}
-            </div>
-            {tab === "admins" && (
+          <div className="min-h-0 overflow-y-auto px-[22px] pb-4">
+            {view === "overview" && (
+              <>
+                <div className="h-2 -mx-[22px] border-y border-border bg-muted/30" aria-hidden="true" />
+                <nav aria-label="Group management sections" className="py-2">
+                  <button type="button" className="flex min-h-[39px] w-full items-center gap-3 rounded-md px-1 text-left hover:bg-accent" onClick={() => setView("admins")}><Shield className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 text-sm">Administrators</span><span className="text-xs text-muted-foreground">{admins.length}</span><ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></button>
+                  <button type="button" className="flex min-h-[39px] w-full items-center gap-3 rounded-md px-1 text-left hover:bg-accent" onClick={() => setView("members")}><Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 text-sm">Members</span><span className="text-xs text-muted-foreground">{state.members.length}</span><ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></button>
+                  <button type="button" className="flex min-h-[39px] w-full items-center gap-3 rounded-md px-1 text-left hover:bg-accent" onClick={() => setView("permissions")}><KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 text-sm">Member permissions</span><ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></button>
+                  {canInvite && onAddMember && <button type="button" className="flex min-h-[39px] w-full items-center gap-3 rounded-md px-1 text-left hover:bg-accent" onClick={onAddMember}><Plus className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 text-sm">Add member</span><ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></button>}
+                </nav>
+                <div className="h-2 -mx-[22px] border-y border-border bg-muted/30" aria-hidden="true" />
+                <div className="flex items-center gap-3 py-2">
+                  <LogOut className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><button type="button" className="min-h-[39px] flex-1 text-left text-sm hover:text-foreground" onClick={leaveGroup}>Leave group</button>
+                </div>
+                {state.role === "owner" && <div className="flex items-center gap-3"><Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" /><button type="button" className="min-h-[39px] flex-1 text-left text-sm text-destructive hover:text-destructive/80" disabled={busy} onClick={deleteGroup}>Delete group</button></div>}
+              </>
+            )}
+            {view === "admins" && (
               <div className="space-y-3">
                 <p className="text-sm">
                   Owner:{" "}
@@ -324,7 +343,7 @@ export function GroupSettingsModal({
                 )}
               </div>
             )}
-            {tab === "members" && (
+            {view === "members" && (
               <div className="space-y-2">
                 <label className="block text-sm">
                   <span className="sr-only">Search members</span>
@@ -384,9 +403,7 @@ export function GroupSettingsModal({
                           busy ||
                           !(
                             state.role === "owner" ||
-                            state.capabilities.includes(
-                              "manage_member_permissions",
-                            )
+                            canManagePermissions
                           )
                         }
                         onClick={() => void saveOverride()}
@@ -398,9 +415,7 @@ export function GroupSettingsModal({
                           busy ||
                           !(
                             state.role === "owner" ||
-                            state.capabilities.includes(
-                              "manage_member_permissions",
-                            )
+                            canManagePermissions
                           )
                         }
                         onClick={() => void clearSelectedOverride()}
@@ -412,7 +427,7 @@ export function GroupSettingsModal({
                           busy ||
                           !(
                             state.role === "owner" ||
-                            state.capabilities.includes("remove_members")
+                            canRemoveMembers
                           )
                         }
                         onClick={() => void removeSelected()}
@@ -424,7 +439,7 @@ export function GroupSettingsModal({
                 )}
               </div>
             )}
-            {tab === "permissions" && (
+            {view === "permissions" && (
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
                   Changes affect ordinary members immediately for future
@@ -445,28 +460,9 @@ export function GroupSettingsModal({
                 </button>
               </div>
             )}
-          </>
+          </div>
         )}
-        <div className="mt-5 flex justify-end">
-          <button
-            onClick={() => {
-              if (state?.role === "owner") {
-                setError("owner_cannot_leave");
-                return;
-              }
-              if (window.confirm("Leave this group?"))
-                roomsApi
-                  .leave(ref)
-                  .then(onClose)
-                  .catch((e) =>
-                    setError(e instanceof Error ? e.message : "Leave failed."),
-                  );
-            }}
-          >
-            Leave group
-          </button>
-        </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

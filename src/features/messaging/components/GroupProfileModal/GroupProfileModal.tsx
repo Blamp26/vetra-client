@@ -27,6 +27,7 @@ export function GroupProfileModal({
 }: GroupProfileModalProps) {
   const titleId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
+  const manageActionRef = useRef<HTMLButtonElement>(null);
   const requestVersion = useRef(0);
   const [members, setMembers] = useState<GovernanceMember[]>([]);
   const [query, setQuery] = useState("");
@@ -36,6 +37,7 @@ export function GroupProfileModal({
   const [governanceLoading, setGovernanceLoading] = useState(true);
   const [manageOpen, setManageOpen] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const wasManageOpen = useRef(false);
 
   const loadMembers = () => {
     const version = ++requestVersion.current;
@@ -66,6 +68,13 @@ export function GroupProfileModal({
       requestVersion.current += 1;
     };
   }, [room.id, room.public_id]);
+
+  useEffect(() => {
+    if (wasManageOpen.current && !manageOpen && !addMemberOpen) {
+      manageActionRef.current?.focus();
+    }
+    wasManageOpen.current = manageOpen;
+  }, [addMemberOpen, manageOpen]);
 
   useEffect(() => {
     let active = true;
@@ -106,6 +115,7 @@ export function GroupProfileModal({
     <Dialog
       open
       onClose={onClose}
+      inert={manageOpen || addMemberOpen}
       labelledBy={titleId}
       initialFocusRef={searchRef}
       overlayClassName="items-start pt-16"
@@ -133,7 +143,7 @@ export function GroupProfileModal({
           </div>
           <div className="mt-4 flex flex-wrap justify-center gap-2 gap-[10px]" role="group" aria-label="Group actions">
             {actions.map((action) => (
-              <button key={action.label} type="button" className="flex h-[52px] w-[81px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={action.onClick}>
+              <button ref={action.label === "Manage" ? manageActionRef : undefined} key={action.label} type="button" className="flex h-[52px] w-[81px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={action.onClick}>
                 {action.icon}
                 {action.label}
               </button>
@@ -200,7 +210,7 @@ export function GroupProfileModal({
         </section>
       </div>
     </Dialog>
-    {manageOpen && <GroupSettingsModal room={room} onClose={() => setManageOpen(false)} />}
+    {manageOpen && <GroupSettingsModal room={room} onClose={() => { setManageOpen(false); manageActionRef.current?.focus(); }} onAddMember={() => { setManageOpen(false); setAddMemberOpen(true); }} />}
     {addMemberOpen && <GroupMemberPicker roomRef={roomRef(room) ?? room.id} existingMemberIds={new Set(members.map((member) => member.id))} onAdded={loadMembers} onClose={() => setAddMemberOpen(false)} />}
     </>
   );

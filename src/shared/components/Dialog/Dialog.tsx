@@ -45,6 +45,7 @@ export interface DialogProps {
   backdropClassName?: string;
   className?: string;
   overlayClassName?: string;
+  inert?: boolean;
   children: React.ReactNode;
 }
 
@@ -61,6 +62,7 @@ export function Dialog({
   backdropClassName,
   className,
   overlayClassName,
+  inert = false,
   children,
 }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -184,6 +186,7 @@ export function Dialog({
         "fixed inset-0 z-modal flex items-center justify-center p-4",
         overlayClassName,
       )}
+      aria-hidden={inert || undefined}
       data-testid="dialog-overlay"
     >
       {showBackdrop && (
@@ -202,6 +205,8 @@ export function Dialog({
         aria-describedby={describedBy}
         tabIndex={-1}
         className={cn("vt-dialog-panel", className)}
+        aria-hidden={inert || undefined}
+        style={inert ? { pointerEvents: "none" } : undefined}
         onKeyDown={handleKeyDown}
         data-testid="dialog-panel"
       >

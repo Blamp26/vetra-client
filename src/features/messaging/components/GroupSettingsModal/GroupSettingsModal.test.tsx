@@ -86,7 +86,7 @@ describe("GroupSettingsModal member governance", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText("Group settings")).toBeTruthy(),
+      expect(screen.getByText("Manage group")).toBeTruthy(),
     );
     fireEvent.click(screen.getByText("Members"));
     fireEvent.click(
@@ -133,5 +133,17 @@ describe("GroupSettingsModal member governance", () => {
 
     socketHandler.current?.({ room_id: 7, event: "group_deleted" });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses a compact vertical overview and returns from an internal page with Back", async () => {
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Manage group")).toBeTruthy());
+    expect(screen.getByTestId("group-management-dialog").parentElement?.className).toContain("w-[min(366px,calc(100vw-32px))]");
+    expect(screen.getByRole("navigation", { name: "Group management sections" })).toBeTruthy();
+    expect(screen.queryByRole("tab")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
+    expect(screen.getByRole("button", { name: "Back to group management" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
+    expect(screen.getByRole("navigation", { name: "Group management sections" })).toBeTruthy();
   });
 });
