@@ -3,11 +3,13 @@ import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GroupProfileModal } from "./GroupProfileModal";
 
-const { governanceMembers } = vi.hoisted(() => ({ governanceMembers: vi.fn() }));
+const { governanceMembers, governance, addMember, searchUsers } = vi.hoisted(() => ({ governanceMembers: vi.fn(), governance: vi.fn(), addMember: vi.fn(), searchUsers: vi.fn() }));
 
 vi.mock("@/api/rooms", () => ({
-  roomsApi: { governanceMembers },
+  roomsApi: { governanceMembers, governance, addMember },
 }));
+
+vi.mock("@/api/auth", () => ({ authApi: { searchUsers } }));
 
 const room = {
   id: 7,
@@ -31,7 +33,13 @@ const members = [
 describe("GroupProfileModal", () => {
   beforeEach(() => {
     governanceMembers.mockReset();
+    governance.mockReset();
+    addMember.mockReset();
+    searchUsers.mockReset();
     governanceMembers.mockResolvedValue([...members]);
+    governance.mockResolvedValue({ role: "member", capabilities: [], defaults: [], members: [...members] });
+    addMember.mockResolvedValue(undefined);
+    searchUsers.mockResolvedValue({ users: [], servers: [] });
   });
 
   it("renders real identity, member count, roles, and only the supported search action", async () => {
@@ -102,5 +110,41 @@ describe("GroupProfileModal", () => {
     expect(onClose).toHaveBeenCalledOnce();
     fireEvent.mouseDown(screen.getByTestId("dialog-backdrop"));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows owner controls only after governance resolves and uses role badges", async () => {
+    governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
+    render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Manage" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add member" })).toBeInTheDocument();
+    expect(screen.getByLabelText("owner role")).toBeInTheDocument();
+    expect(screen.getByLabelText("admin role")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Group actions" }).className).toContain("gap-[10px]");
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    expect(await screen.findByText("Project Seven settings")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Mute|Call/ })).not.toBeInTheDocument();
+  });
+
+  it("uses effective admin capabilities and keeps ordinary members restrained", async () => {
+    governance.mockResolvedValue({ role: "admin", capabilities: ["invite_members"], defaults: [], members: [...members] });
+    const { rerender } = render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "Add member" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
+    governance.mockResolvedValue({ role: "member", capabilities: [], defaults: [], members: [...members] });
+    rerender(<GroupProfileModal room={{ ...room, id: 8 }} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Add member" })).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
+  });
+
+  it("adds a user through the real search and room member APIs, then refreshes members", async () => {
+    searchUsers.mockResolvedValue({ users: [{ id: 9, username: "new-user", display_name: "New User", avatar_url: null, bio: null, status: "offline", last_seen_at: null }], servers: [] });
+    governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
+    render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add member" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Search users to add" }), { target: { value: "new" } });
+    fireEvent.click(await screen.findByRole("button", { name: /New User/ }));
+    await waitFor(() => expect(addMember).toHaveBeenCalledWith("room-seven", 9));
+    expect(governanceMembers.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

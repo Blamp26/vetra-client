@@ -2,11 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getUser, useAppStoreMock, persistentCallMock, governanceMembers } = vi.hoisted(() => ({
+const { getUser, useAppStoreMock, persistentCallMock, governanceMembers, governance } = vi.hoisted(() => ({
   getUser: vi.fn(),
   useAppStoreMock: vi.fn(),
   persistentCallMock: { current: null as unknown },
   governanceMembers: vi.fn(),
+  governance: vi.fn(),
 }));
 
 vi.mock("@/store", () => ({
@@ -21,7 +22,7 @@ vi.mock("@/api/auth", () => ({
 }));
 
 vi.mock("@/api/rooms", () => ({
-  roomsApi: { governanceMembers },
+  roomsApi: { governanceMembers, governance },
 }));
 
 vi.mock("@/features/calling/context/PersistentCallContext", () => ({
@@ -181,6 +182,7 @@ describe("ChatWindow presence rendering", () => {
     governanceMembers.mockResolvedValue([
       { id: 1, username: "alice", display_name: "Alice", role: "member", admin_permissions: [], allow_permissions: [], deny_permissions: [] },
     ]);
+    governance.mockResolvedValue({ role: "member", capabilities: [], defaults: [], members: [] });
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);

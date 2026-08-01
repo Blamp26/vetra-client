@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { AlertCircle, Loader2, Search, Users, X } from "lucide-react";
+import { AlertCircle, Loader2, Search, UserPlus, Users, X, Settings2 } from "lucide-react";
 import { roomsApi, type GovernanceMember } from "@/api/rooms";
 import { Avatar } from "@/shared/components/Avatar";
 import { Dialog } from "@/shared/components/Dialog";
@@ -7,6 +7,8 @@ import { IconButton } from "@/shared/components/IconButton";
 import { TextInput } from "@/shared/components/Field";
 import type { RoomPreview } from "@/shared/types";
 import { roomRef } from "@/shared/utils/refs";
+import { GroupSettingsModal } from "../GroupSettingsModal/GroupSettingsModal";
+import { GroupMemberPicker } from "./GroupMemberPicker";
 
 interface GroupProfileModalProps {
   room: RoomPreview;
@@ -30,6 +32,10 @@ export function GroupProfileModal({
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [governance, setGovernance] = useState<Awaited<ReturnType<typeof roomsApi.governance>> | null>(null);
+  const [governanceLoading, setGovernanceLoading] = useState(true);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
 
   const loadMembers = () => {
     const version = ++requestVersion.current;
@@ -61,6 +67,17 @@ export function GroupProfileModal({
     };
   }, [room.id, room.public_id]);
 
+  useEffect(() => {
+    let active = true;
+    setGovernanceLoading(true);
+    setGovernance(null);
+    void roomsApi.governance(roomRef(room) ?? room.id)
+      .then((next) => { if (active) setGovernance(next); })
+      .catch(() => undefined)
+      .finally(() => { if (active) setGovernanceLoading(false); });
+    return () => { active = false; };
+  }, [room.id, room.public_id]);
+
   const filteredMembers = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     if (!normalized) return members;
@@ -72,8 +89,20 @@ export function GroupProfileModal({
   }, [members, query]);
 
   const memberCount = members.length || room.members?.length || 0;
+  const canManage = !governanceLoading && governance !== null && (
+    governance.role === "owner" ||
+    governance.capabilities.some((capability) => ["remove_members", "manage_member_permissions"].includes(capability))
+  );
+  const canAddMember = !governanceLoading && governance !== null && (
+    governance.role === "owner" || governance.capabilities.includes("invite_members")
+  );
+  const actions = [
+    { label: "Search", icon: <Search className="h-4 w-4" aria-hidden="true" />, onClick: onSearchMessages },
+    ...(canManage ? [{ label: "Manage", icon: <Settings2 className="h-4 w-4" aria-hidden="true" />, onClick: () => setManageOpen(true) }] : []),
+  ];
 
   return (
+    <>
     <Dialog
       open
       onClose={onClose}
@@ -102,24 +131,22 @@ export function GroupProfileModal({
               {memberCount} {memberCount === 1 ? "member" : "members"}
             </p>
           </div>
-          <div className="mt-4 flex flex-wrap justify-center gap-2" role="group" aria-label="Group actions">
-            <button
-              type="button"
-              className="flex h-[52px] w-[81px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={onSearchMessages}
-            >
-              <Search className="h-4 w-4" aria-hidden="true" />
-              Search
-            </button>
+          <div className="mt-4 flex flex-wrap justify-center gap-2 gap-[10px]" role="group" aria-label="Group actions">
+            {actions.map((action) => (
+              <button key={action.label} type="button" className="flex h-[52px] w-[81px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={action.onClick}>
+                {action.icon}
+                {action.label}
+              </button>
+            ))}
           </div>
         </section>
 
         <div data-testid="group-profile-section-separator" className="h-2 shrink-0 border-y border-border bg-muted/30" aria-hidden="true" />
         <section className="min-h-0 overflow-y-auto">
           <div className="border-b border-border bg-muted/30 px-[18px] py-3">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <Users className="h-4 w-4" aria-hidden="true" />
-              Members
+            <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="flex items-center gap-2"><Users className="h-4 w-4" aria-hidden="true" /> Members <span className="font-normal normal-case">({memberCount})</span></span>
+              {canAddMember && <IconButton label="Add member" size="compact" onClick={() => setAddMemberOpen(true)}><UserPlus className="h-4 w-4" aria-hidden="true" /></IconButton>}
             </div>
             <div className="relative mt-2">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -164,7 +191,7 @@ export function GroupProfileModal({
                     <p className="truncate text-xs text-muted-foreground">@{member.username}</p>
                   </div>
                   {member.role !== "member" && (
-                    <span className="shrink-0 text-xs capitalize text-muted-foreground">{member.role}</span>
+                    <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium capitalize text-primary" aria-label={`${member.role} role`}>{member.role}</span>
                   )}
                 </li>
               ))}
@@ -173,5 +200,8 @@ export function GroupProfileModal({
         </section>
       </div>
     </Dialog>
+    {manageOpen && <GroupSettingsModal room={room} onClose={() => setManageOpen(false)} />}
+    {addMemberOpen && <GroupMemberPicker roomRef={roomRef(room) ?? room.id} existingMemberIds={new Set(members.map((member) => member.id))} onAdded={loadMembers} onClose={() => setAddMemberOpen(false)} />}
+    </>
   );
 }
