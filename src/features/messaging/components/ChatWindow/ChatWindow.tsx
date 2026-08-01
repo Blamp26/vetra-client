@@ -31,6 +31,7 @@ import {
 } from "@/shared/utils/presence";
 import { Search } from "lucide-react";
 import { useDirectedCallHistoryForChat } from "@/features/messaging/hooks/useDirectedCallHistoryForChat";
+import { ConversationHeaderShell } from "../ConversationPresentation/ConversationHeaderShell";
 
 interface Props {
   activeChat: ActiveChat;
@@ -310,16 +311,7 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
   const renderHeader = () => {
     if (activeChat.type === "direct") {
       if (!partner)
-        return (
-          <div
-            className="flex h-[54px] items-center border-b border-border px-4 text-sm text-muted-foreground"
-            data-testid="chat-header"
-            role="status"
-            aria-live="polite"
-          >
-            Loading...
-          </div>
-        );
+        return <ConversationHeaderShell avatar={null} title="Loading..." subtitle="" actions={null} headerProps={{ role: "status", "aria-live": "polite" }} />;
 
       const resolvedLastSeenAt =
         lastSeenAt[activeChat.partnerId] ?? partner.last_seen_at;
@@ -337,39 +329,16 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
       });
 
       return (
-        <div
-          className="flex h-[54px] items-center justify-between border-b border-border px-4"
-          data-testid="chat-header"
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-3 pr-2">
-            <Avatar
+        <ConversationHeaderShell
+          avatar={<Avatar
               name={partner.display_name || partner.username}
               src={partner.avatar_url}
               size="medium"
               status={currentStatus as any}
-            />
-            <div className="flex min-w-0 flex-col justify-center self-stretch gap-0.5">
-              <h3 className="truncate text-[15px] font-semibold leading-5">
-                {partner.display_name || partner.username}
-              </h3>
-              <p
-                data-testid="chat-header-status"
-                className={cn(
-                  "truncate text-[12px] leading-[14px]",
-                  currentStatus === "online"
-                    ? "text-online"
-                    : currentStatus === "away"
-                      ? "text-away"
-                      : currentStatus === "dnd"
-                        ? "text-busy"
-                        : "text-muted-foreground",
-                )}
-              >
-              {statusLine}
-              </p>
-            </div>
-          </div>
-          <div className="flex h-full shrink-0 items-center" data-testid="chat-header-actions">
+            />}
+          title={partner.display_name || partner.username}
+          subtitle={<span data-testid="chat-header-status" className={cn(currentStatus === "online" ? "text-online" : currentStatus === "away" ? "text-away" : currentStatus === "dnd" ? "text-busy" : "text-muted-foreground")}>{statusLine}</span>}
+          actions={<>
             {call && <CallButton
               targetUserId={
                 partner?.public_id ??
@@ -396,35 +365,26 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
             >
               <Search className="h-[18px] w-[18px]" aria-hidden="true" />
             </IconButton>
-          </div>
-        </div>
+          </>}
+        />
       );
     } else if (activeChat.type === "room") {
       const roomId = activeChat.roomId;
       const roomPreview = roomPreviews[roomId];
       return (
-        <div
-          className="flex h-[54px] items-center justify-between border-b border-border px-4"
-          data-testid="chat-header"
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-3 pr-2">
-            <Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />
-            <div className="flex min-w-0 flex-col justify-center self-stretch gap-0.5">
-              <h3 className="truncate text-[15px] font-semibold leading-5">
-                {roomPreview?.name || `Room #${roomId}`}
-              </h3>
-              <p className="truncate text-[12px] leading-[14px] text-muted-foreground">Group chat</p>
-            </div>
-          </div>
-          <div className="flex h-full shrink-0 items-center" data-testid="chat-header-actions">
+        <ConversationHeaderShell
+          avatar={<Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />}
+          title={roomPreview?.name || `Room #${roomId}`}
+          subtitle="Group chat"
+          actions={
             <IconButton
               label="Search messages"
               onClick={() => setIsSearchOpen(true)}
             >
               <Search className="h-[18px] w-[18px]" aria-hidden="true" />
             </IconButton>
-          </div>
-        </div>
+          }
+        />
       );
     }
     return null;

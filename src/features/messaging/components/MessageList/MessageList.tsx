@@ -63,6 +63,9 @@ import { MediaVisibilityContext } from "@/shared/components/MediaVisibilityConte
 import { GifResolverProvider } from "./GifResolverContext";
 import { DirectedCallHistoryRow } from "./DirectedCallHistoryRow";
 import { mergeMessageAndCallTimeline } from "./directedCallHistoryTimeline";
+import { ConversationTimeline } from "../ConversationPresentation/ConversationTimeline";
+import { ConversationDateSeparator } from "../ConversationPresentation/ConversationDateSeparator";
+import { ConversationMessageGroup } from "../ConversationPresentation/ConversationMessageGroup";
 
 interface Props {
   messages:      Message[];
@@ -1005,60 +1008,28 @@ export function MessageList({
     : "split";
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <>
     <MediaVisibilityContext.Provider value={{ root: mediaVisibilityRoot, revision: mediaVisibilityRevision }}>
     <GifResolverProvider>
-      <div 
-        ref={(element) => {
+      <ConversationTimeline
+        scrollRef={(element) => {
           containerRef.current = element;
           registerMediaVisibilityRoot(element);
         }}
+        railRef={(element) => { contentRef.current = element; }}
+        bottomRef={bottomRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-3 pb-2 pt-4 scrollbar-hide sm:px-4"
-        data-testid="message-list-scroll"
-        data-media-visibility-revision={mediaVisibilityRevision}
+        alignmentMode={alignmentMode}
+        hasContent={timeline.length > 0 || messages.length > 0}
+        hasMore={hasMore}
+        isLoading={isLoading}
+        onLoadMore={handleLoadMore}
+        dataMediaVisibilityRevision={mediaVisibilityRevision}
+        emptyState={<div className="vt-panel mx-auto max-w-md px-5 py-6 text-center"><div className="space-y-1.5"><span className="vt-kicker">No messages yet</span><p className="text-sm text-muted-foreground">Start the conversation with a message or file.</p></div></div>}
       >
-        <div
-          ref={(element) => {
-            contentRef.current = element;
-          }}
-          className={cn(
-            "flex w-full max-w-[900px] flex-col",
-            alignmentMode === "left-column" ? "mr-auto" : "mx-auto",
-          )}
-          data-testid="message-list-rail"
-          data-alignment-mode={alignmentMode}
-        >
-          {hasMore && (
-            <div className="flex justify-center p-2">
-              <button
-                onClick={handleLoadMore}
-                disabled={isLoading}
-                className="vt-button"
-              >
-                {isLoading ? "Loading..." : "Older messages"}
-              </button>
-            </div>
-          )}
-          {timeline.length === 0 && messages.length === 0 && !isLoading && (
-            <div className="vt-panel mx-auto max-w-md px-5 py-6 text-center">
-              <div className="space-y-1.5">
-                <span className="vt-kicker">No messages yet</span>
-                <p className="text-sm text-muted-foreground">
-                  Start the conversation with a message or file.
-                </p>
-              </div>
-            </div>
-          )}
           {groupedTimeline.map(({ date, entries }) => (
             <div key={date} className="w-full" data-testid="message-date-group">
-              <div className="my-3 flex items-center gap-3">
-                <div className="h-px flex-1 bg-border" />
-                <span className="rounded-full border border-border bg-card px-3 py-1 text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
-                  {date}
-                </span>
-                <div className="h-px flex-1 bg-border" />
-              </div>
+              <ConversationDateSeparator date={date} />
               {entries.map((entry, idx) => {
                 if (entry.kind === "call") {
                   return (
@@ -1092,34 +1063,14 @@ export function MessageList({
                   hasAttachment &&
                   prevHasAttachment &&
                   !isAlbumBoundary;
-                const isPlainTextGroup =
-                  isConsecutive && !hasAttachment && !prevHasAttachment;
                 return (
-                  <div
+                  <ConversationMessageGroup
                     key={msg.id}
-                    data-testid="message-row-spacing"
-                    data-attachment-run={isAttachmentRun ? "true" : "false"}
-                    data-grouped-with-previous={
-                      isConsecutive ? "true" : "false"
-                    }
-                    data-grouped-with-next={
-                      isGroupedWithNext ? "true" : "false"
-                    }
-                    className={cn(
-                      idx === 0
-                        ? "mt-0"
-                        : isAlbumBoundary
-                          ? isConsecutive
-                            ? "mt-1.5"
-                            : "mt-2.5"
-                        : isAttachmentRun
-                          ? "mt-0.5"
-                          : isPlainTextGroup
-                              ? "mt-0.5"
-                            : isConsecutive
-                              ? "mt-0.5"
-                            : "mt-2.5",
-                    )}
+                    index={idx}
+                    isConsecutive={isConsecutive}
+                    isAlbumBoundary={isAlbumBoundary}
+                    isAttachmentRun={isAttachmentRun}
+                    isGroupedWithNext={isGroupedWithNext}
                   >
                     <MessageItem
                       ref={(el) => {
@@ -1147,19 +1098,12 @@ export function MessageList({
                       renderReplyPreview={renderReplyPreview}
                       formatTime={formatTime}
                     />
-                  </div>
+                  </ConversationMessageGroup>
                 );
               })}
             </div>
           ))}
-        </div>
-        <div
-          ref={bottomRef}
-          aria-hidden="true"
-          className="h-0 w-full"
-          data-testid="message-list-bottom-anchor"
-        />
-      </div>
+      </ConversationTimeline>
 
     </GifResolverProvider>
     </MediaVisibilityContext.Provider>
@@ -1324,6 +1268,6 @@ export function MessageList({
           onCancel={cancelForwarding}
         />
       )}
-    </div>
+    </>
   );
 }

@@ -73,6 +73,7 @@ import {
   summarizeUnknownShape,
   type AttachmentDebugMeta,
 } from "../../utils/attachmentDebug";
+import { ConversationComposerBar, ConversationComposerShell } from "../ConversationPresentation/ConversationComposerShell";
 
 type AttachmentMenuPlacement = "composer" | "modal";
 
@@ -1739,10 +1740,7 @@ export function MessageInput({
           onSend={handleSend}
         />
       )}
-      <div
-        className="relative flex flex-col border-t border-border bg-[color:var(--vetra-shell-chat-bg,var(--color-card))]"
-        data-testid="message-composer-shell"
-      >
+      <ConversationComposerShell>
         {composerContextMenu && (
           <ComposerContextMenu
             left={composerContextMenu.left}
@@ -1897,10 +1895,7 @@ export function MessageInput({
           </div>
         )}
 
-        <div
-          className="flex min-h-[46px] items-center gap-1 px-2 py-0.5 sm:px-3"
-          data-testid="message-composer-bar"
-        >
+        <ConversationComposerBar>
           <div className="relative shrink-0">
             <button
               type="button"
@@ -2049,8 +2044,8 @@ export function MessageInput({
             <SendHorizonal className="h-[18px] w-[18px]" />
             <span className="sr-only">{isSending ? "Sending..." : "Send"}</span>
           </button>
-        </div>
-      </div>
+        </ConversationComposerBar>
+      </ConversationComposerShell>
     </>
   );
 }

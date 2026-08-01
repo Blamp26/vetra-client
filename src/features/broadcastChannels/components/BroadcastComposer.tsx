@@ -1,18 +1,20 @@
-import { Paperclip, Send } from "lucide-react";
-import { IconButton } from "@/shared/components/IconButton";
-import { Button } from "@/shared/components/Button";
+import { useRef } from "react";
+import { Paperclip, SendHorizonal } from "lucide-react";
+import { ConversationComposerBar, ConversationComposerShell } from "@/features/messaging/components/ConversationPresentation/ConversationComposerShell";
 
 type Props = { value: string; files: File[]; busy: boolean; contentType: string; onChange: (value: string) => void; onFiles: (files: File[]) => void; onType: (value: "text" | "photo" | "video" | "file" | "album") => void; onSubmit: () => void };
 
-export function BroadcastComposer({ value, files, busy, contentType, onChange, onFiles, onType, onSubmit }: Props) {
-  return <form className="border-t border-border bg-background px-4 py-3" onSubmit={(event) => { event.preventDefault(); onSubmit(); }} data-testid="broadcast-composer">
-    <div className="flex items-end gap-2 rounded-xl border border-border bg-card px-2 py-2 shadow-sm focus-within:border-primary">
-      <input id="broadcast-attachments" className="sr-only" type="file" multiple={contentType === "album"} accept={contentType === "photo" ? "image/*" : contentType === "video" ? "video/*" : undefined} onChange={(event) => onFiles(Array.from(event.target.files ?? []))} />
-      <IconButton label="Attach publication media" type="button" size="compact" onClick={() => document.getElementById("broadcast-attachments")?.click()}><Paperclip className="h-4 w-4" aria-hidden="true" /></IconButton>
-      <textarea id="broadcast-draft" value={value} onChange={(event) => onChange(event.target.value)} placeholder="Write a publication" rows={1} className="max-h-32 min-h-8 flex-1 resize-none bg-transparent px-1 py-1 text-sm outline-none" />
-      <select aria-label="Publication type" value={contentType} onChange={(event) => onType(event.target.value as Props["contentType"] & ("text" | "photo" | "video" | "file" | "album"))} className="max-w-20 bg-transparent text-xs text-muted-foreground outline-none"><option value="text">Text</option><option value="photo">Photo</option><option value="video">Video</option><option value="file">File</option><option value="album">Album</option></select>
+export function BroadcastComposer({ value, files, busy, onChange, onFiles, onType, onSubmit }: Props) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return <form onSubmit={(event) => { event.preventDefault(); onSubmit(); }} data-testid="broadcast-composer">
+    <ConversationComposerShell testId="broadcast-composer-shell">
+    <ConversationComposerBar>
+      <button type="button" onClick={() => inputRef.current?.click()} disabled={busy} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-60" aria-label="Attach publication media"><Paperclip className="h-[18px] w-[18px]" /><span className="sr-only">Attach</span></button>
+      <input ref={inputRef} id="broadcast-attachments" className="hidden" type="file" multiple onChange={(event) => { const next = Array.from(event.target.files ?? []); onFiles(next); onType(next.length > 1 ? "album" : next[0]?.type.startsWith("image/") ? "photo" : next[0]?.type.startsWith("video/") ? "video" : next.length ? "file" : "text"); event.currentTarget.value = ""; }} />
+      <textarea id="broadcast-draft" value={value} onChange={(event) => onChange(event.target.value)} placeholder="Write a publication" rows={1} className="min-h-8 max-h-44 flex-1 resize-none border-0 bg-transparent px-1 py-[6px] text-[15px] leading-5 text-foreground shadow-none outline-none placeholder:text-muted-foreground/85" />
       {files.length > 0 && <span className="max-w-24 truncate text-xs text-muted-foreground" title={files.map((file) => file.name).join(", ")}>{files.length} attached</span>}
-      <Button type="submit" disabled={busy || (!value.trim() && files.length === 0)} aria-label="Publish"><Send className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Publish</span></Button>
-    </div>
+      <button type="submit" disabled={busy || (!value.trim() && files.length === 0)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-60" aria-label="Publish"><SendHorizonal className="h-[18px] w-[18px]" /><span className="sr-only">Publish</span></button>
+    </ConversationComposerBar>
+    </ConversationComposerShell>
   </form>;
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getState, useAppStore } from "@/store";
 import { broadcastChannelsApi } from "@/api/broadcastChannels";
 import { storage } from "@/shared/utils/storage";
@@ -13,6 +13,10 @@ import { BroadcastChannelManagementPanel } from "./BroadcastChannelManagementPan
 import { postFormData } from "@/api/base";
 import { BroadcastPublication as BroadcastPublicationView } from "./BroadcastPublication";
 import { BroadcastComposer } from "./BroadcastComposer";
+import { ConversationHeaderShell } from "@/features/messaging/components/ConversationPresentation/ConversationHeaderShell";
+import { ConversationTimeline } from "@/features/messaging/components/ConversationPresentation/ConversationTimeline";
+import { ConversationDateSeparator } from "@/features/messaging/components/ConversationPresentation/ConversationDateSeparator";
+import { ConversationMessageGroup } from "@/features/messaging/components/ConversationPresentation/ConversationMessageGroup";
 
 function draftKey(account: string, channel: string) { return `vetra:broadcast-draft:${account}:${channel}`; }
 
@@ -46,6 +50,7 @@ export function BroadcastChannelWorkspace({ channelPublicId, publicationId }: { 
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [auditRows, setAuditRows] = useState<Array<{ action_type: string; timestamp: string; actor: { display_name: string }; metadata: Record<string, unknown> }>>([]);
   const [auditCursor, setAuditCursor] = useState<string | null>(null);
+  const [wideLayout, setWideLayout] = useState(() => window.innerWidth > 1000);
   const accountKey = currentUser?.public_id ?? currentUser?.username ?? "account";
   const socketManager = useAppStore((s) => s.socketManager);
   const activeChannel = (resolvedChannel ?? channel ?? (resolvedChannelId ? getState().broadcastChannels[resolvedChannelId] : undefined)) as BroadcastChannel | undefined;
@@ -114,6 +119,24 @@ export function BroadcastChannelWorkspace({ channelPublicId, publicationId }: { 
     }
   }, [accountKey, resolvedChannelId]);
 
+  useEffect(() => {
+    const update = () => setWideLayout(window.innerWidth > 1000);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  const groupedPublications = useMemo(() => {
+    const formatDate = (iso: string) => new Date(iso).toLocaleDateString();
+    const groups: Array<{ date: string; items: BroadcastPublication[] }> = [];
+    for (const publication of publications) {
+      const date = formatDate(publication.created_at);
+      const last = groups[groups.length - 1];
+      if (last?.date === date) last.items.push(publication);
+      else groups.push({ date, items: [publication] });
+    }
+    return groups;
+  }, [publications]);
+
   async function subscribe() { if (!resolvedChannelId) return; setBusy(true); try { const state = await broadcastChannelsApi.subscribe(resolvedChannelId); setSubscription(resolvedChannelId, state); } catch {} finally { setBusy(false); } }
   async function markRead() { if (!resolvedChannelId) return; setBusy(true); try { await broadcastChannelsApi.markRead(resolvedChannelId); setUnread(resolvedChannelId, false); setSubscription(resolvedChannelId, { ...getState().broadcastSubscriptions[resolvedChannelId], unread: false }); } catch {} finally { setBusy(false); } }
   async function publish() { if (!resolvedChannelId || (!draft.trim() && selectedFiles.length === 0)) return; setBusy(true); try { const media = []; for (const file of selectedFiles) { const fd = new FormData(); fd.append("file", file); const uploaded = await postFormData<{ media_file_id: string }>("/media", fd); media.push({ media_file_id: uploaded.media_file_id }); } const item = await broadcastChannelsApi.publish(resolvedChannelId, { content_type: selectedFiles.length > 1 ? "album" : contentType, content: draft.trim() || null, display_identity: "channel", ...(media.length > 0 ? { media } : {}) }); setFeed(resolvedChannelId, [item, ...publications], cursor); saveDraft(""); setSelectedFiles([]); } catch {} finally { setBusy(false); } }
@@ -131,20 +154,45 @@ export function BroadcastChannelWorkspace({ channelPublicId, publicationId }: { 
   const subscription = resolvedChannelId ? getState().broadcastSubscriptions[resolvedChannelId] : undefined;
 
   return <section className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--vetra-shell-chat-bg)]" aria-label="Broadcast channel">
-    <header className="flex h-[54px] shrink-0 items-center justify-between border-b border-border px-4" data-testid="broadcast-channel-header">
-      <div className="flex min-w-0 flex-1 items-center gap-3 pr-2"><Avatar name={activeChannel.display_name} src={activeChannel.avatar_url} size="medium" /><div className="flex min-w-0 flex-col justify-center gap-0.5"><h1 className="truncate text-[15px] font-semibold leading-5">{activeChannel.display_name}</h1><p className="truncate text-[12px] leading-[14px] text-muted-foreground">{activeChannel.username ? `@${activeChannel.username}` : "Private channel"} · {activeChannel.subscriber_count} subscribers</p></div></div>
-      <div className="flex h-full shrink-0 items-center gap-1" data-testid="broadcast-channel-actions">
+    <ConversationHeaderShell
+      testId="broadcast-channel-header"
+      avatar={<Avatar name={activeChannel.display_name} src={activeChannel.avatar_url} size="medium" />}
+      title={activeChannel.display_name}
+      subtitle={`${activeChannel.username ? `@${activeChannel.username}` : "Private channel"} · ${activeChannel.subscriber_count} subscribers`}
+      actions={<>
         {activeChannel.visibility === "public" && !subscription && <Button size="compact" onClick={() => void subscribe()} disabled={busy}>Subscribe</Button>}
         {subscription && <IconButton label="Mark channel read" size="compact" onClick={() => void markRead()} disabled={busy}>✓</IconButton>}
         {canManage && <IconButton label="Manage channel" size="compact" onClick={() => setManagement(true)}><MoreHorizontal className="h-[18px] w-[18px]" aria-hidden="true" /></IconButton>}
         {canManage && <IconButton label="Open audit history" size="compact" onClick={() => void loadAudit()}><ClipboardList className="h-4 w-4" aria-hidden="true" /></IconButton>}
-      </div>
-    </header>
+      </>}
+    />
     {activeChannel.status === "frozen" && <div className="border-b border-border bg-muted px-5 py-2 text-sm" role="status">This channel is frozen and read-only.</div>}
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.26),transparent_12%)] py-3">
-      {publications.length === 0 ? <EmptyPane title="No publications yet" description="New channel updates will appear here." density="compact" /> : <div>{publications.map((publication) => <BroadcastPublicationView key={publication.public_id} channel={activeChannel} publication={publication} canPin={Boolean(canPin)} canEdit={Boolean(canManage || (governance?.capabilities?.includes("edit_others_publications") && publication.display_identity === "author_profile") || (publication.author.public_id === currentUser?.public_id && governance?.capabilities?.includes("edit_others_publications")))} canDelete={Boolean(canManage || (governance?.capabilities?.includes("delete_others_publications") && publication.display_identity === "author_profile") || publication.author.public_id === currentUser?.public_id)} pinned={pinnedIds.has(publication.public_id)} busy={busy} onReaction={(reaction) => void toggleReaction(publication, reaction)} onShare={() => { void navigator.clipboard?.writeText(`${window.location.origin}/#/broadcast/${activeChannel.public_id}/${publication.public_id}`); }} onForward={() => setForwarding(publication.public_id)} onPin={() => void pinPublication(publication.public_id, pinnedIds.has(publication.public_id))} onEdit={() => void editPublication(publication)} onDelete={() => void deletePublication(publication.public_id)} onOpen={() => { window.location.hash = `#/broadcast/${activeChannel.public_id}/${publication.public_id}`; }} />)}</div>}
-      {cursor && <div className="py-4 text-center"><Button variant="secondary" onClick={() => void loadMore()}>Load older publications</Button></div>}
-    </div>
+    <ConversationTimeline
+      alignmentMode={wideLayout ? "left-column" : "split"}
+      hasContent={groupedPublications.length > 0}
+      emptyState={<div className="vt-panel mx-auto max-w-md px-5 py-6 text-center"><div className="space-y-1.5"><span className="vt-kicker">No publications yet</span><p className="text-sm text-muted-foreground">New channel updates will appear here.</p></div></div>}
+      hasMore={Boolean(cursor)}
+      isLoading={busy}
+      onLoadMore={() => void loadMore()}
+      loadMoreLabel="Older publications"
+      scrollTestId="broadcast-message-list-scroll"
+      railTestId="broadcast-message-list-rail"
+    >
+          {groupedPublications.map(({ date, items }) => <div key={date} className="w-full" data-testid="message-date-group">
+            <ConversationDateSeparator date={date} />
+            {items.map((publication, index) => {
+              const previous = items[index - 1];
+              const next = items[index + 1];
+              const isConsecutive = Boolean(previous && (previous.author.public_id ?? previous.author.display_name) === (publication.author.public_id ?? publication.author.display_name));
+              const isGroupedWithNext = Boolean(next && (next.author.public_id ?? next.author.display_name) === (publication.author.public_id ?? publication.author.display_name));
+              const hasMedia = publication.media.length > 0;
+              const previousHasMedia = Boolean(previous?.media.length);
+              return <ConversationMessageGroup key={publication.public_id} index={index} isConsecutive={isConsecutive} isGroupedWithNext={isGroupedWithNext} isAlbumBoundary={hasMedia || previousHasMedia} isAttachmentRun={isConsecutive && hasMedia && previousHasMedia}>
+                <BroadcastPublicationView channel={activeChannel} publication={publication} isConsecutive={isConsecutive} isGroupedWithNext={isGroupedWithNext} alignmentMode={wideLayout ? "left-column" : "split"} canPin={Boolean(canPin)} canEdit={Boolean(canManage || (governance?.capabilities?.includes("edit_others_publications") && publication.display_identity === "author_profile") || (publication.author.public_id === currentUser?.public_id && governance?.capabilities?.includes("edit_others_publications")))} canDelete={Boolean(canManage || (governance?.capabilities?.includes("delete_others_publications") && publication.display_identity === "author_profile") || publication.author.public_id === currentUser?.public_id)} pinned={pinnedIds.has(publication.public_id)} busy={busy} onReaction={(reaction) => void toggleReaction(publication, reaction)} onShare={() => { void navigator.clipboard?.writeText(`${window.location.origin}/#/broadcast/${activeChannel.public_id}/${publication.public_id}`); }} onForward={() => setForwarding(publication.public_id)} onPin={() => void pinPublication(publication.public_id, pinnedIds.has(publication.public_id))} onEdit={() => void editPublication(publication)} onDelete={() => void deletePublication(publication.public_id)} onOpen={() => { window.location.hash = `#/broadcast/${activeChannel.public_id}/${publication.public_id}`; }} />
+              </ConversationMessageGroup>;
+            })}
+          </div>)}
+    </ConversationTimeline>
     {canPublish && <BroadcastComposer value={draft} files={selectedFiles} busy={busy} contentType={contentType} onChange={saveDraft} onFiles={setSelectedFiles} onType={setContentType} onSubmit={() => void publish()} />}
     {management && <BroadcastChannelManagementPanel channelId={activeChannel.public_id} channelVisibility={activeChannel.visibility} description={activeChannel.description} avatarUrl={activeChannel.avatar_url} onClose={() => setManagement(false)} onRefresh={refreshChannel} />}
     {forwarding && <div role="dialog" aria-label="Forward publication" className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-sm rounded-lg bg-background p-4"><h2 className="mb-3 font-semibold">Forward publication</h2><select aria-label="Forward destination type" value={forwardType} onChange={(event) => setForwardType(event.target.value as typeof forwardType)} className="mb-2 w-full rounded border border-border bg-background p-2"><option value="direct_chat">Direct chat</option><option value="group">Standalone group</option><option value="server_text">Server text channel</option></select><input aria-label="Forward destination" value={forwardDestination} onChange={(event) => setForwardDestination(event.target.value)} placeholder="Destination public ID" className="mb-3 w-full rounded border border-border bg-background p-2" /><div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setForwarding(null)}>Cancel</Button><Button disabled={busy || !forwardDestination} onClick={() => void forwardPublication()}>Forward</Button></div></div></div>}
