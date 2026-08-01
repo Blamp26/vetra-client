@@ -14,6 +14,43 @@ describe("broadcast channel API contracts", () => {
     expect(get).toHaveBeenCalledWith("/broadcast-channels/a14e6268-ad65-452e-8cdf-80cb691458ac");
   });
 
+  it("normalizes subscribed summary identifiers to public_id", async () => {
+    vi.mocked(get).mockResolvedValueOnce([
+      {
+        channel_public_id: "a14e6268-ad65-452e-8cdf-80cb691458ac",
+        display_name: "TestBroadcast",
+        description: null,
+        avatar_url: null,
+        visibility: "public",
+      },
+    ]);
+
+    await expect(broadcastChannelsApi.subscribed()).resolves.toEqual([
+      {
+        public_id: "a14e6268-ad65-452e-8cdf-80cb691458ac",
+        display_name: "TestBroadcast",
+        description: null,
+        avatar_url: null,
+        visibility: "public",
+      },
+    ]);
+  });
+
+  it("preserves full profiles that already use public_id", async () => {
+    const profile = {
+      public_id: "a14e6268-ad65-452e-8cdf-80cb691458ac",
+      display_name: "TestBroadcast",
+      description: null,
+      avatar_url: null,
+      visibility: "public" as const,
+      status: "active" as const,
+      subscriber_count: 1,
+    };
+    vi.mocked(get).mockResolvedValueOnce(profile);
+
+    await expect(broadcastChannelsApi.get(profile.public_id)).resolves.toEqual(profile);
+  });
+
   it("uses immutable identifiers for audit and settings", async () => {
     vi.mocked(get).mockResolvedValueOnce({ events: [], next_cursor: null });
     await broadcastChannelsApi.audit("channel-public", "opaque-cursor");

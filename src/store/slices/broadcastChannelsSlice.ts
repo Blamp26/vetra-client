@@ -1,14 +1,14 @@
 import type { StateCreator } from "zustand";
-import type { BroadcastChannel, BroadcastPublication, BroadcastSubscription } from "@/features/broadcastChannels/types";
+import type { BroadcastChannel, BroadcastChannelSummary, BroadcastPublication, BroadcastSubscription } from "@/features/broadcastChannels/types";
 
 export interface BroadcastChannelsSlice {
-  broadcastChannels: Record<string, BroadcastChannel>;
+  broadcastChannels: Record<string, BroadcastChannelSummary>;
   broadcastSubscriptions: Record<string, BroadcastSubscription>;
   broadcastPublications: Record<string, BroadcastPublication[]>;
   broadcastCursors: Record<string, string | null>;
   broadcastUnread: Record<string, boolean>;
   setBroadcastChannel: (channel: BroadcastChannel) => void;
-  setBroadcastSubscriptions: (channels: BroadcastChannel[]) => void;
+  setBroadcastSubscriptions: (channels: BroadcastChannelSummary[]) => void;
   setBroadcastSubscription: (id: string, state: BroadcastSubscription) => void;
   setBroadcastFeed: (id: string, publications: BroadcastPublication[], cursor: string | null, append?: boolean) => void;
   setBroadcastUnread: (id: string, unread: boolean) => void;

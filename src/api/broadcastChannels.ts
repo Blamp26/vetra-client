@@ -1,5 +1,5 @@
 import { del, get, post, put } from "@/api/base";
-import type { BroadcastAdmin, BroadcastAuditEvent, BroadcastChannel, BroadcastGovernanceState, BroadcastInvite, BroadcastJoinRequest, BroadcastOwnershipState, BroadcastPublication, BroadcastSubscriber, BroadcastSubscription } from "@/features/broadcastChannels/types";
+import type { BroadcastAdmin, BroadcastAuditEvent, BroadcastChannel, BroadcastChannelSummary, BroadcastGovernanceState, BroadcastInvite, BroadcastJoinRequest, BroadcastOwnershipState, BroadcastPublication, BroadcastSubscriber, BroadcastSubscription, SubscribedBroadcastChannelResponse } from "@/features/broadcastChannels/types";
 
 export interface BroadcastFeed { channel: BroadcastChannel; publications: BroadcastPublication[]; next_cursor: string | null; }
 export interface BroadcastAuditPage { events: BroadcastAuditEvent[]; next_cursor: string | null; }
@@ -9,7 +9,13 @@ export const broadcastChannelsApi = {
   get: (id: string) => get<BroadcastChannel>(`/broadcast-channels/${encodeURIComponent(id)}`),
   resolveUsername: (username: string) => get<BroadcastChannel>(`/broadcast-channels/by-username/${encodeURIComponent(username)}`),
   search: (query: string) => get<BroadcastChannel[]>(`/broadcast-channels/search?q=${encodeURIComponent(query)}`),
-  subscribed: () => get<BroadcastChannel[]>("/broadcast-channels/subscribed"),
+  subscribed: async (): Promise<BroadcastChannelSummary[]> => {
+    const channels = await get<SubscribedBroadcastChannelResponse[]>("/broadcast-channels/subscribed");
+    return channels.map(({ channel_public_id, ...channel }) => ({
+      ...channel,
+      public_id: channel_public_id,
+    }));
+  },
   settings: (id: string, body: Record<string, unknown>) => put<BroadcastChannel>(`/broadcast-channels/${encodeURIComponent(id)}/settings`, body),
   feed: (id: string, cursor?: string | null) => get<BroadcastFeed>(`/broadcast-channels/${encodeURIComponent(id)}/publications${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
   publication: (id: string, publicationId: string) => get<BroadcastPublication>(`/broadcast-channels/${encodeURIComponent(id)}/publications/${encodeURIComponent(publicationId)}`),

@@ -169,6 +169,41 @@ describe("Sidebar attachment previews", () => {
     window.history.replaceState(null, "", "/");
   });
 
+  it("renders distinct stable keys and navigates exact production subscribed summaries", async () => {
+    const state = makeState();
+    state.broadcastChannels = {
+      "a14e6268-ad65-452e-8cdf-80cb691458ac": {
+        public_id: "a14e6268-ad65-452e-8cdf-80cb691458ac",
+        display_name: "TestBroadcast",
+        description: null,
+        avatar_url: null,
+        visibility: "public",
+      },
+      "b25f7379-be76-563f-9ef1-91dc792569bd": {
+        public_id: "b25f7379-be76-563f-9ef1-91dc792569bd",
+        display_name: "SecondBroadcast",
+        description: null,
+        avatar_url: null,
+        visibility: "public",
+      },
+    } as any;
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    render(<Sidebar />);
+
+    const first = await screen.findByTestId("sidebar-item-broadcast-a14e6268-ad65-452e-8cdf-80cb691458ac");
+    const second = await screen.findByTestId("sidebar-item-broadcast-b25f7379-be76-563f-9ef1-91dc792569bd");
+    expect(first).toHaveTextContent("TestBroadcast");
+    expect(second).toHaveTextContent("SecondBroadcast");
+
+    fireEvent.click(first);
+    expect(window.location.hash).toBe("#/broadcast/a14e6268-ad65-452e-8cdf-80cb691458ac");
+    expect(window.location.hash).not.toContain("undefined");
+    window.history.replaceState(null, "", "/");
+  });
+
   it("uses server-provided preview text for direct and room items", async () => {
     const state = makeState();
 

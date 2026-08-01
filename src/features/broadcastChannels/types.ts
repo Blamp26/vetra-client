@@ -7,18 +7,31 @@ export type BroadcastCapability =
   | "view_subscribers"
   | "ban_users";
 
-export interface BroadcastChannel {
+export interface BroadcastChannelSummary {
   public_id: string;
   display_name: string;
   description?: string | null;
   avatar_url?: string | null;
   username?: string | null;
   visibility: BroadcastVisibility;
-  status: "active" | "frozen";
-  subscriber_count: number;
+  status?: "active" | "frozen";
+  subscriber_count?: number;
   realtime_topic?: string;
   content_protection_enabled?: boolean;
   allowed_reactions?: string[];
+}
+
+export interface BroadcastChannel extends BroadcastChannelSummary {
+  status: "active" | "frozen";
+  subscriber_count: number;
+}
+
+export interface SubscribedBroadcastChannelResponse {
+  channel_public_id: string;
+  display_name: string;
+  description: string | null;
+  avatar_url: string | null;
+  visibility: BroadcastVisibility;
 }
 
 export interface BroadcastPublication {
