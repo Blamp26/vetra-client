@@ -283,6 +283,26 @@ describe("useUnifiedMessages", () => {
     });
   });
 
+  it("treats explicit server-channel context as server-backed without a room preview", () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    renderHook(() =>
+      useUnifiedMessages({
+        type: "room",
+        roomId: 9,
+        roomRef: "channel-public-id",
+        isServerChannel: true,
+        serverId: 5,
+      }),
+    );
+
+    expect(state.resetChannelUnread).toHaveBeenCalledWith(9);
+    expect(state.resetRoomUnread).not.toHaveBeenCalled();
+  });
+
   it("updates the room preview immediately for a photo-only sent message", async () => {
     const state = makeState();
     const sentMessage = {

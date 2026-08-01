@@ -14,6 +14,49 @@ describe("conversation presentation primitives", () => {
     expect(screen.getByTestId("chat-header-actions").textContent).toContain("Action");
   });
 
+  it("keeps header identity layers mounted while exposing only the active layer", () => {
+    const { rerender } = render(
+      <ConversationHeaderShell
+        avatar={null}
+        title=""
+        subtitle=""
+        actions={<button type="button">Action</button>}
+        identityLayers={(
+          <div data-testid="identity-layers">
+            <div data-identity-layer="direct" data-active="true" aria-hidden="false">Direct</div>
+            <div data-identity-layer="server-channel" data-active="false" aria-hidden="true">Server</div>
+          </div>
+        )}
+      />,
+    );
+
+    const header = screen.getByTestId("chat-header");
+    const direct = screen.getByTestId("identity-layers").querySelector('[data-identity-layer="direct"]');
+    const server = screen.getByTestId("identity-layers").querySelector('[data-identity-layer="server-channel"]');
+    expect(header.className).toContain("h-[54px]");
+    expect(direct?.getAttribute("aria-hidden")).toBe("false");
+    expect(server?.getAttribute("aria-hidden")).toBe("true");
+
+    rerender(
+      <ConversationHeaderShell
+        avatar={null}
+        title=""
+        subtitle=""
+        actions={<button type="button">Action</button>}
+        identityLayers={(
+          <div data-testid="identity-layers">
+            <div data-identity-layer="direct" data-active="false" aria-hidden="true">Direct</div>
+            <div data-identity-layer="server-channel" data-active="true" aria-hidden="false">Server</div>
+          </div>
+        )}
+      />,
+    );
+
+    expect(screen.getByTestId("chat-header")).toBe(header);
+    expect(screen.getByTestId("identity-layers").querySelector('[data-identity-layer="direct"]')?.getAttribute("aria-hidden")).toBe("true");
+    expect(screen.getByTestId("identity-layers").querySelector('[data-identity-layer="server-channel"]')?.getAttribute("aria-hidden")).toBe("false");
+  });
+
   it("provides the shared timeline, date, and grouping geometry", () => {
     render(<ConversationTimeline alignmentMode="left-column" hasContent emptyState={<span>empty</span>}><ConversationDateSeparator date="Today" /><ConversationMessageGroup index={0} isConsecutive={false} isAlbumBoundary={false} isAttachmentRun={false}><span>message</span></ConversationMessageGroup></ConversationTimeline>);
     expect(screen.getByTestId("message-list-scroll").className).toContain("px-3");

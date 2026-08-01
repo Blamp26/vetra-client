@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAppStore, type RootState } from "@/store";
 import { UserSearch } from "../UserSearch/UserSearch";
 import { CreateRoomModal } from "../CreateRoomModal/CreateRoomModal";
@@ -32,6 +32,7 @@ import { CreateBroadcastChannelModal } from "@/features/broadcastChannels/compon
 interface SidebarProps {
   isServerMode?: boolean;
   isCollapsed?: boolean;
+  serverPanel?: ReactNode;
   activeBroadcastChannelPublicId?: string | null;
   onNavigateToHash?: (nextHash: string) => void;
 }
@@ -60,6 +61,7 @@ type SidebarItem =
 export function Sidebar({
   isServerMode = false,
   isCollapsed = false,
+  serverPanel = null,
   activeBroadcastChannelPublicId = null,
   onNavigateToHash,
 }: SidebarProps) {
@@ -83,6 +85,37 @@ export function Sidebar({
 
   const [showProfile, setShowProfile] = useState(false);
   const [settingsRoom, setSettingsRoom] = useState<RoomPreview | null>(null);
+  const serverPanelRef = useRef<HTMLDivElement | null>(null);
+  const focusRestoreRef = useRef<HTMLElement | null>(null);
+  const previousServerModeRef = useRef(isServerMode);
+  const [overlayOpen, setOverlayOpen] = useState(isServerMode);
+  const [overlayA11yHidden, setOverlayA11yHidden] = useState(!isServerMode);
+
+  useLayoutEffect(() => {
+    const panel = serverPanelRef.current;
+    if (!panel) return;
+    if (isServerMode) {
+      setOverlayA11yHidden(false);
+      panel.removeAttribute("inert");
+      setOverlayOpen(true);
+    } else {
+      if (previousServerModeRef.current && panel.contains(document.activeElement)) {
+        const preferredTarget = focusRestoreRef.current;
+        const fallbackTarget =
+          document.querySelector<HTMLElement>('[data-testid^="sidebar-item-"]') ??
+          document.querySelector<HTMLElement>('[data-testid="user-search"]');
+        const target = preferredTarget?.isConnected ? preferredTarget : fallbackTarget;
+        target?.focus({ preventScroll: true });
+        if (panel.contains(document.activeElement)) {
+          (document.activeElement as HTMLElement).blur();
+        }
+      }
+      setOverlayA11yHidden(true);
+      panel.setAttribute("inert", "");
+      setOverlayOpen(false);
+    }
+    previousServerModeRef.current = isServerMode;
+  }, [isServerMode]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -166,7 +199,8 @@ export function Sidebar({
     return false;
   };
 
-  const navigateToChat = (chat: ActiveChat) => {
+  const navigateToChat = (chat: ActiveChat, initiator?: HTMLElement) => {
+    if (initiator) focusRestoreRef.current = initiator;
     onNavigateToHash?.(
       buildHashForActiveChat(chat, {
         activeChat,
@@ -181,19 +215,19 @@ export function Sidebar({
     setActiveChat(chat);
   };
 
-  const handleItemClick = (item: SidebarItem) => {
+  const handleItemClick = (item: SidebarItem, initiator?: HTMLElement) => {
     if (item.kind === "direct") {
       navigateToChat({
         type: "direct",
         partnerId: item.id,
         partnerRef: conversationPreviews[item.id]?.partner_public_id ?? item.id,
-      });
+      }, initiator);
     } else {
       const roomPreview = roomPreviews[item.id];
       if (roomPreview) {
-        navigateToChat(roomChatForPreview(roomPreview));
+        navigateToChat(roomChatForPreview(roomPreview), initiator);
       } else {
-        navigateToChat({ type: "room", roomId: item.id });
+        navigateToChat({ type: "room", roomId: item.id }, initiator);
       }
     }
   };
@@ -213,10 +247,9 @@ export function Sidebar({
     <div
       className={cn(
         "flex h-full w-full flex-col bg-[var(--vetra-shell-sidebar-bg)]",
-        isServerMode && "w-[72px]",
       )}
     >
-      {!isServerMode && !isCollapsed && (
+      {!isCollapsed && (
         <div className="h-[54px] px-[11px] pt-[9px]">
           <UserSearch />
         </div>
@@ -224,11 +257,11 @@ export function Sidebar({
 
       <div
         className={cn(
-          "flex-1 overflow-y-auto",
-          !isServerMode && !isCollapsed ? "py-1" : "px-3 py-3",
+          "relative flex min-h-0 flex-1",
         )}
       >
-        {!hasListContent && !isServerMode ? (
+        <div className={cn("min-h-0 flex-1 overflow-y-auto", !isCollapsed && "py-1")}>
+        {!hasListContent ? (
           <EmptyPane
             title="No conversations"
             description={
@@ -246,56 +279,53 @@ export function Sidebar({
             )}
           />
         ) : (
-          <div
-            className={isServerMode || isCollapsed ? "space-y-1.5" : undefined}
-          >
-            {!isServerMode &&
-              Object.values(broadcastChannels).map((channel) => {
+          <div>
+            {Object.values(broadcastChannels).map((channel) => {
                 const active = activeBroadcastChannelPublicId === channel.public_id;
-                return <button key={channel.public_id} type="button" onClick={() => onNavigateToHash?.(`#/broadcast/${channel.public_id}`)} className={listRowClass(active, isCollapsed)} data-testid={`sidebar-item-broadcast-${channel.public_id}`} data-state={active ? "active" : "inactive"} title={channel.display_name}>
+                return <button key={channel.public_id} type="button" onClick={(event) => { focusRestoreRef.current = event.currentTarget; onNavigateToHash?.(`#/broadcast/${channel.public_id}`); }} className={listRowClass(active, isCollapsed)} data-testid={`sidebar-item-broadcast-${channel.public_id}`} data-state={active ? "active" : "inactive"} aria-label={isServerMode ? channel.display_name : undefined} title={channel.display_name}>
                   <Avatar name={channel.display_name} size="medium" />
-                  {!isCollapsed && <span className="min-w-0 flex-1 truncate text-sm font-medium">{channel.display_name}</span>}
+                  {!isCollapsed && <span className="min-w-0 flex-1 truncate text-sm font-medium" aria-hidden={isServerMode}>{channel.display_name}</span>}
                 </button>;
-              })}
-            {!isServerMode &&
-              serverList.map((server) => {
+            })}
+            {serverList.map((server) => {
                 const isActive = isServerActive(server.id);
                 return (
                   <button
                     key={server.id}
-                    onClick={() => navigateToChat(serverChatForServer(server))}
+                    onClick={(event) => navigateToChat(serverChatForServer(server), event.currentTarget)}
                     className={listRowClass(isActive, isCollapsed)}
                     data-testid={`sidebar-item-server-${server.id}`}
                     data-state={isActive ? "active" : "inactive"}
+                    aria-label={isServerMode ? server.name : undefined}
                     title={server.name}
                   >
-                    <Avatar
-                      name={server.name}
-                      size="medium"
-                      className={
-                        isCollapsed ? undefined : "h-[46px] w-[46px] text-base"
-                      }
-                    />
+                    <span className={cn("vt-server-avatar-cell", isCollapsed && "is-collapsed", isActive && "is-active")}>
+                      <Avatar
+                        name={server.name}
+                        size="medium"
+                        className={
+                          isCollapsed ? undefined : "h-[46px] w-[46px] text-base"
+                        }
+                      />
+                    </span>
                     {!isCollapsed && (
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium" aria-hidden={isServerMode}>
                         {server.name}
                       </span>
                     )}
                   </button>
                 );
-              })}
+            })}
             {allItems.map((item) => {
               const isActive = isItemActive(item);
               return (
                 <div className="group relative" key={`${item.kind}-${item.id}`}>
                   <button
-                    onClick={() => handleItemClick(item)}
-                    className={listRowClass(
-                      isActive,
-                      isServerMode || isCollapsed,
-                    )}
+                    onClick={(event) => handleItemClick(item, event.currentTarget)}
+                    className={listRowClass(isActive, isCollapsed)}
                     data-testid={`sidebar-item-${item.kind}-${item.id}`}
                     data-state={isActive ? "active" : "inactive"}
+                    aria-label={isServerMode ? item.name : undefined}
                     data-presence-status={
                       item.kind === "direct"
                         ? (item.status ?? "offline")
@@ -313,9 +343,7 @@ export function Sidebar({
                       name={item.name}
                       size="medium"
                       className={
-                        isServerMode || isCollapsed
-                          ? undefined
-                          : "h-[46px] w-[46px] text-base"
+                        isCollapsed ? undefined : "h-[46px] w-[46px] text-base"
                       }
                       status={
                         item.kind === "direct"
@@ -324,8 +352,11 @@ export function Sidebar({
                           : null
                       }
                     />
-                    {!isCollapsed && !isServerMode && (
-                      <div className="relative h-full min-w-0 flex-1">
+                    {!isCollapsed && (
+                      <div
+                        className="relative h-full min-w-0 flex-1"
+                        aria-hidden={isServerMode}
+                      >
                         <span className="absolute left-0 right-12 top-[14px] truncate text-sm font-medium">
                           {item.name}
                         </span>
@@ -377,6 +408,16 @@ export function Sidebar({
             })}
           </div>
         )}
+        </div>
+
+        <div
+          ref={serverPanelRef}
+          className="vt-channel-panel-overlay"
+          data-state={overlayOpen ? "open" : "closed"}
+          aria-hidden={overlayA11yHidden}
+        >
+          {serverPanel}
+        </div>
       </div>
 
       {activeModal === "CREATE_ROOM" && (

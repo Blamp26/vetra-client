@@ -58,6 +58,7 @@ interface MessageItemProps {
   isHighlighted?: boolean;
   selectionMode: boolean;
   isRoom: boolean;
+  serverFeed?: boolean;
   messageReactions: MessageReactionGroup[];
   currentUserId: number;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, msg: Message) => void;
@@ -268,6 +269,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   isHighlighted = false,
   selectionMode,
   isRoom,
+  serverFeed = false,
   messageReactions,
   onContextMenu,
   onToggleSelection,
@@ -465,7 +467,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
     hasPendingDecodedVisualDimensions ||
     !hasCompleteAlbumLayout(photoLayout, resolvedVisualAttachments.length);
   const isOwnLeftColumn = isOwn && alignmentMode === "left-column";
-  const showSenderName = isRoom && !isOwn && !isConsecutive;
+  const showSenderName =
+    (isRoom && !isOwn && !isConsecutive) ||
+    (serverFeed && !isConsecutive);
     const hasContentAboveMedia =
       Boolean(forwardedSource) || Boolean(msg.reply_to_id) || showSenderName;
   const metadataClassName = isOwn
@@ -1458,6 +1462,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
       data-testid="message-bubble-row"
       data-own-message={isOwn ? "true" : "false"}
       data-alignment-mode={alignmentMode}
+      data-server-feed={serverFeed ? "true" : "false"}
       onClick={() => selectionMode && onToggleSelection(msg.id)}
     >
       {selectionMode && (
@@ -1465,6 +1470,16 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           <input type="checkbox" checked={isSelected} readOnly />
         </div>
       )}
+      {serverFeed && !isConsecutive && (
+        <Avatar
+          name={authorName}
+          src={msg.sender?.avatar_url ?? undefined}
+          size="small"
+          className="mt-1 h-6 w-6"
+          title={authorName}
+        />
+      )}
+      {serverFeed && isConsecutive && <span aria-hidden="true" className="h-6 w-6 shrink-0" />}
       <div
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(

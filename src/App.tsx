@@ -693,14 +693,6 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
   const persistedServerId = lastServerIdRef.current;
 
   const chatTarget = useMemo(() => {
-    if (activeChat?.type === "channel") {
-      return {
-        type: "room" as const,
-        roomId: activeChat.channelId,
-        roomRef: activeChat.channelRef,
-      };
-    }
-
     if (activeChat?.type === "server") {
       return null;
     }
@@ -784,15 +776,14 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
           <div className="flex flex-1 overflow-hidden">
             <Sidebar
               isServerMode={showChannelPanel}
+              serverPanel={
+                persistedServerId !== null ? (
+                  <ChannelPanel serverId={persistedServerId} />
+                ) : null
+              }
               activeBroadcastChannelPublicId={activeBroadcastChannelPublicId}
               onNavigateToHash={navigateToHash}
             />
-
-            {showChannelPanel && persistedServerId !== null && (
-              <div className="w-[320px] border-l border-border bg-[var(--vetra-shell-chat-bg)]">
-                <ChannelPanel serverId={persistedServerId} />
-              </div>
-            )}
           </div>
 
           <SidebarFooter

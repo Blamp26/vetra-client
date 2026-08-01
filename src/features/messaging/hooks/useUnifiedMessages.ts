@@ -18,7 +18,13 @@ import type { MessageTextEntity } from "@/shared/types";
 
 export type ChatContext =
   | { type: "direct"; partnerId: number; partnerRef?: string | number }
-  | { type: "room"; roomId: number; roomRef?: string | number };
+  | {
+      type: "room";
+      roomId: number;
+      roomRef?: string | number;
+      isServerChannel?: boolean;
+      serverId?: number;
+    };
 
 /**
  * Unified hook for handling both direct messages and room messages.
@@ -101,7 +107,11 @@ export function useUnifiedMessages(context: ChatContext | null) {
   const roomPreviewPublicId =
     roomId !== null ? roomPreviews[roomId]?.public_id : undefined;
   const roomIsServer =
-    roomId !== null ? roomPreviews[roomId]?.server_id != null : false;
+    context?.type === "room" && context.isServerChannel === true
+      ? true
+      : roomId !== null
+        ? roomPreviews[roomId]?.server_id != null
+        : false;
 
   const directTargetRef = useMemo(
     () =>

@@ -76,7 +76,13 @@ interface Props {
   onLoadMore:    () => void;
   chatContext:
     | { type: "direct"; partnerId: number; partnerRef?: string | number }
-    | { type: "room";   roomId: number; roomRef?: string | number };
+    | {
+        type: "room";
+        roomId: number;
+        roomRef?: string | number;
+        isServerChannel?: boolean;
+        serverId?: number;
+      };
   onReply?: (target: { id: number; content: string; author: string }) => void;
   onOpenStickerPack?: (packId: string, stickerId: string) => void;
   directedCallHistoryEntries?: DirectedCallHistoryEntry[];
@@ -1002,8 +1008,8 @@ export function MessageList({
     return groups;
   }, [timeline]);
 
-  const alignmentMode =
-    chatViewportWidth > WIDE_CHAT_LEFT_COLUMN_THRESHOLD
+  const isServerFeed = chatContext.type === "room" && chatContext.isServerChannel === true;
+  const alignmentMode = isServerFeed || chatViewportWidth > WIDE_CHAT_LEFT_COLUMN_THRESHOLD
     ? "left-column"
     : "split";
 
@@ -1085,6 +1091,7 @@ export function MessageList({
                       isHighlighted={highlightedMessageId === msg.id}
                       selectionMode={selectionMode}
                       isRoom={chatContext.type === "room"}
+                      serverFeed={chatContext.type === "room" && chatContext.isServerChannel === true}
                       messageReactions={
                         messageReactions[msg.id] || msg.reactions || []
                       }

@@ -98,6 +98,8 @@ function makeState() {
     typingPartnerIds: new Set<number>(),
     roomPreviews: {},
     conversationPreviews: {},
+    servers: {} as Record<number, any>,
+    serverChannels: {} as Record<number, any>,
     typingRoomMemberIds: new Set<number>(),
     typingRoomMemberInfo: {},
   };
@@ -468,6 +470,65 @@ describe("ChatWindow presence rendering", () => {
     );
     expect(headerClasses.some((classes) => classes.includes("pt-2"))).toBe(false);
     expect(headerClasses.some((classes) => classes.includes("mt-[4px]"))).toBe(false);
+  });
+
+  it("keeps ChatWindow header identity layers stable across direct and server-channel contexts", async () => {
+    const state = makeState();
+    state.servers = {
+      6: { id: 6, name: "Project Server", owner_id: 1 },
+    };
+    state.serverChannels = {
+      6: [{ id: 5, name: "general" }],
+    };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+    getUser.mockResolvedValue({
+      id: 2,
+      public_id: "22222222-2222-4222-8222-222222222222",
+      username: "alice",
+      display_name: "Alice",
+      avatar_url: null,
+      status: "online",
+      last_seen_at: null,
+    });
+
+    const { rerender } = render(
+      <ChatWindow activeChat={{ type: "direct", partnerId: 2 }} call={makeCall()} />,
+    );
+    await screen.findByTestId("chat-header-status");
+
+    const header = screen.getByTestId("chat-header");
+    const layers = header.querySelector(".vt-header-identity-layers")!;
+    const directLayer = layers.querySelector('[data-identity-layer="direct"]')!;
+    const serverLayer = layers.querySelector('[data-identity-layer="server-channel"]')!;
+    const actions = screen.getByTestId("chat-header-actions");
+
+    expect(directLayer).toHaveAttribute("data-active", "true");
+    expect(directLayer).toHaveAttribute("aria-hidden", "false");
+    expect(serverLayer).toHaveAttribute("data-active", "false");
+    expect(serverLayer).toHaveAttribute("aria-hidden", "true");
+    expect(actions.parentElement).not.toBe(layers);
+
+    rerender(
+      <ChatWindow activeChat={{ type: "channel", channelId: 5, serverId: 6 }} call={makeCall()} />,
+    );
+
+    const nextLayers = screen.getByTestId("chat-header").querySelector(".vt-header-identity-layers")!;
+    const nextDirectLayer = nextLayers.querySelector('[data-identity-layer="direct"]')!;
+    const nextServerLayer = nextLayers.querySelector('[data-identity-layer="server-channel"]')!;
+    expect(screen.getByTestId("chat-header")).toBe(header);
+    expect(nextLayers).toBe(layers);
+    expect(nextDirectLayer).toBe(directLayer);
+    expect(nextServerLayer).toBe(serverLayer);
+    expect(screen.getByTestId("chat-header-actions")).toBe(actions);
+    expect(nextDirectLayer).toHaveAttribute("data-active", "false");
+    expect(nextDirectLayer).toHaveAttribute("aria-hidden", "true");
+    expect(nextServerLayer).toHaveAttribute("data-active", "true");
+    expect(nextServerLayer).toHaveAttribute("aria-hidden", "false");
+    expect(screen.getByText("# general")).toBeInTheDocument();
+    expect(screen.getByText("Channel · Project Server")).toBeInTheDocument();
+    expect(screen.queryAllByRole("status")).toHaveLength(0);
   });
 
   it("exposes the direct loading header as a polite status", () => {

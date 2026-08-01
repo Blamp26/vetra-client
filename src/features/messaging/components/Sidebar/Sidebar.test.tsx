@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useAppStoreMock, getListMock, subscribedMock } = vi.hoisted(() => ({
+const { useAppStoreMock, getListMock, getChannelsMock, subscribedMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
   getListMock: vi.fn(),
+  getChannelsMock: vi.fn(),
   subscribedMock: vi.fn(),
 }));
 
@@ -16,6 +17,7 @@ vi.mock("@/store", () => ({
 vi.mock("@/api/servers", () => ({
   serversApi: {
     getList: getListMock,
+    getChannels: getChannelsMock,
   },
 }));
 
@@ -44,6 +46,7 @@ vi.mock("@/features/profile/components/ProfileModal/ProfileModal", () => ({
 }));
 
 import { Sidebar } from "./Sidebar";
+import { ChannelPanel } from "../ChannelPanel/ChannelPanel";
 
 function makeState() {
   return {
@@ -113,6 +116,13 @@ function makeState() {
     setActiveChat: vi.fn(),
     broadcastChannels: {},
     setBroadcastSubscriptions: vi.fn(),
+    serverChannels: {},
+    channelsLoading: {},
+    setServerChannels: vi.fn(),
+    addServerChannel: vi.fn(),
+    setChannelsLoading: vi.fn(),
+    upsertRoomPreview: vi.fn(),
+    socketManager: null,
     activeModal: null,
     openModal: vi.fn(),
     closeModal: vi.fn(),
@@ -124,6 +134,8 @@ describe("Sidebar attachment previews", () => {
     useAppStoreMock.mockReset();
     getListMock.mockReset();
     getListMock.mockResolvedValue([]);
+    getChannelsMock.mockReset();
+    getChannelsMock.mockResolvedValue([]);
     subscribedMock.mockReset();
     subscribedMock.mockResolvedValue([]);
   });
@@ -371,7 +383,7 @@ describe("Sidebar attachment previews", () => {
     expect(directRow.querySelector('[data-slot="avatar"]')).toHaveClass("h-[46px]", "w-[46px]");
   });
 
-  it("hides search while collapsed or in server mode", async () => {
+  it("keeps search mounted while server mode covers only the text column", async () => {
     const state = makeState();
 
     useAppStoreMock.mockImplementation(
@@ -382,7 +394,235 @@ describe("Sidebar attachment previews", () => {
     expect(screen.queryByTestId("user-search")).not.toBeInTheDocument();
 
     rerender(<Sidebar isServerMode />);
-    expect(screen.queryByTestId("user-search")).not.toBeInTheDocument();
+    expect(screen.getByTestId("user-search")).toBeInTheDocument();
+  });
+
+  it("preserves canonical avatar nodes and list scroll when the overlay opens", () => {
+    const state = makeState();
+    state.servers = {
+      5: { id: 5, name: "Workspace", created_by: 1, inserted_at: "2026-06-30T10:00:00Z" },
+    };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    const panel = <div data-testid="stable-server-panel" />;
+    const { rerender } = render(<Sidebar serverPanel={panel} />);
+    const list = screen.getByTestId("sidebar-item-direct-2").closest("div.overflow-y-auto") as HTMLDivElement;
+    const search = screen.getByTestId("user-search");
+    const overlay = document.querySelector<HTMLElement>(".vt-channel-panel-overlay");
+    list.scrollTop = 37;
+    const avatars = Array.from(document.querySelectorAll('[data-slot="avatar"]'));
+
+    rerender(<Sidebar isServerMode serverPanel={panel} />);
+
+    const afterAvatars = Array.from(document.querySelectorAll('[data-slot="avatar"]'));
+    expect(afterAvatars).toHaveLength(avatars.length);
+    afterAvatars.forEach((avatar, index) => expect(avatar).toBe(avatars[index]));
+    expect(document.querySelector("div.overflow-y-auto")).toBe(list);
+    expect(screen.getByTestId("user-search")).toBe(search);
+    expect(document.querySelector(".vt-channel-panel-overlay")).toBe(overlay);
+    expect(list.scrollTop).toBe(37);
+    expect(screen.getByTestId("stable-server-panel")).toBeInTheDocument();
+    expect(document.querySelector(".vt-channel-panel-overlay")).toHaveAttribute("data-state", "open");
+  });
+
+  it("restores focus before hiding the server overlay", () => {
+    const state = makeState();
+    state.servers = {
+      5: { id: 5, name: "Workspace", created_by: 1, inserted_at: "2026-06-30T10:00:00Z" },
+    };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    const { rerender } = render(
+      <Sidebar serverPanel={<button type="button" data-testid="panel-control">Panel control</button>} />,
+    );
+    const serverRow = screen.getByTestId("sidebar-item-server-5");
+    fireEvent.click(serverRow);
+    rerender(
+      <Sidebar isServerMode serverPanel={<button type="button" data-testid="panel-control">Panel control</button>} />,
+    );
+    screen.getByTestId("panel-control").focus();
+
+    rerender(
+      <Sidebar serverPanel={<button type="button" data-testid="panel-control">Panel control</button>} />,
+    );
+
+    const overlay = document.querySelector<HTMLElement>(".vt-channel-panel-overlay");
+    expect(document.activeElement).toBe(serverRow);
+    expect(overlay).toHaveAttribute("aria-hidden", "true");
+    expect(overlay).toHaveAttribute("inert", "");
+    expect(overlay?.contains(document.activeElement)).toBe(false);
+  });
+
+  it("keeps one open overlay shell while switching server content", () => {
+    const state = makeState();
+    state.servers = {
+      5: { id: 5, name: "First", created_by: 1, inserted_at: "2026-06-30T10:00:00Z" },
+      6: { id: 6, name: "Second", created_by: 1, inserted_at: "2026-06-30T10:00:00Z" },
+    };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    const { rerender } = render(
+      <Sidebar isServerMode serverPanel={<div data-testid="panel-shell"><span data-testid="server-content">First</span></div>} />,
+    );
+    const overlay = document.querySelector(".vt-channel-panel-overlay");
+    const panel = screen.getByTestId("panel-shell");
+
+    rerender(
+      <Sidebar isServerMode serverPanel={<div data-testid="panel-shell"><span data-testid="server-content">Second</span></div>} />,
+    );
+
+    expect(document.querySelector(".vt-channel-panel-overlay")).toBe(overlay);
+    expect(screen.getByTestId("panel-shell")).toBe(panel);
+    expect(screen.getByTestId("server-content")).toHaveTextContent("Second");
+    expect(overlay).toHaveAttribute("data-state", "open");
+  });
+
+  it("opens a normal chat directly from the visible avatar column while server mode is open", () => {
+    const state = makeState();
+    state.servers = {
+      5: { id: 5, name: "Workspace", created_by: 1, inserted_at: "2026-06-30T10:00:00Z" },
+    };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    const panel = <div data-testid="stable-server-panel" />;
+    const { rerender } = render(<Sidebar serverPanel={panel} />);
+    const serverRow = screen.getByTestId("sidebar-item-server-5");
+    const list = screen.getByTestId("sidebar-item-direct-2").closest("div.overflow-y-auto");
+    const search = screen.getByTestId("user-search");
+    const avatar = screen.getByTestId("sidebar-item-direct-2").querySelector('[data-slot="avatar"]');
+
+    fireEvent.click(serverRow);
+    expect(state.setActiveChat).toHaveBeenCalledWith({
+      type: "server",
+      serverId: 5,
+      serverRef: 5,
+    });
+    rerender(<Sidebar isServerMode serverPanel={panel} />);
+    expect(document.querySelector(".vt-channel-panel-overlay")).toHaveAttribute("data-state", "open");
+
+    fireEvent.click(avatar!);
+    expect(state.setActiveChat).toHaveBeenCalledWith({
+      type: "direct",
+      partnerId: 2,
+      partnerRef: "user-public-id",
+    });
+
+    rerender(<Sidebar serverPanel={panel} />);
+    expect(document.querySelector(".vt-channel-panel-overlay")).toHaveAttribute("data-state", "closed");
+    expect(document.querySelector("div.overflow-y-auto")).toBe(list);
+    expect(screen.getByTestId("user-search")).toBe(search);
+    expect(screen.getByTestId("sidebar-item-direct-2").querySelector('[data-slot="avatar"]')).toBe(avatar);
+  });
+
+  it("moves focus before applying hidden or inert overlay attributes", async () => {
+    const state = makeState();
+    state.servers = {
+      5: { id: 5, name: "Workspace", created_by: 1, inserted_at: "2026-06-30T10:00:00Z" },
+    };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    const { rerender } = render(
+      <Sidebar serverPanel={<button type="button" data-testid="panel-control">Panel control</button>} />,
+    );
+    const serverRow = screen.getByTestId("sidebar-item-server-5");
+    rerender(
+      <Sidebar isServerMode serverPanel={<button type="button" data-testid="panel-control">Panel control</button>} />,
+    );
+    const overlay = document.querySelector<HTMLElement>(".vt-channel-panel-overlay")!;
+    screen.getByTestId("panel-control").focus();
+
+    const invalidMutations: string[] = [];
+    const hiddenMutations: string[] = [];
+    const originalSetAttribute = HTMLElement.prototype.setAttribute;
+    const setAttributeSpy = vi.spyOn(HTMLElement.prototype, "setAttribute").mockImplementation(function (this: HTMLElement, name, value) {
+      if (this === overlay && ((name === "aria-hidden" && value === "true") || name === "inert")) {
+        hiddenMutations.push(name);
+        if (overlay.contains(document.activeElement)) invalidMutations.push(name);
+      }
+      originalSetAttribute.call(this, name, value);
+    });
+
+    try {
+      rerender(
+        <Sidebar serverPanel={<button type="button" data-testid="panel-control">Panel control</button>} />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+    } finally {
+      setAttributeSpy.mockRestore();
+    }
+
+    expect(hiddenMutations).toHaveLength(2);
+    expect(hiddenMutations).toEqual(expect.arrayContaining(["aria-hidden", "inert"]));
+    expect(invalidMutations).toEqual([]);
+    expect(document.activeElement).toBe(serverRow);
+    expect(overlay).toHaveAttribute("aria-hidden", "true");
+    expect(overlay).toHaveAttribute("inert", "");
+  });
+
+  it("switches between real ChannelPanel instances without closing the overlay", async () => {
+    const state = makeState();
+    state.servers = {
+      5: { id: 5, name: "First", created_by: 1, inserted_at: "2026-06-30T10:00:00Z" },
+      6: { id: 6, name: "Second", created_by: 1, inserted_at: "2026-06-30T10:00:00Z" },
+    };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    const { rerender } = render(
+      <Sidebar
+        isServerMode
+        serverPanel={<ChannelPanel serverId={5} />}
+      />,
+    );
+    const list = screen.getByTestId("sidebar-item-direct-2").closest("div.overflow-y-auto");
+    const search = screen.getByTestId("user-search");
+    const avatar = screen.getByTestId("sidebar-item-server-5").querySelector('[data-slot="avatar"]');
+    const overlay = document.querySelector<HTMLElement>(".vt-channel-panel-overlay")!;
+    const panel = screen.getByTestId("channel-panel");
+    const mutations: Array<{ state: string | null; hidden: string | null; inert: boolean }> = [];
+    const observer = new MutationObserver(() => {
+      mutations.push({
+        state: overlay.getAttribute("data-state"),
+        hidden: overlay.getAttribute("aria-hidden"),
+        inert: overlay.hasAttribute("inert"),
+      });
+    });
+    observer.observe(overlay, { attributes: true, attributeFilter: ["data-state", "aria-hidden", "inert"] });
+
+    try {
+      await act(async () => {
+        rerender(
+          <Sidebar
+            isServerMode
+            serverPanel={<ChannelPanel serverId={6} />}
+          />,
+        );
+        await Promise.resolve();
+      });
+    } finally {
+      observer.disconnect();
+    }
+
+    expect(document.querySelector(".vt-channel-panel-overlay")).toBe(overlay);
+    expect(screen.getByTestId("channel-panel")).toBe(panel);
+    expect(panel).toHaveTextContent("Second");
+    expect(mutations.every(({ state, hidden, inert }) => state !== "closed" && hidden !== "true" && !inert)).toBe(true);
+    expect(document.querySelector("div.overflow-y-auto")).toBe(list);
+    expect(screen.getByTestId("user-search")).toBe(search);
+    expect(screen.getByTestId("sidebar-item-server-5").querySelector('[data-slot="avatar"]')).toBe(avatar);
   });
 
   it("keeps unread badges compact and visible in collapsed and server modes", async () => {

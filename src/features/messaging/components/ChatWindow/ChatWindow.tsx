@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from "react";
 import {
   useUnifiedMessages,
   type ChatContext,
@@ -92,6 +92,8 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
   const typingRoomMemberInfo = useAppStore(
     (s: RootState) => s.typingRoomMemberInfo,
   );
+  const servers = useAppStore((s: RootState) => s.servers);
+  const serverChannels = useAppStore((s: RootState) => s.serverChannels);
 
   const [partner, setPartner] = useState<User | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -103,6 +105,8 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
   const stickerRequestRevision = useRef(0);
   const stickerTriggerRef = useRef<HTMLElement | null>(null);
   const customEmojiInserterRef = useRef<(emoji: StickerMessage) => void>(() => undefined);
+  const lastDirectIdentityRef = useRef<ReactNode | null>(null);
+  const lastServerIdentityRef = useRef<ReactNode | null>(null);
   const activeChatType = activeChat.type;
   const activePartnerId =
     activeChat.type === "direct" ? activeChat.partnerId : null;
@@ -142,8 +146,16 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
         roomId: activeRoomId,
         roomRef: activeRoomRef,
       };
+    if (activeChat.type === "channel")
+      return {
+        type: "room",
+        roomId: activeChat.channelId,
+        roomRef: activeChat.channelRef,
+        isServerChannel: true,
+        serverId: activeChat.serverId,
+      };
     return null;
-  }, [activePartnerId, activePartnerRef, activeRoomId, activeRoomRef]);
+  }, [activeChat, activePartnerId, activePartnerRef, activeRoomId, activeRoomRef]);
 
   const openStickerPreview = useCallback((packId: string, stickerId: string) => {
     stickerTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -192,6 +204,8 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
       ? activeChat.partnerId
       : activeChat.type === "room"
         ? activeChat.roomId
+        : activeChat.type === "channel"
+          ? activeChat.channelId
         : 0;
   const directPartnerRef = useMemo(
     () =>
@@ -308,13 +322,10 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
   );
   const displayCallIssue = normalizeCallIssue(call?.callIssue ?? null);
 
-  const renderHeader = () => {
-    if (activeChat.type === "direct") {
-      if (!partner)
-        return <ConversationHeaderShell avatar={null} title="Loading..." subtitle="" actions={null} headerProps={{ role: "status", "aria-live": "polite" }} />;
-
-      const resolvedLastSeenAt =
-        lastSeenAt[activeChat.partnerId] ?? partner.last_seen_at;
+  const renderIdentityLayers = (activeIdentity: "direct" | "server-channel") => {
+    let directIdentity: ReactNode = lastDirectIdentityRef.current;
+    if (activeChat.type === "direct" && partner) {
+      const resolvedLastSeenAt = lastSeenAt[activeChat.partnerId] ?? partner.last_seen_at;
       const currentStatus = resolvePresenceStatus({
         userId: activeChat.partnerId,
         onlineUserIds,
@@ -322,22 +333,79 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
         fallbackStatus: partner.status,
         lastSeenAt: resolvedLastSeenAt,
       });
-
       const statusLine = getPresenceText({
         status: currentStatus,
         lastSeenAt: resolvedLastSeenAt,
       });
+      directIdentity = (
+        <>
+          <Avatar
+            name={partner.display_name || partner.username}
+            src={partner.avatar_url}
+            size="medium"
+            status={currentStatus as any}
+          />
+          <div className="flex min-w-0 flex-col justify-center self-stretch gap-0.5">
+            <h3 className="truncate text-[15px] font-semibold leading-5">{partner.display_name || partner.username}</h3>
+            <p className="truncate text-[12px] leading-[14px] text-muted-foreground">
+              <span data-testid="chat-header-status" className={cn(currentStatus === "online" ? "text-online" : currentStatus === "away" ? "text-away" : currentStatus === "dnd" ? "text-busy" : "text-muted-foreground")}>{statusLine}</span>
+            </p>
+          </div>
+        </>
+      );
+      lastDirectIdentityRef.current = directIdentity;
+    }
+
+    let serverIdentity: ReactNode = lastServerIdentityRef.current;
+    if (activeChat.type === "channel") {
+      const channel = serverChannels?.[activeChat.serverId]?.find((item) => item.id === activeChat.channelId);
+      const server = servers?.[activeChat.serverId];
+      const channelName = channel?.name || `#${activeChat.channelId}`;
+      serverIdentity = (
+        <>
+          <Avatar name={channelName} size="medium" />
+          <div className="flex min-w-0 flex-col justify-center self-stretch gap-0.5">
+            <h3 className="truncate text-[15px] font-semibold leading-5"># {channelName}</h3>
+            <p className="truncate text-[12px] leading-[14px] text-muted-foreground">Channel · {server?.name ?? "Server"}</p>
+          </div>
+        </>
+      );
+      lastServerIdentityRef.current = serverIdentity;
+    }
+
+    return (
+      <div className="vt-header-identity-layers" data-active-identity={activeIdentity}>
+        <div
+          className="vt-header-identity-layer"
+          data-identity-layer="direct"
+          data-active={activeIdentity === "direct" ? "true" : "false"}
+          aria-hidden={activeIdentity !== "direct"}
+        >
+          {directIdentity}
+        </div>
+        <div
+          className="vt-header-identity-layer"
+          data-identity-layer="server-channel"
+          data-active={activeIdentity === "server-channel" ? "true" : "false"}
+          aria-hidden={activeIdentity !== "server-channel"}
+        >
+          {serverIdentity}
+        </div>
+      </div>
+    );
+  };
+
+  const renderHeader = () => {
+    if (activeChat.type === "direct") {
+      if (!partner)
+        return <ConversationHeaderShell avatar={null} title="Loading..." subtitle="" actions={null} headerProps={{ role: "status", "aria-live": "polite" }} />;
 
       return (
         <ConversationHeaderShell
-          avatar={<Avatar
-              name={partner.display_name || partner.username}
-              src={partner.avatar_url}
-              size="medium"
-              status={currentStatus as any}
-            />}
-          title={partner.display_name || partner.username}
-          subtitle={<span data-testid="chat-header-status" className={cn(currentStatus === "online" ? "text-online" : currentStatus === "away" ? "text-away" : currentStatus === "dnd" ? "text-busy" : "text-muted-foreground")}>{statusLine}</span>}
+          identityLayers={renderIdentityLayers("direct")}
+          avatar={null}
+          title=""
+          subtitle=""
           actions={<>
             {call && <CallButton
               targetUserId={
@@ -368,14 +436,19 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
           </>}
         />
       );
-    } else if (activeChat.type === "room") {
-      const roomId = activeChat.roomId;
+    } else if (activeChat.type === "room" || activeChat.type === "channel") {
+      const roomId = activeChat.type === "room" ? activeChat.roomId : activeChat.channelId;
       const roomPreview = roomPreviews[roomId];
+      const channel = activeChat.type === "channel"
+        ? serverChannels?.[activeChat.serverId]?.find((item) => item.id === activeChat.channelId)
+        : undefined;
+      const server = activeChat.type === "channel" ? servers?.[activeChat.serverId] : undefined;
       return (
         <ConversationHeaderShell
-          avatar={<Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />}
-          title={roomPreview?.name || `Room #${roomId}`}
-          subtitle="Group chat"
+          identityLayers={activeChat.type === "channel" ? renderIdentityLayers("server-channel") : undefined}
+          avatar={channel ? <Avatar name={channel.name} size="medium" /> : <Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />}
+          title={channel ? `# ${channel.name}` : roomPreview?.name || `Room #${roomId}`}
+          subtitle={channel ? `Channel · ${server?.name ?? "Server"}` : "Group chat"}
           actions={
             <IconButton
               label="Search messages"
@@ -451,6 +524,7 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
       <div
         className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.26),transparent_12%)]"
         data-testid="message-list-region"
+        data-presentation={activeChat.type === "channel" ? "server-channel" : "direct-or-room"}
       >
         <MessageList
           key={`${activeChat.type}:${chatId}`}
