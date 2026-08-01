@@ -32,6 +32,7 @@ import {
 import { Search } from "lucide-react";
 import { useDirectedCallHistoryForChat } from "@/features/messaging/hooks/useDirectedCallHistoryForChat";
 import { ConversationHeaderShell } from "../ConversationPresentation/ConversationHeaderShell";
+import { GroupProfileModal } from "../GroupProfileModal";
 
 interface Props {
   activeChat: ActiveChat;
@@ -97,6 +98,12 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
 
   const [partner, setPartner] = useState<User | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isGroupProfileOpen, setIsGroupProfileOpen] = useState(false);
+  const groupProfileTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeGroupProfile = useCallback(() => {
+    setIsGroupProfileOpen(false);
+    window.setTimeout(() => groupProfileTriggerRef.current?.focus(), 0);
+  }, []);
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
   const [callStartIssue, setCallStartIssue] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -227,6 +234,7 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
   useEffect(() => {
     setReplyTo(null);
     setIsSearchOpen(false);
+    closeGroupProfile();
     setCallStartIssue(null);
     if (activeChatType === "direct" && activePartnerId !== null) {
       let cancelled = false;
@@ -246,7 +254,7 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
     } else {
       setPartner(null);
     }
-  }, [activeChatType, activePartnerId, directPartnerRef]);
+  }, [activeChatType, activePartnerId, activeRoomId, activeRoomRef, directPartnerRef, closeGroupProfile]);
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => { if (event.key === "Escape") setPickerOpen(false); };
@@ -449,6 +457,8 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
           avatar={channel ? <Avatar name={channel.name} size="medium" /> : <Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />}
           title={channel ? `# ${channel.name}` : roomPreview?.name || `Room #${roomId}`}
           subtitle={channel ? `Channel · ${server?.name ?? "Server"}` : "Group chat"}
+          identityRef={!channel ? groupProfileTriggerRef : undefined}
+          identityProps={!channel ? { onClick: () => setIsGroupProfileOpen(true), "aria-label": `Open ${roomPreview?.name || `Room #${roomId}`} group profile` } : undefined}
           actions={
             <IconButton
               label="Search messages"
@@ -561,6 +571,16 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
           type={activeChat.type === "direct" ? "direct" : "room"}
           onClose={() => setIsSearchOpen(false)}
           onJumpTo={(id) => console.log("Jump to message:", id)}
+        />
+      )}
+      {isGroupProfileOpen && activeChat.type === "room" && roomPreviews[activeChat.roomId] && (
+        <GroupProfileModal
+          room={roomPreviews[activeChat.roomId]}
+          onClose={closeGroupProfile}
+          onSearchMessages={() => {
+            setIsGroupProfileOpen(false);
+            setIsSearchOpen(true);
+          }}
         />
       )}
       </div>

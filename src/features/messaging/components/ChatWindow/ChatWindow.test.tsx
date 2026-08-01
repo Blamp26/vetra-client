@@ -2,10 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getUser, useAppStoreMock, persistentCallMock } = vi.hoisted(() => ({
+const { getUser, useAppStoreMock, persistentCallMock, governanceMembers } = vi.hoisted(() => ({
   getUser: vi.fn(),
   useAppStoreMock: vi.fn(),
   persistentCallMock: { current: null as unknown },
+  governanceMembers: vi.fn(),
 }));
 
 vi.mock("@/store", () => ({
@@ -17,6 +18,10 @@ vi.mock("@/api/auth", () => ({
   authApi: {
     getUser,
   },
+}));
+
+vi.mock("@/api/rooms", () => ({
+  roomsApi: { governanceMembers },
 }));
 
 vi.mock("@/features/calling/context/PersistentCallContext", () => ({
@@ -96,7 +101,30 @@ function makeState() {
     userStatuses: {} as Record<number, "online" | "away" | "dnd" | "offline">,
     lastSeenAt: {} as Record<number, string>,
     typingPartnerIds: new Set<number>(),
-    roomPreviews: {},
+    roomPreviews: {
+      4: {
+        id: 4,
+        public_id: "room-four",
+        name: "Room Four",
+        created_by: 1,
+        server_id: null,
+        inserted_at: "2026-07-01T00:00:00Z",
+        unread_count: 0,
+        last_message_at: null,
+        last_message: null,
+      },
+      5: {
+        id: 5,
+        public_id: "room-five",
+        name: "Room Five",
+        created_by: 1,
+        server_id: null,
+        inserted_at: "2026-07-01T00:00:00Z",
+        unread_count: 0,
+        last_message_at: null,
+        last_message: null,
+      },
+    },
     conversationPreviews: {},
     servers: {} as Record<number, any>,
     serverChannels: {} as Record<number, any>,
@@ -147,11 +175,42 @@ function makeCall(overrides: Partial<UseCallReturn> = {}): UseCallReturn {
 describe("ChatWindow presence rendering", () => {
   beforeEach(() => {
     getUser.mockReset();
+    getUser.mockResolvedValue({ id: 2, public_id: null, username: "alice", display_name: "Alice", bio: null, avatar_url: null, status: "offline", last_seen_at: null });
     useAppStoreMock.mockReset();
     persistentCallMock.current = null;
+    governanceMembers.mockResolvedValue([
+      { id: 1, username: "alice", display_name: "Alice", role: "member", admin_permissions: [], allow_permissions: [], deny_permissions: [] },
+    ]);
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
+  });
+
+  it("opens the group profile from an ordinary room header, but not direct or broadcast headers", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation((selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state));
+    const { rerender } = render(<ChatWindow activeChat={{ type: "room", roomId: 4 }} call={makeCall()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Open Room Four group profile/ }));
+    expect(await screen.findByRole("dialog", { name: "Room Four" })).toBeInTheDocument();
+
+    rerender(<ChatWindow activeChat={{ type: "direct", partnerId: 2 }} call={makeCall()} />);
+    expect(screen.queryByRole("dialog", { name: "Room Four" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /group profile/i })).not.toBeInTheDocument();
+    getUser.mockResolvedValue({ id: 2, public_id: null, username: "alice", display_name: "Alice", bio: null, avatar_url: null, status: "offline", last_seen_at: null });
+    rerender(<ChatWindow activeChat={{ type: "channel", channelId: 8, serverId: 9 }} call={makeCall()} />);
+    expect(screen.queryByRole("button", { name: /group profile/i })).not.toBeInTheDocument();
+  });
+
+  it("closes the group profile when the active conversation changes and restores focus", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation((selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state));
+    const { rerender } = render(<ChatWindow activeChat={{ type: "room", roomId: 4 }} call={makeCall()} />);
+    const trigger = screen.getByRole("button", { name: /Open Room Four group profile/ });
+    fireEvent.click(trigger);
+    expect(await screen.findByRole("dialog", { name: "Room Four" })).toBeInTheDocument();
+    rerender(<ChatWindow activeChat={{ type: "room", roomId: 5 }} call={makeCall()} />);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Room Four" })).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: /Open Room Five group profile/ })));
   });
 
   it("shows one persistent call button for an owner with a direct chat public ref", async () => {

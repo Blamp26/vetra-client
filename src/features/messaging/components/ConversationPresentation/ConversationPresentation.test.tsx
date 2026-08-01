@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { ConversationHeaderShell } from "./ConversationHeaderShell";
 import { ConversationDateSeparator } from "./ConversationDateSeparator";
 import { ConversationMessageGroup } from "./ConversationMessageGroup";
@@ -12,6 +12,15 @@ describe("conversation presentation primitives", () => {
     expect(screen.getByTestId("chat-header").className).toContain("h-[54px]");
     expect(screen.getByTestId("chat-header").className).toContain("px-4");
     expect(screen.getByTestId("chat-header-actions").textContent).toContain("Action");
+  });
+
+  it("exposes a keyboard-accessible identity trigger without changing header geometry", () => {
+    const onClick = vi.fn();
+    render(<ConversationHeaderShell avatar={<span>avatar</span>} title="Group" subtitle="Group chat" actions={<button>Action</button>} identityProps={{ onClick }} />);
+    const identity = screen.getByRole("button", { name: /Group Group chat/ });
+    fireEvent.click(identity);
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(screen.getByTestId("chat-header").className).toContain("h-[54px]");
   });
 
   it("keeps header identity layers mounted while exposing only the active layer", () => {
