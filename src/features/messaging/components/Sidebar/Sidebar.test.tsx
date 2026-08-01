@@ -2,9 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useAppStoreMock, getListMock } = vi.hoisted(() => ({
+const { useAppStoreMock, getListMock, subscribedMock } = vi.hoisted(() => ({
   useAppStoreMock: vi.fn(),
   getListMock: vi.fn(),
+  subscribedMock: vi.fn(),
 }));
 
 vi.mock("@/store", () => ({
@@ -16,6 +17,10 @@ vi.mock("@/api/servers", () => ({
   serversApi: {
     getList: getListMock,
   },
+}));
+
+vi.mock("@/api/broadcastChannels", () => ({
+  broadcastChannelsApi: { subscribed: subscribedMock },
 }));
 
 vi.mock("../UserSearch/UserSearch", () => ({
@@ -106,6 +111,8 @@ function makeState() {
     servers: {},
     setServers: vi.fn(),
     setActiveChat: vi.fn(),
+    broadcastChannels: {},
+    setBroadcastSubscriptions: vi.fn(),
     activeModal: null,
     openModal: vi.fn(),
     closeModal: vi.fn(),
@@ -117,6 +124,8 @@ describe("Sidebar attachment previews", () => {
     useAppStoreMock.mockReset();
     getListMock.mockReset();
     getListMock.mockResolvedValue([]);
+    subscribedMock.mockReset();
+    subscribedMock.mockResolvedValue([]);
   });
 
   it("renders the no-conversations state as a semantic empty pane", () => {
@@ -133,6 +142,31 @@ describe("Sidebar attachment previews", () => {
     expect(screen.getByText("Start a direct chat or create a room to begin messaging.")).toBeInTheDocument();
     expect(screen.queryByText("No conversations", { selector: ".vt-kicker" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start a new/i })).not.toBeInTheDocument();
+  });
+
+  it("navigates a subscribed broadcast by public ID, not its display name or username", async () => {
+    const state = makeState();
+    state.broadcastChannels = {
+      "channel-public-id": {
+        public_id: "channel-public-id",
+        display_name: "TestBroadcast",
+        username: "testbroadcast",
+        visibility: "public",
+        status: "active",
+        subscriber_count: 1,
+      },
+    } as any;
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    render(<Sidebar />);
+
+    const row = await screen.findByTestId("sidebar-item-broadcast-channel-public-id");
+    fireEvent.click(row);
+
+    expect(window.location.hash).toBe("#/broadcast/channel-public-id");
+    window.history.replaceState(null, "", "/");
   });
 
   it("uses server-provided preview text for direct and room items", async () => {

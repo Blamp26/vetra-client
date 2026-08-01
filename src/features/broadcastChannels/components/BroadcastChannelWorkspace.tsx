@@ -14,6 +14,7 @@ function draftKey(account: string, channel: string) { return `vetra:broadcast-dr
 export function BroadcastChannelWorkspace({ channelId, publicationId }: { channelId?: string; publicationId?: string }) {
   const currentUser = useAppStore((s) => s.currentUser);
   const [resolvedChannelId, setResolvedChannelId] = useState(channelId);
+  const [resolvedChannel, setResolvedChannel] = useState<BroadcastChannel | null>(null);
   const broadcastChannels = useAppStore((s) => s.broadcastChannels);
   const broadcastPublications = useAppStore((s) => s.broadcastPublications);
   const broadcastCursors = useAppStore((s) => s.broadcastCursors);
@@ -42,16 +43,16 @@ export function BroadcastChannelWorkspace({ channelId, publicationId }: { channe
   const [auditCursor, setAuditCursor] = useState<string | null>(null);
   const accountKey = currentUser?.public_id ?? currentUser?.username ?? "account";
   const socketManager = useAppStore((s) => s.socketManager);
-  const activeChannel = channel ?? (resolvedChannelId ? getState().broadcastChannels[resolvedChannelId] : undefined);
+  const activeChannel = resolvedChannel ?? channel ?? (resolvedChannelId ? getState().broadcastChannels[resolvedChannelId] : undefined);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      setLoading(true); setUnavailable(false);
+      setLoading(true); setUnavailable(false); setResolvedChannel(null);
       try {
         const resolved: BroadcastChannel = channelId ? await broadcastChannelsApi.get(channelId) : await broadcastChannelsApi.resolveUsername(window.location.pathname.slice(1));
         if (cancelled) return;
-        setResolvedChannelId(resolved.public_id); setChannel(resolved);
+        setResolvedChannelId(resolved.public_id); setResolvedChannel(resolved); setChannel(resolved);
         const [feed, subscription, currentGovernance, pinned] = await Promise.all([broadcastChannelsApi.feed(resolved.public_id), broadcastChannelsApi.subscription(resolved.public_id).catch(() => null), broadcastChannelsApi.governance(resolved.public_id).catch(() => null), broadcastChannelsApi.pinned(resolved.public_id).catch(() => [])]);
         if (cancelled) return;
         setFeed(resolved.public_id, feed.publications, feed.next_cursor);
@@ -101,7 +102,7 @@ export function BroadcastChannelWorkspace({ channelId, publicationId }: { channe
   async function toggleReaction(publication: BroadcastPublication, value: string) { if (!resolvedChannelId || activeChannel?.status === "frozen") return; try { await broadcastChannelsApi.react(resolvedChannelId, publication.public_id, value); const next = await broadcastChannelsApi.publication(resolvedChannelId, publication.public_id); setFeed(resolvedChannelId, publications.map((p) => p.public_id === next.public_id ? next : p), cursor); } catch {} }
   async function loadMore() { if (!resolvedChannelId || !cursor) return; try { const page = await broadcastChannelsApi.feed(resolvedChannelId, cursor); setFeed(resolvedChannelId, page.publications, page.next_cursor, true); } catch {} }
   async function loadAudit(next: string | null = null) { if (!resolvedChannelId) return; try { const page = await broadcastChannelsApi.audit(resolvedChannelId, next); setAuditRows((rows) => next ? [...rows, ...page.events] : page.events); setAuditCursor(page.next_cursor); setAudit(true); } catch { setAudit(false); } }
-  async function refreshChannel() { if (!resolvedChannelId) return; const next = await broadcastChannelsApi.get(resolvedChannelId); setChannel(next); setGovernance(await broadcastChannelsApi.governance(resolvedChannelId).catch(() => null)); }
+  async function refreshChannel() { if (!resolvedChannelId) return; const next = await broadcastChannelsApi.get(resolvedChannelId); setResolvedChannel(next); setChannel(next); setGovernance(await broadcastChannelsApi.governance(resolvedChannelId).catch(() => null)); }
   async function deletePublication(publicationId: string) { if (!resolvedChannelId) return; setBusy(true); try { await broadcastChannelsApi.removePublication(resolvedChannelId, publicationId); const page = await broadcastChannelsApi.feed(resolvedChannelId); setFeed(resolvedChannelId, page.publications, page.next_cursor); } catch {} finally { setBusy(false); } }
   async function pinPublication(publicationId: string, pinned: boolean) { if (!resolvedChannelId) return; setBusy(true); try { if (pinned) await broadcastChannelsApi.unpin(resolvedChannelId, publicationId); else await broadcastChannelsApi.pin(resolvedChannelId, publicationId); const next = await broadcastChannelsApi.pinned(resolvedChannelId); setPinnedIds(new Set(next.map((item) => item.public_id))); } catch {} finally { setBusy(false); } }
   async function editPublication(publication: BroadcastPublication) { if (!resolvedChannelId || publication.deleted) return; const content = window.prompt("Edit publication", publication.content ?? ""); if (content === null) return; setBusy(true); try { const next = await broadcastChannelsApi.edit(resolvedChannelId, publication.public_id, { content }); setFeed(resolvedChannelId, publications.map((item) => item.public_id === next.public_id ? next : item), cursor); } catch {} finally { setBusy(false); } }
