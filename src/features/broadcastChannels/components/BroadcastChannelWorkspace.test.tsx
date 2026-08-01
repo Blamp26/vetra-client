@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BroadcastChannelWorkspace } from "./BroadcastChannelWorkspace";
@@ -119,7 +119,9 @@ describe("broadcast channel sidebar-to-workspace navigation", () => {
 
     render(<BroadcastChannelWorkspace channelPublicId={channel.public_id} />);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Unpin" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("broadcast-publication-actions")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Publication actions" }));
+    expect(screen.getByRole("menuitem", { name: "Unpin" })).toBeInTheDocument();
   });
 
   it("renders unavailable when the profile request fails", async () => {
