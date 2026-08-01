@@ -420,6 +420,37 @@ describe("MessageList bubble layout", () => {
     expect(screen.queryByTestId("directed-call-history-row")).not.toBeInTheDocument();
   });
 
+  it("opts ordinary standalone rooms into the author rail and preserves it for grouped messages", () => {
+    renderMessageList([
+      makeMessage({ id: 1, inserted_at: "2026-07-01T10:00:00Z", sender: { avatar_url: "/alice.png" } }),
+      makeMessage({ id: 2, inserted_at: "2026-07-01T10:04:00Z", sender: { avatar_url: "/alice.png" } }),
+    ], { chatContext: { type: "room", roomId: 9 } });
+
+    expect(screen.getAllByTestId("group-author-rail")).toHaveLength(2);
+    expect(screen.getAllByTestId("group-author-name")).toHaveLength(1);
+    expect(screen.getAllByTestId("group-author-rail")[0].querySelector('[data-slot="avatar"]')).toBeInTheDocument();
+    expect(screen.getAllByTestId("group-author-rail")[1].className).toContain("w-[45px]");
+    expect(screen.getAllByTestId("message-bubble")[0].closest('[data-testid="message-bubble-row"]')?.querySelector('[data-testid="group-author-rail"]')).toBeInTheDocument();
+  });
+
+  it.each([
+    ["direct", { type: "direct" as const, partnerId: 2 }],
+    ["server channel", { type: "room" as const, roomId: 9, isServerChannel: true }],
+  ])("does not opt %s into standalone author presentation", (_, chatContext) => {
+    renderMessageList([makeMessage()], { chatContext });
+    expect(screen.queryByTestId("group-author-rail")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("group-author-name")).not.toBeInTheDocument();
+  });
+
+  it("starts a new author sequence when the sender or time changes", () => {
+    renderMessageList([
+      makeMessage({ id: 1, inserted_at: "2026-07-01T10:00:00Z" }),
+      makeMessage({ id: 2, sender_id: 3, sender_username: "bob", sender_display_name: "Bob", inserted_at: "2026-07-01T10:01:00Z" }),
+      makeMessage({ id: 3, inserted_at: "2026-07-01T10:07:00Z" }),
+    ], { chatContext: { type: "room", roomId: 9 } });
+    expect(screen.getAllByTestId("group-author-name").map((node) => node.textContent)).toEqual(["Alice", "Bob", "Alice"]);
+  });
+
   it("renders date dividers while keeping messages in a vertical bubble list", () => {
     renderMessageList([
       makeMessage({

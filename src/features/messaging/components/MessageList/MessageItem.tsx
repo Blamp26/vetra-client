@@ -59,6 +59,11 @@ interface MessageItemProps {
   selectionMode: boolean;
   isRoom: boolean;
   serverFeed?: boolean;
+  standaloneGroupAuthor?: {
+    showIdentity: boolean;
+    name: string;
+    avatarSrc?: string | null;
+  };
   messageReactions: MessageReactionGroup[];
   currentUserId: number;
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, msg: Message) => void;
@@ -270,6 +275,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   selectionMode,
   isRoom,
   serverFeed = false,
+  standaloneGroupAuthor,
   messageReactions,
   onContextMenu,
   onToggleSelection,
@@ -470,6 +476,9 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const showSenderName =
     (isRoom && !isOwn && !isConsecutive) ||
     (serverFeed && !isConsecutive);
+  const showStandaloneGroupAuthor = Boolean(
+    standaloneGroupAuthor && !isOwn,
+  );
     const hasContentAboveMedia =
       Boolean(forwardedSource) || Boolean(msg.reply_to_id) || showSenderName;
   const metadataClassName = isOwn
@@ -1470,6 +1479,27 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           <input type="checkbox" checked={isSelected} readOnly />
         </div>
       )}
+      {showStandaloneGroupAuthor && standaloneGroupAuthor && (
+        <div
+          className="flex w-[45px] shrink-0 items-start justify-start"
+          data-testid="group-author-rail"
+        >
+          {standaloneGroupAuthor.showIdentity ? (
+            <Avatar
+              name={standaloneGroupAuthor.name}
+              src={standaloneGroupAuthor.avatarSrc ?? undefined}
+              size="medium"
+              title={standaloneGroupAuthor.name || undefined}
+              className="h-8 w-8"
+            />
+          ) : (
+            <span aria-hidden="true" className="h-8 w-8 shrink-0" />
+          )}
+          {!standaloneGroupAuthor.showIdentity && standaloneGroupAuthor.name && (
+            <span className="sr-only">{standaloneGroupAuthor.name}</span>
+          )}
+        </div>
+      )}
       {serverFeed && !isConsecutive && (
         <Avatar
           name={authorName}
@@ -1610,9 +1640,14 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           }
       >
         {renderForwardedHeader()}
-        {showSenderName && (
+        {showSenderName && !standaloneGroupAuthor && (
           <div className="mb-1.5 text-[11px] font-semibold tracking-[0.01em] text-primary">
             {authorName}
+          </div>
+        )}
+        {standaloneGroupAuthor?.showIdentity && (
+          <div className="mb-1.5 max-w-full truncate text-[11px] font-semibold tracking-[0.01em] text-primary" data-testid="group-author-name">
+            {standaloneGroupAuthor.name}
           </div>
         )}
           {isCustomEmojiOnlyMessage ? (

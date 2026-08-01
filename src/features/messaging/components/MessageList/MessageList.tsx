@@ -66,6 +66,7 @@ import { mergeMessageAndCallTimeline } from "./directedCallHistoryTimeline";
 import { ConversationTimeline } from "../ConversationPresentation/ConversationTimeline";
 import { ConversationDateSeparator } from "../ConversationPresentation/ConversationDateSeparator";
 import { ConversationMessageGroup } from "../ConversationPresentation/ConversationMessageGroup";
+import { isMessageSequenceContinuation } from "../../utils/messageGrouping";
 
 interface Props {
   messages:      Message[];
@@ -1009,6 +1010,7 @@ export function MessageList({
   }, [timeline]);
 
   const isServerFeed = chatContext.type === "room" && chatContext.isServerChannel === true;
+  const isStandaloneGroup = chatContext.type === "room" && chatContext.isServerChannel !== true;
   const alignmentMode = isServerFeed || chatViewportWidth > WIDE_CHAT_LEFT_COLUMN_THRESHOLD
     ? "left-column"
     : "split";
@@ -1053,8 +1055,12 @@ export function MessageList({
                 const nextEntry = entries[idx + 1];
                 const prevMsg = previousEntry?.kind === "message" ? previousEntry.message : undefined;
                 const nextMsg = nextEntry?.kind === "message" ? nextEntry.message : undefined;
-                const isConsecutive = prevMsg?.sender_id === msg.sender_id;
-                const isGroupedWithNext = nextMsg?.sender_id === msg.sender_id;
+                const isConsecutive = isStandaloneGroup
+                  ? isMessageSequenceContinuation(prevMsg, msg)
+                  : prevMsg?.sender_id === msg.sender_id;
+                const isGroupedWithNext = isStandaloneGroup
+                  ? isMessageSequenceContinuation(msg, nextMsg)
+                  : nextMsg?.sender_id === msg.sender_id;
                 const messageAttachments = getMessageAttachments(msg);
                 const previousMessageAttachments = prevMsg
                   ? getMessageAttachments(prevMsg)
@@ -1092,6 +1098,11 @@ export function MessageList({
                       selectionMode={selectionMode}
                       isRoom={chatContext.type === "room"}
                       serverFeed={chatContext.type === "room" && chatContext.isServerChannel === true}
+                      standaloneGroupAuthor={isStandaloneGroup && msg.sender_id !== currentUserId ? {
+                        showIdentity: !isConsecutive,
+                        name: msg.sender_display_name || msg.sender_username || "",
+                        avatarSrc: msg.sender?.avatar_url ?? null,
+                      } : undefined}
                       messageReactions={
                         messageReactions[msg.id] || msg.reactions || []
                       }
