@@ -1514,6 +1514,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
         onContextMenu={(e) => !selectionMode && onContextMenu(e, msg)}
         className={cn(
             "relative box-border w-fit overflow-visible message-text-scale tracking-normal",
+            standaloneGroupAuthor && !isOwn && "ml-[9px]",
             (isEmojiOnlyMessage || isAnyCustomEmojiOnlyMessage) && "message-emoji-only-bubble",
                   isEmojiOnlyMessage || isAnyCustomEmojiOnlyMessage
             ? "min-w-0 p-0"
