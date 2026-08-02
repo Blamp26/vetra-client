@@ -15,6 +15,17 @@ export const roomsApi = {
     return get<RoomPreview[]>("/rooms");
   },
 
+  updateProfile(
+    roomRef: ResourceRef,
+    profile: {
+      name: string;
+      description: string | null;
+      avatar_media_file_id: string | null;
+    },
+  ): Promise<RoomPreview> {
+    return put<RoomPreview>(`/rooms/${roomRef}/profile`, profile);
+  },
+
   getMessages(
     roomRef: ResourceRef,
     limit?: number,

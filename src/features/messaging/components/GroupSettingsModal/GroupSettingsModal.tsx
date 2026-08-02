@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, KeyRound, LogOut, Plus, Shield, Trash2, Users } from "lucide-react";
 import {
   roomsApi,
@@ -10,6 +10,8 @@ import type { RoomPreview } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
 import { Dialog } from "@/shared/components/Dialog";
 import { IconButton } from "@/shared/components/IconButton";
+import { Avatar } from "@/shared/components/Avatar";
+import { GroupBasicInfoEditor } from "../GroupBasicInfoEditor/GroupBasicInfoEditor";
 
 const ADMIN_RIGHTS = [
   "change_group_info",
@@ -54,6 +56,8 @@ export function GroupSettingsModal({
     Record<string, "inherit" | "allow" | "deny">
   >({});
   const [view, setView] = useState<"overview" | "admins" | "members" | "permissions">("overview");
+  const [editOpen, setEditOpen] = useState(false);
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const ref = roomRef(room) ?? room.id;
@@ -234,7 +238,8 @@ export function GroupSettingsModal({
     void roomsApi.delete(ref).then(onClose).catch((e) => setError(e instanceof Error ? e.message : "Delete failed.")).finally(() => setBusy(false));
   };
   return (
-    <Dialog open onClose={onClose} labelledBy={titleId} className="w-[min(366px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-hidden rounded-xl p-0">
+    <>
+    <Dialog open onClose={onClose} inert={editOpen} labelledBy={titleId} className="w-[min(366px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-hidden rounded-xl p-0">
       <div className="flex max-h-[calc(100vh-32px)] min-h-0 flex-col" data-testid="group-management-dialog">
         <div className="shrink-0 border-b border-border px-[22px] py-4">
           <div className="flex items-center justify-between gap-3">
@@ -242,10 +247,17 @@ export function GroupSettingsModal({
             <h2 id={titleId} className="truncate text-base font-semibold">Manage group</h2>
             <IconButton label="Close group management" size="compact" onClick={onClose}><span aria-hidden="true">×</span></IconButton>
           </div>
-          <div className="mt-3 flex items-center gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary text-lg font-semibold text-primary-foreground">{room.name.slice(0, 1).toUpperCase()}</div>
+          <button
+            ref={editTriggerRef}
+            type="button"
+            className="mt-3 flex w-full items-center gap-3 rounded-lg p-1 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setEditOpen(true)}
+            aria-label="Edit group basic information"
+          >
+            <Avatar name={room.name} src={room.avatar_url ?? null} size="large" className="h-12 w-12 text-lg" />
             <div className="min-w-0"><p className="truncate text-sm font-medium">{room.name}</p><p className="text-xs text-muted-foreground">{state?.members.length ?? room.members?.length ?? 0} members</p></div>
-          </div>
+            <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </button>
         </div>
         {error && (
           <div role="alert" className="mx-[22px] mt-3 text-sm text-destructive">
@@ -464,5 +476,7 @@ export function GroupSettingsModal({
         )}
       </div>
     </Dialog>
+    {editOpen && <GroupBasicInfoEditor room={room} onClose={() => { setEditOpen(false); window.setTimeout(() => editTriggerRef.current?.focus(), 0); }} />}
+    </>
   );
 }

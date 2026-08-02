@@ -247,6 +247,10 @@ export interface Room {
   id: number;
   public_id?: string | null;
   name: string;
+  description?: string | null;
+  avatar_media_file_id?: string | null;
+  avatar_url?: string | null;
+  kind?: string;
   created_by: number;
   created_by_public_id?: string | null;
   server_id: number | null;
@@ -262,6 +266,10 @@ export interface RoomPreview {
   id: number;
   public_id?: string | null;
   name: string;
+  description?: string | null;
+  avatar_media_file_id?: string | null;
+  avatar_url?: string | null;
+  kind?: string;
   created_by: number;
   created_by_public_id?: string | null;
   server_id: number | null;

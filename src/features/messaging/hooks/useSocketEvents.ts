@@ -515,6 +515,16 @@ export function useSocketEvents() {
       }),
     );
 
+    if (typeof socketManager.onRoomProfileUpdated === "function") {
+      unsubs.push(
+        socketManager.onRoomProfileUpdated((profile) => {
+          if (profile.kind && profile.kind !== "group") return;
+          if (!getState().roomPreviews[profile.id]) return;
+          upsertRoomPreview(profile);
+        }),
+      );
+    }
+
     unsubs.push(
       socketManager.onServerDeleted(({ server_id }) => {
         removeServer(server_id);

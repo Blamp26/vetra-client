@@ -454,7 +454,7 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
       return (
         <ConversationHeaderShell
           identityLayers={activeChat.type === "channel" ? renderIdentityLayers("server-channel") : undefined}
-          avatar={channel ? <Avatar name={channel.name} size="medium" /> : <Avatar name={roomPreview?.name || `#${roomId}`} size="medium" />}
+          avatar={channel ? <Avatar name={channel.name} size="medium" /> : <Avatar name={roomPreview?.name || `#${roomId}`} src={roomPreview?.avatar_url ?? null} size="medium" />}
           title={channel ? `# ${channel.name}` : roomPreview?.name || `Room #${roomId}`}
           subtitle={channel ? `Channel · ${server?.name ?? "Server"}` : "Group chat"}
           identityRef={!channel ? groupProfileTriggerRef : undefined}

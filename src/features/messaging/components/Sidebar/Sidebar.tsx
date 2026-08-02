@@ -53,6 +53,7 @@ type SidebarItem =
       kind: "room";
       id: number;
       name: string;
+      avatar_url?: string | null;
       time: string;
       preview: string;
       unread: number;
@@ -167,6 +168,7 @@ export function Sidebar({
           kind: "room",
           id: r.id,
           name: r.name,
+          avatar_url: r.avatar_url,
           time: r.last_message_at ?? r.inserted_at,
           preview: r.last_message
             ? getPreviewText(r.last_message, "No messages yet")
@@ -341,6 +343,7 @@ export function Sidebar({
                   >
                     <Avatar
                       name={item.name}
+                      src={item.kind === "room" ? item.avatar_url ?? null : null}
                       size="medium"
                       className={
                         isCollapsed ? undefined : "h-[46px] w-[46px] text-base"

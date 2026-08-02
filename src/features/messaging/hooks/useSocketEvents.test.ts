@@ -65,6 +65,7 @@ function makeSocketManager(
     onServerMemberRemoved: subscribe("serverMemberRemoved"),
     onRoomMemberAdded: subscribe("roomMemberAdded"),
     onRoomMemberRemoved: subscribe("roomMemberRemoved"),
+    onRoomProfileUpdated: subscribe("roomProfileUpdated"),
     onServerDeleted: subscribe("serverDeleted"),
     onChannelCreated: subscribe("channelCreated"),
   };
@@ -127,6 +128,19 @@ describe("useSocketEvents", () => {
     useAppStoreMock.mockReset();
     getStateMock.mockReset();
     showNotificationMock.mockReset();
+  });
+
+  it("upserts complete ordinary-group profile events without affecting channels", () => {
+    const { state, handlers } = makeState();
+    state.roomPreviews[9].server_id = null;
+    useAppStoreMock.mockImplementation((selector: (value: typeof state) => unknown) => selector(state));
+    getStateMock.mockImplementation(() => state);
+    renderHook(() => useSocketEvents());
+    handlers.roomProfileUpdated?.({ id: 9, kind: "group", name: "Renamed", description: "About", avatar_url: "/api/v1/media/avatar", avatar_media_file_id: "avatar" });
+    expect(state.upsertRoomPreview).toHaveBeenCalledWith(expect.objectContaining({ id: 9, name: "Renamed", description: "About", avatar_media_file_id: "avatar" }));
+    state.upsertRoomPreview.mockClear();
+    handlers.roomProfileUpdated?.({ id: 9, kind: "server_text", name: "Channel" });
+    expect(state.upsertRoomPreview).not.toHaveBeenCalled();
   });
 
   it("uses room_message_summary for preview/unread updates without appending room messages", async () => {

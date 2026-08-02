@@ -131,6 +131,7 @@ export function GroupProfileModal({
           <div className="flex flex-col items-center text-center">
             <Avatar
               name={room.name}
+              src={room.avatar_url ?? null}
               size="large"
               className="h-20 w-20 text-2xl"
             />
@@ -150,6 +151,15 @@ export function GroupProfileModal({
             ))}
           </div>
         </section>
+
+        {room.description && (
+          <>
+            <div className="h-2 shrink-0 border-y border-border bg-muted/30" aria-hidden="true" />
+            <section className="border-b border-border px-[18px] py-3" aria-label="Group description">
+              <p className="whitespace-pre-wrap text-sm text-muted-foreground">{room.description}</p>
+            </section>
+          </>
+        )}
 
         <div data-testid="group-profile-section-separator" className="h-2 shrink-0 border-y border-border bg-muted/30" aria-hidden="true" />
         <section className="min-h-0 overflow-y-auto">
