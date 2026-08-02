@@ -126,6 +126,8 @@ export function AvatarCropDialog({
   };
   const cropCenterX = cropBounds.x - surface.left + cropBounds.size / 2;
   const cropCenterY = cropBounds.y - surface.top + cropBounds.size / 2;
+  const clipCenterX = cropCenterX - position.left;
+  const clipCenterY = cropCenterY - position.top;
 
   const getPositionBounds = (crop: CropBounds) => ({
     minLeft: crop.x - surface.left + crop.size - renderedWidth,
@@ -533,7 +535,7 @@ export function AvatarCropDialog({
                   left: position.left,
                   top: position.top,
                   visibility: imageStatus === "ready" ? "visible" : "hidden",
-                  clipPath: `circle(${cropBounds.size / 2}px at ${cropBounds.x - surface.left + cropBounds.size / 2}px ${cropBounds.y - surface.top + cropBounds.size / 2}px)`,
+                  clipPath: `circle(${cropBounds.size / 2}px at ${clipCenterX}px ${clipCenterY}px)`,
                 }}
                 onLoad={handleImageLoad}
                 onError={handleImageError}

@@ -259,51 +259,101 @@ describe("AvatarCropDialog", () => {
     ).toBeLessThanOrEqual(surfaceRight + 0.01);
   });
 
-  it("keeps the bright clip and circular outline synchronized with crop bounds", () => {
+  it("keeps the bright clip and circular outline synchronized through geometry changes", () => {
+    const originalWidth = window.innerWidth;
+    const originalHeight = window.innerHeight;
     renderCrop();
     const image = loadImage();
     const stage = screen.getByTestId("avatar-crop-stage");
-    const readClip = () => {
+    const readGeometry = () => {
+      const surface = screen.getByTestId("avatar-crop-image-surface");
       const match = image.style.clipPath.match(
         /circle\(([-\d.]+)px at ([-\d.]+)px ([-\d.]+)px\)/,
       );
       if (!match) throw new Error("Expected circular image clip");
-      return {
-        radius: Number(match[1]),
-        x: Number(match[2]),
-        y: Number(match[3]),
-      };
-    };
-    const readOutline = () => {
       const circle = screen
         .getByTestId("avatar-crop-mask")
         .querySelector("circle");
       if (!circle) throw new Error("Expected circular crop outline");
       return {
-        radius: Number(circle.getAttribute("r")),
-        x: Number(circle.getAttribute("cx")),
-        y: Number(circle.getAttribute("cy")),
+        clip: {
+          radius: Number(match[1]),
+          x:
+            Number.parseFloat(surface.style.left) +
+            Number.parseFloat(image.style.left) +
+            Number(match[2]),
+          y:
+            Number.parseFloat(surface.style.top) +
+            Number.parseFloat(image.style.top) +
+            Number(match[3]),
+        },
+        outline: {
+          radius: Number(circle.getAttribute("r")),
+          x:
+            Number.parseFloat(surface.style.left) +
+            Number(circle.getAttribute("cx")),
+          y:
+            Number.parseFloat(surface.style.top) +
+            Number(circle.getAttribute("cy")),
+        },
       };
     };
+    const expectSynchronized = () => {
+      const { clip, outline } = readGeometry();
+      expect(outline.x).toBeCloseTo(clip.x);
+      expect(outline.y).toBeCloseTo(clip.y);
+      expect(outline.radius).toBeCloseTo(clip.radius - 1);
+      return { clip, outline };
+    };
 
-    const initialClip = readClip();
-    const initialOutline = readOutline();
-    expect(initialOutline.x).toBeCloseTo(initialClip.x);
-    expect(initialOutline.y).toBeCloseTo(initialClip.y);
-    expect(initialOutline.radius).toBeCloseTo(initialClip.radius - 1);
+    const initial = expectSynchronized();
+
+    fireEvent.pointerDown(stage, {
+      pointerId: 9,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(stage, {
+      pointerId: 9,
+      clientX: 40,
+      clientY: 40,
+    });
+    fireEvent.pointerUp(stage, { pointerId: 9 });
+    const dragged = expectSynchronized();
+    expect(dragged.clip.x).toBeCloseTo(initial.clip.x);
+    expect(dragged.clip.y).toBeCloseTo(initial.clip.y);
 
     const handle = screen.getByRole("button", { name: "Resize crop top left" });
-    fireEvent.pointerDown(handle, { pointerId: 9, clientX: 100, clientY: 100 });
-    fireEvent.pointerMove(stage, { pointerId: 9, clientX: 140, clientY: 140 });
-    fireEvent.pointerUp(stage, { pointerId: 9 });
+    fireEvent.pointerDown(handle, { pointerId: 10, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(stage, { pointerId: 10, clientX: 140, clientY: 140 });
+    fireEvent.pointerUp(stage, { pointerId: 10 });
+    const resized = expectSynchronized();
+    expect(resized.clip.x - dragged.clip.x).toBeCloseTo(20);
+    expect(resized.clip.y - dragged.clip.y).toBeCloseTo(20);
+    expect(resized.clip.radius).toBeLessThan(dragged.clip.radius);
 
-    const nextClip = readClip();
-    const nextOutline = readOutline();
-    expect(nextClip.x - initialClip.x).toBeCloseTo(20);
-    expect(nextClip.y - initialClip.y).toBeCloseTo(20);
-    expect(nextOutline.x).toBeCloseTo(nextClip.x);
-    expect(nextOutline.y).toBeCloseTo(nextClip.y);
-    expect(nextOutline.radius).toBeCloseTo(nextClip.radius - 1);
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expectSynchronized();
+
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: window.innerWidth + 120,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: window.innerHeight - 80,
+    });
+    fireEvent(window, new Event("resize"));
+    expectSynchronized();
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: originalWidth,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: originalHeight,
+    });
+
     expect(
       screen.getByTestId("avatar-crop-mask").querySelectorAll("circle"),
     ).toHaveLength(1);
@@ -330,18 +380,48 @@ describe("AvatarCropDialog", () => {
     });
     const { onSetPhoto } = renderCrop();
     const image = loadImage();
+    const stage = screen.getByTestId("avatar-crop-stage");
+    fireEvent.pointerDown(stage, {
+      pointerId: 11,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(stage, {
+      pointerId: 11,
+      clientX: 40,
+      clientY: 40,
+    });
+    fireEvent.pointerUp(stage, { pointerId: 11 });
+    const handle = screen.getByRole("button", { name: "Resize crop top left" });
+    fireEvent.pointerDown(handle, { pointerId: 12, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(stage, { pointerId: 12, clientX: 140, clientY: 140 });
+    fireEvent.pointerUp(stage, { pointerId: 12 });
+
+    const guides = screen.getByTestId("avatar-crop-corner-guides");
+    const surface = screen.getByTestId("avatar-crop-image-surface");
+    const cropX = Number.parseFloat(guides.style.left) + 12;
+    const cropY = Number.parseFloat(guides.style.top) + 12;
+    const cropSize = Number.parseFloat(guides.style.width) - 24;
+    const scale = Number.parseFloat(image.style.width) / 800;
     fireEvent.click(screen.getByRole("button", { name: "Set photo" }));
     await waitFor(() => expect(onSetPhoto).toHaveBeenCalledOnce());
     const [blob] = onSetPhoto.mock.calls[0];
     expect(blob.type).toBe("image/png");
     expect(context.drawImage).toHaveBeenCalledOnce();
-    const cropSize =
-      Number.parseFloat(
-        screen.getByTestId("avatar-crop-corner-guides").style.width,
-      ) - 24;
-    expect(context.drawImage.mock.calls[0][3]).toBeCloseTo(
-      cropSize / (Number.parseFloat(image.style.width) / 800),
+    expect(context.drawImage.mock.calls[0][1]).toBeCloseTo(
+      (cropX -
+        Number.parseFloat(surface.style.left) -
+        Number.parseFloat(image.style.left)) /
+        scale,
     );
+    expect(context.drawImage.mock.calls[0][2]).toBeCloseTo(
+      (cropY -
+        Number.parseFloat(surface.style.top) -
+        Number.parseFloat(image.style.top)) /
+        scale,
+    );
+    expect(context.drawImage.mock.calls[0][3]).toBeCloseTo(cropSize / scale);
+    expect(context.drawImage.mock.calls[0][4]).toBeCloseTo(cropSize / scale);
   });
 
   it("releases the active URL once when cancelled or unmounted", () => {
