@@ -45,6 +45,7 @@ export interface DialogProps {
   backdropClassName?: string;
   className?: string;
   overlayClassName?: string;
+  overlayStyle?: React.CSSProperties;
   inert?: boolean;
   children: React.ReactNode;
 }
@@ -62,6 +63,7 @@ export function Dialog({
   backdropClassName,
   className,
   overlayClassName,
+  overlayStyle,
   inert = false,
   children,
 }: DialogProps) {
@@ -186,6 +188,7 @@ export function Dialog({
         "fixed inset-0 z-modal flex items-center justify-center p-4",
         overlayClassName,
       )}
+      style={overlayStyle}
       aria-hidden={inert || undefined}
       data-testid="dialog-overlay"
     >

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { AvatarCropDialog } from "./AvatarCropDialog";
+import { APP_TITLE_BAR_HEIGHT } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
 
 describe("AvatarCropDialog", () => {
   let createObjectUrl: ReturnType<typeof vi.spyOn>;
@@ -58,6 +59,12 @@ describe("AvatarCropDialog", () => {
     const image = loadImage();
     expect(image.style.visibility).toBe("visible");
     expect(screen.getByTestId("avatar-crop-fullscreen")).toBeTruthy();
+    expect(screen.getByTestId("dialog-overlay").style.top).toBe(
+      `${APP_TITLE_BAR_HEIGHT}px`,
+    );
+    expect(screen.getByTestId("avatar-crop-fullscreen").className).toContain(
+      "bg-neutral-950/85",
+    );
     expect(screen.queryByText("Crop photo")).toBeNull();
     expect(screen.queryByRole("button", { name: "Cancel crop" })).toBeNull();
     expect(screen.queryByRole("slider")).toBeNull();
@@ -101,6 +108,40 @@ describe("AvatarCropDialog", () => {
         .disabled,
     ).toBe(true);
     expect(revokeObjectUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the title bar clear and aligns the crop stage below it", () => {
+    const originalWidth = window.innerWidth;
+    const originalHeight = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1920,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 1032,
+    });
+
+    try {
+      renderCrop();
+      const image = loadImage();
+      expect(screen.getByTestId("dialog-overlay").style.top).toBe(
+        `${APP_TITLE_BAR_HEIGHT}px`,
+      );
+      expect(image.style.top).toBe("49px");
+      expect(screen.getByTestId("avatar-crop-toolbar").className).toContain(
+        "bottom-5",
+      );
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: originalWidth,
+      });
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: originalHeight,
+      });
+    }
   });
 
   it("bounds dragging and recalculates position when zoom changes", () => {

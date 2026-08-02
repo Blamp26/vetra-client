@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Minus, Plus, RotateCcw } from "lucide-react";
 import { Dialog } from "@/shared/components/Dialog";
 import { Button } from "@/shared/components/Button";
+import { APP_TITLE_BAR_HEIGHT } from "@/shared/components/DesktopTitleBar/DesktopTitleBar";
 
 export const GROUP_AVATAR_SIZE = 512;
 export const GROUP_AVATAR_MAX_UPLOAD_SIZE = 15_000_000;
@@ -62,7 +63,7 @@ export function AvatarCropDialog({
   const viewportSize = Math.min(768, Math.max(240, windowSize.height - 218));
   const cropTop = Math.max(
     24,
-    Math.min(56, (windowSize.height - viewportSize - 160) / 2),
+    Math.min(56, (windowSize.height - viewportSize - 160) / 2) - 3,
   );
   const cropLeft = Math.max(0, (windowSize.width - viewportSize) / 2);
   const cropCenterX = cropLeft + viewportSize / 2;
@@ -288,14 +289,15 @@ export function AvatarCropDialog({
       onClose={onCancel}
       labelledBy={titleId}
       showBackdrop={false}
-      overlayClassName="!z-[1200] !p-0"
-      className="!fixed !inset-0 !flex !h-full !w-full !max-w-none !items-stretch !justify-stretch !rounded-none !border-0 !bg-transparent !p-0 !shadow-none"
+      overlayClassName="!z-[1200] !inset-x-0 !bottom-0 !p-0"
+      overlayStyle={{ top: `${APP_TITLE_BAR_HEIGHT}px` }}
+      className="!absolute !inset-0 !flex !h-full !w-full !max-w-none !items-stretch !justify-stretch !rounded-none !border-0 !bg-transparent !p-0 !shadow-none"
     >
       <h2 id={titleId} className="sr-only">
         Avatar crop editor
       </h2>
       <div
-        className="fixed inset-0 overflow-hidden bg-neutral-950 text-white"
+        className="absolute inset-0 overflow-hidden bg-neutral-950/85 text-white"
         data-testid="avatar-crop-fullscreen"
       >
         <div
