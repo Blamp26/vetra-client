@@ -256,31 +256,29 @@ export function GroupBasicInfoFields({
   const { draft, avatarMenuOpen, setAvatarMenuOpen, fileInputRef, chooseFile, pasteFromClipboard, removePhoto, nameTouched, setNameTouched, nameError, error, setDraft } = controller;
   return (
     <>
-      <div className="h-2 border-y border-border bg-muted/30" aria-hidden="true" />
-      <section aria-labelledby={`${titleId}-basic`} className="space-y-4 px-[22px] py-5">
-        <h3 id={`${titleId}-basic`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basic information</h3>
-        <div className="flex items-center gap-3">
+      <section aria-labelledby={`${titleId}-identity`} className="space-y-3 px-4 py-3">
+        <h3 id={`${titleId}-identity`} className="sr-only">Group identity</h3>
+        <div className="flex items-start gap-3">
           <div className="relative">
-            {draft.avatarPreviewUrl ? <img src={draft.avatarPreviewUrl} alt="Group avatar preview" className="h-16 w-16 rounded-full border border-border object-cover" /> : <Avatar name={draft.name} src={draft.avatarMediaFileId ? room.avatar_url ?? null : null} size="large" className="h-16 w-16 text-xl" />}
-            <button type="button" aria-label="Change group photo" className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border border-border bg-card text-foreground shadow-sm hover:bg-accent" onClick={() => setAvatarMenuOpen((open) => !open)}><ImagePlus className="h-4 w-4" aria-hidden="true" /></button>
+            {draft.avatarPreviewUrl ? <img src={draft.avatarPreviewUrl} alt="Group avatar preview" className="h-16 w-16 rounded-full border border-border object-cover" /> : <Avatar name={draft.name} src={draft.avatarMediaFileId ? room.avatar_url ?? null : null} size="large" className="h-16 w-16 rounded-full text-xl" />}
+            <button type="button" aria-label="Change group photo" className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border border-border bg-card text-foreground shadow-sm hover:bg-accent" onClick={() => setAvatarMenuOpen((open) => !open)}><ImagePlus className="h-3.5 w-3.5" aria-hidden="true" /></button>
             {avatarMenuOpen && <div role="menu" className="absolute left-0 top-[70px] z-10 w-48 rounded-lg border border-border bg-card p-1 shadow-lg">
               <button type="button" role="menuitem" className="flex w-full items-center rounded px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => fileInputRef.current?.click()}>Choose from file</button>
               <button type="button" role="menuitem" className="flex w-full items-center rounded px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => void pasteFromClipboard()}>Paste from clipboard</button>
               {(room.avatar_media_file_id || draft.avatarPreviewUrl) && <button type="button" role="menuitem" className="flex w-full items-center rounded px-3 py-2 text-left text-sm text-destructive hover:bg-accent" onClick={removePhoto}>Remove photo</button>}
             </div>}
           </div>
-          <div className="min-w-0"><p className="text-sm font-medium">Group photo</p><p className="text-xs text-muted-foreground">PNG, JPEG, GIF, or WebP · up to 15 MB</p></div>
+          <div className="min-w-0 flex-1 space-y-1">
+            <label className="block text-[11px] leading-none text-muted-foreground" htmlFor={`${titleId}-name`}>Group name</label>
+            <TextInput id={`${titleId}-name`} value={draft.name} maxLength={MAX_NAME_LENGTH} invalid={Boolean(nameTouched && nameError)} size="compact" className="!rounded-none !border-0 !border-b !border-border !bg-transparent !px-0 !py-1 !shadow-none focus:!border-primary focus:!ring-0" onBlur={() => setNameTouched(true)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} aria-describedby={nameTouched && nameError ? `${titleId}-name-error` : undefined} />
+            {nameTouched && nameError && <p id={`${titleId}-name-error`} role="alert" className="text-[11px] leading-tight text-destructive">{nameError}</p>}
+          </div>
         </div>
         <input ref={fileInputRef} type="file" accept={GROUP_AVATAR_TYPES.join(",")} className="hidden" onChange={chooseFile} />
         <div className="space-y-1">
-          <label className="vt-label" htmlFor={`${titleId}-name`}>Group name</label>
-          <TextInput id={`${titleId}-name`} value={draft.name} maxLength={MAX_NAME_LENGTH} invalid={Boolean(nameTouched && nameError)} onBlur={() => setNameTouched(true)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} aria-describedby={nameTouched && nameError ? `${titleId}-name-error` : undefined} />
-          {nameTouched && nameError && <p id={`${titleId}-name-error`} role="alert" className="text-xs text-destructive">{nameError}</p>}
-        </div>
-        <div className="space-y-1">
-          <label className="vt-label" htmlFor={descriptionId}>Description</label>
-          <textarea id={descriptionId} value={draft.description} maxLength={MAX_DESCRIPTION_LENGTH} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} className="vt-input min-h-20 w-full resize-y py-2" placeholder="Add a description" />
-          <p className="text-right text-xs text-muted-foreground">{draft.description.length}/{MAX_DESCRIPTION_LENGTH}</p>
+          <label className="block text-[11px] leading-none text-muted-foreground" htmlFor={descriptionId}>Description</label>
+          <textarea id={descriptionId} value={draft.description} maxLength={MAX_DESCRIPTION_LENGTH} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} className="vt-input !min-h-0 w-full resize-none !rounded-none !border-0 !border-b !border-border !bg-transparent !px-0 !py-1.5 text-sm !shadow-none focus:!border-primary focus:!ring-0" placeholder="Add a description" rows={draft.description ? Math.min(3, Math.max(1, draft.description.split("\n").length)) : 1} />
+          {draft.description.length >= MAX_DESCRIPTION_LENGTH - 50 && <p className="text-right text-[10px] text-muted-foreground">{draft.description.length}/{MAX_DESCRIPTION_LENGTH}</p>}
         </div>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </section>

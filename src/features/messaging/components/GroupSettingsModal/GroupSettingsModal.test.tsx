@@ -147,6 +147,15 @@ describe("GroupSettingsModal member governance", () => {
     expect((screen.getByLabelText("Group name") as HTMLInputElement).value).toBe("Group");
     expect(screen.getByLabelText("Description")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText("Basic information")).toBeNull();
+    expect(screen.queryByText(/PNG, JPEG, GIF, or WebP/)).toBeNull();
+    expect(screen.queryByText("0/500")).toBeNull();
+    expect((screen.getByLabelText("Group name") as HTMLInputElement).className).toContain("border-b");
+    expect((screen.getByLabelText("Description") as HTMLTextAreaElement).rows).toBe(1);
+    expect(screen.getByTestId("group-management-dialog").querySelector('[data-slot="avatar"]')?.className).toEqual(expect.stringContaining("h-16"));
+    expect(screen.getByTestId("group-management-dialog").querySelector('[data-slot="avatar"]')?.className).toEqual(expect.stringContaining("w-16"));
+    expect(screen.getByRole("button", { name: "Cancel" }).className).toContain("vt-button--ghost");
+    expect(screen.getByRole("button", { name: "Save" }).className).toContain("vt-button--ghost");
     expect(screen.queryByRole("button", { name: "Edit group basic information" })).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
