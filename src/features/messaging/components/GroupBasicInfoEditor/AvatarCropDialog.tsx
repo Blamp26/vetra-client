@@ -25,6 +25,11 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+type CropBounds = { x: number; y: number; size: number };
+type ResizeCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+const MIN_CROP_SIZE = 160;
+
 interface AvatarCropDialogProps {
   source: Blob;
   onCancel: () => void;
@@ -48,11 +53,23 @@ export function AvatarCropDialog({
     left: number;
     top: number;
   } | null>(null);
+  const resizeRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    crop: CropBounds;
+    corner: ResizeCorner;
+  } | null>(null);
   const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [imageStatus, setImageStatus] = useState<ImageStatus>("loading");
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ left: 0, top: 0 });
+  const [cropBounds, setCropBounds] = useState<CropBounds>({
+    x: 0,
+    y: 0,
+    size: 0,
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [windowSize, setWindowSize] = useState(() => ({
@@ -66,8 +83,6 @@ export function AvatarCropDialog({
     Math.min(56, (windowSize.height - viewportSize - 160) / 2) - 3,
   );
   const cropLeft = Math.max(0, (windowSize.width - viewportSize) / 2);
-  const cropCenterX = cropLeft + viewportSize / 2;
-  const cropCenterY = cropTop + viewportSize / 2;
 
   useEffect(() => {
     const handleResize = () =>
@@ -103,30 +118,61 @@ export function AvatarCropDialog({
       : 1;
   const renderedWidth = imageSize.width * baseScale * zoom;
   const renderedHeight = imageSize.height * baseScale * zoom;
-  const bounds = {
-    minLeft: viewportSize - renderedWidth,
-    maxLeft: 0,
-    minTop: viewportSize - renderedHeight,
-    maxTop: 0,
+  const surface = {
+    left: cropLeft,
+    top: cropTop,
+    width: imageSize.width ? imageSize.width * baseScale : viewportSize,
+    height: imageSize.height ? imageSize.height * baseScale : viewportSize,
+  };
+  const cropCenterX = cropBounds.x + cropBounds.size / 2;
+  const cropCenterY = cropBounds.y + cropBounds.size / 2;
+
+  const getPositionBounds = (crop: CropBounds) => ({
+    minLeft: crop.x - surface.left + crop.size - renderedWidth,
+    maxLeft: crop.x - surface.left,
+    minTop: crop.y - surface.top + crop.size - renderedHeight,
+    maxTop: crop.y - surface.top,
+  });
+
+  const clampPosition = (
+    next: { left: number; top: number },
+    crop: CropBounds,
+  ) => {
+    const bounds = getPositionBounds(crop);
+    return {
+      left: clamp(next.left, bounds.minLeft, bounds.maxLeft),
+      top: clamp(next.top, bounds.minTop, bounds.maxTop),
+    };
   };
 
   useEffect(() => {
     if (!imageSize.width || !imageSize.height) return;
+    const size = Math.min(viewportSize, surface.width, surface.height);
+    const nextCrop = {
+      x: surface.left + (surface.width - size) / 2,
+      y: surface.top + (surface.height - size) / 2,
+      size,
+    };
+    setCropBounds(nextCrop);
     setPosition({
-      left: (viewportSize - renderedWidth) / 2,
-      top: (viewportSize - renderedHeight) / 2,
+      left: 0,
+      top: 0,
     });
     // Initial centering is tied to the decoded image, not subsequent dragging.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageSize.width, imageSize.height, viewportSize]);
+  }, [
+    imageSize.width,
+    imageSize.height,
+    viewportSize,
+    surface.width,
+    surface.height,
+  ]);
 
   useEffect(() => {
-    setPosition((current) => ({
-      left: clamp(current.left, bounds.minLeft, bounds.maxLeft),
-      top: clamp(current.top, bounds.minTop, bounds.maxTop),
-    }));
+    if (!cropBounds.size) return;
+    setPosition((current) => clampPosition(current, cropBounds));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoom, imageSize.width, imageSize.height, viewportSize]);
+  }, [zoom, imageSize.width, imageSize.height, viewportSize, cropBounds]);
 
   const releaseSourceUrl = () => {
     const currentUrl = sourceUrlRef.current;
@@ -156,8 +202,77 @@ export function AvatarCropDialog({
     releaseSourceUrl();
   };
 
+  const getMaxCropSize = (crop: CropBounds, corner: ResizeCorner) => {
+    const right = surface.left + surface.width;
+    const bottom = surface.top + surface.height;
+    switch (corner) {
+      case "top-left":
+        return Math.min(
+          crop.x - surface.left + crop.size,
+          crop.y - surface.top + crop.size,
+        );
+      case "top-right":
+        return Math.min(right - crop.x, crop.y - surface.top + crop.size);
+      case "bottom-left":
+        return Math.min(crop.x - surface.left + crop.size, bottom - crop.y);
+      case "bottom-right":
+        return Math.min(right - crop.x, bottom - crop.y);
+    }
+  };
+
+  const resizeFromDelta = (
+    start: CropBounds,
+    corner: ResizeCorner,
+    deltaX: number,
+    deltaY: number,
+  ) => {
+    const signedDelta = {
+      "top-left": -(deltaX + deltaY) / 2,
+      "top-right": (deltaX - deltaY) / 2,
+      "bottom-left": (-deltaX + deltaY) / 2,
+      "bottom-right": (deltaX + deltaY) / 2,
+    }[corner];
+    const maximum = Math.max(MIN_CROP_SIZE, getMaxCropSize(start, corner));
+    const size = clamp(
+      start.size + signedDelta,
+      Math.min(MIN_CROP_SIZE, maximum),
+      maximum,
+    );
+    const fixed = {
+      "top-left": { x: start.x + start.size, y: start.y + start.size },
+      "top-right": { x: start.x, y: start.y + start.size },
+      "bottom-left": { x: start.x + start.size, y: start.y },
+      "bottom-right": { x: start.x, y: start.y },
+    }[corner];
+    const nextCrop = {
+      x: corner.includes("left") ? fixed.x - size : fixed.x,
+      y: corner.includes("top") ? fixed.y - size : fixed.y,
+      size,
+    };
+    setCropBounds(nextCrop);
+    setPosition((current) => clampPosition(current, nextCrop));
+  };
+
+  const handleResizePointerDown = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    corner: ResizeCorner,
+  ) => {
+    if (imageStatus !== "ready") return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      crop: cropBounds,
+      corner,
+    };
+  };
+
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (imageStatus !== "ready") return;
+    if (resizeRef.current) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
@@ -169,8 +284,19 @@ export function AvatarCropDialog({
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const resize = resizeRef.current;
+    if (resize && resize.pointerId === event.pointerId) {
+      resizeFromDelta(
+        resize.crop,
+        resize.corner,
+        event.clientX - resize.x,
+        event.clientY - resize.y,
+      );
+      return;
+    }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+    const bounds = getPositionBounds(cropBounds);
     setPosition({
       left: clamp(
         drag.left + event.clientX - drag.x,
@@ -186,6 +312,8 @@ export function AvatarCropDialog({
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (resizeRef.current?.pointerId === event.pointerId)
+      resizeRef.current = null;
     if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
   };
 
@@ -206,9 +334,11 @@ export function AvatarCropDialog({
       canvas.height = GROUP_AVATAR_SIZE;
       const context = canvas.getContext("2d");
       if (!context) throw new Error("Could not prepare the avatar crop.");
-      const sourceX = -position.left / (baseScale * zoom);
-      const sourceY = -position.top / (baseScale * zoom);
-      const sourceSize = viewportSize / (baseScale * zoom);
+      const sourceX =
+        (cropBounds.x - surface.left - position.left) / (baseScale * zoom);
+      const sourceY =
+        (cropBounds.y - surface.top - position.top) / (baseScale * zoom);
+      const sourceSize = cropBounds.size / (baseScale * zoom);
       context.clearRect(0, 0, GROUP_AVATAR_SIZE, GROUP_AVATAR_SIZE);
       context.save();
       context.beginPath();
@@ -253,9 +383,15 @@ export function AvatarCropDialog({
   const resetFraming = () => {
     setZoom(1);
     if (imageSize.width && imageSize.height) {
+      const size = Math.min(viewportSize, surface.width, surface.height);
       setPosition({
-        left: (viewportSize - renderedWidth / zoom) / 2,
-        top: (viewportSize - renderedHeight / zoom) / 2,
+        left: 0,
+        top: 0,
+      });
+      setCropBounds({
+        x: surface.left + (surface.width - size) / 2,
+        y: surface.top + (surface.height - size) / 2,
+        size,
       });
     } else {
       setPosition({ left: 0, top: 0 });
@@ -267,6 +403,10 @@ export function AvatarCropDialog({
     changeZoom(event.deltaY > 0 ? -0.1 : 0.1);
   };
   const handleStageKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      resizeRef.current = null;
+      return;
+    }
     if (event.key === "+" || event.key === "=" || event.key === "ArrowUp") {
       event.preventDefault();
       changeZoom(0.1);
@@ -281,6 +421,48 @@ export function AvatarCropDialog({
       event.preventDefault();
       resetFraming();
     }
+  };
+
+  const handleResizeKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    corner: ResizeCorner,
+  ) => {
+    if (
+      !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    const step = event.shiftKey ? 24 : 8;
+    const direction = {
+      "top-left": {
+        ArrowLeft: [-step, -step],
+        ArrowUp: [-step, -step],
+        ArrowRight: [step, step],
+        ArrowDown: [step, step],
+      },
+      "top-right": {
+        ArrowLeft: [-step, step],
+        ArrowUp: [step, -step],
+        ArrowRight: [step, -step],
+        ArrowDown: [-step, step],
+      },
+      "bottom-left": {
+        ArrowLeft: [-step, step],
+        ArrowUp: [-step, step],
+        ArrowRight: [step, -step],
+        ArrowDown: [step, -step],
+      },
+      "bottom-right": {
+        ArrowLeft: [-step, -step],
+        ArrowUp: [-step, -step],
+        ArrowRight: [step, step],
+        ArrowDown: [step, step],
+      },
+    }[corner][
+      event.key as "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight"
+    ];
+    resizeFromDelta(cropBounds, corner, direction[0], direction[1]);
   };
 
   return (
@@ -314,7 +496,16 @@ export function AvatarCropDialog({
           data-testid="avatar-crop-stage"
         >
           {sourceUrl && (
-            <>
+            <div
+              className="absolute overflow-hidden"
+              style={{
+                left: surface.left,
+                top: surface.top,
+                width: surface.width,
+                height: surface.height,
+              }}
+              data-testid="avatar-crop-image-surface"
+            >
               <img
                 src={sourceUrl}
                 alt=""
@@ -323,8 +514,8 @@ export function AvatarCropDialog({
                 style={{
                   width: renderedWidth,
                   height: renderedHeight,
-                  left: cropLeft + position.left,
-                  top: cropTop + position.top,
+                  left: position.left,
+                  top: position.top,
                   visibility: imageStatus === "ready" ? "visible" : "hidden",
                   filter: "brightness(0.3)",
                 }}
@@ -339,16 +530,16 @@ export function AvatarCropDialog({
                 style={{
                   width: renderedWidth,
                   height: renderedHeight,
-                  left: cropLeft + position.left,
-                  top: cropTop + position.top,
+                  left: position.left,
+                  top: position.top,
                   visibility: imageStatus === "ready" ? "visible" : "hidden",
-                  clipPath: `circle(${viewportSize / 2}px at ${cropCenterX}px ${cropCenterY}px)`,
+                  clipPath: `circle(${cropBounds.size / 2}px at ${cropBounds.x - surface.left + cropBounds.size / 2}px ${cropBounds.y - surface.top + cropBounds.size / 2}px)`,
                 }}
                 onLoad={handleImageLoad}
                 onError={handleImageError}
                 data-testid="avatar-crop-image-bright"
               />
-            </>
+            </div>
           )}
           {imageStatus === "loading" && (
             <div
@@ -376,7 +567,7 @@ export function AvatarCropDialog({
                 <circle
                   cx={cropCenterX}
                   cy={cropCenterY}
-                  r={viewportSize / 2 - 1}
+                  r={cropBounds.size / 2 - 1}
                   fill="none"
                   stroke="white"
                   strokeOpacity="0.38"
@@ -386,18 +577,45 @@ export function AvatarCropDialog({
               <div
                 className="pointer-events-none absolute"
                 style={{
-                  left: cropLeft,
-                  top: cropTop,
-                  width: viewportSize,
-                  height: viewportSize,
+                  left: cropBounds.x - 12,
+                  top: cropBounds.y - 12,
+                  width: cropBounds.size + 24,
+                  height: cropBounds.size + 24,
                 }}
                 data-testid="avatar-crop-corner-guides"
-                aria-hidden="true"
               >
-                <span className="absolute left-0 top-0 h-8 w-8 border-l-2 border-t-2 border-white/90" />
-                <span className="absolute right-0 top-0 h-8 w-8 border-r-2 border-t-2 border-white/90" />
-                <span className="absolute bottom-0 left-0 h-8 w-8 border-b-2 border-l-2 border-white/90" />
-                <span className="absolute bottom-0 right-0 h-8 w-8 border-b-2 border-r-2 border-white/90" />
+                {(
+                  [
+                    "top-left",
+                    "top-right",
+                    "bottom-left",
+                    "bottom-right",
+                  ] as ResizeCorner[]
+                ).map((corner) => (
+                  <button
+                    key={corner}
+                    type="button"
+                    aria-label={`Resize crop ${corner.replace("-", " ")}`}
+                    className={`pointer-events-auto absolute h-6 w-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 ${
+                      corner === "top-left"
+                        ? "left-0 top-0 cursor-nwse-resize"
+                        : ""
+                    }${corner === "top-right" ? "right-0 top-0 cursor-nesw-resize" : ""}${corner === "bottom-left" ? "bottom-0 left-0 cursor-nesw-resize" : ""}${corner === "bottom-right" ? "bottom-0 right-0 cursor-nwse-resize" : ""}`}
+                    onPointerDown={(event) =>
+                      handleResizePointerDown(event, corner)
+                    }
+                    onKeyDown={(event) => handleResizeKeyDown(event, corner)}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`absolute h-3 w-3 border-white/90 ${
+                        corner === "top-left"
+                          ? "left-3 top-3 border-l-2 border-t-2"
+                          : ""
+                      }${corner === "top-right" ? "right-3 top-3 border-r-2 border-t-2" : ""}${corner === "bottom-left" ? "bottom-3 left-3 border-b-2 border-l-2" : ""}${corner === "bottom-right" ? "bottom-3 right-3 border-b-2 border-r-2" : ""}`}
+                    />
+                  </button>
+                ))}
               </div>
             </>
           )}

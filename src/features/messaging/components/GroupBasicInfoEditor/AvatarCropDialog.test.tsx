@@ -76,6 +76,12 @@ describe("AvatarCropDialog", () => {
     expect(screen.getByTestId("avatar-crop-image-dim").style.filter).toContain(
       "brightness",
     );
+    expect(screen.getByTestId("avatar-crop-image-dim").style.left).toBe(
+      screen.getByTestId("avatar-crop-image-bright").style.left,
+    );
+    expect(screen.getByTestId("avatar-crop-image-surface").className).toContain(
+      "overflow-hidden",
+    );
     expect(image.style.clipPath).toContain("circle(");
     const circle = screen
       .getByTestId("avatar-crop-mask")
@@ -124,11 +130,13 @@ describe("AvatarCropDialog", () => {
 
     try {
       renderCrop();
-      const image = loadImage();
+      loadImage();
       expect(screen.getByTestId("dialog-overlay").style.top).toBe(
         `${APP_TITLE_BAR_HEIGHT}px`,
       );
-      expect(image.style.top).toBe("49px");
+      expect(screen.getByTestId("avatar-crop-image-surface").style.top).toBe(
+        "49px",
+      );
       expect(screen.getByTestId("avatar-crop-toolbar").className).toContain(
         "bottom-5",
       );
@@ -168,6 +176,89 @@ describe("AvatarCropDialog", () => {
     expect(Number.parseFloat(image.style.width)).toBe(initialWidth);
   });
 
+  it("resizes every corner around its diagonally opposite anchor", () => {
+    renderCrop();
+    loadImage();
+    const stage = screen.getByTestId("avatar-crop-stage");
+    const corners = [
+      ["top-left", 40, 40, "bottom-right"],
+      ["top-right", -40, 40, "bottom-left"],
+      ["bottom-left", 40, -40, "top-right"],
+      ["bottom-right", -40, -40, "top-left"],
+    ] as const;
+
+    for (const [corner, deltaX, deltaY, opposite] of corners) {
+      const guides = screen.getByTestId("avatar-crop-corner-guides");
+      const initialSize = Number.parseFloat(guides.style.width) - 24;
+      const initialLeft = Number.parseFloat(guides.style.left) + 12;
+      const initialTop = Number.parseFloat(guides.style.top) + 12;
+      const initialOpposite = {
+        x: opposite.includes("right") ? initialLeft + initialSize : initialLeft,
+        y: opposite.includes("bottom") ? initialTop + initialSize : initialTop,
+      };
+      const handle = screen.getByRole("button", {
+        name: `Resize crop ${corner.replace("-", " ")}`,
+      });
+      fireEvent.pointerDown(handle, {
+        pointerId: 7,
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(stage, {
+        pointerId: 7,
+        clientX: 100 + deltaX,
+        clientY: 100 + deltaY,
+      });
+      fireEvent.pointerUp(stage, { pointerId: 7 });
+
+      const nextGuides = screen.getByTestId("avatar-crop-corner-guides");
+      const nextSize = Number.parseFloat(nextGuides.style.width) - 24;
+      const nextLeft = Number.parseFloat(nextGuides.style.left) + 12;
+      const nextTop = Number.parseFloat(nextGuides.style.top) + 12;
+      expect(nextSize).toBeLessThan(initialSize);
+      expect(nextSize).toBe(Number.parseFloat(nextGuides.style.height) - 24);
+      expect(
+        opposite.includes("right") ? nextLeft + nextSize : nextLeft,
+      ).toBeCloseTo(initialOpposite.x);
+      expect(
+        opposite.includes("bottom") ? nextTop + nextSize : nextTop,
+      ).toBeCloseTo(initialOpposite.y);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Reset crop framing" }),
+      );
+    }
+  });
+
+  it("enforces crop bounds and keyboard resizing without stretching", () => {
+    renderCrop();
+    loadImage();
+    const stage = screen.getByTestId("avatar-crop-stage");
+    const handle = screen.getByRole("button", {
+      name: "Resize crop bottom right",
+    });
+    fireEvent.keyDown(handle, { key: "ArrowLeft" });
+    const guides = screen.getByTestId("avatar-crop-corner-guides");
+    const keyboardSize = Number.parseFloat(guides.style.width) - 24;
+    expect(keyboardSize).toBe(Number.parseFloat(guides.style.height) - 24);
+    fireEvent.pointerDown(handle, { pointerId: 8, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(stage, {
+      pointerId: 8,
+      clientX: -5000,
+      clientY: -5000,
+    });
+    fireEvent.pointerUp(stage, { pointerId: 8 });
+    const minimumSize = Number.parseFloat(guides.style.width) - 24;
+    expect(minimumSize).toBeGreaterThanOrEqual(160);
+    expect(minimumSize).toBe(Number.parseFloat(guides.style.height) - 24);
+    const surface = screen.getByTestId("avatar-crop-image-surface");
+    const surfaceRight =
+      Number.parseFloat(surface.style.left) +
+      Number.parseFloat(surface.style.width);
+    expect(
+      Number.parseFloat(guides.style.left) + minimumSize + 12,
+    ).toBeLessThanOrEqual(surfaceRight + 0.01);
+  });
+
   it("creates a 512 by 512 PNG draft without uploading", async () => {
     const context = {
       clearRect: vi.fn(),
@@ -188,12 +279,19 @@ describe("AvatarCropDialog", () => {
         callback(new Blob(["cropped"], { type: type ?? "image/png" })),
     });
     const { onSetPhoto } = renderCrop();
-    loadImage();
+    const image = loadImage();
     fireEvent.click(screen.getByRole("button", { name: "Set photo" }));
     await waitFor(() => expect(onSetPhoto).toHaveBeenCalledOnce());
     const [blob] = onSetPhoto.mock.calls[0];
     expect(blob.type).toBe("image/png");
     expect(context.drawImage).toHaveBeenCalledOnce();
+    const cropSize =
+      Number.parseFloat(
+        screen.getByTestId("avatar-crop-corner-guides").style.width,
+      ) - 24;
+    expect(context.drawImage.mock.calls[0][3]).toBeCloseTo(
+      cropSize / (Number.parseFloat(image.style.width) / 800),
+    );
   });
 
   it("releases the active URL once when cancelled or unmounted", () => {
