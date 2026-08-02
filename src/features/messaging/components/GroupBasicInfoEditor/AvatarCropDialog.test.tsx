@@ -259,6 +259,56 @@ describe("AvatarCropDialog", () => {
     ).toBeLessThanOrEqual(surfaceRight + 0.01);
   });
 
+  it("keeps the bright clip and circular outline synchronized with crop bounds", () => {
+    renderCrop();
+    const image = loadImage();
+    const stage = screen.getByTestId("avatar-crop-stage");
+    const readClip = () => {
+      const match = image.style.clipPath.match(
+        /circle\(([-\d.]+)px at ([-\d.]+)px ([-\d.]+)px\)/,
+      );
+      if (!match) throw new Error("Expected circular image clip");
+      return {
+        radius: Number(match[1]),
+        x: Number(match[2]),
+        y: Number(match[3]),
+      };
+    };
+    const readOutline = () => {
+      const circle = screen
+        .getByTestId("avatar-crop-mask")
+        .querySelector("circle");
+      if (!circle) throw new Error("Expected circular crop outline");
+      return {
+        radius: Number(circle.getAttribute("r")),
+        x: Number(circle.getAttribute("cx")),
+        y: Number(circle.getAttribute("cy")),
+      };
+    };
+
+    const initialClip = readClip();
+    const initialOutline = readOutline();
+    expect(initialOutline.x).toBeCloseTo(initialClip.x);
+    expect(initialOutline.y).toBeCloseTo(initialClip.y);
+    expect(initialOutline.radius).toBeCloseTo(initialClip.radius - 1);
+
+    const handle = screen.getByRole("button", { name: "Resize crop top left" });
+    fireEvent.pointerDown(handle, { pointerId: 9, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(stage, { pointerId: 9, clientX: 140, clientY: 140 });
+    fireEvent.pointerUp(stage, { pointerId: 9 });
+
+    const nextClip = readClip();
+    const nextOutline = readOutline();
+    expect(nextClip.x - initialClip.x).toBeCloseTo(20);
+    expect(nextClip.y - initialClip.y).toBeCloseTo(20);
+    expect(nextOutline.x).toBeCloseTo(nextClip.x);
+    expect(nextOutline.y).toBeCloseTo(nextClip.y);
+    expect(nextOutline.radius).toBeCloseTo(nextClip.radius - 1);
+    expect(
+      screen.getByTestId("avatar-crop-mask").querySelectorAll("circle"),
+    ).toHaveLength(1);
+  });
+
   it("creates a 512 by 512 PNG draft without uploading", async () => {
     const context = {
       clearRect: vi.fn(),

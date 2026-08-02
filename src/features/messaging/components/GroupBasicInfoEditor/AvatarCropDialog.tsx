@@ -124,8 +124,8 @@ export function AvatarCropDialog({
     width: imageSize.width ? imageSize.width * baseScale : viewportSize,
     height: imageSize.height ? imageSize.height * baseScale : viewportSize,
   };
-  const cropCenterX = cropBounds.x + cropBounds.size / 2;
-  const cropCenterY = cropBounds.y + cropBounds.size / 2;
+  const cropCenterX = cropBounds.x - surface.left + cropBounds.size / 2;
+  const cropCenterY = cropBounds.y - surface.top + cropBounds.size / 2;
 
   const getPositionBounds = (crop: CropBounds) => ({
     minLeft: crop.x - surface.left + crop.size - renderedWidth,
@@ -560,7 +560,14 @@ export function AvatarCropDialog({
           {imageStatus === "ready" && (
             <>
               <svg
-                className="pointer-events-none absolute inset-0 h-full w-full"
+                className="pointer-events-none absolute"
+                style={{
+                  left: surface.left,
+                  top: surface.top,
+                  width: surface.width,
+                  height: surface.height,
+                }}
+                viewBox={`0 0 ${surface.width} ${surface.height}`}
                 aria-hidden="true"
                 data-testid="avatar-crop-mask"
               >
