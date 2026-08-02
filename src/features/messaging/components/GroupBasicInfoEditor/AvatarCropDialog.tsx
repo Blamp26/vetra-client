@@ -39,7 +39,7 @@ export function AvatarCropDialog({ source, onCancel, onSetPhoto }: AvatarCropDia
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const viewportSize = 288;
+  const viewportSize = 344;
 
   useEffect(() => {
     const nextUrl = URL.createObjectURL(source);
@@ -176,15 +176,15 @@ export function AvatarCropDialog({ source, onCancel, onSetPhoto }: AvatarCropDia
   const changeZoom = (delta: number) => setZoom((current) => clamp(Number((current + delta).toFixed(2)), 1, 3));
 
   return (
-    <Dialog open onClose={onCancel} labelledBy={titleId} className="w-[min(366px,calc(100vw-48px))] overflow-hidden rounded-xl p-0">
+    <Dialog open onClose={onCancel} labelledBy={titleId} className="w-[min(448px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-hidden rounded-xl p-0">
       <div className="flex flex-col">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 id={titleId} className="text-base font-semibold">Crop photo</h2>
           <IconButton label="Cancel crop" size="compact" onClick={onCancel}><X className="h-4 w-4" aria-hidden="true" /></IconButton>
         </div>
-        <div className="space-y-3 px-4 py-4">
+        <div className="space-y-5 px-6 py-6">
           <div
-            className="relative mx-auto h-72 w-72 touch-none cursor-grab overflow-hidden rounded-lg border border-border bg-muted active:cursor-grabbing"
+            className="relative mx-auto h-[344px] w-[344px] max-w-full touch-none cursor-grab overflow-hidden bg-muted active:cursor-grabbing"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -207,18 +207,18 @@ export function AvatarCropDialog({ source, onCancel, onSetPhoto }: AvatarCropDia
             {imageStatus === "error" && <div className="absolute inset-0 grid place-items-center p-6 text-center text-xs text-destructive" role="alert">{error}</div>}
             {imageStatus === "ready" && <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${viewportSize} ${viewportSize}`} aria-hidden="true" data-testid="avatar-crop-mask">
               <defs><mask id={maskId}><rect width={viewportSize} height={viewportSize} fill="white" /><circle cx={viewportSize / 2} cy={viewportSize / 2} r={viewportSize / 2 - 2} fill="black" /></mask></defs>
-              <rect width={viewportSize} height={viewportSize} fill="black" fillOpacity="0.52" mask={`url(#${maskId})`} />
-              <circle cx={viewportSize / 2} cy={viewportSize / 2} r={viewportSize / 2 - 2} fill="none" stroke="white" strokeOpacity="0.9" strokeWidth="2" />
+              <rect width={viewportSize} height={viewportSize} fill="black" fillOpacity="0.74" mask={`url(#${maskId})`} />
+              <circle cx={viewportSize / 2} cy={viewportSize / 2} r={viewportSize / 2 - 1} fill="none" stroke="white" strokeOpacity="0.42" strokeWidth="1" />
             </svg>}
           </div>
-          <div className="flex items-center gap-2" aria-label="Zoom">
+          <div className="mx-auto flex w-[344px] max-w-full items-center gap-2" aria-label="Zoom">
             <button type="button" aria-label="Zoom out" className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={zoom <= 1 || imageStatus !== "ready"} onClick={() => changeZoom(-0.1)}><Minus className="h-4 w-4" aria-hidden="true" /></button>
             <input aria-label="Zoom avatar" type="range" min="1" max="3" step="0.05" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} disabled={imageStatus !== "ready"} className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-border accent-primary" />
             <button type="button" aria-label="Zoom in" className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" disabled={zoom >= 3 || imageStatus !== "ready"} onClick={() => changeZoom(0.1)}><Plus className="h-4 w-4" aria-hidden="true" /></button>
           </div>
           {error && imageStatus === "ready" && <p role="alert" className="text-xs text-destructive">{error}</p>}
         </div>
-        <div className="flex justify-end gap-1 border-t border-border px-4 py-2">
+        <div className="flex justify-end gap-1 border-t border-border px-5 py-3">
           <Button type="button" variant="ghost" size="compact" className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm" disabled={busy} onClick={onCancel}>Cancel</Button>
           <Button type="button" variant="ghost" size="compact" className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm text-primary" loading={busy} disabled={busy || imageStatus !== "ready"} onClick={() => void setPhoto()}>Set photo</Button>
         </div>

@@ -42,8 +42,14 @@ describe("AvatarCropDialog", () => {
     expect(revokeObjectUrl).not.toHaveBeenCalled();
     const image = loadImage();
     expect(image.style.visibility).toBe("visible");
-    expect(image.style.width).toBe("384px");
+    expect(image.style.width).toBe("458.6666666666667px");
     expect(screen.getByTestId("avatar-crop-mask")).toBeTruthy();
+    const viewport = screen.getByTestId("avatar-crop-viewport");
+    expect(viewport.className).toContain("h-[344px]");
+    expect(viewport.className).toContain("w-[344px]");
+    expect(viewport.className).not.toContain("rounded-lg");
+    expect(screen.getByTestId("avatar-crop-mask").querySelectorAll("rect")[1]?.getAttribute("fill-opacity")).toBe("0.74");
+    expect(screen.getByTestId("avatar-crop-mask").querySelectorAll("circle")[1]?.getAttribute("stroke-width")).toBe("1");
     expect((screen.getByRole("button", { name: "Set photo" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -65,10 +71,10 @@ describe("AvatarCropDialog", () => {
     fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 0, clientY: 0 });
     expect(image.style.left).not.toBe(initialLeft);
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-    expect(Number.parseFloat(image.style.width)).toBeGreaterThan(384);
+    expect(Number.parseFloat(image.style.width)).toBeGreaterThan(458);
     fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
     fireEvent.change(screen.getByRole("slider", { name: "Zoom avatar" }), { target: { value: "3" } });
-    expect(Number.parseFloat(image.style.width)).toBeGreaterThan(384);
+    expect(Number.parseFloat(image.style.width)).toBeGreaterThan(458);
   });
 
   it("creates a 512 by 512 PNG draft without uploading", async () => {
