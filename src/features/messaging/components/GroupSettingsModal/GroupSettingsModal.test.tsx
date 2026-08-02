@@ -152,10 +152,14 @@ describe("GroupSettingsModal member governance", () => {
     expect(screen.queryByText("0/500")).toBeNull();
     expect((screen.getByLabelText("Group name") as HTMLInputElement).className).toContain("border-b");
     expect((screen.getByLabelText("Description") as HTMLTextAreaElement).rows).toBe(1);
-    expect(screen.getByTestId("group-management-dialog").querySelector('[data-slot="avatar"]')?.className).toEqual(expect.stringContaining("h-16"));
-    expect(screen.getByTestId("group-management-dialog").querySelector('[data-slot="avatar"]')?.className).toEqual(expect.stringContaining("w-16"));
+    const avatarButton = screen.getByRole("button", { name: "Change group photo" });
+    expect(avatarButton.className).toContain("h-16");
+    expect(avatarButton.className).toContain("w-16");
     expect(screen.getByRole("button", { name: "Cancel" }).className).toContain("vt-button--ghost");
     expect(screen.getByRole("button", { name: "Save" }).className).toContain("vt-button--ghost");
+    expect(avatarButton.className).toContain("overflow-hidden");
+    expect(avatarButton.querySelector(".lucide-camera")?.getAttribute("class")).toContain("text-white");
+    expect(avatarButton.querySelector(".lucide-image-plus")).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit group basic information" })).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
@@ -205,5 +209,16 @@ describe("GroupSettingsModal member governance", () => {
       description: null,
       avatar_media_file_id: null,
     }));
+  });
+
+  it("opens avatar actions from the whole initials avatar with keyboard activation", async () => {
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Edit group")).toBeTruthy());
+    const avatarButton = screen.getByRole("button", { name: "Change group photo" });
+    fireEvent.keyDown(avatarButton, { key: "Enter" });
+    expect(screen.getByRole("menuitem", { name: "Choose from file" })).toBeTruthy();
+    fireEvent.click(avatarButton);
+    fireEvent.keyDown(avatarButton, { key: " " });
+    expect(screen.getByRole("menuitem", { name: "Paste from clipboard" })).toBeTruthy();
   });
 });
