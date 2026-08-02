@@ -22,9 +22,8 @@ import {
 import { sortConversationItems } from "../../utils/conversationOrdering";
 import { getPreviewText } from "../../utils/attachments";
 import { EmptyPane } from "@/shared/components/EmptyPane";
-import { GroupSettingsModal } from "../GroupSettingsModal/GroupSettingsModal";
 import { Settings } from "lucide-react";
-import type { ActiveChat, RoomPreview } from "@/shared/types";
+import type { ActiveChat } from "@/shared/types";
 import { formatUnreadCount } from "../../utils/unread";
 import { broadcastChannelsApi } from "@/api/broadcastChannels";
 import { CreateBroadcastChannelModal } from "@/features/broadcastChannels/components/CreateBroadcastChannelModal";
@@ -85,7 +84,7 @@ export function Sidebar({
   const setBroadcastSubscriptions = useAppStore((s: RootState) => s.setBroadcastSubscriptions);
 
   const [showProfile, setShowProfile] = useState(false);
-  const [settingsRoom, setSettingsRoom] = useState<RoomPreview | null>(null);
+  const openGroupSettings = useAppStore((s: RootState) => s.openGroupSettings);
   const serverPanelRef = useRef<HTMLDivElement | null>(null);
   const focusRestoreRef = useRef<HTMLElement | null>(null);
   const previousServerModeRef = useRef(isServerMode);
@@ -400,7 +399,10 @@ export function Sidebar({
                         className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSettingsRoom(roomPreviews[item.id]);
+                          openGroupSettings(item.id, {
+                            settingsOrigin: "sidebar",
+                            restoreFocus: e.currentTarget,
+                          });
                         }}
                       >
                         <Settings className="h-3 w-3" />
@@ -442,12 +444,6 @@ export function Sidebar({
         <ProfileModal
           user={currentUser}
           onClose={() => setShowProfile(false)}
-        />
-      )}
-      {settingsRoom && (
-        <GroupSettingsModal
-          room={settingsRoom}
-          onClose={() => setSettingsRoom(null)}
         />
       )}
     </div>

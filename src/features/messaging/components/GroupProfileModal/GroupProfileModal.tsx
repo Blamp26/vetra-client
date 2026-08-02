@@ -7,13 +7,13 @@ import { IconButton } from "@/shared/components/IconButton";
 import { TextInput } from "@/shared/components/Field";
 import type { RoomPreview } from "@/shared/types";
 import { roomRef } from "@/shared/utils/refs";
-import { GroupSettingsModal } from "../GroupSettingsModal/GroupSettingsModal";
 import { GroupMemberPicker } from "./GroupMemberPicker";
 
 interface GroupProfileModalProps {
   room: RoomPreview;
   onClose: () => void;
   onSearchMessages: () => void;
+  onManage?: () => void;
 }
 
 function memberName(member: GovernanceMember) {
@@ -24,10 +24,10 @@ export function GroupProfileModal({
   room,
   onClose,
   onSearchMessages,
+  onManage = () => undefined,
 }: GroupProfileModalProps) {
   const titleId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
-  const manageActionRef = useRef<HTMLButtonElement>(null);
   const requestVersion = useRef(0);
   const [members, setMembers] = useState<GovernanceMember[]>([]);
   const [query, setQuery] = useState("");
@@ -35,9 +35,7 @@ export function GroupProfileModal({
   const [error, setError] = useState<string | null>(null);
   const [governance, setGovernance] = useState<Awaited<ReturnType<typeof roomsApi.governance>> | null>(null);
   const [governanceLoading, setGovernanceLoading] = useState(true);
-  const [manageOpen, setManageOpen] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
-  const wasManageOpen = useRef(false);
 
   const loadMembers = () => {
     const version = ++requestVersion.current;
@@ -70,13 +68,6 @@ export function GroupProfileModal({
   }, [room.id, room.public_id]);
 
   useEffect(() => {
-    if (wasManageOpen.current && !manageOpen && !addMemberOpen) {
-      manageActionRef.current?.focus();
-    }
-    wasManageOpen.current = manageOpen;
-  }, [addMemberOpen, manageOpen]);
-
-  useEffect(() => {
     let active = true;
     setGovernanceLoading(true);
     setGovernance(null);
@@ -107,7 +98,7 @@ export function GroupProfileModal({
   );
   const actions = [
     { label: "Search", icon: <Search className="h-4 w-4" aria-hidden="true" />, onClick: onSearchMessages },
-    ...(canManage ? [{ label: "Manage", icon: <Settings2 className="h-4 w-4" aria-hidden="true" />, onClick: () => setManageOpen(true) }] : []),
+    ...(canManage ? [{ label: "Manage", icon: <Settings2 className="h-4 w-4" aria-hidden="true" />, onClick: onManage }] : []),
   ];
 
   return (
@@ -115,7 +106,7 @@ export function GroupProfileModal({
     <Dialog
       open
       onClose={onClose}
-      inert={manageOpen || addMemberOpen}
+      inert={addMemberOpen}
       labelledBy={titleId}
       initialFocusRef={searchRef}
       overlayClassName="items-start pt-16"
@@ -144,7 +135,7 @@ export function GroupProfileModal({
           </div>
           <div className="mt-4 flex flex-wrap justify-center gap-2 gap-[10px]" role="group" aria-label="Group actions">
             {actions.map((action) => (
-              <button ref={action.label === "Manage" ? manageActionRef : undefined} key={action.label} type="button" className="flex h-[52px] w-[81px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={action.onClick}>
+              <button key={action.label} type="button" className="flex h-[52px] w-[81px] shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={action.onClick}>
                 {action.icon}
                 {action.label}
               </button>
@@ -220,7 +211,6 @@ export function GroupProfileModal({
         </section>
       </div>
     </Dialog>
-    {manageOpen && <GroupSettingsModal room={room} onClose={() => { setManageOpen(false); manageActionRef.current?.focus(); }} onAddMember={() => { setManageOpen(false); setAddMemberOpen(true); }} />}
     {addMemberOpen && <GroupMemberPicker roomRef={roomRef(room) ?? room.id} existingMemberIds={new Set(members.map((member) => member.id))} onAdded={loadMembers} onClose={() => setAddMemberOpen(false)} />}
     </>
   );

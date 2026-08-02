@@ -126,6 +126,7 @@ function makeState() {
     activeModal: null,
     openModal: vi.fn(),
     closeModal: vi.fn(),
+    openGroupSettings: vi.fn(),
   };
 }
 
@@ -138,6 +139,21 @@ describe("Sidebar attachment previews", () => {
     getChannelsMock.mockResolvedValue([]);
     subscribedMock.mockReset();
     subscribedMock.mockResolvedValue([]);
+  });
+
+  it("routes group settings through the authoritative group surface", () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+    render(<Sidebar />);
+    const trigger = screen.getByRole("button", { name: "Manage general" });
+    fireEvent.click(trigger);
+    expect(state.openGroupSettings).toHaveBeenCalledWith(7, {
+      settingsOrigin: "sidebar",
+      restoreFocus: trigger,
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("renders the no-conversations state as a semantic empty pane", () => {

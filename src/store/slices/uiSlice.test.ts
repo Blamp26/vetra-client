@@ -2,6 +2,37 @@ import { describe, expect, it, vi } from "vitest";
 import { createUISlice } from "./uiSlice";
 
 describe("createUISlice", () => {
+  it("uses one group surface state for profile and both settings origins", () => {
+    let state: any = { groupSurface: null };
+    const set = vi.fn((updater: any) => {
+      const next = typeof updater === "function" ? updater(state) : updater;
+      state = { ...state, ...next };
+    });
+    const slice = createUISlice(set as any, () => state, {} as any);
+
+    slice.openGroupProfile(7);
+    expect(state.groupSurface).toEqual({ roomId: 7, view: "profile" });
+    slice.openGroupSettings(7, { settingsOrigin: "profile" });
+    expect(state.groupSurface).toEqual({
+      roomId: 7,
+      view: "settings",
+      settingsOrigin: "profile",
+    });
+    slice.backToGroupProfile();
+    expect(state.groupSurface).toEqual({
+      roomId: 7,
+      view: "profile",
+      settingsOrigin: undefined,
+    });
+
+    slice.openGroupSettings(7);
+    expect(state.groupSurface.settingsOrigin).toBe("sidebar");
+    slice.backToGroupProfile();
+    expect(state.groupSurface.view).toBe("settings");
+    slice.closeGroupSurface();
+    expect(state.groupSurface).toBeNull();
+  });
+
   it("ignores stale reaction revisions while accepting duplicate-safe updates", () => {
     let state: any = { messageReactions: {}, messageReactionVersions: {} };
     const set = vi.fn((updater: any) => {

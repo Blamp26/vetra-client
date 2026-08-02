@@ -114,7 +114,8 @@ describe("GroupProfileModal", () => {
 
   it("shows owner controls only after governance resolves and uses role badges", async () => {
     governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
-    render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
+    const onManage = vi.fn();
+    render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} onManage={onManage} />);
     expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Manage" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add member" })).toBeInTheDocument();
@@ -122,7 +123,8 @@ describe("GroupProfileModal", () => {
     expect(screen.getByLabelText("admin role")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Group actions" }).className).toContain("gap-[10px]");
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
-    expect(await screen.findByText("Edit group")).toBeInTheDocument();
+    expect(onManage).toHaveBeenCalledOnce();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /Mute|Call/ })).not.toBeInTheDocument();
   });
 
@@ -148,22 +150,14 @@ describe("GroupProfileModal", () => {
     expect(governanceMembers.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("layers management above the profile, traps focus there, and closes one dialog per Escape", async () => {
+  it("delegates Manage without mounting a second dialog owner", async () => {
     governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
-    const onClose = vi.fn();
-    render(<GroupProfileModal room={room} onClose={onClose} onSearchMessages={vi.fn()} />);
+    const onManage = vi.fn();
+    render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} onManage={onManage} />);
     const manage = await screen.findByRole("button", { name: "Manage" });
     fireEvent.click(manage);
-    const overlays = screen.getAllByTestId("dialog-overlay");
-    expect(overlays).toHaveLength(2);
-    expect(overlays[0]).toHaveAttribute("aria-hidden", "true");
-    expect(overlays[1].querySelector('[data-testid="dialog-panel"]')).toHaveClass("w-[min(366px,calc(100vw-32px))]");
-    expect(screen.getByRole("dialog", { name: "Edit group" })).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole("dialog", { name: "Edit group" }), { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "Edit group" })).not.toBeInTheDocument();
+    expect(onManage).toHaveBeenCalledOnce();
+    expect(screen.getAllByTestId("dialog-overlay")).toHaveLength(1);
     expect(screen.getByRole("dialog", { name: "Project Seven" })).toBeInTheDocument();
-    expect(document.activeElement).toBe(manage);
-    fireEvent.keyDown(screen.getByRole("dialog", { name: "Project Seven" }), { key: "Escape" });
-    expect(onClose).toHaveBeenCalledOnce();
   });
 });

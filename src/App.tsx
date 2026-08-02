@@ -9,6 +9,7 @@ import { AuthPage } from "@/features/registration/AuthPage";
 import { UpdateRequiredScreen } from "@/features/registration/UpdateRequiredScreen";
 import { Sidebar } from "@/features/messaging/components/Sidebar";
 import { SidebarFooter } from "@/features/messaging/components/Sidebar/SidebarFooter";
+import { GroupManagementHost } from "@/features/messaging/components/GroupManagement/GroupManagementHost";
 import { ChatWindow } from "@/features/messaging/components/ChatWindow/ChatWindow";
 import { ChannelPanel } from "@/features/messaging/components/ChannelPanel/ChannelPanel";
 import { SettingsPage } from "@/features/settings/components/SettingsPage/SettingsPage";
@@ -941,6 +942,7 @@ export function AppShell({ call, persistentCallAffordance }: AppShellProps) {
           </div>
         )}
 
+      <GroupManagementHost />
       <ToastHost />
       <PersistentCallDiagnosticsShortcut />
       <PersistentCallDebugPanel

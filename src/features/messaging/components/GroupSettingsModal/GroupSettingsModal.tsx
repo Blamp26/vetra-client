@@ -16,36 +16,21 @@ import {
   GroupBasicInfoFields,
   useGroupBasicInfoEditor,
 } from "../GroupBasicInfoEditor/GroupBasicInfoEditor";
-
-const ADMIN_RIGHTS = [
-  "change_group_info",
-  "delete_messages",
-  "remove_members",
-  "invite_members",
-  "pin_messages",
-  "manage_member_permissions",
-];
-const MEMBER_RIGHTS = [
-  "send_messages",
-  "send_photos",
-  "send_videos",
-  "send_stickers_gifs",
-  "send_music",
-  "send_files",
-  "send_voice_messages",
-  "send_video_messages",
-  "embed_links",
-  "send_polls",
-  "send_reactions",
-];
+import {
+  ADMIN_PERMISSION_KEYS,
+  groupPermissionLabel,
+  MEMBER_PERMISSION_KEYS,
+} from "../GroupManagement/permissionLabels";
 
 export function GroupSettingsModal({
   room,
   onClose,
+  onBack,
   onAddMember,
 }: {
   room: RoomPreview;
   onClose: () => void;
+  onBack?: () => void;
   onAddMember?: () => void;
 }) {
   const titleId = useId();
@@ -125,7 +110,7 @@ export function GroupSettingsModal({
     setSelected(member);
     setOverrideDraft(
       Object.fromEntries(
-        MEMBER_RIGHTS.map((right) => [
+        MEMBER_PERMISSION_KEYS.map((right) => [
           right,
           member.deny_permissions.includes(right)
             ? "deny"
@@ -143,8 +128,8 @@ export function GroupSettingsModal({
       await roomsApi.updateOverride(
         ref,
         selected.id,
-        MEMBER_RIGHTS.filter((right) => overrideDraft[right] === "allow"),
-        MEMBER_RIGHTS.filter((right) => overrideDraft[right] === "deny"),
+        MEMBER_PERMISSION_KEYS.filter((right) => overrideDraft[right] === "allow"),
+        MEMBER_PERMISSION_KEYS.filter((right) => overrideDraft[right] === "deny"),
       );
       await reload();
     } catch (e) {
@@ -247,7 +232,7 @@ export function GroupSettingsModal({
       <div className="flex max-h-[calc(100vh-32px)] min-h-0 flex-col" data-testid="group-management-dialog">
         <div className="shrink-0 border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
-            {view !== "overview" && <IconButton label="Back to group management" size="compact" onClick={() => setView("overview")}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></IconButton>}
+            {(view !== "overview" || onBack) && <IconButton label={view === "overview" ? "Back to group profile" : "Back to group management"} size="compact" onClick={view === "overview" ? onBack : () => setView("overview")}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></IconButton>}
             <h2 id={titleId} className="flex-1 truncate text-left text-base font-semibold">Edit group</h2>
             <IconButton label="Close edit group" size="compact" onClick={onClose}><span aria-hidden="true">×</span></IconButton>
           </div>
@@ -330,7 +315,7 @@ export function GroupSettingsModal({
                 {selected && (
                   <div className="rounded border p-3">
                     <h3 className="mb-2 font-medium">Administrator rights</h3>
-                    {ADMIN_RIGHTS.map((right) => (
+                    {ADMIN_PERMISSION_KEYS.map((right) => (
                       <label key={right} className="block text-sm">
                         <input
                           type="checkbox"
@@ -339,7 +324,7 @@ export function GroupSettingsModal({
                             setAdminRights(toggle(adminRights, right))
                           }
                         />{" "}
-                        {right}
+                        {groupPermissionLabel(right)}
                       </label>
                     ))}
                     <button disabled={busy} onClick={() => void saveAdmin()}>
@@ -376,16 +361,16 @@ export function GroupSettingsModal({
                   <div className="rounded border p-3">
                     <p className="mb-2 text-sm">
                       Effective:{" "}
-                      {selected.effective_permissions?.join(", ") || "none"}
+                      {selected.effective_permissions?.map(groupPermissionLabel).join(", ") || "none"}
                     </p>
-                    {MEMBER_RIGHTS.map((right) => (
+                    {MEMBER_PERMISSION_KEYS.map((right) => (
                       <label
                         key={right}
                         className="flex items-center justify-between text-sm"
                       >
-                        <span>{right}</span>
+                        <span>{groupPermissionLabel(right)}</span>
                         <select
-                          aria-label={`${right} override`}
+                          aria-label={`${groupPermissionLabel(right)} override`}
                           value={overrideDraft[right] ?? "inherit"}
                           onChange={(event) =>
                             setOverrideDraft((current) => ({
@@ -451,14 +436,14 @@ export function GroupSettingsModal({
                   Changes affect ordinary members immediately for future
                   actions.
                 </p>
-                {MEMBER_RIGHTS.map((right) => (
+                {MEMBER_PERMISSION_KEYS.map((right) => (
                   <label key={right} className="block text-sm">
                     <input
                       type="checkbox"
                       checked={defaults.includes(right)}
                       onChange={() => setDefaults(toggle(defaults, right))}
                     />{" "}
-                    {right}
+                    {groupPermissionLabel(right)}
                   </label>
                 ))}
                 <button disabled={busy} onClick={() => void saveDefaults()}>

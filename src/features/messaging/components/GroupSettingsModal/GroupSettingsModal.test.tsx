@@ -99,7 +99,7 @@ describe("GroupSettingsModal member governance", () => {
       }),
     );
 
-    const control = screen.getByLabelText("send_messages override");
+    const control = screen.getByLabelText("Send messages override");
     expect((control as HTMLSelectElement).value).toBe("inherit");
     fireEvent.change(control, { target: { value: "deny" } });
     fireEvent.click(screen.getByText("Save restrictions"));
@@ -166,6 +166,20 @@ describe("GroupSettingsModal member governance", () => {
     expect(screen.getByRole("button", { name: "Back to group management" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
     expect(screen.getByRole("navigation", { name: "Group management sections" })).toBeTruthy();
+  });
+
+  it("shows centralized permission labels while preserving wire keys in API calls", async () => {
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+    fireEvent.click(screen.getByRole("button", { name: "Member permissions" }));
+    expect(screen.getByText("Send messages")).toBeTruthy();
+    expect(screen.getByText("Send photos")).toBeTruthy();
+    expect(screen.queryByText("send_messages")).toBeNull();
+    expect(screen.queryByText("send_photos")).toBeNull();
+    fireEvent.click(screen.getByText("Save defaults"));
+    await waitFor(() =>
+      expect(roomsApiMock.updateDefaults).toHaveBeenCalledWith(7, ["send_messages"]),
+    );
   });
 
   it("keeps a valid basic-information draft while visiting governance views", async () => {

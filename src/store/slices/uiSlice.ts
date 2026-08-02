@@ -8,9 +8,18 @@ import { sameActiveChat } from "@/shared/utils/chatRoutes";
 
 export type ModalType = "CREATE_PICKER" | "CREATE_SERVER" | "CREATE_ROOM" | "CREATE_BROADCAST_CHANNEL";
 
+export interface GroupSurfaceState {
+  roomId: number;
+  view: "profile" | "settings";
+  settingsOrigin?: "profile" | "sidebar";
+  onSearchMessages?: () => void;
+  restoreFocus?: HTMLElement | null;
+}
+
 export interface UISlice {
   activeChat: ActiveChat | null;
   activeModal: ModalType | null;
+  groupSurface: GroupSurfaceState | null;
   messageReactions: Record<number, MessageReactionGroup[]>;
   messageReactionVersions: Record<number, string>;
   theme: Theme;
@@ -18,6 +27,16 @@ export interface UISlice {
   setActiveChat: (chat: ActiveChat | null) => void;
   openModal: (modal: ModalType) => void;
   closeModal: () => void;
+  openGroupProfile: (
+    roomId: number,
+    options?: Pick<GroupSurfaceState, "onSearchMessages" | "restoreFocus">,
+  ) => void;
+  openGroupSettings: (
+    roomId: number,
+    options?: Pick<GroupSurfaceState, "settingsOrigin" | "onSearchMessages" | "restoreFocus">,
+  ) => void;
+  backToGroupProfile: () => void;
+  closeGroupSurface: () => void;
   setMessageReactions: (
     messageId: number,
     reactions: MessageReactionGroup[],
@@ -29,6 +48,7 @@ export interface UISlice {
 export const createUISlice: StateCreator<any, [], [], UISlice> = (set) => ({
   activeChat: null,
   activeModal: null,
+  groupSurface: null,
   messageReactions: {},
   messageReactionVersions: {},
   theme: (storage.getString(STORAGE_KEYS.THEME) as Theme) || "light",
@@ -40,6 +60,31 @@ export const createUISlice: StateCreator<any, [], [], UISlice> = (set) => ({
     }),
   openModal: (modal) => set({ activeModal: modal }),
   closeModal: () => set({ activeModal: null }),
+  openGroupProfile: (roomId, options) =>
+    set({ groupSurface: { roomId, view: "profile", ...options } }),
+  openGroupSettings: (roomId, options) =>
+    set({
+      groupSurface: {
+        roomId,
+        view: "settings",
+        settingsOrigin: "sidebar",
+        ...options,
+      },
+    }),
+  backToGroupProfile: () =>
+    set((state: any) =>
+      state.groupSurface?.view === "settings" &&
+      state.groupSurface.settingsOrigin === "profile"
+        ? {
+            groupSurface: {
+              ...state.groupSurface,
+              view: "profile",
+              settingsOrigin: undefined,
+            },
+          }
+        : state,
+    ),
+  closeGroupSurface: () => set({ groupSurface: null }),
 
   setMessageReactions: (messageId, reactions, updatedAt) =>
     set((state: any) => {

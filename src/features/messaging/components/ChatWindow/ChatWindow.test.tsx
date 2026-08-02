@@ -131,6 +131,8 @@ function makeState() {
     serverChannels: {} as Record<number, any>,
     typingRoomMemberIds: new Set<number>(),
     typingRoomMemberInfo: {},
+    openGroupProfile: vi.fn(),
+    closeGroupSurface: vi.fn(),
   };
 }
 
@@ -188,31 +190,28 @@ describe("ChatWindow presence rendering", () => {
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
   });
 
-  it("opens the group profile from an ordinary room header, but not direct or broadcast headers", async () => {
+  it("routes an ordinary room header through the authoritative group profile flow", async () => {
     const state = makeState();
     useAppStoreMock.mockImplementation((selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state));
     const { rerender } = render(<ChatWindow activeChat={{ type: "room", roomId: 4 }} call={makeCall()} />);
-    fireEvent.click(screen.getByRole("button", { name: /Open Room Four group profile/ }));
-    expect(await screen.findByRole("dialog", { name: "Room Four" })).toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: /Open Room Four group profile/ });
+    fireEvent.click(trigger);
+    expect(state.openGroupProfile).toHaveBeenCalledWith(4, expect.objectContaining({ restoreFocus: trigger }));
 
     rerender(<ChatWindow activeChat={{ type: "direct", partnerId: 2 }} call={makeCall()} />);
-    expect(screen.queryByRole("dialog", { name: "Room Four" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /group profile/i })).not.toBeInTheDocument();
     getUser.mockResolvedValue({ id: 2, public_id: null, username: "alice", display_name: "Alice", bio: null, avatar_url: null, status: "offline", last_seen_at: null });
     rerender(<ChatWindow activeChat={{ type: "channel", channelId: 8, serverId: 9 }} call={makeCall()} />);
     expect(screen.queryByRole("button", { name: /group profile/i })).not.toBeInTheDocument();
   });
 
-  it("closes the group profile when the active conversation changes and restores focus", async () => {
+  it("closes the authoritative group surface when the active conversation changes", async () => {
     const state = makeState();
     useAppStoreMock.mockImplementation((selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state));
     const { rerender } = render(<ChatWindow activeChat={{ type: "room", roomId: 4 }} call={makeCall()} />);
-    const trigger = screen.getByRole("button", { name: /Open Room Four group profile/ });
-    fireEvent.click(trigger);
-    expect(await screen.findByRole("dialog", { name: "Room Four" })).toBeInTheDocument();
+    const initialCloseCalls = state.closeGroupSurface.mock.calls.length;
     rerender(<ChatWindow activeChat={{ type: "room", roomId: 5 }} call={makeCall()} />);
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Room Four" })).not.toBeInTheDocument());
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: /Open Room Five group profile/ })));
+    await waitFor(() => expect(state.closeGroupSurface.mock.calls.length).toBeGreaterThan(initialCloseCalls));
   });
 
   it("shows one persistent call button for an owner with a direct chat public ref", async () => {
