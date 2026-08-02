@@ -1,8 +1,8 @@
 # Vetra client agent guidance
 
 This repository is the Vetra client. Work primarily in
-`/mnt/games/vetra/repos/vetra-client`. The Vetra server is
-`/mnt/games/vetra/repos/vetra-server`; inspect it read-only unless a task
+`/srv/vetra-dev/vetra/dev/vetra-client`. The Vetra server is
+`/srv/vetra-dev/vetra/dev/vetra-server`; inspect it read-only unless a task
 explicitly authorizes a server change. Do not modify both repositories in one
 implementation stage unless explicitly requested. The server owns persistent
 directed-call lifecycle, authorization, and database authority.
