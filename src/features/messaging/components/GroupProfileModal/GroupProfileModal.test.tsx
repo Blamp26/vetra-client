@@ -122,7 +122,7 @@ describe("GroupProfileModal", () => {
     expect(screen.getByLabelText("admin role")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Group actions" }).className).toContain("gap-[10px]");
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
-    expect(await screen.findByText("Manage group")).toBeInTheDocument();
+    expect(await screen.findByText("Edit group")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Mute|Call/ })).not.toBeInTheDocument();
   });
 
@@ -158,9 +158,9 @@ describe("GroupProfileModal", () => {
     expect(overlays).toHaveLength(2);
     expect(overlays[0]).toHaveAttribute("aria-hidden", "true");
     expect(overlays[1].querySelector('[data-testid="dialog-panel"]')).toHaveClass("w-[min(366px,calc(100vw-32px))]");
-    expect(screen.getByRole("dialog", { name: "Manage group" })).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole("dialog", { name: "Manage group" }), { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "Manage group" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Edit group" })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Edit group" }), { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Edit group" })).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Project Seven" })).toBeInTheDocument();
     expect(document.activeElement).toBe(manage);
     fireEvent.keyDown(screen.getByRole("dialog", { name: "Project Seven" }), { key: "Escape" });

@@ -13,15 +13,18 @@ const { roomsApiMock, socketHandler } = vi.hoisted(() => ({
     updateAdminRights: vi.fn(),
     demote: vi.fn(),
     leave: vi.fn(),
+    updateProfile: vi.fn(),
   },
   socketHandler: { current: null as ((event: any) => void) | null },
 }));
 
 vi.mock("@/api/rooms", () => ({ roomsApi: roomsApiMock }));
+vi.mock("@/api/base", () => ({ postFormData: vi.fn() }));
 vi.mock("@/store", () => ({
   useAppStore: (selector: (state: any) => unknown) =>
     selector({
       currentUser: { id: 1 },
+      upsertRoomPreview: vi.fn(),
       socketManager: {
         onGroupGovernanceChanged: (handler: (event: any) => void) => {
           socketHandler.current = handler;
@@ -75,6 +78,7 @@ describe("GroupSettingsModal member governance", () => {
     roomsApiMock.updateOverride.mockResolvedValue(member);
     roomsApiMock.clearOverride.mockResolvedValue(undefined);
     roomsApiMock.removeMember.mockResolvedValue(undefined);
+    roomsApiMock.updateProfile.mockResolvedValue({ id: 7, name: "Updated group" });
   });
 
   it("edits inherit/allow/deny restrictions and clears them through the API", async () => {
@@ -86,7 +90,7 @@ describe("GroupSettingsModal member governance", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText("Manage group")).toBeTruthy(),
+      expect(screen.getByText("Edit group")).toBeTruthy(),
     );
     fireEvent.click(screen.getByText("Members"));
     fireEvent.click(
@@ -137,13 +141,60 @@ describe("GroupSettingsModal member governance", () => {
 
   it("uses a compact vertical overview and returns from an internal page with Back", async () => {
     render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("Manage group")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Edit group")).toBeTruthy());
     expect(screen.getByTestId("group-management-dialog").parentElement?.className).toContain("w-[min(366px,calc(100vw-32px))]");
     expect(screen.getByRole("navigation", { name: "Group management sections" })).toBeTruthy();
+    expect((screen.getByLabelText("Group name") as HTMLInputElement).value).toBe("Group");
+    expect(screen.getByLabelText("Description")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Edit group basic information" })).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
     expect(screen.getByRole("button", { name: "Back to group management" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
     expect(screen.getByRole("navigation", { name: "Group management sections" })).toBeTruthy();
+  });
+
+  it("keeps a valid basic-information draft while visiting governance views", async () => {
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Edit group")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Group name"), { target: { value: " Renamed " } });
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Details" } });
+    expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /^Administrators/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
+    expect((screen.getByLabelText("Group name") as HTMLInputElement).value).toBe(" Renamed ");
+    expect((screen.getByLabelText("Description") as HTMLTextAreaElement).value).toBe("Details");
+  });
+
+  it("requires a valid dirty draft before saving and normalizes description", async () => {
+    render(<GroupSettingsModal room={{ id: 7, name: "Group", description: "Old" } as any} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Edit group")).toBeTruthy());
+    const save = screen.getByRole("button", { name: "Save" });
+    fireEvent.change(screen.getByLabelText("Group name"), { target: { value: "   " } });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Group name"), { target: { value: "New name" } });
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "   " } });
+    fireEvent.click(save);
+    await waitFor(() => expect(roomsApiMock.updateProfile).toHaveBeenCalledWith(7, {
+      name: "New name",
+      description: null,
+      avatar_media_file_id: null,
+    }));
+  });
+
+  it("keeps avatar removal local until Save", async () => {
+    render(<GroupSettingsModal room={{ id: 7, name: "Group", avatar_media_file_id: "media-1", avatar_url: "/media-1" } as any} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Edit group")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Change group photo" }));
+    expect(screen.getByRole("menuitem", { name: "Remove photo" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove photo" }));
+    expect(roomsApiMock.updateProfile).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(roomsApiMock.updateProfile).toHaveBeenCalledWith(7, {
+      name: "Group",
+      description: null,
+      avatar_media_file_id: null,
+    }));
   });
 });

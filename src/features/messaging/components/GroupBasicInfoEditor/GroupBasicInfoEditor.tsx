@@ -1,28 +1,19 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { ImagePlus, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ImagePlus } from "lucide-react";
 import { roomsApi } from "@/api/rooms";
 import { postFormData } from "@/api/base";
 import { Avatar } from "@/shared/components/Avatar";
-import { Button } from "@/shared/components/Button";
-import { Dialog } from "@/shared/components/Dialog";
-import { IconButton } from "@/shared/components/IconButton";
 import { TextInput } from "@/shared/components/Field";
 import type { RoomPreview } from "@/shared/types";
 import { roomRef } from "@/shared/utils/refs";
 import { useAppStore, type RootState } from "@/store";
 import {
-  AvatarCropDialog,
   GROUP_AVATAR_MAX_UPLOAD_SIZE,
   GROUP_AVATAR_TYPES,
   isSupportedGroupAvatar,
 } from "./AvatarCropDialog";
 
-interface Props {
-  room: RoomPreview;
-  onClose: () => void;
-}
-
-interface Draft {
+export interface GroupBasicInfoDraft {
   name: string;
   description: string;
   avatarMediaFileId: string | null;
@@ -31,10 +22,34 @@ interface Draft {
   uploadedMediaId: string | null;
 }
 
-const MAX_NAME_LENGTH = 100;
-const MAX_DESCRIPTION_LENGTH = 500;
+export interface GroupBasicInfoController {
+  draft: GroupBasicInfoDraft;
+  cropSource: Blob | null;
+  setCropSource: (source: Blob | null) => void;
+  avatarMenuOpen: boolean;
+  setAvatarMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  nameTouched: boolean;
+  setNameTouched: React.Dispatch<React.SetStateAction<boolean>>;
+  error: string | null;
+  saving: boolean;
+  stage: "idle" | "uploading" | "saving";
+  nameError: string | null;
+  dirty: boolean;
+  saveDisabled: boolean;
+  fileInputRef: React.RefObject<HTMLInputElement>;
+  editorRef: React.RefObject<HTMLDivElement>;
+  chooseFile: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  pasteFromClipboard: () => Promise<void>;
+  removePhoto: () => void;
+  replacePreview: (blob: Blob) => void;
+  setDraft: React.Dispatch<React.SetStateAction<GroupBasicInfoDraft>>;
+  save: () => Promise<void>;
+}
 
-function initialDraft(room: RoomPreview): Draft {
+export const MAX_NAME_LENGTH = 100;
+export const MAX_DESCRIPTION_LENGTH = 500;
+
+function initialDraft(room: RoomPreview): GroupBasicInfoDraft {
   return {
     name: room.name.trim(),
     description: room.description?.trim() ?? "",
@@ -54,9 +69,8 @@ async function decodeImageBlob(blob: Blob) {
   try {
     const image = new Image();
     image.src = url;
-    if (typeof image.decode === "function") {
-      await image.decode();
-    } else {
+    if (typeof image.decode === "function") await image.decode();
+    else {
       await new Promise<void>((resolve, reject) => {
         image.onload = () => resolve();
         image.onerror = () => reject(new Error("That image could not be decoded."));
@@ -67,11 +81,15 @@ async function decodeImageBlob(blob: Blob) {
   }
 }
 
-export function GroupBasicInfoEditor({ room, onClose }: Props) {
-  const titleId = useId();
-  const descriptionId = useId();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
+export function useGroupBasicInfoEditor({
+  room,
+  onClose,
+}: {
+  room: RoomPreview;
+  onClose: () => void;
+}): GroupBasicInfoController {
+  const fileInputRef = useRef<HTMLInputElement>(null!);
+  const editorRef = useRef<HTMLDivElement>(null!);
   const roomIdentityRef = useRef(`${room.id}:${room.public_id ?? ""}`);
   const updateRoomPreview = useAppStore((state: RootState) => state.upsertRoomPreview);
   const [draft, setDraft] = useState(() => initialDraft(room));
@@ -87,42 +105,11 @@ export function GroupBasicInfoEditor({ room, onClose }: Props) {
     if (roomIdentityRef.current !== identity) onClose();
   }, [onClose, room.id, room.public_id]);
 
-  useEffect(() => {
-    const onPaste = (event: ClipboardEvent) => {
-      const item = Array.from(event.clipboardData?.items ?? []).find((candidate) =>
-        GROUP_AVATAR_TYPES.includes(candidate.type as (typeof GROUP_AVATAR_TYPES)[number]),
-      );
-      if (!item) return;
-      event.preventDefault();
-      const blob = item.getAsFile();
-      if (blob) void prepareImage(blob);
-    };
-    const prepareImage = async (blob: Blob) => {
-      if (!isSupportedGroupAvatar({ type: blob.type, size: blob.size })) {
-        setError(blob.size > GROUP_AVATAR_MAX_UPLOAD_SIZE ? "Image must be 15 MB or smaller." : "Use a PNG, JPEG, GIF, or WebP image.");
-        return;
-      }
-      try {
-        await decodeImageBlob(blob);
-        setError(null);
-        setCropSource(blob);
-      } catch {
-        setError("That image could not be decoded.");
-      }
-    };
-    const editor = editorRef.current;
-    editor?.addEventListener("paste", onPaste);
-    return () => editor?.removeEventListener("paste", onPaste);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => () => {
-    if (draft.avatarPreviewUrl) URL.revokeObjectURL(draft.avatarPreviewUrl);
-  }, [draft.avatarPreviewUrl]);
-
   const prepareImage = async (file: File | Blob) => {
     if (!isSupportedGroupAvatar({ type: file.type, size: file.size })) {
-      setError(file.size > GROUP_AVATAR_MAX_UPLOAD_SIZE ? "Image must be 15 MB or smaller." : `Use ${GROUP_AVATAR_TYPES.map((type) => type.replace("image/", "").toUpperCase()).join(", ")} images.`);
+      setError(file.size > GROUP_AVATAR_MAX_UPLOAD_SIZE
+        ? "Image must be 15 MB or smaller."
+        : `Use ${GROUP_AVATAR_TYPES.map((type) => type.replace("image/", "").toUpperCase()).join(", ")} images.`);
       return;
     }
     try {
@@ -133,6 +120,26 @@ export function GroupBasicInfoEditor({ room, onClose }: Props) {
       setError("That image could not be decoded.");
     }
   };
+
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const item = Array.from(event.clipboardData?.items ?? []).find((candidate) =>
+        GROUP_AVATAR_TYPES.includes(candidate.type as (typeof GROUP_AVATAR_TYPES)[number]),
+      );
+      if (!item) return;
+      event.preventDefault();
+      const blob = item.getAsFile();
+      if (blob) void prepareImage(blob);
+    };
+    const editor = editorRef.current;
+    editor?.addEventListener("paste", onPaste);
+    return () => editor?.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => {
+    if (draft.avatarPreviewUrl) URL.revokeObjectURL(draft.avatarPreviewUrl);
+  }, [draft.avatarPreviewUrl]);
 
   const chooseFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -153,8 +160,7 @@ export function GroupBasicInfoEditor({ room, onClose }: Props) {
       for (const item of items) {
         const type = GROUP_AVATAR_TYPES.find((candidate) => item.types.includes(candidate));
         if (type) {
-          const blob = await item.getType(type);
-          await prepareImage(blob);
+          await prepareImage(await item.getType(type));
           return;
         }
       }
@@ -167,13 +173,7 @@ export function GroupBasicInfoEditor({ room, onClose }: Props) {
   const replacePreview = (blob: Blob) => {
     setDraft((current) => {
       if (current.avatarPreviewUrl) URL.revokeObjectURL(current.avatarPreviewUrl);
-      return {
-        ...current,
-        avatarMediaFileId: null,
-        avatarPreviewUrl: URL.createObjectURL(blob),
-        avatarBlob: blob,
-        uploadedMediaId: null,
-      };
+      return { ...current, avatarMediaFileId: null, avatarPreviewUrl: URL.createObjectURL(blob), avatarBlob: blob, uploadedMediaId: null };
     });
     setCropSource(null);
   };
@@ -191,6 +191,11 @@ export function GroupBasicInfoEditor({ room, onClose }: Props) {
     : draft.name.trim().length > MAX_NAME_LENGTH
       ? `Group name must be ${MAX_NAME_LENGTH} characters or fewer.`
       : null;
+  const normalizedDescription = draft.description.trim() || null;
+  const dirty = draft.name.trim() !== room.name.trim()
+    || normalizedDescription !== (room.description?.trim() || null)
+    || draft.avatarBlob !== null
+    || draft.avatarMediaFileId !== (room.avatar_media_file_id ?? null);
 
   const save = async () => {
     setNameTouched(true);
@@ -208,13 +213,11 @@ export function GroupBasicInfoEditor({ room, onClose }: Props) {
         if (roomIdentityRef.current !== identity) return;
         avatarMediaFileId = uploaded.media_file_id;
         setDraft((current) => ({ ...current, uploadedMediaId: uploaded.media_file_id }));
-      } else if (draft.uploadedMediaId) {
-        avatarMediaFileId = draft.uploadedMediaId;
-      }
+      } else if (draft.uploadedMediaId) avatarMediaFileId = draft.uploadedMediaId;
       setStage("saving");
       const updated = await roomsApi.updateProfile(roomRef(room) ?? room.id, {
         name: draft.name.trim(),
-        description: draft.description.trim() || null,
+        description: normalizedDescription,
         avatar_media_file_id: avatarMediaFileId,
       });
       if (roomIdentityRef.current !== identity) return;
@@ -230,53 +233,57 @@ export function GroupBasicInfoEditor({ room, onClose }: Props) {
     }
   };
 
+  return {
+    draft, cropSource, setCropSource, avatarMenuOpen, setAvatarMenuOpen,
+    nameTouched, setNameTouched, error, saving, stage, nameError, dirty,
+    saveDisabled: saving || Boolean(nameError) || !dirty,
+    fileInputRef, editorRef, chooseFile, pasteFromClipboard, removePhoto,
+    replacePreview, setDraft, save,
+  };
+}
+
+export function GroupBasicInfoFields({
+  room,
+  titleId,
+  descriptionId,
+  controller,
+}: {
+  room: RoomPreview;
+  titleId: string;
+  descriptionId: string;
+  controller: GroupBasicInfoController;
+}) {
+  const { draft, avatarMenuOpen, setAvatarMenuOpen, fileInputRef, chooseFile, pasteFromClipboard, removePhoto, nameTouched, setNameTouched, nameError, error, setDraft } = controller;
   return (
     <>
-      <Dialog open onClose={onClose} labelledBy={titleId} initialFocusRef={editorRef} className="w-[min(430px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-hidden rounded-xl p-0">
-        <div ref={editorRef} tabIndex={-1} className="flex max-h-[calc(100vh-32px)] min-h-0 flex-col">
-          <div className="flex items-center justify-between border-b border-border px-[22px] py-4">
-            <h2 id={titleId} className="text-base font-semibold">Edit group</h2>
-            <IconButton label="Close edit group" size="compact" onClick={onClose}><X className="h-4 w-4" aria-hidden="true" /></IconButton>
+      <div className="h-2 border-y border-border bg-muted/30" aria-hidden="true" />
+      <section aria-labelledby={`${titleId}-basic`} className="space-y-4 px-[22px] py-5">
+        <h3 id={`${titleId}-basic`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basic information</h3>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            {draft.avatarPreviewUrl ? <img src={draft.avatarPreviewUrl} alt="Group avatar preview" className="h-16 w-16 rounded-full border border-border object-cover" /> : <Avatar name={draft.name} src={draft.avatarMediaFileId ? room.avatar_url ?? null : null} size="large" className="h-16 w-16 text-xl" />}
+            <button type="button" aria-label="Change group photo" className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border border-border bg-card text-foreground shadow-sm hover:bg-accent" onClick={() => setAvatarMenuOpen((open) => !open)}><ImagePlus className="h-4 w-4" aria-hidden="true" /></button>
+            {avatarMenuOpen && <div role="menu" className="absolute left-0 top-[70px] z-10 w-48 rounded-lg border border-border bg-card p-1 shadow-lg">
+              <button type="button" role="menuitem" className="flex w-full items-center rounded px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => fileInputRef.current?.click()}>Choose from file</button>
+              <button type="button" role="menuitem" className="flex w-full items-center rounded px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => void pasteFromClipboard()}>Paste from clipboard</button>
+              {(room.avatar_media_file_id || draft.avatarPreviewUrl) && <button type="button" role="menuitem" className="flex w-full items-center rounded px-3 py-2 text-left text-sm text-destructive hover:bg-accent" onClick={removePhoto}>Remove photo</button>}
+            </div>}
           </div>
-          <div className="min-h-0 overflow-y-auto">
-            <div className="h-2 border-y border-border bg-muted/30" aria-hidden="true" />
-            <section aria-labelledby={`${titleId}-basic`} className="space-y-4 px-[22px] py-5">
-              <h3 id={`${titleId}-basic`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basic information</h3>
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  {draft.avatarPreviewUrl ? <img src={draft.avatarPreviewUrl} alt="Group avatar preview" className="h-20 w-20 rounded-full border border-border object-cover" /> : <Avatar name={draft.name} src={draft.avatarMediaFileId ? room.avatar_url ?? null : null} size="large" className="h-20 w-20 text-2xl" />}
-                  <button type="button" aria-label="Change group photo" className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full border border-border bg-card text-foreground shadow-sm hover:bg-accent" onClick={() => setAvatarMenuOpen((open) => !open)}><ImagePlus className="h-4 w-4" aria-hidden="true" /></button>
-                  {avatarMenuOpen && (
-                    <div role="menu" className="absolute left-0 top-[86px] z-10 w-48 rounded-lg border border-border bg-card p-1 shadow-lg">
-                      <button type="button" role="menuitem" className="flex w-full items-center rounded px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => fileInputRef.current?.click()}>Choose from file</button>
-                      <button type="button" role="menuitem" className="flex w-full items-center rounded px-3 py-2 text-left text-sm hover:bg-accent" onClick={() => void pasteFromClipboard()}>Paste from clipboard</button>
-                      {(room.avatar_media_file_id || draft.avatarPreviewUrl) && <button type="button" role="menuitem" className="flex w-full items-center rounded px-3 py-2 text-left text-sm text-destructive hover:bg-accent" onClick={removePhoto}>Remove photo</button>}
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0"><p className="text-sm font-medium">Group photo</p><p className="text-xs text-muted-foreground">PNG, JPEG, GIF, or WebP · up to 15 MB</p></div>
-              </div>
-              <input ref={fileInputRef} type="file" accept={GROUP_AVATAR_TYPES.join(",")} className="hidden" onChange={chooseFile} />
-              <div className="space-y-1">
-                <label className="vt-label" htmlFor={`${titleId}-name`}>Group name</label>
-                <TextInput id={`${titleId}-name`} value={draft.name} maxLength={MAX_NAME_LENGTH} invalid={Boolean(nameTouched && nameError)} onBlur={() => setNameTouched(true)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} aria-describedby={nameTouched && nameError ? `${titleId}-name-error` : undefined} />
-                {nameTouched && nameError && <p id={`${titleId}-name-error`} role="alert" className="text-xs text-destructive">{nameError}</p>}
-              </div>
-              <div className="space-y-1">
-                <label className="vt-label" htmlFor={descriptionId}>Description</label>
-                <textarea id={descriptionId} value={draft.description} maxLength={MAX_DESCRIPTION_LENGTH} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} className="vt-input min-h-24 w-full resize-y py-2" placeholder="Add a description" />
-                <p className="text-right text-xs text-muted-foreground">{draft.description.length}/{MAX_DESCRIPTION_LENGTH}</p>
-              </div>
-              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-            </section>
-          </div>
-          <div className="flex items-center justify-between border-t border-border px-[22px] py-3">
-            <span className="text-xs text-muted-foreground" role="status">{stage === "uploading" ? "Uploading photo…" : stage === "saving" ? "Saving…" : ""}</span>
-            <div className="flex gap-2"><Button type="button" variant="secondary" disabled={saving} onClick={onClose}>Cancel</Button><Button type="button" variant="primary" loading={saving} onClick={() => void save()}>Save</Button></div>
-          </div>
+          <div className="min-w-0"><p className="text-sm font-medium">Group photo</p><p className="text-xs text-muted-foreground">PNG, JPEG, GIF, or WebP · up to 15 MB</p></div>
         </div>
-      </Dialog>
-      {cropSource && <AvatarCropDialog source={cropSource} onCancel={() => setCropSource(null)} onSetPhoto={replacePreview} />}
+        <input ref={fileInputRef} type="file" accept={GROUP_AVATAR_TYPES.join(",")} className="hidden" onChange={chooseFile} />
+        <div className="space-y-1">
+          <label className="vt-label" htmlFor={`${titleId}-name`}>Group name</label>
+          <TextInput id={`${titleId}-name`} value={draft.name} maxLength={MAX_NAME_LENGTH} invalid={Boolean(nameTouched && nameError)} onBlur={() => setNameTouched(true)} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} aria-describedby={nameTouched && nameError ? `${titleId}-name-error` : undefined} />
+          {nameTouched && nameError && <p id={`${titleId}-name-error`} role="alert" className="text-xs text-destructive">{nameError}</p>}
+        </div>
+        <div className="space-y-1">
+          <label className="vt-label" htmlFor={descriptionId}>Description</label>
+          <textarea id={descriptionId} value={draft.description} maxLength={MAX_DESCRIPTION_LENGTH} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} className="vt-input min-h-20 w-full resize-y py-2" placeholder="Add a description" />
+          <p className="text-right text-xs text-muted-foreground">{draft.description.length}/{MAX_DESCRIPTION_LENGTH}</p>
+        </div>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      </section>
     </>
   );
 }

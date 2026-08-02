@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { ArrowLeft, ChevronRight, KeyRound, LogOut, Plus, Shield, Trash2, Users } from "lucide-react";
 import {
   roomsApi,
@@ -8,10 +8,14 @@ import {
 import { roomRef } from "@/shared/utils/refs";
 import type { RoomPreview } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
+import { Button } from "@/shared/components/Button";
 import { Dialog } from "@/shared/components/Dialog";
 import { IconButton } from "@/shared/components/IconButton";
-import { Avatar } from "@/shared/components/Avatar";
-import { GroupBasicInfoEditor } from "../GroupBasicInfoEditor/GroupBasicInfoEditor";
+import { AvatarCropDialog } from "../GroupBasicInfoEditor/AvatarCropDialog";
+import {
+  GroupBasicInfoFields,
+  useGroupBasicInfoEditor,
+} from "../GroupBasicInfoEditor/GroupBasicInfoEditor";
 
 const ADMIN_RIGHTS = [
   "change_group_info",
@@ -56,11 +60,11 @@ export function GroupSettingsModal({
     Record<string, "inherit" | "allow" | "deny">
   >({});
   const [view, setView] = useState<"overview" | "admins" | "members" | "permissions">("overview");
-  const [editOpen, setEditOpen] = useState(false);
-  const editTriggerRef = useRef<HTMLButtonElement>(null);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const ref = roomRef(room) ?? room.id;
+  const basicInfo = useGroupBasicInfoEditor({ room, onClose });
+  const descriptionId = useId();
   const reload = () =>
     roomsApi
       .governance(ref)
@@ -239,25 +243,14 @@ export function GroupSettingsModal({
   };
   return (
     <>
-    <Dialog open onClose={onClose} inert={editOpen} labelledBy={titleId} className="w-[min(366px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-hidden rounded-xl p-0">
+    <Dialog open onClose={onClose} labelledBy={titleId} className="w-[min(366px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-hidden rounded-xl p-0">
       <div className="flex max-h-[calc(100vh-32px)] min-h-0 flex-col" data-testid="group-management-dialog">
         <div className="shrink-0 border-b border-border px-[22px] py-4">
           <div className="flex items-center justify-between gap-3">
             {view === "overview" ? <span className="w-8" aria-hidden="true" /> : <IconButton label="Back to group management" size="compact" onClick={() => setView("overview")}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></IconButton>}
-            <h2 id={titleId} className="truncate text-base font-semibold">Manage group</h2>
-            <IconButton label="Close group management" size="compact" onClick={onClose}><span aria-hidden="true">×</span></IconButton>
+            <h2 id={titleId} className="truncate text-base font-semibold">Edit group</h2>
+            <IconButton label="Close edit group" size="compact" onClick={onClose}><span aria-hidden="true">×</span></IconButton>
           </div>
-          <button
-            ref={editTriggerRef}
-            type="button"
-            className="mt-3 flex w-full items-center gap-3 rounded-lg p-1 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setEditOpen(true)}
-            aria-label="Edit group basic information"
-          >
-            <Avatar name={room.name} src={room.avatar_url ?? null} size="large" className="h-12 w-12 text-lg" />
-            <div className="min-w-0"><p className="truncate text-sm font-medium">{room.name}</p><p className="text-xs text-muted-foreground">{state?.members.length ?? room.members?.length ?? 0} members</p></div>
-            <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </button>
         </div>
         {error && (
           <div role="alert" className="mx-[22px] mt-3 text-sm text-destructive">
@@ -267,7 +260,8 @@ export function GroupSettingsModal({
         {!state ? (
           <p className="px-[22px] py-6 text-sm text-muted-foreground" role="status">Loading…</p>
         ) : (
-          <div className="min-h-0 overflow-y-auto px-[22px] pb-4">
+          <div ref={basicInfo.editorRef} tabIndex={-1} className="min-h-0 overflow-y-auto px-[22px] pb-4">
+            <GroupBasicInfoFields room={room} titleId={titleId} descriptionId={descriptionId} controller={basicInfo} />
             {view === "overview" && (
               <>
                 <div className="h-2 -mx-[22px] border-y border-border bg-muted/30" aria-hidden="true" />
@@ -474,9 +468,16 @@ export function GroupSettingsModal({
             )}
           </div>
         )}
+        <div className="flex items-center justify-between border-t border-border px-[22px] py-3">
+          <span className="text-xs text-muted-foreground" role="status">{basicInfo.stage === "uploading" ? "Uploading photo…" : basicInfo.stage === "saving" ? "Saving…" : ""}</span>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" disabled={basicInfo.saving} onClick={onClose}>Cancel</Button>
+            <Button type="button" variant="primary" loading={basicInfo.saving} disabled={basicInfo.saveDisabled} onClick={() => void basicInfo.save()}>Save</Button>
+          </div>
+        </div>
       </div>
     </Dialog>
-    {editOpen && <GroupBasicInfoEditor room={room} onClose={() => { setEditOpen(false); window.setTimeout(() => editTriggerRef.current?.focus(), 0); }} />}
+    {basicInfo.cropSource && <AvatarCropDialog source={basicInfo.cropSource} onCancel={() => basicInfo.setCropSource(null)} onSetPhoto={basicInfo.replacePreview} />}
     </>
   );
 }
