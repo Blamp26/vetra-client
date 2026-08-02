@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { ArrowLeft, ChevronRight, KeyRound, LogOut, Plus, Shield, Trash2, Users } from "lucide-react";
+import { ChevronRight, KeyRound, LogOut, Shield, Trash2, Users } from "lucide-react";
 import {
   roomsApi,
   type GovernanceMember,
@@ -9,8 +9,6 @@ import { roomRef } from "@/shared/utils/refs";
 import type { RoomPreview } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
 import { Button } from "@/shared/components/Button";
-import { Dialog } from "@/shared/components/Dialog";
-import { IconButton } from "@/shared/components/IconButton";
 import { AvatarCropDialog } from "../GroupBasicInfoEditor/AvatarCropDialog";
 import {
   GroupBasicInfoFields,
@@ -21,17 +19,23 @@ import {
   groupPermissionLabel,
   MEMBER_PERMISSION_KEYS,
 } from "../GroupManagement/permissionLabels";
+import {
+  GroupManagementFooter,
+  GroupManagementFrame,
+  GroupManagementHeader,
+  GroupManagementRow,
+  GroupManagementScrollBody,
+  GroupManagementSection,
+} from "../GroupManagement/GroupManagementLayout";
 
 export function GroupSettingsModal({
   room,
   onClose,
   onBack,
-  onAddMember,
 }: {
   room: RoomPreview;
   onClose: () => void;
   onBack?: () => void;
-  onAddMember?: () => void;
 }) {
   const titleId = useId();
   const [state, setState] = useState<GroupGovernance | null>(null);
@@ -209,7 +213,6 @@ export function GroupSettingsModal({
     values.includes(value)
       ? values.filter((v) => v !== value)
       : [...values, value];
-  const canInvite = state?.role === "owner" || state?.capabilities.includes("invite_members");
   const canManagePermissions = state?.role === "owner" || state?.capabilities.includes("manage_member_permissions");
   const canRemoveMembers = state?.role === "owner" || state?.capabilities.includes("remove_members");
   const leaveGroup = () => {
@@ -228,39 +231,39 @@ export function GroupSettingsModal({
   };
   return (
     <>
-    <Dialog open onClose={onClose} labelledBy={titleId} className="w-[min(366px,calc(100vw-32px))] max-h-[min(620px,calc(100vh-48px))] overflow-hidden rounded-xl p-0">
-      <div className="flex max-h-[calc(100vh-32px)] min-h-0 flex-col" data-testid="group-management-dialog">
-        <div className="shrink-0 border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            {(view !== "overview" || onBack) && <IconButton label={view === "overview" ? "Back to group profile" : "Back to group management"} size="compact" onClick={view === "overview" ? onBack : () => setView("overview")}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></IconButton>}
-            <h2 id={titleId} className="flex-1 truncate text-left text-base font-semibold">Edit group</h2>
-            <IconButton label="Close edit group" size="compact" onClick={onClose}><span aria-hidden="true">×</span></IconButton>
-          </div>
-        </div>
+    <GroupManagementFrame width="settings" onClose={onClose} labelledBy={titleId}>
+      <div className="contents" data-testid="group-management-dialog">
+        <GroupManagementHeader
+          title="Edit group"
+          titleId={titleId}
+          closeLabel="Close edit group"
+          onClose={onClose}
+          backLabel={view === "overview" ? "Back to group profile" : "Back to group management"}
+          onBack={view === "overview" ? onBack : () => setView("overview")}
+        />
         {error && (
-          <div role="alert" className="mx-[22px] mt-3 text-sm text-destructive">
+          <div role="alert" className="shrink-0 px-5 pt-3 text-sm text-destructive">
             {error}
           </div>
         )}
         {!state ? (
-          <p className="px-[22px] py-6 text-sm text-muted-foreground" role="status">Loading…</p>
+          <p className="min-h-0 flex-1 px-5 py-6 text-sm text-muted-foreground" role="status">Loading…</p>
         ) : (
-          <div ref={basicInfo.editorRef} tabIndex={-1} className="min-h-0 overflow-y-auto">
-            <GroupBasicInfoFields room={room} titleId={titleId} descriptionId={descriptionId} controller={basicInfo} />
+          <GroupManagementScrollBody ref={basicInfo.editorRef} tabIndex={-1} data-testid="group-settings-scroll-body">
             {view === "overview" && (
               <>
-                <div className="h-px bg-border" aria-hidden="true" />
-                <nav aria-label="Group management sections" className="px-4 py-1">
-                  <button type="button" className="flex min-h-9 w-full items-center gap-3 text-left hover:text-foreground" onClick={() => setView("admins")}><Shield className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 text-sm">Administrators</span><span className="text-xs text-muted-foreground">{admins.length}</span><ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></button>
-                  <button type="button" className="flex min-h-9 w-full items-center gap-3 text-left hover:text-foreground" onClick={() => setView("members")}><Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 text-sm">Members</span><span className="text-xs text-muted-foreground">{state.members.length}</span><ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></button>
-                  <button type="button" className="flex min-h-9 w-full items-center gap-3 text-left hover:text-foreground" onClick={() => setView("permissions")}><KeyRound className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 text-sm">Member permissions</span><ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></button>
-                  {canInvite && onAddMember && <button type="button" className="flex min-h-9 w-full items-center gap-3 text-left hover:text-foreground" onClick={onAddMember}><Plus className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 text-sm">Add member</span><ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" /></button>}
+                <GroupBasicInfoFields room={room} titleId={titleId} descriptionId={descriptionId} controller={basicInfo} />
+                <GroupManagementSection separated className="p-0" aria-label="Group management navigation">
+                <nav aria-label="Group management sections">
+                  <GroupManagementRow label="Administrators" leading={<Shield className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{admins.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("admins")} />
+                  <GroupManagementRow label="Members" leading={<Users className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{state.members.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("members")} />
+                  <GroupManagementRow label="Member permissions" leading={<KeyRound className="h-4 w-4 text-muted-foreground" />} trailing={<ChevronRight className="h-4 w-4" aria-hidden="true" />} onClick={() => setView("permissions")} />
                 </nav>
-                <div className="h-px bg-border" aria-hidden="true" />
-                <div className="flex items-center gap-3 px-4 py-1">
-                  <LogOut className="h-4 w-4 text-muted-foreground" aria-hidden="true" /><button type="button" className="min-h-9 flex-1 text-left text-sm hover:text-foreground" onClick={leaveGroup}>Leave group</button>
-                </div>
-                {state.role === "owner" && <div className="flex items-center gap-3 px-4"><Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" /><button type="button" className="min-h-9 flex-1 text-left text-sm text-destructive hover:text-destructive/80" disabled={busy} onClick={deleteGroup}>Delete group</button></div>}
+                </GroupManagementSection>
+                <GroupManagementSection separated className="p-0" aria-label="Group actions">
+                  <GroupManagementRow label="Leave group" leading={<LogOut className="h-4 w-4" />} onClick={leaveGroup} />
+                  {state.role === "owner" && <GroupManagementRow label="Delete group" leading={<Trash2 className="h-4 w-4" />} tone="destructive" disabled={busy} onClick={deleteGroup} />}
+                </GroupManagementSection>
               </>
             )}
             {view === "admins" && (
@@ -451,17 +454,17 @@ export function GroupSettingsModal({
                 </button>
               </div>
             )}
-          </div>
+          </GroupManagementScrollBody>
         )}
-        <div className="flex items-center justify-end gap-1 border-t border-border px-4 py-2">
+        {state && view === "overview" && <GroupManagementFooter data-testid="group-settings-footer">
           <span className="text-xs text-muted-foreground" role="status">{basicInfo.stage === "uploading" ? "Uploading photo…" : basicInfo.stage === "saving" ? "Saving…" : ""}</span>
-          <div className="flex gap-1">
+          <div className="flex gap-3">
             <Button type="button" variant="ghost" size="compact" className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm" disabled={basicInfo.saving} onClick={onClose}>Cancel</Button>
             <Button type="button" variant="ghost" size="compact" className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm text-primary" loading={basicInfo.saving} disabled={basicInfo.saveDisabled} onClick={() => void basicInfo.save()}>Save</Button>
           </div>
-        </div>
+        </GroupManagementFooter>}
       </div>
-    </Dialog>
+    </GroupManagementFrame>
     {basicInfo.cropSource && <AvatarCropDialog source={basicInfo.cropSource} onCancel={() => basicInfo.setCropSource(null)} onSetPhoto={basicInfo.replacePreview} />}
     </>
   );

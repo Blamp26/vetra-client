@@ -256,11 +256,11 @@ export function GroupBasicInfoFields({
   const { draft, avatarMenuOpen, setAvatarMenuOpen, fileInputRef, chooseFile, pasteFromClipboard, removePhoto, nameTouched, setNameTouched, nameError, error, setDraft } = controller;
   return (
     <>
-      <section aria-labelledby={`${titleId}-identity`} className="space-y-3 px-4 py-3">
+      <section aria-labelledby={`${titleId}-identity`} className="space-y-3 px-5 py-4">
         <h3 id={`${titleId}-identity`} className="sr-only">Group identity</h3>
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-5">
           <div className="relative">
-            <button type="button" aria-label="Change group photo" className="group relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" onClick={() => setAvatarMenuOpen((open) => !open)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setAvatarMenuOpen((open) => !open); } }}>
+            <button type="button" aria-label="Change group photo" className="group relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-full border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" onClick={() => setAvatarMenuOpen((open) => !open)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setAvatarMenuOpen((open) => !open); } }}>
               {draft.avatarPreviewUrl ? <img src={draft.avatarPreviewUrl} alt="Group avatar preview" className="h-full w-full object-cover" /> : <Avatar name={draft.name} src={draft.avatarMediaFileId ? room.avatar_url ?? null : null} size="large" className="h-full w-full rounded-full text-xl" />}
               <span aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center rounded-full bg-black/50 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
                 <Camera className="h-5 w-5 text-white" aria-hidden="true" />

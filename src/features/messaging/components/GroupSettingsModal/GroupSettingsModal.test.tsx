@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { roomsApiMock, socketHandler } = vi.hoisted(() => ({
@@ -142,7 +143,9 @@ describe("GroupSettingsModal member governance", () => {
   it("uses a compact vertical overview and returns from an internal page with Back", async () => {
     render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Edit group")).toBeTruthy());
-    expect(screen.getByTestId("group-management-dialog").parentElement?.className).toContain("w-[min(366px,calc(100vw-32px))]");
+    expect(screen.getByTestId("group-management-frame")).toHaveAttribute("data-group-management-frame", "settings");
+    expect(screen.getByTestId("dialog-panel")).toHaveClass("max-w-[366px]", "overflow-hidden");
+    expect(screen.getByTestId("group-settings-scroll-body")).toHaveClass("overflow-y-auto", "min-h-0");
     expect(screen.getByRole("navigation", { name: "Group management sections" })).toBeTruthy();
     expect((screen.getByLabelText("Group name") as HTMLInputElement).value).toBe("Group");
     expect(screen.getByLabelText("Description")).toBeTruthy();
@@ -153,8 +156,8 @@ describe("GroupSettingsModal member governance", () => {
     expect((screen.getByLabelText("Group name") as HTMLInputElement).className).toContain("border-b");
     expect((screen.getByLabelText("Description") as HTMLTextAreaElement).rows).toBe(1);
     const avatarButton = screen.getByRole("button", { name: "Change group photo" });
-    expect(avatarButton.className).toContain("h-16");
-    expect(avatarButton.className).toContain("w-16");
+    expect(avatarButton.className).toContain("h-[72px]");
+    expect(avatarButton.className).toContain("w-[72px]");
     expect(screen.getByRole("button", { name: "Cancel" }).className).toContain("vt-button--ghost");
     expect(screen.getByRole("button", { name: "Save" }).className).toContain("vt-button--ghost");
     expect(avatarButton.className).toContain("overflow-hidden");
@@ -162,10 +165,21 @@ describe("GroupSettingsModal member governance", () => {
     expect(avatarButton.querySelector(".lucide-image-plus")).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit group basic information" })).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add member" })).toBeNull();
+    expect(screen.getByTestId("group-settings-footer")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
     expect(screen.getByRole("button", { name: "Back to group management" })).toBeTruthy();
+    expect(screen.queryByLabelText("Group name")).toBeNull();
+    expect(screen.queryByTestId("group-settings-footer")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
     expect(screen.getByRole("navigation", { name: "Group management sections" })).toBeTruthy();
+    expect(screen.getByTestId("group-settings-footer")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Member permissions" }));
+    expect(screen.queryByLabelText("Group name")).toBeNull();
+    expect(screen.queryByTestId("group-settings-footer")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
   it("shows centralized permission labels while preserving wire keys in API calls", async () => {
@@ -189,6 +203,8 @@ describe("GroupSettingsModal member governance", () => {
     fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Details" } });
     expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: /^Administrators/ }));
+    expect(screen.queryByLabelText("Group name")).toBeNull();
+    expect(screen.queryByTestId("group-settings-footer")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
     expect((screen.getByLabelText("Group name") as HTMLInputElement).value).toBe(" Renamed ");
     expect((screen.getByLabelText("Description") as HTMLTextAreaElement).value).toBe("Details");

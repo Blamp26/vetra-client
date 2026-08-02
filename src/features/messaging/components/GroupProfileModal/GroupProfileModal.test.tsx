@@ -54,9 +54,13 @@ describe("GroupProfileModal", () => {
     expect(screen.getByText("Ada Owner")).toBeInTheDocument();
     expect(screen.getByText("owner")).toBeInTheDocument();
     const actions = screen.getByRole("group", { name: "Group actions" });
-    expect(actions.className).toContain("justify-center");
-    expect(actions.className).toContain("gap-2");
-    expect(screen.getByRole("button", { name: "Search" })).toHaveClass("h-[52px]", "w-[81px]");
+    expect(actions).toHaveClass("gap-[10px]");
+    expect(actions).not.toHaveClass("gap-2");
+    expect(screen.getByRole("button", { name: "Search" })).toHaveClass("h-[52px]", "flex-1");
+    expect(screen.getByTestId("group-management-frame")).toHaveAttribute("data-group-management-frame", "profile");
+    expect(screen.getByTestId("group-profile-member-list")).toHaveClass("overflow-y-auto", "min-h-0");
+    expect(screen.getByText("Ada Owner").closest("li")).toHaveClass("min-h-[62px]", "px-5");
+    expect(screen.getByText("Ada Owner").closest("li")?.querySelector('[data-slot="avatar"]')).toHaveClass("h-11", "w-11");
     expect(screen.queryByRole("button", { name: /mute|leave|media/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/description|photos|videos|media/i)).not.toBeInTheDocument();
   });
