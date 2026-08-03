@@ -283,6 +283,39 @@ describe("useUnifiedMessages", () => {
     });
   });
 
+  it("removes an expired message from the active room when the authoritative deletion event arrives", () => {
+    const state = makeState();
+    let deletedHandler: ((payload: { id: number; room_id: number; reason?: string }) => void) | undefined;
+    state.socketManager = {
+      ...state.socketManager,
+      onRoomMessageDeleted: vi.fn((_roomId: number, handler: (payload: { id: number; room_id: number; reason?: string }) => void) => {
+        deletedHandler = handler;
+        return () => {};
+      }),
+    } as any;
+    state.roomPreviews = {
+      9: {
+        id: 9,
+        public_id: "room-public-id",
+        name: "group",
+        created_by: 1,
+        server_id: null,
+        inserted_at: "2026-06-28T00:00:00Z",
+        unread_count: 1,
+        last_message_at: null,
+        last_message: null,
+      },
+    };
+    useAppStoreMock.mockImplementation(
+      (selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state),
+    );
+
+    renderHook(() => useUnifiedMessages({ type: "room", roomId: 9, roomRef: "room-public-id" }));
+    act(() => deletedHandler?.({ id: 10, room_id: 9, reason: "expired" }));
+
+    expect(state.deleteRoomMessage).toHaveBeenCalledWith({ id: 10, room_id: 9, reason: "expired" });
+  });
+
   it("treats explicit server-channel context as server-backed without a room preview", () => {
     const state = makeState();
     useAppStoreMock.mockImplementation(

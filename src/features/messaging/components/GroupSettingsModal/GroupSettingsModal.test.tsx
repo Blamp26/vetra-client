@@ -11,6 +11,7 @@ const { roomsApiMock, socketHandler } = vi.hoisted(() => ({
     removeMember: vi.fn(),
     updateDefaults: vi.fn(),
     updateSlowMode: vi.fn(),
+    updateStage5: vi.fn(),
     promote: vi.fn(),
     updateAdminRights: vi.fn(),
     updateMemberTag: vi.fn(),
@@ -96,6 +97,8 @@ const governance = () => ({
   can_edit_defaults: true,
   can_manage_slow_mode: true,
   slow_mode_seconds: 0,
+  reaction_policy: { mode: "all" as const, allowed_reactions: [] },
+  auto_delete: null,
   can_leave: false,
   can_delete_group: true,
   members: [
@@ -125,6 +128,7 @@ describe("GroupSettingsModal member governance", () => {
     roomsApiMock.removeMember.mockResolvedValue(undefined);
     roomsApiMock.updateDefaults.mockResolvedValue(["send_messages"]);
     roomsApiMock.updateSlowMode.mockResolvedValue(0);
+    roomsApiMock.updateStage5.mockResolvedValue({ reaction_policy: { mode: "all", allowed_reactions: [] }, auto_delete: null });
     roomsApiMock.promote.mockResolvedValue({ ...member, role: "admin" });
     roomsApiMock.updateAdminRights.mockResolvedValue(admin);
     roomsApiMock.updateMemberTag.mockResolvedValue(member);
@@ -261,6 +265,26 @@ describe("GroupSettingsModal member governance", () => {
     await waitFor(() =>
       expect(roomsApiMock.updateDefaults).toHaveBeenCalledWith(7, ["send_messages", "send_photos"]),
     );
+  });
+
+  it("edits and validates the Stage 5 reaction allowlist and auto-delete policy", async () => {
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+    fireEvent.change(screen.getByLabelText("Reactions"), { target: { value: "some" } });
+    const input = screen.getByLabelText("Add reaction");
+    fireEvent.change(input, { target: { value: "not emoji" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("alert")).toHaveTextContent("one supported emoji");
+    fireEvent.change(input, { target: { value: "👍" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("button", { name: "Remove 👍" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Auto-delete new messages"), { target: { value: "86400" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save policies" }));
+    await waitFor(() => expect(roomsApiMock.updateStage5).toHaveBeenCalledWith(7, {
+      reaction_mode: "some",
+      allowed_reactions: ["👍"],
+      auto_delete_seconds: 86400,
+    }));
   });
 
   it("normalizes every governance subpage without changing administrator mutations", async () => {

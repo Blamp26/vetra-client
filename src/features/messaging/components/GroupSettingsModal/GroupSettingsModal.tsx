@@ -44,6 +44,17 @@ type GroupConfirmation =
   | { type: "leave" }
   | { type: "delete" };
 
+function validReaction(value: string): boolean {
+  if (!value || value.length > 64 || !/\p{Extended_Pictographic}/u.test(value)) return false;
+  const Segmenter = (Intl as unknown as {
+    Segmenter?: new (locales?: string | string[], options?: { granularity: "grapheme" }) => {
+      segment(input: string): Iterable<unknown>;
+    };
+  }).Segmenter;
+  if (!Segmenter) return !/[\p{L}\p{N}\p{Z}\p{P}]/u.test(value);
+  return Array.from(new Segmenter(undefined, { granularity: "grapheme" }).segment(value)).length === 1;
+}
+
 export function GroupSettingsModal({
   room,
   onClose,
@@ -58,6 +69,9 @@ export function GroupSettingsModal({
   const [selected, setSelected] = useState<GovernanceMember | null>(null);
   const [defaults, setDefaults] = useState<string[]>([]);
   const [slowMode, setSlowMode] = useState(0);
+  const [reactionMode, setReactionMode] = useState<"all" | "some" | "none">("all");
+  const [allowedReactions, setAllowedReactions] = useState<string[]>([]);
+  const [stage5Draft, setStage5Draft] = useState<string>("");
   const [adminRights, setAdminRights] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [titleDraft, setTitleDraft] = useState("");
@@ -92,6 +106,9 @@ export function GroupSettingsModal({
         setState(next);
         setDefaults(next.defaults);
         setSlowMode(next.slow_mode_seconds ?? 0);
+        setReactionMode(next.reaction_policy?.mode ?? "all");
+        setAllowedReactions(next.reaction_policy?.allowed_reactions ?? []);
+        setStage5Draft(String(next.auto_delete ?? ""));
         setSelected((current) =>
           current
             ? (() => {
@@ -234,6 +251,19 @@ export function GroupSettingsModal({
     } finally {
       setBusy(false);
     }
+  };
+  const saveStage5 = async () => {
+    if (!state?.can_edit_defaults) return;
+    const values = [...new Set(allowedReactions.map((value) => value.trim()).filter(Boolean))];
+    if (reactionMode === "some" && values.length === 0) { setError("Select at least one allowed reaction."); return; }
+    setBusy(true); setError(null);
+    try {
+      const seconds = stage5Draft === "" ? null : Number(stage5Draft);
+      if (seconds !== null && ![86400, 259200, 604800, 2592000].includes(seconds)) throw new Error("Choose a supported auto-delete duration.");
+      await roomsApi.updateStage5(ref, { reaction_mode: reactionMode, allowed_reactions: reactionMode === "some" ? values : [], auto_delete_seconds: seconds });
+      await reload();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Stage 5 policy update failed. Authority was refreshed."); await reload(); }
+    finally { setBusy(false); }
   };
   const beginPromotion = (member: GovernanceMember) => {
     beginMemberEdit(member);
@@ -439,6 +469,13 @@ export function GroupSettingsModal({
             {view === "overview" && (
               <>
                 {canChangeGroupInfo && <GroupBasicInfoFields room={room} titleId={titleId} descriptionId={descriptionId} controller={basicInfo} />}
+                {state.can_edit_defaults && <section className="space-y-3 rounded-lg border border-border p-3" aria-label="Stage 5 group policies">
+                  <h3 className="text-sm font-semibold">Reactions and auto-delete</h3>
+                  <label className="block text-sm">Reactions<select className="vt-select mt-1 block w-full" value={reactionMode} disabled={busy} onChange={(e) => setReactionMode(e.target.value as "all" | "some" | "none")}><option value="all">All supported reactions</option><option value="some">Selected reactions only</option><option value="none">Disabled for new reactions</option></select></label>
+                  {reactionMode === "some" && <div className="space-y-2"><div className="flex flex-wrap gap-2">{allowedReactions.map((reaction) => <button type="button" key={reaction} className="rounded border px-2 py-1 text-lg" aria-label={`Remove ${reaction}`} onClick={() => setAllowedReactions((current) => current.filter((item) => item !== reaction))}>{reaction} ×</button>)}</div><TextInput aria-label="Add reaction" placeholder="Paste one emoji" size="compact" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const value = e.currentTarget.value.trim(); if (!validReaction(value)) { setError("Enter one supported emoji reaction."); return; } if (allowedReactions.includes(value)) { setError("That reaction is already selected."); return; } setError(null); setAllowedReactions((current) => [...current, value]); e.currentTarget.value = ""; } }} /></div>}
+                  <label className="block text-sm">Auto-delete new messages<select className="vt-select mt-1 block w-full" value={stage5Draft} disabled={busy} onChange={(e) => setStage5Draft(e.target.value)}><option value="">Disabled</option><option value="86400">1 day</option><option value="259200">3 days</option><option value="604800">1 week</option><option value="2592000">30 days</option></select></label>
+                  <Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void saveStage5()}>Save policies</Button>
+                </section>}
                 <GroupManagementSection separated className="p-0" aria-label="Group management navigation">
                 <nav aria-label="Group management sections">
                   <GroupManagementRow label="Administrators" leading={<Shield className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{administrators.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("admins")} />

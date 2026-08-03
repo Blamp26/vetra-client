@@ -83,6 +83,7 @@ export interface Message {
   forwarded_from?: ForwardedAttribution | null;
   status: MessageStatus;
   inserted_at: string;
+  expires_at?: string | null;
   edited_at?: string | null;
   sender_username?: string;
   sender_display_name?: string | null;

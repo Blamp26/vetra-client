@@ -76,6 +76,9 @@ export const roomsApi = {
   updateSlowMode(roomRef: ResourceRef, seconds: number): Promise<number> {
     return put<number>(`/rooms/${roomRef}/governance/slow-mode`, { seconds });
   },
+  updateStage5(roomRef: ResourceRef, value: { reaction_mode: "all" | "some" | "none"; allowed_reactions: string[]; auto_delete_seconds: number | null }) {
+    return put<{ reaction_policy: { mode: "all" | "some" | "none"; allowed_reactions: string[] }; auto_delete: number | null }>(`/rooms/${roomRef}/governance/stage5`, value);
+  },
   promote(
     roomRef: ResourceRef,
     userRef: ResourceRef,
@@ -226,6 +229,8 @@ export interface GroupGovernance {
     remaining_seconds: number;
     next_allowed_at: string | null;
   };
+  reaction_policy?: { mode: "all" | "some" | "none"; allowed_reactions: string[] };
+  auto_delete?: number | null;
   can_leave?: boolean;
   can_delete_group?: boolean;
   members: GovernanceMember[];
