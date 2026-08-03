@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,7 @@ const { roomsApiMock, socketHandler } = vi.hoisted(() => ({
     updateAdminRights: vi.fn(),
     demote: vi.fn(),
     leave: vi.fn(),
+    delete: vi.fn(),
     updateProfile: vi.fn(),
   },
   socketHandler: { current: null as ((event: any) => void) | null },
@@ -95,6 +96,8 @@ describe("GroupSettingsModal member governance", () => {
     roomsApiMock.promote.mockResolvedValue({ ...member, role: "admin" });
     roomsApiMock.updateAdminRights.mockResolvedValue(admin);
     roomsApiMock.demote.mockResolvedValue({ ...admin, role: "member" });
+    roomsApiMock.leave.mockResolvedValue(undefined);
+    roomsApiMock.delete.mockResolvedValue(undefined);
     roomsApiMock.updateProfile.mockResolvedValue({ id: 7, name: "Updated group" });
   });
 
@@ -213,7 +216,6 @@ describe("GroupSettingsModal member governance", () => {
   });
 
   it("normalizes every governance subpage without changing administrator mutations", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
     await screen.findByText("Edit group");
 
@@ -230,15 +232,16 @@ describe("GroupSettingsModal member governance", () => {
     await waitFor(() => expect(roomsApiMock.updateAdminRights).toHaveBeenCalledWith(7, 3, ["change_group_info"]));
 
     fireEvent.click(screen.getByRole("button", { name: "Demote" }));
+    const demoteDialog = screen.getByRole("dialog", { name: "Demote administrator?" });
+    expect(demoteDialog).toBeInTheDocument();
+    fireEvent.click(within(demoteDialog).getByRole("button", { name: "Demote" }));
     await waitFor(() => expect(roomsApiMock.demote).toHaveBeenCalledWith(7, 3));
-    expect(confirm).toHaveBeenCalledWith("Demote this administrator?");
 
     fireEvent.click(screen.getByRole("button", { name: "Promote" }));
     await waitFor(() => expect(roomsApiMock.promote).toHaveBeenCalledWith(7, 2));
   });
 
   it("keeps member selection, overrides, removal, and default permissions on the same APIs", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
     await screen.findByText("Edit group");
 
@@ -253,6 +256,8 @@ describe("GroupSettingsModal member governance", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save restrictions" }));
     await waitFor(() => expect(roomsApiMock.updateOverride).toHaveBeenCalledWith(7, 2, ["send_messages"], []));
     fireEvent.click(screen.getByRole("button", { name: "Remove member" }));
+    expect(screen.getByRole("dialog", { name: "Remove member?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(roomsApiMock.removeMember).toHaveBeenCalledWith(7, 2));
 
     fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
@@ -261,6 +266,126 @@ describe("GroupSettingsModal member governance", () => {
     expect(screen.getByLabelText("Send messages").closest('[data-group-management-control-row]')).toHaveClass("min-h-11");
     expect(screen.queryByText(/Topics|Stories|QR|Slow mode|Auto-delete/i)).not.toBeInTheDocument();
     expect(screen.queryByTestId("group-settings-footer")).not.toBeInTheDocument();
+  });
+
+  it("keeps administrator context mounted when demotion is cancelled and prevents duplicate confirmation", async () => {
+    const nativeConfirm = vi.spyOn(window, "confirm");
+    let resolveDemote!: (value: typeof admin) => void;
+    roomsApiMock.demote.mockImplementationOnce(() => new Promise((resolve) => { resolveDemote = resolve; }));
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+    fireEvent.click(screen.getByRole("button", { name: /^Administrators/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit rights" }));
+    fireEvent.click(screen.getByRole("button", { name: "Demote" }));
+
+    expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(2);
+    expect(screen.getByTestId("group-admins-subpage")).toBeInTheDocument();
+    const demoteDialog = screen.getByRole("dialog", { name: "Demote administrator?" });
+    expect(demoteDialog).toHaveAccessibleDescription("Administrator will become a regular group member.");
+    expect(screen.queryByText(/delete for everyone|transfer ownership/i)).not.toBeInTheDocument();
+    fireEvent.click(within(demoteDialog).getByRole("button", { name: "Cancel" }));
+    expect(roomsApiMock.demote).not.toHaveBeenCalled();
+    expect(screen.getByText("Administrator rights")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Demote" }));
+    const confirm = within(screen.getByRole("dialog", { name: "Demote administrator?" })).getByRole("button", { name: "Demote" });
+    fireEvent.click(confirm);
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(roomsApiMock.demote).toHaveBeenCalledTimes(1);
+    expect(roomsApiMock.demote).toHaveBeenCalledWith(7, 3);
+    resolveDemote(admin);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Demote administrator?" })).not.toBeInTheDocument());
+    expect(roomsApiMock.governance.mock.calls.length).toBeGreaterThan(1);
+    expect(nativeConfirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps member selection mounted when removal is cancelled and prevents duplicate confirmation", async () => {
+    const nativeConfirm = vi.spyOn(window, "confirm");
+    let resolveRemove!: () => void;
+    roomsApiMock.removeMember.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveRemove = resolve; }));
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+    fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Member 1 effective permissions$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove member" }));
+
+    expect(screen.getByTestId("group-members-subpage")).toBeInTheDocument();
+    const removeDialog = screen.getByRole("dialog", { name: "Remove member?" });
+    expect(removeDialog).toHaveAccessibleDescription("Remove Member from this group?");
+    fireEvent.click(within(removeDialog).getByRole("button", { name: "Cancel" }));
+    expect(roomsApiMock.removeMember).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Remove member" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove member" }));
+    const confirm = screen.getByRole("button", { name: "Remove" });
+    fireEvent.click(confirm);
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(roomsApiMock.removeMember).toHaveBeenCalledTimes(1);
+    expect(roomsApiMock.removeMember).toHaveBeenCalledWith(7, 2);
+    resolveRemove();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Remove member?" })).not.toBeInTheDocument());
+    expect(roomsApiMock.governance.mock.calls.length).toBeGreaterThan(1);
+    expect(nativeConfirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps the overview draft mounted when leaving is cancelled and prevents duplicate confirmation", async () => {
+    const nativeConfirm = vi.spyOn(window, "confirm");
+    const onClose = vi.fn();
+    let resolveLeave!: () => void;
+    roomsApiMock.governance.mockResolvedValue({ ...governance(), role: "member" });
+    roomsApiMock.leave.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveLeave = resolve; }));
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={onClose} />);
+    await screen.findByText("Edit group");
+    fireEvent.change(screen.getByLabelText("Group name"), { target: { value: "Draft name" } });
+    fireEvent.click(screen.getByRole("button", { name: "Leave group" }));
+
+    const leaveDialog = screen.getByRole("dialog", { name: "Leave group?" });
+    expect(leaveDialog).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    fireEvent.click(within(leaveDialog).getByRole("button", { name: "Cancel" }));
+    expect(roomsApiMock.leave).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Group name")).toHaveValue("Draft name");
+
+    fireEvent.click(screen.getByRole("button", { name: "Leave group" }));
+    const confirm = screen.getByRole("button", { name: "Leave" });
+    fireEvent.click(confirm);
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(roomsApiMock.leave).toHaveBeenCalledTimes(1);
+    expect(roomsApiMock.leave).toHaveBeenCalledWith(7);
+    resolveLeave();
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(nativeConfirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps the overview mounted when deletion is cancelled and prevents duplicate confirmation", async () => {
+    const nativeConfirm = vi.spyOn(window, "confirm");
+    const onClose = vi.fn();
+    let resolveDelete!: () => void;
+    roomsApiMock.delete.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveDelete = resolve; }));
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={onClose} />);
+    await screen.findByText("Edit group");
+    fireEvent.click(screen.getByRole("button", { name: "Delete group" }));
+
+    const deleteDialog = screen.getByRole("dialog", { name: "Delete group?" });
+    expect(deleteDialog).toHaveAccessibleDescription("This group and its messages will be permanently deleted.");
+    expect(screen.getByTestId("group-settings-scroll-body")).toBeInTheDocument();
+    fireEvent.click(within(deleteDialog).getByRole("button", { name: "Cancel" }));
+    expect(roomsApiMock.delete).not.toHaveBeenCalled();
+    expect(screen.getByRole("navigation", { name: "Group management sections" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete group" }));
+    const confirm = screen.getByRole("button", { name: "Delete" });
+    fireEvent.click(confirm);
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(roomsApiMock.delete).toHaveBeenCalledTimes(1);
+    expect(roomsApiMock.delete).toHaveBeenCalledWith(7);
+    resolveDelete();
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(nativeConfirm).not.toHaveBeenCalled();
   });
 
   it("keeps a valid basic-information draft while visiting governance views", async () => {

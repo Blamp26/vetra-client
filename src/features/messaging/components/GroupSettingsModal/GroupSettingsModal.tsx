@@ -9,6 +9,7 @@ import { roomRef } from "@/shared/utils/refs";
 import type { RoomPreview } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
 import { Button } from "@/shared/components/Button";
+import { ConfirmModal } from "@/shared/components/ConfirmModal";
 import { TextInput } from "@/shared/components/Field";
 import { AvatarCropDialog } from "../GroupBasicInfoEditor/AvatarCropDialog";
 import {
@@ -32,6 +33,12 @@ import {
   GroupManagementSubpage,
 } from "../GroupManagement/GroupManagementLayout";
 
+type GroupConfirmation =
+  | { type: "demote"; member: GovernanceMember }
+  | { type: "remove"; member: GovernanceMember }
+  | { type: "leave" }
+  | { type: "delete" };
+
 export function GroupSettingsModal({
   room,
   onClose,
@@ -48,6 +55,7 @@ export function GroupSettingsModal({
   const [adminRights, setAdminRights] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmation, setConfirmation] = useState<GroupConfirmation | null>(null);
   const [memberQuery, setMemberQuery] = useState("");
   const [overrideDraft, setOverrideDraft] = useState<
     Record<string, "inherit" | "allow" | "deny">
@@ -148,24 +156,6 @@ export function GroupSettingsModal({
       setBusy(false);
     }
   };
-  const removeSelected = async () => {
-    if (
-      !selected ||
-      selected.role !== "member" ||
-      !window.confirm("Remove this member from the group?")
-    )
-      return;
-    setBusy(true);
-    try {
-      await roomsApi.removeMember(ref, selected.id);
-      setSelected(null);
-      await reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Member removal failed.");
-    } finally {
-      setBusy(false);
-    }
-  };
   const clearSelectedOverride = async () => {
     if (!selected) return;
     setBusy(true);
@@ -224,15 +214,57 @@ export function GroupSettingsModal({
       setError("owner_cannot_leave");
       return;
     }
-    if (window.confirm("Leave this group?")) {
-      void roomsApi.leave(ref).then(onClose).catch((e) => setError(e instanceof Error ? e.message : "Leave failed."));
-    }
+    setConfirmation({ type: "leave" });
   };
   const deleteGroup = () => {
-    if (state?.role !== "owner" || !window.confirm("Delete this group?")) return;
-    setBusy(true);
-    void roomsApi.delete(ref).then(onClose).catch((e) => setError(e instanceof Error ? e.message : "Delete failed.")).finally(() => setBusy(false));
+    if (state?.role !== "owner") return;
+    setConfirmation({ type: "delete" });
   };
+  const confirmAction = async () => {
+    if (!confirmation || busy) return;
+    setBusy(true);
+    try {
+      if (confirmation.type === "demote") {
+        await roomsApi.demote(ref, confirmation.member.id);
+        await reload();
+      } else if (confirmation.type === "remove") {
+        await roomsApi.removeMember(ref, confirmation.member.id);
+        setSelected(null);
+        await reload();
+      } else if (confirmation.type === "leave") {
+        await roomsApi.leave(ref);
+        onClose();
+      } else {
+        await roomsApi.delete(ref);
+        onClose();
+      }
+    } catch (e) {
+      const fallback = confirmation.type === "remove"
+          ? "Member removal failed."
+          : confirmation.type === "leave"
+            ? "Leave failed."
+            : "Delete failed.";
+      setError(
+        confirmation.type === "demote"
+          ? (e as { message: string }).message
+          : e instanceof Error
+            ? e.message
+            : fallback,
+      );
+    } finally {
+      setBusy(false);
+      setConfirmation(null);
+    }
+  };
+  const confirmationCopy = confirmation
+    ? confirmation.type === "demote"
+      ? { title: "Demote administrator?", message: `${confirmation.member.display_name ?? confirmation.member.username} will become a regular group member.`, confirmLabel: "Demote" }
+      : confirmation.type === "remove"
+        ? { title: "Remove member?", message: `Remove ${confirmation.member.display_name ?? confirmation.member.username} from this group?`, confirmLabel: "Remove" }
+        : confirmation.type === "leave"
+          ? { title: "Leave group?", message: "You will leave this group and lose access to its messages.", confirmLabel: "Leave" }
+          : { title: "Delete group?", message: "This group and its messages will be permanently deleted.", confirmLabel: "Delete" }
+    : null;
   return (
     <>
     <GroupManagementFrame width="settings" onClose={onClose} labelledBy={titleId}>
@@ -288,7 +320,7 @@ export function GroupSettingsModal({
                       trailing={
                         <>
                           <Button type="button" variant="ghost" size="compact" className="px-2" disabled={state.role !== "owner" || busy} onClick={() => { setSelected(m); setAdminRights(m.admin_permissions); }}>Edit rights</Button>
-                          <Button type="button" variant="ghost" size="compact" className="px-2 text-destructive" disabled={state.role !== "owner" || busy} onClick={() => window.confirm("Demote this administrator?") && roomsApi.demote(ref, m.id).then(reload).catch((e) => setError(e.message))}>Demote</Button>
+                          <Button type="button" variant="ghost" size="compact" className="px-2 text-destructive" disabled={state.role !== "owner" || busy} onClick={() => setConfirmation({ type: "demote", member: m })}>Demote</Button>
                         </>
                       }
                     />
@@ -354,7 +386,7 @@ export function GroupSettingsModal({
                       <Button type="button" variant="ghost" size="compact" disabled={busy || !(state.role === "owner" || canManagePermissions)} onClick={() => void clearSelectedOverride()}>Clear override</Button>
                     </div>
                     <div className="mt-3 border-t border-border pt-3">
-                      <Button type="button" variant="ghost" size="compact" className="text-destructive" disabled={busy || !(state.role === "owner" || canRemoveMembers)} onClick={() => void removeSelected()}>Remove member</Button>
+                      <Button type="button" variant="ghost" size="compact" className="text-destructive" disabled={busy || !(state.role === "owner" || canRemoveMembers)} onClick={() => setConfirmation({ type: "remove", member: selected })}>Remove member</Button>
                     </div>
                   </section>
                 )}
@@ -389,6 +421,17 @@ export function GroupSettingsModal({
       </div>
     </GroupManagementFrame>
     {basicInfo.cropSource && <AvatarCropDialog source={basicInfo.cropSource} onCancel={() => basicInfo.setCropSource(null)} onSetPhoto={basicInfo.replacePreview} />}
+    {confirmationCopy && (
+      <ConfirmModal
+        title={confirmationCopy.title}
+        message={confirmationCopy.message}
+        confirmLabel={confirmationCopy.confirmLabel}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => void confirmAction()}
+        isLoading={busy}
+        isDanger
+      />
+    )}
     </>
   );
 }
