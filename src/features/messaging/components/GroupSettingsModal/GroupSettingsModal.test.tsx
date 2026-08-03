@@ -10,6 +10,7 @@ const { roomsApiMock, socketHandler } = vi.hoisted(() => ({
     clearOverride: vi.fn(),
     removeMember: vi.fn(),
     updateDefaults: vi.fn(),
+    updateSlowMode: vi.fn(),
     promote: vi.fn(),
     updateAdminRights: vi.fn(),
     updateMemberTag: vi.fn(),
@@ -93,6 +94,8 @@ const governance = () => ({
   ],
   defaults: ["send_messages"],
   can_edit_defaults: true,
+  can_manage_slow_mode: true,
+  slow_mode_seconds: 0,
   can_leave: false,
   can_delete_group: true,
   members: [
@@ -121,6 +124,7 @@ describe("GroupSettingsModal member governance", () => {
     roomsApiMock.clearOverride.mockResolvedValue(undefined);
     roomsApiMock.removeMember.mockResolvedValue(undefined);
     roomsApiMock.updateDefaults.mockResolvedValue(["send_messages"]);
+    roomsApiMock.updateSlowMode.mockResolvedValue(0);
     roomsApiMock.promote.mockResolvedValue({ ...member, role: "admin" });
     roomsApiMock.updateAdminRights.mockResolvedValue(admin);
     roomsApiMock.updateMemberTag.mockResolvedValue(member);
@@ -327,7 +331,7 @@ describe("GroupSettingsModal member governance", () => {
     expect(defaultPermission).toHaveClass("sr-only", "peer");
     expect(defaultPermission).toBeChecked();
     expect(defaultPermission.closest('[data-group-management-control-row]')).toHaveClass("min-h-11");
-    expect(screen.queryByText(/Topics|Stories|QR|Slow mode|Auto-delete/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Topics|Stories|QR|Auto-delete/i)).not.toBeInTheDocument();
     expect(screen.queryByTestId("group-settings-footer")).not.toBeInTheDocument();
     const saveDefaults = screen.getByRole("button", { name: "Save defaults" });
     expect(screen.getByTestId("group-permissions-footer")).toContainElement(saveDefaults);
@@ -500,7 +504,7 @@ describe("GroupSettingsModal member governance", () => {
     const nativeConfirm = vi.spyOn(window, "confirm");
     const onClose = vi.fn();
     let resolveLeave!: () => void;
-    roomsApiMock.governance.mockResolvedValue({ ...governance(), role: "member", can_leave: true, can_delete_group: false });
+    roomsApiMock.governance.mockResolvedValue({ ...governance(), role: "member", action_capabilities: { change_group_info: true }, can_leave: true, can_delete_group: false });
     roomsApiMock.leave.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveLeave = resolve; }));
     render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={onClose} />);
     await screen.findByText("Edit group");

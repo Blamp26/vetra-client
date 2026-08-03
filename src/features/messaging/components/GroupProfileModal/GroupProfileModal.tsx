@@ -7,6 +7,7 @@ import { TextInput } from "@/shared/components/Field";
 import type { RoomPreview } from "@/shared/types";
 import { roomRef } from "@/shared/utils/refs";
 import { GroupMemberPicker } from "./GroupMemberPicker";
+import { useAppStore, type RootState } from "@/store";
 import {
   GroupManagementFrame,
   GroupManagementScrollBody,
@@ -41,6 +42,7 @@ export function GroupProfileModal({
   const [governance, setGovernance] = useState<Awaited<ReturnType<typeof roomsApi.governance>> | null>(null);
   const [governanceLoading, setGovernanceLoading] = useState(true);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const socketManager = useAppStore((state: RootState) => state.socketManager);
 
   const closeMemberPicker = () => {
     setAddMemberOpen(false);
@@ -79,6 +81,21 @@ export function GroupProfileModal({
   }, [room.id, room.public_id]);
 
   useEffect(() => {
+    if (!socketManager) return;
+    let active = true;
+    const unsubscribe = socketManager.onGroupGovernanceChanged((event) => {
+      if (event.room_id !== room.id) return;
+      void roomsApi.governance(roomRef(room) ?? room.id).then((next) => {
+        if (!active) return;
+        setGovernance(next);
+        if (!next.action_capabilities?.add_users) setAddMemberOpen(false);
+      }).catch(() => undefined);
+      void loadMembers().catch(() => undefined);
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [room.id, room.public_id, socketManager]);
+
+  useEffect(() => {
     let active = true;
     setGovernanceLoading(true);
     setGovernance(null);
@@ -102,10 +119,11 @@ export function GroupProfileModal({
   const memberCount = members.length || room.members?.length || 0;
   const canManage = !governanceLoading && governance !== null && (
     governance.role === "owner" ||
-    governance.capabilities.some((capability) => ["remove_members", "manage_member_permissions"].includes(capability))
+    governance.action_capabilities?.manage_member_permissions === true ||
+    governance.action_capabilities?.edit_own_tags === true
   );
   const canAddMember = !governanceLoading && governance !== null && (
-    governance.role === "owner" || governance.capabilities.includes("invite_members")
+    governance.action_capabilities?.add_users === true
   );
   const actions = [
     { label: "Search", icon: <Search className="h-4 w-4" aria-hidden="true" />, onClick: onSearchMessages },

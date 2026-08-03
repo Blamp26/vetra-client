@@ -32,6 +32,7 @@ interface MessageContextMenuProps {
   isPickerExpanded: boolean;
   setIsPickerExpanded: (expanded: boolean) => void;
   onToggleReaction: (msgId: number, emoji: string) => void;
+  canReact?: boolean;
   onReply: () => void;
   onCopy: () => void;
   onDownload: () => void;
@@ -320,6 +321,7 @@ export function MessageContextMenu({
   isPickerExpanded,
   setIsPickerExpanded,
   onToggleReaction,
+  canReact = true,
   onReply,
   onCopy,
   onDownload,
@@ -476,7 +478,7 @@ export function MessageContextMenu({
       style={{ top: position.top, left: position.left }}
       onClick={(event) => event.stopPropagation()}
     >
-      <div
+      {canReact && <div
         className={cn(
           "absolute left-[-82px] top-[-48px] z-[2] w-[298px] overflow-visible bg-transparent transition-[height] duration-150 ease-[cubic-bezier(0.2,0,0.2,1)] motion-reduce:transition-none",
           isPickerExpanded ? "h-[358px]" : "h-10",
@@ -586,7 +588,7 @@ export function MessageContextMenu({
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       <div
         className="mr-[44px] flex min-h-[248px] w-[172px] overflow-y-auto rounded-[16px] bg-[rgba(33,33,33,0.867)] py-1 shadow-[0px_4px_8px_2px_rgba(16,16,16,0.61)] supports-[backdrop-filter]:backdrop-blur-[10px]"

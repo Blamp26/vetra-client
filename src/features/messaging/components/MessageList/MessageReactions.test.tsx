@@ -73,4 +73,13 @@ describe("MessageReactions", () => {
     });
     expect(group.lastElementChild).toBe(metadata);
   });
+
+  it("keeps existing reactions visible but disables mutation when send_reactions is unavailable", () => {
+    const onToggle = vi.fn();
+    render(<MessageReactions messageId={9} reactions={[{ reaction: "👍", count: 2, chosen: false }]} onToggle={onToggle} canReact={false} />);
+    const button = screen.getByRole("button", { name: /reaction/ });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
 });

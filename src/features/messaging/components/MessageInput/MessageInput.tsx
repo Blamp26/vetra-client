@@ -82,11 +82,15 @@ function AttachmentSourceMenu({
   onClose,
   onSelectMedia,
   onSelectFile,
+  canSelectMedia,
+  canSelectFile,
 }: {
   placement: AttachmentMenuPlacement;
   onClose: () => void;
   onSelectMedia: () => void;
   onSelectFile: () => void;
+  canSelectMedia: boolean;
+  canSelectFile: boolean;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -125,6 +129,7 @@ function AttachmentSourceMenu({
     >
       <button
         type="button"
+        disabled={!canSelectMedia}
         className="vt-attachment-review__menu-item flex w-full items-center gap-3 px-3 py-2 text-left text-[14px] font-medium transition"
         onClick={() => {
           onSelectMedia();
@@ -137,6 +142,7 @@ function AttachmentSourceMenu({
       </button>
       <button
         type="button"
+        disabled={!canSelectFile}
         className="vt-attachment-review__menu-item mt-0.5 flex w-full items-center gap-3 px-3 py-2 text-left text-[14px] font-medium transition"
         onClick={() => {
           onSelectFile();
@@ -177,6 +183,8 @@ interface Props {
   focusBlocked?: boolean;
   onOpenPicker?: () => void;
   pickerOpen?: boolean;
+  permissions?: string[];
+  slowModeUntil?: string | null;
   onRegisterCustomEmojiInserter?: (
     inserter: (emoji: StickerMessage) => void,
   ) => void;
@@ -192,8 +200,13 @@ export function MessageInput({
   focusBlocked = false,
   onOpenPicker,
   pickerOpen = false,
+  permissions,
+  slowModeUntil = null,
   onRegisterCustomEmojiInserter,
 }: Props) {
+  const allowed = (permission: string) => permissions === undefined || permissions.includes(permission);
+  const canAttachMedia = allowed("send_photos") || allowed("send_videos");
+  const canAttachFile = allowed("send_files") || allowed("send_music");
   const [content, setContent] = useState("");
   const [entities, setEntities] = useState<MessageTextEntity[]>([]);
   const [composerContextMenu, setComposerContextMenu] = useState<{
@@ -231,6 +244,7 @@ export function MessageInput({
   const [isModalAttachmentMenuOpen, setIsModalAttachmentMenuOpen] =
     useState(false);
   const [focusRequest, setFocusRequest] = useState(0);
+  const [slowModeRemaining, setSlowModeRemaining] = useState(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -265,6 +279,22 @@ export function MessageInput({
 
   const isEditing = !!editingMessage;
   const isUploading = uploadStatus === "uploading";
+  const slowModeActive = slowModeRemaining > 0 && !isEditing;
+
+  useEffect(() => {
+    const update = () => {
+      const deadline = slowModeUntil ? Date.parse(slowModeUntil) : Number.NaN;
+      setSlowModeRemaining(
+        Number.isFinite(deadline)
+          ? Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+          : 0,
+      );
+    };
+    update();
+    if (!slowModeUntil) return;
+    const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [slowModeUntil]);
   const activeChatKey = activeChat
     ? activeChat.type === "direct"
       ? `direct:${activeChat.partnerId}`
@@ -391,6 +421,23 @@ export function MessageInput({
       setIsModalAttachmentMenuOpen(false);
     }
   }, [pendingAttachments.length]);
+
+  useEffect(() => {
+    if (permissions === undefined) return;
+    const permitted = (kind: PendingAttachment["kind"]) => {
+      const permission = kind === "photo" ? "send_photos" : kind === "video" ? "send_videos" : kind === "audio" ? "send_music" : kind === "voice" ? "send_voice_messages" : "send_files";
+      return permissions.includes(permission);
+    };
+    const removed = pendingAttachmentsRef.current.filter((attachment) => !permitted(attachment.kind));
+    if (removed.length === 0) return;
+    removed.forEach((attachment) => {
+      if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    });
+    const next = pendingAttachmentsRef.current.filter((attachment) => permitted(attachment.kind));
+    pendingAttachmentsRef.current = next;
+    setPendingAttachments(next);
+    if (next.length === 0) setIsModalAttachmentMenuOpen(false);
+  }, [permissions]);
 
   useEffect(() => {
     if (
@@ -936,6 +983,21 @@ export function MessageInput({
       }
 
       const { kind, mimeType } = classification;
+      const requiredPermission =
+        kind === "photo"
+          ? "send_photos"
+          : kind === "video"
+            ? "send_videos"
+            : kind === "audio"
+              ? "send_music"
+              : kind === "voice"
+                ? "send_voice_messages"
+                : "send_files";
+      if (!allowed(requiredPermission)) {
+        firstValidationError ??=
+          "This attachment type is not permitted in this group";
+        continue;
+      }
       const pendingAttachment: PendingAttachment = {
         id: `pending-attachment-${attachmentIdRef.current++}`,
         file,
@@ -1060,6 +1122,7 @@ export function MessageInput({
       (!content.trim() && pendingAttachments.length === 0) ||
       isSending ||
       isUploading ||
+      slowModeActive ||
       sendLockRef.current
     )
       return;
@@ -1731,6 +1794,8 @@ export function MessageInput({
               onClose={() => setIsModalAttachmentMenuOpen(false)}
               onSelectMedia={openMediaPicker}
               onSelectFile={openFilePicker}
+              canSelectMedia={canAttachMedia}
+              canSelectFile={canAttachFile}
             />
           }
           onClose={handleCloseAttachmentReview}
@@ -1868,6 +1933,12 @@ export function MessageInput({
           </div>
         )}
 
+        {slowModeRemaining > 0 && (
+          <div className="border-b border-border px-4 py-1 text-xs text-muted-foreground" role="status">
+            Slow mode: {slowModeRemaining}s
+          </div>
+        )}
+
         {uploadStatus !== "idle" && pendingAttachments.length === 0 && (
           <div className="border-b border-border px-4 py-2 text-[11px]">
             {uploadStatus === "uploading" ? (
@@ -1902,6 +1973,8 @@ export function MessageInput({
               onClick={handleAttachClick}
               disabled={
                 disabled ||
+                slowModeActive ||
+                (!canAttachMedia && !canAttachFile) ||
                 isSending ||
                 isEditing ||
                 isUploading ||
@@ -1926,6 +1999,8 @@ export function MessageInput({
                 onClose={() => setIsComposerAttachmentMenuOpen(false)}
                 onSelectMedia={openMediaPicker}
                 onSelectFile={openFilePicker}
+                canSelectMedia={canAttachMedia}
+                canSelectFile={canAttachFile}
               />
             )}
           </div>
@@ -1970,6 +2045,8 @@ export function MessageInput({
               onPaste={handlePaste}
               disabled={
                 disabled ||
+                slowModeActive ||
+                !allowed("send_messages") ||
                 isSending ||
                 isUploading ||
                 pendingAttachments.length > 0 ||
@@ -1986,6 +2063,8 @@ export function MessageInput({
             onClick={onOpenPicker}
             disabled={
               disabled ||
+              slowModeActive ||
+              !allowed("send_stickers_gifs") ||
               isSending ||
               isUploading ||
               voiceRecordingState !== "idle"
@@ -2006,6 +2085,8 @@ export function MessageInput({
             onClick={() => void startVoiceRecording()}
             disabled={
               disabled ||
+              slowModeActive ||
+              !allowed("send_voice_messages") ||
               isSending ||
               isUploading ||
               isEditing ||
@@ -2029,6 +2110,8 @@ export function MessageInput({
               pendingAttachments.length > 0 ||
               (!content.trim() && pendingAttachments.length === 0) ||
               disabled ||
+              slowModeActive ||
+              !allowed("send_messages") ||
               isSending ||
               isUploading ||
               voiceRecordingState !== "idle"

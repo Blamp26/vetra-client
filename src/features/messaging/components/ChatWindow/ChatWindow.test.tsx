@@ -1,13 +1,16 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getUser, useAppStoreMock, persistentCallMock, governanceMembers, governance } = vi.hoisted(() => ({
+const { getUser, useAppStoreMock, persistentCallMock, governanceMembers, governance, captured, governanceHandler, sendMessageMock } = vi.hoisted(() => ({
   getUser: vi.fn(),
   useAppStoreMock: vi.fn(),
   persistentCallMock: { current: null as unknown },
   governanceMembers: vi.fn(),
   governance: vi.fn(),
+  captured: { input: null as any, list: null as any },
+  governanceHandler: { current: null as null | ((event: any) => void) },
+  sendMessageMock: vi.fn(),
 }));
 
 vi.mock("@/store", () => ({
@@ -54,18 +57,18 @@ vi.mock("@/features/messaging/hooks/useUnifiedMessages", () => ({
     isLoading: false,
     hasMore: false,
     loadMore: vi.fn(),
-    sendMessage: vi.fn(),
+    sendMessage: sendMessageMock,
   }),
 }));
 
 vi.mock("../MessageList/MessageList", () => ({
-  MessageList: ({
-    messages,
-    onReply,
-  }: {
+  MessageList: (props: {
     messages: Array<{ content?: string | null }>;
     onReply?: (target: { id: number; content: string; author: string }) => void;
-  }) => (
+  }) => {
+    captured.list = props;
+    const { messages, onReply } = props;
+    return (
     <div data-testid="message-list">
       {messages.map((message, index) => (
         <div key={index}>{message.content}</div>
@@ -74,17 +77,22 @@ vi.mock("../MessageList/MessageList", () => ({
         Select mock reply
       </button>
     </div>
-  ),
+    );
+  },
 }));
 
 vi.mock("../MessageInput/MessageInput", () => ({
-  MessageInput: ({ replyTo }: { replyTo?: { id: number } | null }) => (
+  MessageInput: (props: { replyTo?: { id: number } | null; permissions?: string[]; slowModeUntil?: string | null; onSend: (...args: any[]) => Promise<void> }) => {
+    captured.input = props;
+    const { replyTo } = props;
+    return (
     <textarea
       data-testid="message-input"
       aria-label="Message composer"
       data-reply-id={replyTo?.id ?? "none"}
     />
-  ),
+    );
+  },
 }));
 
 vi.mock("../MessageSearch/MessageSearch", () => ({
@@ -93,6 +101,7 @@ vi.mock("../MessageSearch/MessageSearch", () => ({
 
 import { ChatWindow } from "./ChatWindow";
 import type { UseCallReturn } from "@/features/calling/hooks/useCall.types";
+import { RoomMessageSendError } from "@/services/socket";
 
 function makeState() {
   return {
@@ -181,6 +190,11 @@ describe("ChatWindow presence rendering", () => {
     getUser.mockResolvedValue({ id: 2, public_id: null, username: "alice", display_name: "Alice", bio: null, avatar_url: null, status: "offline", last_seen_at: null });
     useAppStoreMock.mockReset();
     persistentCallMock.current = null;
+    captured.input = null;
+    captured.list = null;
+    governanceHandler.current = null;
+    sendMessageMock.mockReset();
+    sendMessageMock.mockResolvedValue(undefined);
     governanceMembers.mockResolvedValue([
       { id: 1, username: "alice", display_name: "Alice", role: "member", admin_permissions: [], allow_permissions: [], deny_permissions: [] },
     ]);
@@ -188,6 +202,43 @@ describe("ChatWindow presence rendering", () => {
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
+  });
+
+  it("reconciles authoritative reaction, composer, and slow-mode capabilities without reopening the room", async () => {
+    const state = makeState();
+    state.socketManager = {
+      onGroupGovernanceChanged: (handler: (event: any) => void) => {
+        governanceHandler.current = handler;
+        return () => { governanceHandler.current = null; };
+      },
+    } as any;
+    useAppStoreMock.mockImplementation((selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state));
+    governance
+      .mockResolvedValueOnce({ role: "member", capabilities: [], defaults: [], members: [], effective_permissions: ["send_messages", "send_reactions"], action_capabilities: { send_reactions: true, send_stickers_gifs: false }, slow_mode: { applies: true, seconds: 10, remaining_seconds: 0, next_allowed_at: null } })
+      .mockResolvedValueOnce({ role: "member", capabilities: [], defaults: [], members: [], effective_permissions: ["send_photos"], action_capabilities: { send_reactions: false, send_stickers_gifs: false }, slow_mode: { applies: true, seconds: 30, remaining_seconds: 12, next_allowed_at: "2026-08-03T10:00:12Z" } });
+
+    render(<ChatWindow activeChat={{ type: "room", roomId: 4 }} call={makeCall()} />);
+    await waitFor(() => expect(captured.input?.permissions).toEqual(["send_messages", "send_reactions"]));
+    expect(captured.list?.canReact).toBe(true);
+
+    act(() => governanceHandler.current?.({ room_id: 4, event: "default_permissions_changed" }));
+    await waitFor(() => expect(captured.input?.permissions).toEqual(["send_photos"]));
+    expect(captured.list?.canReact).toBe(false);
+    expect(captured.input?.slowModeUntil).toBe("2026-08-03T10:00:12Z");
+  });
+
+  it("starts cooldown only from authoritative success projection or structured slow-mode rejection", async () => {
+    const state = makeState();
+    useAppStoreMock.mockImplementation((selector: (value: ReturnType<typeof makeState>) => unknown) => selector(state));
+    governance.mockResolvedValue({ role: "member", capabilities: [], defaults: [], members: [], effective_permissions: ["send_messages"], action_capabilities: { send_reactions: false }, slow_mode: { applies: true, seconds: 5, remaining_seconds: 0, next_allowed_at: null } });
+    render(<ChatWindow activeChat={{ type: "room", roomId: 4 }} call={makeCall()} />);
+    await waitFor(() => expect(captured.input?.permissions).toEqual(["send_messages"]));
+    await act(async () => captured.input.onSend({ content: "ok" }));
+    expect(Date.parse(captured.input.slowModeUntil)).toBeGreaterThan(Date.now());
+
+    sendMessageMock.mockRejectedValueOnce(new RoomMessageSendError({ reason: "slow_mode", remaining_seconds: 9, next_allowed_at: "2026-08-03T10:00:09Z" }));
+    await expect(captured.input.onSend({ content: "blocked" })).rejects.toMatchObject({ reason: "slow_mode" });
+    await waitFor(() => expect(captured.input.slowModeUntil).toBe("2026-08-03T10:00:09Z"));
   });
 
   it("routes an ordinary room header through the authoritative group profile flow", async () => {

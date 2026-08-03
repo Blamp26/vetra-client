@@ -5,6 +5,8 @@ import {
 } from "@/features/messaging/hooks/useUnifiedMessages";
 import { useAppStore, type RootState } from "@/store";
 import { authApi } from "@/api/auth";
+import { roomsApi, type GroupGovernance } from "@/api/rooms";
+import { RoomMessageSendError } from "@/services/socket";
 import { MessageList } from "../MessageList/MessageList";
 import { MessageInput } from "../MessageInput/MessageInput";
 import { MessageSearch } from "../MessageSearch/MessageSearch";
@@ -76,6 +78,45 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
   const { entries: directedCallHistoryEntries } = useDirectedCallHistoryForChat(activeChat);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
+  const [groupGovernance, setGroupGovernance] = useState<GroupGovernance | null>(null);
+  const [slowModeUntil, setSlowModeUntil] = useState<string | null>(null);
+  const governanceRequestRef = useRef(0);
+
+  const reconcileGovernance = useCallback(async () => {
+    if (activeChat.type !== "room") return;
+    const request = ++governanceRequestRef.current;
+    const roomId = activeChat.roomId;
+    const value = await roomsApi.governance(activeChat.roomRef ?? roomId);
+    if (request !== governanceRequestRef.current || activeChat.type !== "room" || activeChat.roomId !== roomId) return;
+    setGroupGovernance(value);
+    setSlowModeUntil(value.slow_mode?.next_allowed_at ?? null);
+    if (!value.action_capabilities?.send_stickers_gifs) setPickerOpen(false);
+  }, [activeChat]);
+
+  useEffect(() => {
+    governanceRequestRef.current += 1;
+    if (activeChat.type !== "room") {
+      setGroupGovernance(null);
+      setSlowModeUntil(null);
+      return;
+    }
+    setGroupGovernance(null);
+    setSlowModeUntil(null);
+    void reconcileGovernance().catch(() => undefined);
+  }, [activeChat, reconcileGovernance]);
+
+  useEffect(() => {
+    if (activeChat.type !== "room" || !socketManager) return;
+    const roomId = activeChat.roomId;
+    return socketManager.onGroupGovernanceChanged((event) => {
+      if (event.room_id !== roomId) return;
+      void reconcileGovernance().catch(() => undefined);
+    });
+  }, [activeChat, socketManager, reconcileGovernance]);
+
+  const groupPermissions = activeChat.type === "room"
+    ? (groupGovernance?.effective_permissions ?? [])
+    : undefined;
 
   const onlineUserIds = useAppStore((s: RootState) => s.onlineUserIds);
   const userStatuses = useAppStore((s: RootState) => s.userStatuses);
@@ -201,6 +242,28 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
 
   const { messages, isLoading, hasMore, loadMore, initialHistoryLoaded, sendMessage } =
     useUnifiedMessages(chatContext);
+
+  const sendWithGovernance = useCallback(
+    async (...args: Parameters<typeof sendMessage>) => {
+      try {
+        await sendMessage(...args);
+        const slowMode = groupGovernance?.slow_mode;
+        if (activeChat.type === "room" && slowMode?.applies && slowMode.seconds > 0) {
+          setSlowModeUntil(new Date(Date.now() + slowMode.seconds * 1000).toISOString());
+        }
+      } catch (error) {
+        if (error instanceof RoomMessageSendError && error.reason === "slow_mode") {
+          const fallback = error.remainingSeconds
+            ? new Date(Date.now() + error.remainingSeconds * 1000).toISOString()
+            : null;
+          await reconcileGovernance().catch(() => undefined);
+          setSlowModeUntil(error.nextAllowedAt ?? fallback);
+        }
+        throw error;
+      }
+    },
+    [activeChat.type, groupGovernance?.slow_mode, reconcileGovernance, sendMessage],
+  );
 
   const chatId =
     activeChat.type === "direct"
@@ -544,13 +607,16 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
           onReply={setReplyTo}
           onOpenStickerPack={openStickerPreview}
           directedCallHistoryEntries={directedCallHistoryEntries}
+          canReact={activeChat.type !== "room" || groupGovernance?.action_capabilities?.send_reactions === true}
         />
       </div>
 
       {typingNickname && <TypingIndicator nickname={typingNickname} />}
 
       <MessageInput
-        onSend={sendMessage}
+        onSend={sendWithGovernance}
+        permissions={groupPermissions}
+        slowModeUntil={slowModeUntil}
         onOpenPicker={() => setPickerOpen((open) => !open)}
         pickerOpen={pickerOpen}
         onTypingStart={handleTypingStart}

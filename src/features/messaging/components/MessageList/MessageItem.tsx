@@ -69,6 +69,7 @@ interface MessageItemProps {
   onContextMenu: (e: React.MouseEvent<HTMLDivElement>, msg: Message) => void;
   onToggleSelection: (id: number) => void;
   onToggleReaction: (msgId: number, emoji: string) => void;
+  canReact?: boolean;
   onLightbox: (
     data:
       | {
@@ -280,6 +281,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   onContextMenu,
   onToggleSelection,
   onToggleReaction,
+  canReact = true,
   onLightbox,
   onOpenStickerPack,
   onOpenForwardedSender,
@@ -1456,6 +1458,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
         messageId={msg.id}
         reactions={messageReactions ?? []}
         onToggle={(reaction) => onToggleReaction(msg.id, reaction)}
+        canReact={canReact}
         metadata={renderMetadata("inline", true)}
       />
     );

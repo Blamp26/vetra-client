@@ -1,4 +1,4 @@
-import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -165,6 +165,45 @@ describe("MessageInput attachments", () => {
     expect(screen.getByTestId("attachment-source-menu")).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Photo or Video" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "File" })).toBeInTheDocument();
+  });
+
+  it("gates text independently from attachment, voice, and sticker permissions", () => {
+    const { rerender } = render(<MessageInput onSend={vi.fn()} permissions={["send_photos"]} />);
+    expect(screen.getByLabelText("Message composer")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Record voice message" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Open emoji and sticker picker" })).toBeDisabled();
+
+    rerender(<MessageInput onSend={vi.fn()} permissions={["send_messages", "send_voice_messages", "send_stickers_gifs"]} />);
+    expect(screen.getByLabelText("Message composer")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Record voice message" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Open emoji and sticker picker" })).toBeEnabled();
+  });
+
+  it("independently rejects unauthorized photo, video, music, and file selections", () => {
+    const { container } = render(<MessageInput onSend={vi.fn()} permissions={["send_photos"]} />);
+    const mediaInput = getMediaInput(container);
+    const fileInput = getFileInput(container);
+    fireEvent.change(mediaInput, { target: { files: [new File(["v"], "clip.mp4", { type: "video/mp4" })] } });
+    expect(screen.queryByText("clip.mp4")).not.toBeInTheDocument();
+    fireEvent.change(fileInput, { target: { files: [new File(["a"], "song.mp3", { type: "audio/mpeg" }), new File(["f"], "report.pdf", { type: "application/pdf" })] } });
+    expect(screen.queryByText("song.mp3")).not.toBeInTheDocument();
+    expect(screen.queryByText("report.pdf")).not.toBeInTheDocument();
+    fireEvent.change(mediaInput, { target: { files: [new File(["p"], "photo.png", { type: "image/png" })] } });
+    expect(screen.getByText("photo.png")).toBeInTheDocument();
+  });
+
+  it("renders and expires an authoritative slow-mode countdown without blocking edits", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-03T10:00:00Z"));
+    render(<MessageInput onSend={vi.fn()} slowModeUntil="2026-08-03T10:00:02Z" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Slow mode: 2s");
+    expect(screen.getByLabelText("Message composer")).toBeDisabled();
+    act(() => vi.advanceTimersByTime(2_100));
+    expect(screen.queryByText(/Slow mode:/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Message composer")).toBeEnabled();
+    vi.useRealTimers();
   });
 
   it("creates a custom text link from the selected composer text", async () => {

@@ -54,6 +54,7 @@ export function GroupSettingsModal({
   const [state, setState] = useState<GroupGovernance | null>(null);
   const [selected, setSelected] = useState<GovernanceMember | null>(null);
   const [defaults, setDefaults] = useState<string[]>([]);
+  const [slowMode, setSlowMode] = useState(0);
   const [adminRights, setAdminRights] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [titleDraft, setTitleDraft] = useState("");
@@ -80,9 +81,15 @@ export function GroupSettingsModal({
       .then((next) => {
         setState(next);
         setDefaults(next.defaults);
+        setSlowMode(next.slow_mode_seconds ?? 0);
         setSelected((current) =>
           current
-            ? (next.members.find((member) => member.id === current.id) ?? null)
+            ? (() => {
+                const refreshed = next.members.find((member) => member.id === current.id);
+                if (!refreshed) return null;
+                const stillAuthorized = refreshed.can_manage || refreshed.can_edit_tag || refreshed.can_edit_admin || refreshed.can_restrict || refreshed.can_remove;
+                return stillAuthorized ? refreshed : null;
+              })()
             : null,
         );
       })
@@ -190,6 +197,7 @@ export function GroupSettingsModal({
     setError(null);
     try {
       await roomsApi.updateDefaults(ref, defaults);
+      if (state?.can_manage_slow_mode) await roomsApi.updateSlowMode(ref, slowMode);
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Permission update failed.");
@@ -371,6 +379,7 @@ export function GroupSettingsModal({
       : view === "members"
         ? "Members"
         : "Member permissions";
+  const canChangeGroupInfo = state?.role === "owner" || state?.action_capabilities?.change_group_info === true;
   return (
     <>
     <GroupManagementFrame
@@ -399,7 +408,7 @@ export function GroupSettingsModal({
           <GroupManagementScrollBody ref={basicInfo.editorRef} tabIndex={-1} data-testid="group-settings-scroll-body">
             {view === "overview" && (
               <>
-                <GroupBasicInfoFields room={room} titleId={titleId} descriptionId={descriptionId} controller={basicInfo} />
+                {canChangeGroupInfo && <GroupBasicInfoFields room={room} titleId={titleId} descriptionId={descriptionId} controller={basicInfo} />}
                 <GroupManagementSection separated className="p-0" aria-label="Group management navigation">
                 <nav aria-label="Group management sections">
                   <GroupManagementRow label="Administrators" leading={<Shield className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{administrators.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("admins")} />
@@ -458,6 +467,7 @@ export function GroupSettingsModal({
                       })}
                     </div>
                     {selected.can_edit_tag && <div className="mt-3 flex items-end gap-2"><label className="min-w-0 flex-1 text-xs text-muted-foreground">Member tag<TextInput value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="Optional member tag" size="compact" /></label><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void saveTag()}>Save tag</Button></div>}
+                    {selected.role === "admin" && selected.can_manage && <div className="mt-4 border-t border-border pt-3"><h4 className="text-sm font-semibold">Ordinary-member exception</h4><p className="mt-1 text-xs text-muted-foreground">Effective: {selected.effective_permissions?.map(groupPermissionLabel).join(", ") || "none"}</p><div className="mt-2 overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">{MEMBER_PERMISSION_KEYS.map((right) => <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} control={<select className="vt-select !w-28 !py-1 text-sm" aria-label={`${groupPermissionLabel(right)} override`} value={overrideDraft[right] ?? "inherit"} onChange={(event) => setOverrideDraft((current) => ({ ...current, [right]: event.target.value as "inherit" | "allow" | "deny" }))}><option value="inherit">Inherit</option><option value="allow">Allow</option><option value="deny">Deny</option></select>} />)}</div><div className="mt-3 flex gap-2"><Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void saveOverride()}>Save exception</Button><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void clearSelectedOverride()}>Remove exception</Button></div></div>}
                     {selected.role === "admin" && selected.can_edit_title && <div className="mt-3 flex items-end gap-2"><label className="min-w-0 flex-1 text-xs text-muted-foreground">Administrator title<TextInput value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} placeholder="Optional public title" size="compact" /></label><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void saveTitle()}>Save title</Button></div>}
                     <div className="mt-3 flex justify-end">
                       <Button type="button" variant="primary" size="compact" disabled={busy || (selected.role === "member" ? !(selected.can_promote ?? state.role === "owner") : !(selected.can_edit_admin ?? state.role === "owner"))} onClick={() => void saveAdmin()}>{selected.role === "member" ? "Promote" : "Save rights"}</Button>
@@ -521,11 +531,17 @@ export function GroupSettingsModal({
                     return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={busy || !state.can_edit_defaults} control={<GroupManagementBooleanControl id={controlId} disabled={busy || !state.can_edit_defaults} checked={defaults.includes(right)} onChange={() => setDefaults(toggle(defaults, right))} />} />;
                   })}
                 </section>
+                <GroupManagementControlRow
+                  label="Slow mode"
+                  control={<select className="vt-select !w-40 !py-1 text-sm" aria-label="Slow mode" value={slowMode} disabled={busy || !state.can_manage_slow_mode} onChange={(event) => setSlowMode(Number(event.target.value))}>
+                    <option value={0}>Off</option><option value={5}>5 seconds</option><option value={10}>10 seconds</option><option value={30}>30 seconds</option><option value={60}>1 minute</option><option value={300}>5 minutes</option><option value={900}>15 minutes</option><option value={3600}>1 hour</option>
+                  </select>}
+                />
               </GroupManagementSubpage>
             )}
           </GroupManagementScrollBody>
         )}
-        {state && view === "overview" && <GroupManagementFooter data-testid="group-settings-footer">
+        {state && view === "overview" && canChangeGroupInfo && <GroupManagementFooter data-testid="group-settings-footer">
           <span className="text-xs text-muted-foreground" role="status">{basicInfo.stage === "uploading" ? "Uploading photo…" : basicInfo.stage === "saving" ? "Saving…" : ""}</span>
           <div className="flex gap-3">
             <Button type="button" variant="ghost" size="compact" className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm" disabled={basicInfo.saving} onClick={onClose}>Cancel</Button>

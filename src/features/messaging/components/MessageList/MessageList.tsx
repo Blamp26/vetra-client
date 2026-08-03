@@ -87,6 +87,7 @@ interface Props {
   onReply?: (target: { id: number; content: string; author: string }) => void;
   onOpenStickerPack?: (packId: string, stickerId: string) => void;
   directedCallHistoryEntries?: DirectedCallHistoryEntry[];
+  canReact?: boolean;
 }
 
 interface ContextMenu {
@@ -209,6 +210,7 @@ export function MessageList({
   onReply,
   onOpenStickerPack,
   directedCallHistoryEntries = [],
+  canReact = true,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -419,6 +421,7 @@ export function MessageList({
 
   const toggleReaction = useCallback(
     async (msgId: number, emoji: string) => {
+    if (!canReact) return;
     if (!socketManager) return;
     const key = `${msgId}:${emoji}`;
     if (pendingReactionRef.current.has(key)) return;
@@ -483,6 +486,7 @@ export function MessageList({
     }
     },
     [
+      canReact,
       socketManager,
       chatContext,
       conversationPreviews,
@@ -1110,6 +1114,7 @@ export function MessageList({
                       onContextMenu={handleContextMenu}
                       onToggleSelection={toggleMessageSelection}
                       onToggleReaction={toggleReaction}
+                      canReact={canReact}
                       onLightbox={setLightboxData}
                       onOpenStickerPack={onOpenStickerPack ?? (() => {})}
                       onOpenForwardedSender={handleOpenForwardedSender}
@@ -1198,6 +1203,7 @@ export function MessageList({
           isPickerExpanded={isPickerExpanded}
           setIsPickerExpanded={setIsPickerExpanded}
           onToggleReaction={toggleReaction}
+          canReact={canReact}
           onReply={handleReplyClick}
           onCopy={handleCopy}
           onDownload={handleDownload}

@@ -1,15 +1,34 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GroupProfileModal } from "./GroupProfileModal";
 
-const { governanceMembers, governance, addMember, searchUsers } = vi.hoisted(() => ({ governanceMembers: vi.fn(), governance: vi.fn(), addMember: vi.fn(), searchUsers: vi.fn() }));
+const { governanceMembers, governance, addMember, searchUsers, governanceHandler, socketManager } = vi.hoisted(() => {
+  const handler = { current: null as null | ((event: { room_id: number }) => void) };
+  return {
+    governanceMembers: vi.fn(),
+    governance: vi.fn(),
+    addMember: vi.fn(),
+    searchUsers: vi.fn(),
+    governanceHandler: handler,
+    socketManager: {
+      onGroupGovernanceChanged: (next: (event: { room_id: number }) => void) => {
+        handler.current = next;
+        return () => { handler.current = null; };
+      },
+    },
+  };
+});
 
 vi.mock("@/api/rooms", () => ({
   roomsApi: { governanceMembers, governance, addMember },
 }));
 
 vi.mock("@/api/auth", () => ({ authApi: { searchUsers } }));
+
+vi.mock("@/store", () => ({
+  useAppStore: (selector: (state: unknown) => unknown) => selector({ socketManager }),
+}));
 
 const room = {
   id: 7,
@@ -36,6 +55,7 @@ describe("GroupProfileModal", () => {
     governance.mockReset();
     addMember.mockReset();
     searchUsers.mockReset();
+    governanceHandler.current = null;
     governanceMembers.mockResolvedValue([...members]);
     governance.mockResolvedValue({ role: "member", capabilities: [], defaults: [], members: [...members] });
     addMember.mockResolvedValue(undefined);
@@ -130,7 +150,7 @@ describe("GroupProfileModal", () => {
   });
 
   it("shows owner controls only after governance resolves and uses role badges", async () => {
-    governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
+    governance.mockResolvedValue({ role: "owner", capabilities: [], action_capabilities: { add_users: true, manage_member_permissions: true }, defaults: [], members: [...members] });
     const onManage = vi.fn();
     render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} onManage={onManage} />);
     expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
@@ -146,7 +166,7 @@ describe("GroupProfileModal", () => {
   });
 
   it("uses effective admin capabilities and keeps ordinary members restrained", async () => {
-    governance.mockResolvedValue({ role: "admin", capabilities: ["invite_members"], defaults: [], members: [...members] });
+    governance.mockResolvedValue({ role: "admin", capabilities: ["invite_members"], action_capabilities: { add_users: true, manage_member_permissions: false }, defaults: [], members: [...members] });
     const { rerender } = render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
     expect(await screen.findByRole("button", { name: "Add member" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
@@ -156,9 +176,21 @@ describe("GroupProfileModal", () => {
     expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
   });
 
+  it("removes member-add access immediately after authoritative governance reconciliation", async () => {
+    governance
+      .mockResolvedValueOnce({ role: "admin", capabilities: [], action_capabilities: { add_users: true }, defaults: [], members: [...members] })
+      .mockResolvedValueOnce({ role: "admin", capabilities: [], action_capabilities: { add_users: false }, defaults: [], members: [...members] });
+    render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "Add member" })).toBeInTheDocument();
+
+    act(() => governanceHandler.current?.({ room_id: room.id }));
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Add member" })).not.toBeInTheDocument());
+  });
+
   it("opens the nested multi-select picker, keeps the profile mounted and inert, then refreshes after explicit Add", async () => {
     searchUsers.mockResolvedValue({ users: [{ id: 9, username: "new-user", display_name: "New User", avatar_url: null, bio: null, status: "offline", last_seen_at: null }], servers: [] });
-    governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
+    governance.mockResolvedValue({ role: "owner", capabilities: [], action_capabilities: { add_users: true, manage_member_permissions: true }, defaults: [], members: [...members] });
     render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Add member" }));
     const dialogs = screen.getAllByRole("dialog", { hidden: true });
@@ -175,7 +207,7 @@ describe("GroupProfileModal", () => {
   });
 
   it("cancels the nested picker without membership mutation and restores focus to Add member", async () => {
-    governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
+    governance.mockResolvedValue({ role: "owner", capabilities: [], action_capabilities: { add_users: true, manage_member_permissions: true }, defaults: [], members: [...members] });
     render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
     const opener = await screen.findByRole("button", { name: "Add member" });
     fireEvent.click(opener);
@@ -187,7 +219,7 @@ describe("GroupProfileModal", () => {
   });
 
   it("delegates Manage without mounting a second dialog owner", async () => {
-    governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
+    governance.mockResolvedValue({ role: "owner", capabilities: [], action_capabilities: { add_users: true, manage_member_permissions: true }, defaults: [], members: [...members] });
     const onManage = vi.fn();
     render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} onManage={onManage} />);
     const manage = await screen.findByRole("button", { name: "Manage" });

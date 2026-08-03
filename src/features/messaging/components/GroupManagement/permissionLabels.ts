@@ -21,6 +21,10 @@ export const MEMBER_PERMISSION_KEYS = [
   "embed_links",
   "send_polls",
   "send_reactions",
+  "add_users",
+  "pin_messages",
+  "edit_own_tags",
+  "change_group_info",
 ] as const;
 
 const PERMISSION_LABELS: Record<string, string> = {
@@ -44,6 +48,8 @@ const PERMISSION_LABELS: Record<string, string> = {
   embed_links: "Embed links",
   send_polls: "Send polls",
   send_reactions: "Send reactions",
+  add_users: "Add users",
+  edit_own_tags: "Edit own member tag",
 };
 
 export function groupPermissionLabel(permission: string): string {

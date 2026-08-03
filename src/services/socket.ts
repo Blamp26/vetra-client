@@ -302,6 +302,20 @@ export interface SocketManager {
   disconnect: () => void;
 }
 
+export class RoomMessageSendError extends Error {
+  readonly reason: string;
+  readonly remainingSeconds?: number;
+  readonly nextAllowedAt?: string;
+
+  constructor(response: { reason?: string; remaining_seconds?: number; next_allowed_at?: string }) {
+    super(response.reason ?? "Failed to send room message");
+    this.name = "RoomMessageSendError";
+    this.reason = response.reason ?? "unknown";
+    this.remainingSeconds = response.remaining_seconds;
+    this.nextAllowedAt = response.next_allowed_at;
+  }
+}
+
 // ── Event bus factory ─────────────────────────────────────────────────────────
 
 function makeEventBus<T>() {
@@ -875,15 +889,7 @@ export async function connectSocket(
             );
             resolve(p);
           })
-          .receive("error", (resp) =>
-            reject(
-              new Error(
-                resp?.reason ??
-                  resp?.errors?.content?.[0] ??
-                  "Failed to send room message",
-              ),
-            ),
-          )
+          .receive("error", (resp) => reject(new RoomMessageSendError(resp ?? {})))
           .receive("timeout", () =>
             reject(new Error("Send room message timed out")),
           );

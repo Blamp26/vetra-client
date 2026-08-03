@@ -6,6 +6,7 @@ interface Props {
   messageId: number;
   reactions: MessageReactionGroup[];
   onToggle: (reaction: string) => void;
+  canReact?: boolean;
   metadata?: ReactNode;
 }
 
@@ -14,6 +15,7 @@ export function MessageReactions({
   reactions,
   onToggle,
   metadata,
+  canReact = true,
 }: Props) {
   if (reactions.length === 0) return null;
 
@@ -32,10 +34,11 @@ export function MessageReactions({
             key={`${messageId}:${reaction}`}
             className={`message-reactions__pill${item.chosen ? " is-chosen" : ""}`}
             aria-pressed={item.chosen}
+            disabled={!canReact}
             aria-label={`${item.chosen ? "Remove" : "Add"} ${reaction} reaction, ${item.count} reactions`}
             onClick={(event) => {
               event.stopPropagation();
-              onToggle(reaction);
+              if (canReact) onToggle(reaction);
             }}
           >
             <span className="message-reactions__emoji-wrapper">

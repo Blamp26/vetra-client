@@ -73,6 +73,9 @@ export const roomsApi = {
       permissions,
     });
   },
+  updateSlowMode(roomRef: ResourceRef, seconds: number): Promise<number> {
+    return put<number>(`/rooms/${roomRef}/governance/slow-mode`, { seconds });
+  },
   promote(
     roomRef: ResourceRef,
     userRef: ResourceRef,
@@ -188,9 +191,19 @@ export interface GovernanceMember {
 export interface GroupGovernance {
   role: "owner" | "admin" | "member";
   capabilities: string[];
+  effective_permissions?: string[];
+  action_capabilities?: Record<string, boolean>;
   delegable_admin_permissions?: string[];
   defaults: string[];
   can_edit_defaults?: boolean;
+  can_manage_slow_mode?: boolean;
+  slow_mode_seconds?: number;
+  slow_mode?: {
+    applies: boolean;
+    seconds: number;
+    remaining_seconds: number;
+    next_allowed_at: string | null;
+  };
   can_leave?: boolean;
   can_delete_group?: boolean;
   members: GovernanceMember[];
