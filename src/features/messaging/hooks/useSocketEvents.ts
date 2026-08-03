@@ -398,7 +398,14 @@ export function useSocketEvents() {
         updateRoomPreviewFromSummary(summary);
         scheduleReconciliation();
 
-        if (summary.sender_id !== currentUser.id) {
+        const roomPreview = getState().roomPreviews[summary.room_id];
+        const mutedUntil = roomPreview?.notification_muted_until
+          ? Date.parse(roomPreview.notification_muted_until)
+          : 0;
+        if (
+          summary.sender_id !== currentUser.id &&
+          !(mutedUntil > Date.now())
+        ) {
           const active = isActiveRoom(summary.room_id);
 
           if (!active) {
@@ -426,6 +433,12 @@ export function useSocketEvents() {
         upsertRoomPreview(room);
       }),
     );
+    if (typeof socketManager.onGroupNotificationPreferencesUpdated === "function") {
+      unsubs.push(socketManager.onGroupNotificationPreferencesUpdated((event) => {
+        const current = getState().roomPreviews[event.room_id];
+        if (current) upsertRoomPreview({ ...current, notification_muted_until: event.muted_until, notification_sound_enabled: event.sound_enabled });
+      }));
+    }
     unsubs.push(
       socketManager.onRoomDeleted(({ room_id }) => {
         removeRoom(room_id);

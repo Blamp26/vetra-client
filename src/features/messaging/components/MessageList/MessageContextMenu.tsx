@@ -41,10 +41,12 @@ interface MessageContextMenuProps {
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onDeleteForEveryone?: () => void;
   canReply: boolean;
   canEdit: boolean;
   canForward: boolean;
   canDownload: boolean;
+  canDeleteForEveryone?: boolean;
   onClose: () => void;
 }
 
@@ -331,10 +333,12 @@ export function MessageContextMenu({
   onSelect,
   onEdit,
   onDelete,
+  onDeleteForEveryone,
   canReply,
   canEdit,
   canForward,
   canDownload,
+  canDeleteForEveryone = false,
   onClose,
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -455,10 +459,18 @@ export function MessageContextMenu({
         hidden: !data.isOwn,
         destructive: true,
       },
+      {
+        key: "delete-everyone",
+        label: "Delete for everyone",
+        icon: Trash2,
+        onSelect: canDeleteForEveryone ? onDeleteForEveryone : undefined,
+        hidden: !canDeleteForEveryone,
+        destructive: true,
+      },
     ];
 
     return rows.filter((row) => !row.hidden);
-  }, [canDownload, canEdit, canForward, canReply, data.hasAttachment, data.hasText, data.isOwn, onCopy, onDelete, onDownload, onEdit, onForward, onReply, onSelect]);
+  }, [canDeleteForEveryone, canDownload, canEdit, canForward, canReply, data.hasAttachment, data.hasText, data.isOwn, onCopy, onDelete, onDeleteForEveryone, onDownload, onEdit, onForward, onReply, onSelect]);
 
   const filteredReactions = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();

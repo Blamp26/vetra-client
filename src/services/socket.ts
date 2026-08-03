@@ -127,6 +127,7 @@ export type GroupGovernanceChangedHandler = (payload: {
   event: string;
 }) => void;
 export type RoomProfileUpdatedHandler = (payload: RoomPreview) => void;
+export type GroupNotificationPreferencesUpdatedHandler = (payload: { room_id: number; muted: boolean; muted_until: string | null; sound_enabled: boolean; tone: string | null }) => void;
 export type ChannelCreatedHandler = (payload: {
   server_id: number;
   channel: any;
@@ -211,6 +212,7 @@ export interface SocketManager {
     handler: GroupGovernanceChangedHandler,
   ) => () => void;
   onRoomProfileUpdated: (handler: RoomProfileUpdatedHandler) => () => void;
+  onGroupNotificationPreferencesUpdated: (handler: GroupNotificationPreferencesUpdatedHandler) => () => void;
   onRoomDeleted: (handler: RoomDeletedHandler) => () => void;
   onChannelDeleted: (handler: ChannelDeletedHandler) => () => void;
   onRoomCreated: (handler: RoomCreatedHandler) => () => void;
@@ -466,6 +468,7 @@ export async function connectSocket(
     event: string;
   }>();
   const roomProfileUpdatedBus = makeEventBus<RoomPreview>();
+  const groupNotificationPreferencesUpdatedBus = makeEventBus<{ room_id: number; muted: boolean; muted_until: string | null; sound_enabled: boolean; tone: string | null }>();
   const channelDeletedBus = makeEventBus<{
     server_id: number;
     channel_id: number;
@@ -532,6 +535,7 @@ export async function connectSocket(
   userChannel.on("room_profile_updated", (p: RoomPreview) =>
     roomProfileUpdatedBus.emit(p),
   );
+  userChannel.on("group_notification_preferences_updated", (p) => groupNotificationPreferencesUpdatedBus.emit(p));
   userChannel.on("channel_deleted", (p) => channelDeletedBus.emit(p));
   userChannel.on("room_created", (p) => roomCreatedBus.emit(p));
   userChannel.on("new_room_message", (payload: Message) => {
@@ -743,6 +747,7 @@ export async function connectSocket(
     onRoomMemberRemoved: (h) => roomMemberRemovedBus.subscribe(h),
     onGroupGovernanceChanged: (h) => groupGovernanceChangedBus.subscribe(h),
     onRoomProfileUpdated: (h) => roomProfileUpdatedBus.subscribe(h),
+    onGroupNotificationPreferencesUpdated: (h) => groupNotificationPreferencesUpdatedBus.subscribe(h),
     onRoomDeleted: (h) => roomDeletedBus.subscribe(h),
     onChannelDeleted: (h) => channelDeletedBus.subscribe(h),
     onRoomCreated: (h) => roomCreatedBus.subscribe(h),

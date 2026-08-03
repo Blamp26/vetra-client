@@ -275,6 +275,8 @@ export interface RoomPreview {
   visibility?: "private" | "public";
   history_policy?: "visible" | "hidden";
   content_protection_enabled?: boolean;
+  notification_muted_until?: string | null;
+  notification_sound_enabled?: boolean;
   created_by: number;
   created_by_public_id?: string | null;
   server_id: number | null;

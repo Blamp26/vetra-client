@@ -40,6 +40,41 @@ export const roomsApi = {
     }).then((messages) => messages.map(normalizeMessageAttachments));
   },
 
+  getNotifications(
+    roomRef: ResourceRef,
+  ): Promise<GroupNotificationPreferences> {
+    return get<GroupNotificationPreferences>(`/rooms/${roomRef}/notifications`);
+  },
+  updateNotifications(
+    roomRef: ResourceRef,
+    value: {
+      muted_until: string | null;
+      sound_enabled: boolean;
+      tone?: string | null;
+    },
+  ): Promise<GroupNotificationPreferences> {
+    return put<GroupNotificationPreferences>(
+      `/rooms/${roomRef}/notifications`,
+      value,
+    );
+  },
+  clearHistory(
+    roomRef: ResourceRef,
+  ): Promise<{ room_id: number; cleared_before_message_id: number | null }> {
+    return post<{ room_id: number; cleared_before_message_id: number | null }>(
+      `/rooms/${roomRef}/clear-history`,
+      {},
+    );
+  },
+  deleteMessageForEveryone(
+    roomRef: ResourceRef,
+    messageId: number,
+  ): Promise<{ id: number; room_id: number; deletion_scope: "everyone" }> {
+    return del<{ id: number; room_id: number; deletion_scope: "everyone" }>(
+      `/rooms/${roomRef}/messages/${messageId}`,
+    );
+  },
+
   search(roomRef: ResourceRef, query: string): Promise<Message[]> {
     const params = new URLSearchParams({ q: query });
     return get<Message[]>(`/rooms/${roomRef}/search?${params}`).then(
@@ -76,8 +111,21 @@ export const roomsApi = {
   updateSlowMode(roomRef: ResourceRef, seconds: number): Promise<number> {
     return put<number>(`/rooms/${roomRef}/governance/slow-mode`, { seconds });
   },
-  updateStage5(roomRef: ResourceRef, value: { reaction_mode: "all" | "some" | "none"; allowed_reactions: string[]; auto_delete_seconds: number | null }) {
-    return put<{ reaction_policy: { mode: "all" | "some" | "none"; allowed_reactions: string[] }; auto_delete: number | null }>(`/rooms/${roomRef}/governance/stage5`, value);
+  updateStage5(
+    roomRef: ResourceRef,
+    value: {
+      reaction_mode: "all" | "some" | "none";
+      allowed_reactions: string[];
+      auto_delete_seconds: number | null;
+    },
+  ) {
+    return put<{
+      reaction_policy: {
+        mode: "all" | "some" | "none";
+        allowed_reactions: string[];
+      };
+      auto_delete: number | null;
+    }>(`/rooms/${roomRef}/governance/stage5`, value);
   },
   promote(
     roomRef: ResourceRef,
@@ -162,29 +210,139 @@ export const roomsApi = {
   leave(roomRef: ResourceRef) {
     return post<void>(`/rooms/${roomRef}/leave`, {});
   },
-  access(roomRef: ResourceRef) { return get<GroupAccessSettings>(`/rooms/${roomRef}/access`); },
-  updateAccess(roomRef: ResourceRef, value: Pick<GroupAccessSettings, "visibility" | "history_policy" | "content_protection_enabled" | "public_username">) { return put<GroupAccessSettings>(`/rooms/${roomRef}/access`, value); },
-  discover(query: string) { return get<GroupDiscoveryResult[]>(`/groups/discovery?${new URLSearchParams({ q: query })}`); },
-  publicPreview(username: string) { return get<GroupDiscoveryResult>(`/groups/by-username/${encodeURIComponent(username)}`); },
-  publicJoin(username: string) { return post<GroupJoinResult>(`/groups/by-username/${encodeURIComponent(username)}/join`, {}); },
-  resolveInvite(token: string) { return get<GroupInvitePreview>(`/group-invites/${encodeURIComponent(token)}`); },
-  joinInvite(token: string) { return post<GroupJoinResult>(`/group-invites/${encodeURIComponent(token)}/join`, {}); },
-  invites(roomRef: ResourceRef) { return get<GroupInvite[]>(`/rooms/${roomRef}/invites`); },
-  primaryInvite(roomRef: ResourceRef) { return post<GroupInvite>(`/rooms/${roomRef}/invites/primary`, {}); },
-  createInvite(roomRef: ResourceRef, value: GroupInviteOptions) { return post<GroupInvite>(`/rooms/${roomRef}/invites`, value); },
-  revokeInvite(roomRef: ResourceRef, id: number) { return del<GroupInvite>(`/rooms/${roomRef}/invites/${id}`); },
-  regenerateInvite(roomRef: ResourceRef, id: number) { return post<GroupInvite>(`/rooms/${roomRef}/invites/${id}/regenerate`, {}); },
-  joinRequests(roomRef: ResourceRef) { return get<GroupJoinRequest[]>(`/rooms/${roomRef}/join-requests`); },
-  resolveJoinRequest(roomRef: ResourceRef, id: number, decision: "approve" | "reject") { return post<{ status: string }>(`/rooms/${roomRef}/join-requests/${id}/${decision}`, {}); },
+  access(roomRef: ResourceRef) {
+    return get<GroupAccessSettings>(`/rooms/${roomRef}/access`);
+  },
+  updateAccess(
+    roomRef: ResourceRef,
+    value: Pick<
+      GroupAccessSettings,
+      | "visibility"
+      | "history_policy"
+      | "content_protection_enabled"
+      | "public_username"
+    >,
+  ) {
+    return put<GroupAccessSettings>(`/rooms/${roomRef}/access`, value);
+  },
+  discover(query: string) {
+    return get<GroupDiscoveryResult[]>(
+      `/groups/discovery?${new URLSearchParams({ q: query })}`,
+    );
+  },
+  publicPreview(username: string) {
+    return get<GroupDiscoveryResult>(
+      `/groups/by-username/${encodeURIComponent(username)}`,
+    );
+  },
+  publicJoin(username: string) {
+    return post<GroupJoinResult>(
+      `/groups/by-username/${encodeURIComponent(username)}/join`,
+      {},
+    );
+  },
+  resolveInvite(token: string) {
+    return get<GroupInvitePreview>(
+      `/group-invites/${encodeURIComponent(token)}`,
+    );
+  },
+  joinInvite(token: string) {
+    return post<GroupJoinResult>(
+      `/group-invites/${encodeURIComponent(token)}/join`,
+      {},
+    );
+  },
+  invites(roomRef: ResourceRef) {
+    return get<GroupInvite[]>(`/rooms/${roomRef}/invites`);
+  },
+  primaryInvite(roomRef: ResourceRef) {
+    return post<GroupInvite>(`/rooms/${roomRef}/invites/primary`, {});
+  },
+  createInvite(roomRef: ResourceRef, value: GroupInviteOptions) {
+    return post<GroupInvite>(`/rooms/${roomRef}/invites`, value);
+  },
+  revokeInvite(roomRef: ResourceRef, id: number) {
+    return del<GroupInvite>(`/rooms/${roomRef}/invites/${id}`);
+  },
+  regenerateInvite(roomRef: ResourceRef, id: number) {
+    return post<GroupInvite>(`/rooms/${roomRef}/invites/${id}/regenerate`, {});
+  },
+  joinRequests(roomRef: ResourceRef) {
+    return get<GroupJoinRequest[]>(`/rooms/${roomRef}/join-requests`);
+  },
+  resolveJoinRequest(
+    roomRef: ResourceRef,
+    id: number,
+    decision: "approve" | "reject",
+  ) {
+    return post<{ status: string }>(
+      `/rooms/${roomRef}/join-requests/${id}/${decision}`,
+      {},
+    );
+  },
 };
 
-export interface GroupAccessSettings { visibility: "private" | "public"; history_policy: "visible" | "hidden"; recent_history_count: number; content_protection_enabled: boolean; public_username: string | null; capabilities: { manage_access: boolean; manage_invites: boolean; moderate_requests: boolean }; }
-export interface GroupDiscoveryResult { id: number; public_id?: string; name: string; description?: string | null; avatar_url?: string | null; public_username: string; member_count: number; membership: "member" | "none"; }
-export interface GroupJoinResult { status: "joined" | "already_member" | "pending"; room_id?: number; request_id?: number; }
-export interface GroupInviteOptions { internal_name?: string | null; expires_at?: string | null; max_uses?: number | null; approval_required: boolean; }
-export interface GroupInvite extends GroupInviteOptions { id: number; token: string; kind: "primary" | "additional"; use_count: number; revoked_at?: string | null; state: "active" | "revoked" | "expired" | "exhausted"; }
+export interface GroupAccessSettings {
+  visibility: "private" | "public";
+  history_policy: "visible" | "hidden";
+  recent_history_count: number;
+  content_protection_enabled: boolean;
+  public_username: string | null;
+  capabilities: {
+    manage_access: boolean;
+    manage_invites: boolean;
+    moderate_requests: boolean;
+  };
+}
+export interface GroupNotificationPreferences {
+  room_id: number;
+  muted: boolean;
+  muted_until: string | null;
+  sound_enabled: boolean;
+  tone: string | null;
+}
+export interface GroupDiscoveryResult {
+  id: number;
+  public_id?: string;
+  name: string;
+  description?: string | null;
+  avatar_url?: string | null;
+  public_username: string;
+  member_count: number;
+  membership: "member" | "none";
+}
+export interface GroupJoinResult {
+  status: "joined" | "already_member" | "pending";
+  room_id?: number;
+  request_id?: number;
+}
+export interface GroupInviteOptions {
+  internal_name?: string | null;
+  expires_at?: string | null;
+  max_uses?: number | null;
+  approval_required: boolean;
+}
+export interface GroupInvite extends GroupInviteOptions {
+  id: number;
+  token: string;
+  kind: "primary" | "additional";
+  use_count: number;
+  revoked_at?: string | null;
+  state: "active" | "revoked" | "expired" | "exhausted";
+}
 export interface GroupInvitePreview extends GroupDiscoveryResult, GroupInvite {}
-export interface GroupJoinRequest { id: number; source: "public" | "invite"; status: string; inserted_at: string; user: { id: number; public_id?: string; username: string; display_name?: string | null }; }
+export interface GroupJoinRequest {
+  id: number;
+  source: "public" | "invite";
+  status: string;
+  inserted_at: string;
+  user: {
+    id: number;
+    public_id?: string;
+    username: string;
+    display_name?: string | null;
+  };
+}
 
 export interface GovernanceMember {
   id: number;
@@ -229,7 +387,10 @@ export interface GroupGovernance {
     remaining_seconds: number;
     next_allowed_at: string | null;
   };
-  reaction_policy?: { mode: "all" | "some" | "none"; allowed_reactions: string[] };
+  reaction_policy?: {
+    mode: "all" | "some" | "none";
+    allowed_reactions: string[];
+  };
   auto_delete?: number | null;
   can_leave?: boolean;
   can_delete_group?: boolean;

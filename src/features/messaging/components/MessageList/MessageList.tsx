@@ -28,6 +28,7 @@ import {
   normalizeMessageAttachments,
 } from "../../utils/attachments";
 import { downloadAttachmentWithAuth } from "../../utils/attachmentDownloads";
+import { roomsApi } from "@/api/rooms";
 
 function optimisticReactions(
   current: MessageReactionGroup[],
@@ -218,6 +219,8 @@ export function MessageList({
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [mediaVisibilityRoot, setMediaVisibilityRoot] = useState<HTMLElement | null>(null);
   const [mediaVisibilityRevision, setMediaVisibilityRevision] = useState(0);
+  const [canDeleteForEveryone, setCanDeleteForEveryone] = useState(false);
+  const [deleteScope, setDeleteScope] = useState<"self" | "everyone">("self");
   const registerMediaVisibilityRoot = useCallback((element: HTMLDivElement | null) => {
     setMediaVisibilityRoot((current) => current === element ? current : element);
   }, []);
@@ -275,6 +278,12 @@ export function MessageList({
     }),
     true,
   );
+  useEffect(() => {
+    if (chatContext.type !== "room" || chatContext.isServerChannel) { setCanDeleteForEveryone(false); return; }
+    let active = true;
+    void roomsApi.governance(chatContext.roomId).then((value) => { if (active) setCanDeleteForEveryone(value.action_capabilities?.delete_messages === true); }).catch(() => { if (active) setCanDeleteForEveryone(false); });
+    return () => { active = false; };
+  }, [chatContext]);
   const contentProtected = chatContext.type === "room" && !chatContext.isServerChannel && roomPreviews[chatContext.roomId]?.content_protection_enabled === true;
 
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
@@ -618,6 +627,12 @@ export function MessageList({
     setMsgToDelete(contextMenu.msgId);
     setContextMenu(null);
   }, [contextMenu]);
+  const handleDeleteForEveryone = useCallback(() => {
+    if (!contextMenu || chatContext.type !== "room" || (!contextMenu.isOwn && !canDeleteForEveryone)) return;
+    setDeleteScope("everyone");
+    setMsgToDelete(contextMenu.msgId);
+    setContextMenu(null);
+  }, [canDeleteForEveryone, chatContext.type, contextMenu]);
 
   const performDelete = useCallback(async () => {
     if (!msgToDelete || !socketManager) return;
@@ -637,11 +652,15 @@ export function MessageList({
         );
         await socketManager.deleteMessage(partnerRef, msgToDelete);
         deleteMessage({ id: msgToDelete, recipient_id: chatContext.partnerId });
+      } else if (deleteScope === "everyone") {
+        await roomsApi.deleteMessageForEveryone(chatContext.roomId, msgToDelete);
+        deleteRoomMessage({ id: msgToDelete, room_id: chatContext.roomId });
       } else {
         await socketManager.deleteRoomMessage(chatContext.roomId, msgToDelete);
         deleteRoomMessage({ id: msgToDelete, room_id: chatContext.roomId });
       }
       setMsgToDelete(null);
+      setDeleteScope("self");
     } catch (err) {
       console.error("Delete failed:", err);
     } finally {
@@ -653,7 +672,7 @@ export function MessageList({
     chatContext,
     deleteMessage,
     deleteRoomMessage,
-    conversationPreviews,
+    conversationPreviews, deleteScope,
   ]);
 
   const handleCopy = useCallback(async () => {
@@ -1216,6 +1235,8 @@ export function MessageList({
           onSelect={handleSelect}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onDeleteForEveryone={handleDeleteForEveryone}
+          canDeleteForEveryone={chatContext.type === "room" && (contextMenu.isOwn || canDeleteForEveryone)}
           canReply={Boolean(onReply)}
           canEdit={(() => {
             const contextMessage = messagesById.get(contextMenu.msgId);
@@ -1237,11 +1258,11 @@ export function MessageList({
 
       {msgToDelete && (
         <ConfirmModal
-          title="Delete message"
-          message="Delete this message?"
-          confirmLabel="Delete"
+          title={deleteScope === "everyone" ? "Delete for everyone?" : "Delete message"}
+          message={deleteScope === "everyone" ? "This permanently removes the message and its attachments for every group participant." : "Delete this message?"}
+          confirmLabel={deleteScope === "everyone" ? "Delete for everyone" : "Delete"}
           onConfirm={performDelete}
-          onCancel={() => setMsgToDelete(null)}
+          onCancel={() => { setMsgToDelete(null); setDeleteScope("self"); }}
           isLoading={isDeleting}
           isDanger
         />

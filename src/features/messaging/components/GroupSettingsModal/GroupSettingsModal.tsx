@@ -1,5 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ChevronRight, Globe2, KeyRound, Link, LogOut, Shield, Trash2, Users } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  ChevronRight,
+  Globe2,
+  KeyRound,
+  Link,
+  LogOut,
+  Shield,
+  Trash2,
+  Users,
+} from "lucide-react";
 import {
   roomsApi,
   type GovernanceMember,
@@ -45,14 +56,24 @@ type GroupConfirmation =
   | { type: "delete" };
 
 function validReaction(value: string): boolean {
-  if (!value || value.length > 64 || !/\p{Extended_Pictographic}/u.test(value)) return false;
-  const Segmenter = (Intl as unknown as {
-    Segmenter?: new (locales?: string | string[], options?: { granularity: "grapheme" }) => {
-      segment(input: string): Iterable<unknown>;
-    };
-  }).Segmenter;
+  if (!value || value.length > 64 || !/\p{Extended_Pictographic}/u.test(value))
+    return false;
+  const Segmenter = (
+    Intl as unknown as {
+      Segmenter?: new (
+        locales?: string | string[],
+        options?: { granularity: "grapheme" },
+      ) => {
+        segment(input: string): Iterable<unknown>;
+      };
+    }
+  ).Segmenter;
   if (!Segmenter) return !/[\p{L}\p{N}\p{Z}\p{P}]/u.test(value);
-  return Array.from(new Segmenter(undefined, { granularity: "grapheme" }).segment(value)).length === 1;
+  return (
+    Array.from(
+      new Segmenter(undefined, { granularity: "grapheme" }).segment(value),
+    ).length === 1
+  );
 }
 
 export function GroupSettingsModal({
@@ -69,24 +90,32 @@ export function GroupSettingsModal({
   const [selected, setSelected] = useState<GovernanceMember | null>(null);
   const [defaults, setDefaults] = useState<string[]>([]);
   const [slowMode, setSlowMode] = useState(0);
-  const [reactionMode, setReactionMode] = useState<"all" | "some" | "none">("all");
+  const [reactionMode, setReactionMode] = useState<"all" | "some" | "none">(
+    "all",
+  );
   const [allowedReactions, setAllowedReactions] = useState<string[]>([]);
   const [stage5Draft, setStage5Draft] = useState<string>("");
   const [adminRights, setAdminRights] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [titleDraft, setTitleDraft] = useState("");
   const [temporaryDenies, setTemporaryDenies] = useState<string[]>([]);
-  const [restrictionDuration, setRestrictionDuration] = useState<"forever" | "day" | "week" | "custom">("forever");
+  const [restrictionDuration, setRestrictionDuration] = useState<
+    "forever" | "day" | "week" | "custom"
+  >("forever");
   const [restrictionExpiresAt, setRestrictionExpiresAt] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const mutationPending = useRef(false);
-  const [confirmation, setConfirmation] = useState<GroupConfirmation | null>(null);
+  const [confirmation, setConfirmation] = useState<GroupConfirmation | null>(
+    null,
+  );
   const [memberQuery, setMemberQuery] = useState("");
   const [overrideDraft, setOverrideDraft] = useState<
     Record<string, "inherit" | "allow" | "deny">
   >({});
-  const [view, setView] = useState<"overview" | "admins" | "members" | "permissions" | "access">("overview");
+  const [view, setView] = useState<
+    "overview" | "admins" | "members" | "permissions" | "access"
+  >("overview");
   const [access, setAccess] = useState<GroupAccessSettings | null>(null);
   const [invites, setInvites] = useState<GroupInvite[]>([]);
   const [requests, setRequests] = useState<GroupJoinRequest[]>([]);
@@ -94,6 +123,13 @@ export function GroupSettingsModal({
   const [inviteExpiry, setInviteExpiry] = useState("");
   const [inviteLimit, setInviteLimit] = useState("");
   const [inviteApproval, setInviteApproval] = useState(false);
+  const [notifications, setNotifications] = useState<Awaited<
+    ReturnType<typeof roomsApi.getNotifications>
+  > | null>(null);
+  const [mutePreset, setMutePreset] = useState("off");
+  const [customDays, setCustomDays] = useState(0);
+  const [customHours, setCustomHours] = useState(0);
+  const [customMinutes, setCustomMinutes] = useState(0);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const ref = roomRef(room) ?? room.id;
@@ -112,9 +148,16 @@ export function GroupSettingsModal({
         setSelected((current) =>
           current
             ? (() => {
-                const refreshed = next.members.find((member) => member.id === current.id);
+                const refreshed = next.members.find(
+                  (member) => member.id === current.id,
+                );
                 if (!refreshed) return null;
-                const stillAuthorized = refreshed.can_manage || refreshed.can_edit_tag || refreshed.can_edit_admin || refreshed.can_restrict || refreshed.can_remove;
+                const stillAuthorized =
+                  refreshed.can_manage ||
+                  refreshed.can_edit_tag ||
+                  refreshed.can_edit_admin ||
+                  refreshed.can_restrict ||
+                  refreshed.can_remove;
                 return stillAuthorized ? refreshed : null;
               })()
             : null,
@@ -127,6 +170,13 @@ export function GroupSettingsModal({
       );
   useEffect(() => {
     void reload();
+    void roomsApi
+      .getNotifications?.(ref)
+      ?.then((next) => {
+        setNotifications(next);
+        setMutePreset(next.muted ? (next.muted_until && Date.parse(next.muted_until) > Date.now() + 31536000000 ? "forever" : "custom") : "off");
+      })
+      .catch(() => undefined);
     const unsubscribe = socketManager?.onGroupGovernanceChanged((event) => {
       if (event.room_id !== room.id) return;
       if (
@@ -137,29 +187,112 @@ export function GroupSettingsModal({
         onClose();
         return;
       }
-      if (["group_access_changed", "join_request_created", "join_request_resolved"].includes(event.event) && view === "access") void reloadAccess();
+      if (
+        [
+          "group_access_changed",
+          "join_request_created",
+          "join_request_resolved",
+        ].includes(event.event) &&
+        view === "access"
+      )
+        void reloadAccess();
       void reload();
     });
     return unsubscribe;
   }, [room.id, socketManager, currentUser?.id, onClose]);
+  const saveNotifications = async () => {
+    if (!notifications) return;
+    let mutedUntil: string | null = null;
+    if (mutePreset === "forever") mutedUntil = "9999-12-31T23:59:59Z";
+    else if (mutePreset !== "off") {
+      const seconds =
+        mutePreset === "custom"
+          ? ((customDays * 24 + customHours) * 60 + customMinutes) * 60
+          : Number(mutePreset);
+      if (seconds <= 0) {
+        setError("Custom mute duration must be greater than zero.");
+        return;
+      }
+      mutedUntil = new Date(Date.now() + seconds * 1000).toISOString();
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      setNotifications(
+        await roomsApi.updateNotifications(ref, {
+          muted_until: mutedUntil,
+          sound_enabled: notifications.sound_enabled,
+          tone: notifications.tone,
+        }),
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Notification settings update failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   const reloadAccess = async () => {
     const next = await roomsApi.access(ref);
     setAccess(next);
-    if (next.capabilities.manage_invites) setInvites(await roomsApi.invites(ref));
-    if (next.capabilities.moderate_requests) setRequests(await roomsApi.joinRequests(ref));
+    if (next.capabilities.manage_invites)
+      setInvites(await roomsApi.invites(ref));
+    if (next.capabilities.moderate_requests)
+      setRequests(await roomsApi.joinRequests(ref));
   };
-  useEffect(() => { if (view === "access") void reloadAccess().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load group access policy.")); }, [view, room.id]);
+  useEffect(() => {
+    if (view === "access")
+      void reloadAccess().catch((reason) =>
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Could not load group access policy.",
+        ),
+      );
+  }, [view, room.id]);
   const saveAccess = async () => {
-    if (!access) return; setBusy(true); setError(null);
-    try { setAccess(await roomsApi.updateAccess(ref, access)); await reloadAccess(); }
-    catch (reason) { await reloadAccess().catch(() => undefined); setError(reason instanceof Error ? reason.message : "Access policy update failed. Authority was refreshed."); }
-    finally { setBusy(false); }
+    if (!access) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setAccess(await roomsApi.updateAccess(ref, access));
+      await reloadAccess();
+    } catch (reason) {
+      await reloadAccess().catch(() => undefined);
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Access policy update failed. Authority was refreshed.",
+      );
+    } finally {
+      setBusy(false);
+    }
   };
   const createInvite = async () => {
-    setBusy(true); setError(null);
-    try { await roomsApi.createInvite(ref, { internal_name: inviteName || null, expires_at: inviteExpiry ? new Date(inviteExpiry).toISOString() : null, max_uses: inviteLimit ? Number(inviteLimit) : null, approval_required: inviteApproval }); setInviteName(""); setInviteExpiry(""); setInviteLimit(""); setInviteApproval(false); await reloadAccess(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Invite creation failed."); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError(null);
+    try {
+      await roomsApi.createInvite(ref, {
+        internal_name: inviteName || null,
+        expires_at: inviteExpiry ? new Date(inviteExpiry).toISOString() : null,
+        max_uses: inviteLimit ? Number(inviteLimit) : null,
+        approval_required: inviteApproval,
+      });
+      setInviteName("");
+      setInviteExpiry("");
+      setInviteLimit("");
+      setInviteApproval(false);
+      await reloadAccess();
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Invite creation failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
   };
   useEffect(() => {
     if (!memberQuery.trim()) {
@@ -181,7 +314,9 @@ export function GroupSettingsModal({
     [state],
   );
   const administrators = useMemo(
-    () => state?.members.filter((m) => m.role === "owner" || m.role === "admin") ?? [],
+    () =>
+      state?.members.filter((m) => m.role === "owner" || m.role === "admin") ??
+      [],
     [state],
   );
   const ordinary = useMemo(
@@ -213,14 +348,22 @@ export function GroupSettingsModal({
       await roomsApi.updateOverride(
         ref,
         selected.id,
-        MEMBER_PERMISSION_KEYS.filter((right) => overrideDraft[right] === "allow"),
-        MEMBER_PERMISSION_KEYS.filter((right) => overrideDraft[right] === "deny"),
+        MEMBER_PERMISSION_KEYS.filter(
+          (right) => overrideDraft[right] === "allow",
+        ),
+        MEMBER_PERMISSION_KEYS.filter(
+          (right) => overrideDraft[right] === "deny",
+        ),
       );
       await reload();
     } catch (e) {
       await reload();
       setSelected(null);
-      setError(e instanceof Error ? e.message : "Member restriction update failed. Group authority was refreshed.");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Member restriction update failed. Group authority was refreshed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -234,7 +377,11 @@ export function GroupSettingsModal({
     } catch (e) {
       await reload();
       setSelected(null);
-      setError(e instanceof Error ? e.message : "Could not clear override. Group authority was refreshed.");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Could not clear override. Group authority was refreshed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -244,7 +391,8 @@ export function GroupSettingsModal({
     setError(null);
     try {
       await roomsApi.updateDefaults(ref, defaults);
-      if (state?.can_manage_slow_mode) await roomsApi.updateSlowMode(ref, slowMode);
+      if (state?.can_manage_slow_mode)
+        await roomsApi.updateSlowMode(ref, slowMode);
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Permission update failed.");
@@ -254,16 +402,38 @@ export function GroupSettingsModal({
   };
   const saveStage5 = async () => {
     if (!state?.can_edit_defaults) return;
-    const values = [...new Set(allowedReactions.map((value) => value.trim()).filter(Boolean))];
-    if (reactionMode === "some" && values.length === 0) { setError("Select at least one allowed reaction."); return; }
-    setBusy(true); setError(null);
+    const values = [
+      ...new Set(allowedReactions.map((value) => value.trim()).filter(Boolean)),
+    ];
+    if (reactionMode === "some" && values.length === 0) {
+      setError("Select at least one allowed reaction.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
     try {
       const seconds = stage5Draft === "" ? null : Number(stage5Draft);
-      if (seconds !== null && ![86400, 259200, 604800, 2592000].includes(seconds)) throw new Error("Choose a supported auto-delete duration.");
-      await roomsApi.updateStage5(ref, { reaction_mode: reactionMode, allowed_reactions: reactionMode === "some" ? values : [], auto_delete_seconds: seconds });
+      if (
+        seconds !== null &&
+        ![86400, 259200, 604800, 2592000].includes(seconds)
+      )
+        throw new Error("Choose a supported auto-delete duration.");
+      await roomsApi.updateStage5(ref, {
+        reaction_mode: reactionMode,
+        allowed_reactions: reactionMode === "some" ? values : [],
+        auto_delete_seconds: seconds,
+      });
       await reload();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Stage 5 policy update failed. Authority was refreshed."); await reload(); }
-    finally { setBusy(false); }
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Stage 5 policy update failed. Authority was refreshed.",
+      );
+      await reload();
+    } finally {
+      setBusy(false);
+    }
   };
   const beginPromotion = (member: GovernanceMember) => {
     beginMemberEdit(member);
@@ -285,7 +455,10 @@ export function GroupSettingsModal({
       await roomsApi.updateMemberTag(ref, selected.id, tagDraft);
       await reload();
     } catch (reason) {
-      await refreshAfterUnsafeError("Member tag update failed. Group authority was refreshed.", reason);
+      await refreshAfterUnsafeError(
+        "Member tag update failed. Group authority was refreshed.",
+        reason,
+      );
     } finally {
       setBusy(false);
     }
@@ -297,7 +470,10 @@ export function GroupSettingsModal({
       await roomsApi.updateAdminTitle(ref, selected.id, titleDraft);
       await reload();
     } catch (reason) {
-      await refreshAfterUnsafeError("Administrator title update failed. Group authority was refreshed.", reason);
+      await refreshAfterUnsafeError(
+        "Administrator title update failed. Group authority was refreshed.",
+        reason,
+      );
     } finally {
       setBusy(false);
     }
@@ -306,13 +482,23 @@ export function GroupSettingsModal({
     if (!selected || busy || temporaryDenies.length === 0) return;
     setBusy(true);
     try {
-      const expiresAt = restrictionDuration === "custom" && restrictionExpiresAt
-        ? new Date(restrictionExpiresAt).toISOString()
-        : undefined;
-      await roomsApi.updateTemporaryRestriction(ref, selected.id, temporaryDenies, restrictionDuration, expiresAt);
+      const expiresAt =
+        restrictionDuration === "custom" && restrictionExpiresAt
+          ? new Date(restrictionExpiresAt).toISOString()
+          : undefined;
+      await roomsApi.updateTemporaryRestriction(
+        ref,
+        selected.id,
+        temporaryDenies,
+        restrictionDuration,
+        expiresAt,
+      );
       await reload();
     } catch (reason) {
-      await refreshAfterUnsafeError("Temporary restriction update failed. Group authority was refreshed.", reason);
+      await refreshAfterUnsafeError(
+        "Temporary restriction update failed. Group authority was refreshed.",
+        reason,
+      );
     } finally {
       setBusy(false);
     }
@@ -325,7 +511,10 @@ export function GroupSettingsModal({
       setTemporaryDenies([]);
       await reload();
     } catch (reason) {
-      await refreshAfterUnsafeError("Could not clear temporary restriction. Group authority was refreshed.", reason);
+      await refreshAfterUnsafeError(
+        "Could not clear temporary restriction. Group authority was refreshed.",
+        reason,
+      );
     } finally {
       setBusy(false);
     }
@@ -397,13 +586,14 @@ export function GroupSettingsModal({
         onClose();
       }
     } catch (e) {
-      const fallback = confirmation.type === "remove"
+      const fallback =
+        confirmation.type === "remove"
           ? "Member removal failed."
           : confirmation.type === "transfer"
             ? "Ownership transfer failed. Group authority was refreshed."
-          : confirmation.type === "leave"
-            ? "Leave failed."
-            : "Delete failed.";
+            : confirmation.type === "leave"
+              ? "Leave failed."
+              : "Delete failed.";
       if (["demote", "remove", "transfer"].includes(confirmation.type)) {
         await reload();
         setSelected(null);
@@ -423,232 +613,1478 @@ export function GroupSettingsModal({
   };
   const confirmationCopy = confirmation
     ? confirmation.type === "demote"
-      ? { title: "Demote administrator?", message: `${confirmation.member.display_name ?? confirmation.member.username} will become a regular group member.`, confirmLabel: "Demote" }
+      ? {
+          title: "Demote administrator?",
+          message: `${confirmation.member.display_name ?? confirmation.member.username} will become a regular group member.`,
+          confirmLabel: "Demote",
+        }
       : confirmation.type === "remove"
-        ? { title: "Remove member?", message: `Remove ${confirmation.member.display_name ?? confirmation.member.username} from this group?`, confirmLabel: "Remove" }
+        ? {
+            title: "Remove member?",
+            message: `Remove ${confirmation.member.display_name ?? confirmation.member.username} from this group?`,
+            confirmLabel: "Remove",
+          }
         : confirmation.type === "transfer"
-          ? { title: "Transfer ownership?", message: `${confirmation.member.display_name ?? confirmation.member.username} will become the owner. You will become an administrator with full rights.`, confirmLabel: "Transfer" }
-        : confirmation.type === "leave"
-          ? { title: "Leave group?", message: "You will leave this group and lose access to its messages.", confirmLabel: "Leave" }
-          : { title: "Delete group?", message: "This group and its messages will be permanently deleted.", confirmLabel: "Delete" }
+          ? {
+              title: "Transfer ownership?",
+              message: `${confirmation.member.display_name ?? confirmation.member.username} will become the owner. You will become an administrator with full rights.`,
+              confirmLabel: "Transfer",
+            }
+          : confirmation.type === "leave"
+            ? {
+                title: "Leave group?",
+                message:
+                  "You will leave this group and lose access to its messages.",
+                confirmLabel: "Leave",
+              }
+            : {
+                title: "Delete group?",
+                message:
+                  "This group and its messages will be permanently deleted.",
+                confirmLabel: "Delete",
+              }
     : null;
-  const headerTitle = view === "overview"
-    ? "Edit group"
-    : view === "admins"
-      ? "Administrators"
-      : view === "members"
-        ? "Members"
-      : view === "permissions" ? "Member permissions" : "Group access";
-  const canChangeGroupInfo = state?.role === "owner" || state?.action_capabilities?.change_group_info === true;
+  const headerTitle =
+    view === "overview"
+      ? "Edit group"
+      : view === "admins"
+        ? "Administrators"
+        : view === "members"
+          ? "Members"
+          : view === "permissions"
+            ? "Member permissions"
+            : "Group access";
+  const canChangeGroupInfo =
+    state?.role === "owner" ||
+    state?.action_capabilities?.change_group_info === true;
   return (
     <>
-    <GroupManagementFrame
-      width="settings"
-      onClose={onClose}
-      labelledBy={titleId}
-      contentClassName={view === "overview" ? undefined : "min-h-[min(520px,calc(100dvh-96px))]"}
-    >
-      <div className="contents" data-testid="group-management-dialog">
-        <GroupManagementHeader
-          title={headerTitle}
-          titleId={titleId}
-          closeLabel="Close edit group"
-          onClose={onClose}
-          backLabel={view === "overview" ? "Back to group profile" : "Back to group management"}
-          onBack={view === "overview" ? onBack : () => setView("overview")}
-        />
-        {error && (
-          <div role="alert" className="shrink-0 px-5 pt-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        {!state ? (
-          <p className="min-h-0 flex-1 px-5 py-6 text-sm text-muted-foreground" role="status">Loading…</p>
-        ) : (
-          <GroupManagementScrollBody ref={basicInfo.editorRef} tabIndex={-1} data-testid="group-settings-scroll-body">
-            {view === "overview" && (
-              <>
-                {canChangeGroupInfo && <GroupBasicInfoFields room={room} titleId={titleId} descriptionId={descriptionId} controller={basicInfo} />}
-                {state.can_edit_defaults && <section className="space-y-3 rounded-lg border border-border p-3" aria-label="Stage 5 group policies">
-                  <h3 className="text-sm font-semibold">Reactions and auto-delete</h3>
-                  <label className="block text-sm">Reactions<select className="vt-select mt-1 block w-full" value={reactionMode} disabled={busy} onChange={(e) => setReactionMode(e.target.value as "all" | "some" | "none")}><option value="all">All supported reactions</option><option value="some">Selected reactions only</option><option value="none">Disabled for new reactions</option></select></label>
-                  {reactionMode === "some" && <div className="space-y-2"><div className="flex flex-wrap gap-2">{allowedReactions.map((reaction) => <button type="button" key={reaction} className="rounded border px-2 py-1 text-lg" aria-label={`Remove ${reaction}`} onClick={() => setAllowedReactions((current) => current.filter((item) => item !== reaction))}>{reaction} ×</button>)}</div><TextInput aria-label="Add reaction" placeholder="Paste one emoji" size="compact" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const value = e.currentTarget.value.trim(); if (!validReaction(value)) { setError("Enter one supported emoji reaction."); return; } if (allowedReactions.includes(value)) { setError("That reaction is already selected."); return; } setError(null); setAllowedReactions((current) => [...current, value]); e.currentTarget.value = ""; } }} /></div>}
-                  <label className="block text-sm">Auto-delete new messages<select className="vt-select mt-1 block w-full" value={stage5Draft} disabled={busy} onChange={(e) => setStage5Draft(e.target.value)}><option value="">Disabled</option><option value="86400">1 day</option><option value="259200">3 days</option><option value="604800">1 week</option><option value="2592000">30 days</option></select></label>
-                  <Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void saveStage5()}>Save policies</Button>
-                </section>}
-                <GroupManagementSection separated className="p-0" aria-label="Group management navigation">
-                <nav aria-label="Group management sections">
-                  <GroupManagementRow label="Administrators" leading={<Shield className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{administrators.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("admins")} />
-                  <GroupManagementRow label="Members" leading={<Users className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{state.members.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("members")} />
-                  <GroupManagementRow label="Member permissions" leading={<KeyRound className="h-4 w-4 text-muted-foreground" />} trailing={<ChevronRight className="h-4 w-4" aria-hidden="true" />} onClick={() => setView("permissions")} />
-                  <GroupManagementRow label="Type, history and invite links" leading={<Globe2 className="h-4 w-4 text-muted-foreground" />} trailing={<ChevronRight className="h-4 w-4" aria-hidden="true" />} onClick={() => setView("access")} />
-                </nav>
-                </GroupManagementSection>
-                <GroupManagementSection separated className="p-0" aria-label="Group actions">
-                  {state.can_leave && <GroupManagementRow label="Leave group" leading={<LogOut className="h-4 w-4" />} onClick={leaveGroup} />}
-                  {state.can_delete_group && <GroupManagementRow label="Delete group" leading={<Trash2 className="h-4 w-4" />} tone="destructive" disabled={busy} onClick={deleteGroup} />}
-                </GroupManagementSection>
-              </>
-            )}
-            {view === "admins" && (
-              <GroupManagementSubpage data-testid="group-admins-subpage">
-                <p className="text-xs text-muted-foreground">Manage administrator access and rights.</p>
-                <section className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background" aria-label="Current administrators">
-                  {state.members.filter((m) => m.role === "owner").map((m) => (
-                    <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={m.member_tag ? `Owner · ${m.member_tag}` : "Owner"} trailing={m.can_edit_tag ? <Button type="button" variant="ghost" size="compact" className="px-2" onClick={() => beginAdminEdit(m)}>Edit tag</Button> : undefined} />
-                  ))}
-                  {admins.map((m) => (
-                    <GroupManagementPersonRow
-                      key={m.id}
-                      name={m.display_name ?? m.username}
-                      secondary={m.admin_title ? `Administrator · ${m.admin_title}` : "Administrator"}
-                      trailing={
-                        <>
-                          <Button type="button" variant="ghost" size="compact" className="px-2" disabled={!m.can_edit_admin || busy} onClick={() => beginAdminEdit(m)}>Edit rights</Button>
-                          <Button type="button" variant="ghost" size="compact" className="px-2 text-destructive" disabled={!(m.can_demote ?? state.role === "owner") || busy} onClick={() => setConfirmation({ type: "demote", member: m })}>Demote</Button>
-                        </>
-                      }
+      <GroupManagementFrame
+        width="settings"
+        onClose={onClose}
+        labelledBy={titleId}
+        contentClassName={
+          view === "overview"
+            ? undefined
+            : "min-h-[min(520px,calc(100dvh-96px))]"
+        }
+      >
+        <div className="contents" data-testid="group-management-dialog">
+          <GroupManagementHeader
+            title={headerTitle}
+            titleId={titleId}
+            closeLabel="Close edit group"
+            onClose={onClose}
+            backLabel={
+              view === "overview"
+                ? "Back to group profile"
+                : "Back to group management"
+            }
+            onBack={view === "overview" ? onBack : () => setView("overview")}
+          />
+          {error && (
+            <div
+              role="alert"
+              className="shrink-0 px-5 pt-3 text-sm text-destructive"
+            >
+              {error}
+            </div>
+          )}
+          {!state ? (
+            <p
+              className="min-h-0 flex-1 px-5 py-6 text-sm text-muted-foreground"
+              role="status"
+            >
+              Loading…
+            </p>
+          ) : (
+            <GroupManagementScrollBody
+              ref={basicInfo.editorRef}
+              tabIndex={-1}
+              data-testid="group-settings-scroll-body"
+            >
+              {view === "overview" && (
+                <>
+                  {canChangeGroupInfo && (
+                    <GroupBasicInfoFields
+                      room={room}
+                      titleId={titleId}
+                      descriptionId={descriptionId}
+                      controller={basicInfo}
                     />
-                  ))}
-                </section>
-                {ordinary.length > 0 && (
-                  <section aria-labelledby={`${titleId}-eligible-members`}>
-                    <h3 id={`${titleId}-eligible-members`} className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Members</h3>
-                    <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background">
-                      {ordinary.map((m) => (
-                        <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary="Member" trailing={(m.can_promote ?? state.role === "owner") ? <Button type="button" variant="ghost" size="compact" className="px-2 text-primary" disabled={busy} onClick={() => beginPromotion(m)}>Promote</Button> : undefined} />
+                  )}
+                  {notifications && (
+                    <section
+                      className="space-y-3 rounded-lg border border-border p-3"
+                      aria-label="Group notification settings"
+                    >
+                      <div className="flex items-start gap-2">
+                        <Bell className="mt-0.5 h-4 w-4" aria-hidden="true" />
+                        <div>
+                          <h3 className="text-sm font-semibold">
+                            Notifications
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            Per-user settings synchronized by the server.
+                          </p>
+                        </div>
+                      </div>
+                      <label className="block text-sm">
+                        Mute duration
+                        <select
+                          className="vt-select mt-1 block w-full"
+                          value={mutePreset}
+                          disabled={busy}
+                          onChange={(event) =>
+                            setMutePreset(event.target.value)
+                          }
+                        >
+                          <option value="off">Unmuted</option>
+                          <option value="900">15 minutes</option>
+                          <option value="1800">30 minutes</option>
+                          <option value="3600">1 hour</option>
+                          <option value="28800">8 hours</option>
+                          <option value="86400">1 day</option>
+                          <option value="604800">1 week</option>
+                          <option value="forever">Forever</option>
+                          <option value="custom">Custom</option>
+                        </select>
+                      </label>
+                      {mutePreset === "custom" && (
+                        <div className="grid grid-cols-3 gap-2">
+                          <label className="text-xs">
+                            Days
+                            <input
+                              className="vt-input mt-1 w-full"
+                              type="number"
+                              min="0"
+                              value={customDays}
+                              onChange={(event) =>
+                                setCustomDays(
+                                  Math.max(0, Number(event.target.value) || 0),
+                                )
+                              }
+                            />
+                          </label>
+                          <label className="text-xs">
+                            Hours
+                            <input
+                              className="vt-input mt-1 w-full"
+                              type="number"
+                              min="0"
+                              value={customHours}
+                              onChange={(event) =>
+                                setCustomHours(
+                                  Math.max(0, Number(event.target.value) || 0),
+                                )
+                              }
+                            />
+                          </label>
+                          <label className="text-xs">
+                            Minutes
+                            <input
+                              className="vt-input mt-1 w-full"
+                              type="number"
+                              min="0"
+                              value={customMinutes}
+                              onChange={(event) =>
+                                setCustomMinutes(
+                                  Math.max(0, Number(event.target.value) || 0),
+                                )
+                              }
+                            />
+                          </label>
+                        </div>
+                      )}
+                      <GroupManagementControlRow
+                        label={
+                          notifications.sound_enabled
+                            ? "Sound enabled"
+                            : "Sound disabled"
+                        }
+                        control={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            disabled={busy}
+                            onClick={() =>
+                              setNotifications({
+                                ...notifications,
+                                sound_enabled: !notifications.sound_enabled,
+                              })
+                            }
+                          >
+                            {notifications.sound_enabled ? (
+                              <Bell className="h-4 w-4" />
+                            ) : (
+                              <BellOff className="h-4 w-4" />
+                            )}
+                          </Button>
+                        }
+                      />
+                      <label className="block text-sm">
+                        Notification tone
+                        <select
+                          className="vt-select mt-1 block w-full"
+                          value={notifications.tone ?? ""}
+                          disabled={
+                            busy || notifications.sound_enabled === false
+                          }
+                          onChange={(event) =>
+                            setNotifications({
+                              ...notifications,
+                              tone: event.target.value || null,
+                            })
+                          }
+                        >
+                          <option value="">Platform default</option>
+                          <option value="default">Vetra default</option>
+                        </select>
+                      </label>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="compact"
+                        disabled={busy}
+                        onClick={() => void saveNotifications()}
+                      >
+                        Save notification settings
+                      </Button>
+                    </section>
+                  )}
+                  {state.can_edit_defaults && (
+                    <section
+                      className="space-y-3 rounded-lg border border-border p-3"
+                      aria-label="Stage 5 group policies"
+                    >
+                      <h3 className="text-sm font-semibold">
+                        Reactions and auto-delete
+                      </h3>
+                      <label className="block text-sm">
+                        Reactions
+                        <select
+                          className="vt-select mt-1 block w-full"
+                          value={reactionMode}
+                          disabled={busy}
+                          onChange={(e) =>
+                            setReactionMode(
+                              e.target.value as "all" | "some" | "none",
+                            )
+                          }
+                        >
+                          <option value="all">All supported reactions</option>
+                          <option value="some">Selected reactions only</option>
+                          <option value="none">
+                            Disabled for new reactions
+                          </option>
+                        </select>
+                      </label>
+                      {reactionMode === "some" && (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap gap-2">
+                            {allowedReactions.map((reaction) => (
+                              <button
+                                type="button"
+                                key={reaction}
+                                className="rounded border px-2 py-1 text-lg"
+                                aria-label={`Remove ${reaction}`}
+                                onClick={() =>
+                                  setAllowedReactions((current) =>
+                                    current.filter((item) => item !== reaction),
+                                  )
+                                }
+                              >
+                                {reaction} ×
+                              </button>
+                            ))}
+                          </div>
+                          <TextInput
+                            aria-label="Add reaction"
+                            placeholder="Paste one emoji"
+                            size="compact"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const value = e.currentTarget.value.trim();
+                                if (!validReaction(value)) {
+                                  setError(
+                                    "Enter one supported emoji reaction.",
+                                  );
+                                  return;
+                                }
+                                if (allowedReactions.includes(value)) {
+                                  setError(
+                                    "That reaction is already selected.",
+                                  );
+                                  return;
+                                }
+                                setError(null);
+                                setAllowedReactions((current) => [
+                                  ...current,
+                                  value,
+                                ]);
+                                e.currentTarget.value = "";
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+                      <label className="block text-sm">
+                        Auto-delete new messages
+                        <select
+                          className="vt-select mt-1 block w-full"
+                          value={stage5Draft}
+                          disabled={busy}
+                          onChange={(e) => setStage5Draft(e.target.value)}
+                        >
+                          <option value="">Disabled</option>
+                          <option value="86400">1 day</option>
+                          <option value="259200">3 days</option>
+                          <option value="604800">1 week</option>
+                          <option value="2592000">30 days</option>
+                        </select>
+                      </label>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="compact"
+                        disabled={busy}
+                        onClick={() => void saveStage5()}
+                      >
+                        Save policies
+                      </Button>
+                    </section>
+                  )}
+                  <GroupManagementSection
+                    separated
+                    className="p-0"
+                    aria-label="Group management navigation"
+                  >
+                    <nav aria-label="Group management sections">
+                      <GroupManagementRow
+                        label="Administrators"
+                        leading={
+                          <Shield className="h-4 w-4 text-muted-foreground" />
+                        }
+                        trailing={
+                          <>
+                            <span>{administrators.length}</span>
+                            <ChevronRight
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            />
+                          </>
+                        }
+                        onClick={() => setView("admins")}
+                      />
+                      <GroupManagementRow
+                        label="Members"
+                        leading={
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                        }
+                        trailing={
+                          <>
+                            <span>{state.members.length}</span>
+                            <ChevronRight
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            />
+                          </>
+                        }
+                        onClick={() => setView("members")}
+                      />
+                      <GroupManagementRow
+                        label="Member permissions"
+                        leading={
+                          <KeyRound className="h-4 w-4 text-muted-foreground" />
+                        }
+                        trailing={
+                          <ChevronRight
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
+                        }
+                        onClick={() => setView("permissions")}
+                      />
+                      <GroupManagementRow
+                        label="Type, history and invite links"
+                        leading={
+                          <Globe2 className="h-4 w-4 text-muted-foreground" />
+                        }
+                        trailing={
+                          <ChevronRight
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
+                        }
+                        onClick={() => setView("access")}
+                      />
+                    </nav>
+                  </GroupManagementSection>
+                  <GroupManagementSection
+                    separated
+                    className="p-0"
+                    aria-label="Group actions"
+                  >
+                    {state.can_leave && (
+                      <GroupManagementRow
+                        label="Leave group"
+                        leading={<LogOut className="h-4 w-4" />}
+                        onClick={leaveGroup}
+                      />
+                    )}
+                    {state.can_delete_group && (
+                      <GroupManagementRow
+                        label="Delete group"
+                        leading={<Trash2 className="h-4 w-4" />}
+                        tone="destructive"
+                        disabled={busy}
+                        onClick={deleteGroup}
+                      />
+                    )}
+                  </GroupManagementSection>
+                </>
+              )}
+              {view === "admins" && (
+                <GroupManagementSubpage data-testid="group-admins-subpage">
+                  <p className="text-xs text-muted-foreground">
+                    Manage administrator access and rights.
+                  </p>
+                  <section
+                    className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background"
+                    aria-label="Current administrators"
+                  >
+                    {state.members
+                      .filter((m) => m.role === "owner")
+                      .map((m) => (
+                        <GroupManagementPersonRow
+                          key={m.id}
+                          name={m.display_name ?? m.username}
+                          secondary={
+                            m.member_tag ? `Owner · ${m.member_tag}` : "Owner"
+                          }
+                          trailing={
+                            m.can_edit_tag ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="compact"
+                                className="px-2"
+                                onClick={() => beginAdminEdit(m)}
+                              >
+                                Edit tag
+                              </Button>
+                            ) : undefined
+                          }
+                        />
                       ))}
-                    </div>
+                    {admins.map((m) => (
+                      <GroupManagementPersonRow
+                        key={m.id}
+                        name={m.display_name ?? m.username}
+                        secondary={
+                          m.admin_title
+                            ? `Administrator · ${m.admin_title}`
+                            : "Administrator"
+                        }
+                        trailing={
+                          <>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="compact"
+                              className="px-2"
+                              disabled={!m.can_edit_admin || busy}
+                              onClick={() => beginAdminEdit(m)}
+                            >
+                              Edit rights
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="compact"
+                              className="px-2 text-destructive"
+                              disabled={
+                                !(m.can_demote ?? state.role === "owner") ||
+                                busy
+                              }
+                              onClick={() =>
+                                setConfirmation({ type: "demote", member: m })
+                              }
+                            >
+                              Demote
+                            </Button>
+                          </>
+                        }
+                      />
+                    ))}
                   </section>
-                )}
-                {selected && (
-                  <section aria-labelledby={`${titleId}-admin-rights`}>
-                    <div className="mb-2">
-                      <h3 id={`${titleId}-admin-rights`} className="text-sm font-semibold">Administrator rights</h3>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">{selected.display_name ?? selected.username}</p>
-                    </div>
-                    <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
-                      {ADMIN_PERMISSION_KEYS.map((right) => {
-                        const controlId = `${titleId}-admin-${right}`;
-                        const disabled = busy || !(state.delegable_admin_permissions ?? (state.role === "owner" ? [...ADMIN_PERMISSION_KEYS] : [])).includes(right);
-                        return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={disabled} control={<GroupManagementBooleanControl id={controlId} disabled={disabled} checked={adminRights.includes(right)} onChange={() => setAdminRights(toggle(adminRights, right))} />} />;
-                      })}
-                    </div>
-                    {selected.can_edit_tag && <div className="mt-3 flex items-end gap-2"><label className="min-w-0 flex-1 text-xs text-muted-foreground">Member tag<TextInput value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="Optional member tag" size="compact" /></label><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void saveTag()}>Save tag</Button></div>}
-                    {selected.role === "admin" && selected.can_manage && <div className="mt-4 border-t border-border pt-3"><h4 className="text-sm font-semibold">Ordinary-member exception</h4><p className="mt-1 text-xs text-muted-foreground">Effective: {selected.effective_permissions?.map(groupPermissionLabel).join(", ") || "none"}</p><div className="mt-2 overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">{MEMBER_PERMISSION_KEYS.map((right) => <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} control={<select className="vt-select !w-28 !py-1 text-sm" aria-label={`${groupPermissionLabel(right)} override`} value={overrideDraft[right] ?? "inherit"} onChange={(event) => setOverrideDraft((current) => ({ ...current, [right]: event.target.value as "inherit" | "allow" | "deny" }))}><option value="inherit">Inherit</option><option value="allow">Allow</option><option value="deny">Deny</option></select>} />)}</div><div className="mt-3 flex gap-2"><Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void saveOverride()}>Save exception</Button><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void clearSelectedOverride()}>Remove exception</Button></div></div>}
-                    {selected.role === "admin" && selected.can_edit_title && <div className="mt-3 flex items-end gap-2"><label className="min-w-0 flex-1 text-xs text-muted-foreground">Administrator title<TextInput value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} placeholder="Optional public title" size="compact" /></label><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void saveTitle()}>Save title</Button></div>}
-                    <div className="mt-3 flex justify-end">
-                      <Button type="button" variant="primary" size="compact" disabled={busy || (selected.role === "member" ? !(selected.can_promote ?? state.role === "owner") : !(selected.can_edit_admin ?? state.role === "owner"))} onClick={() => void saveAdmin()}>{selected.role === "member" ? "Promote" : "Save rights"}</Button>
-                    </div>
-                    {selected.can_transfer_ownership && <div className="mt-3 border-t border-border pt-3"><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => setConfirmation({ type: "transfer", member: selected })}>Transfer ownership</Button></div>}
-                    {selected.can_remove && selected.role === "admin" && <div className="mt-3"><Button type="button" variant="ghost" size="compact" className="text-destructive" disabled={busy} onClick={() => setConfirmation({ type: "remove", member: selected })}>Remove administrator</Button></div>}
+                  {ordinary.length > 0 && (
+                    <section aria-labelledby={`${titleId}-eligible-members`}>
+                      <h3
+                        id={`${titleId}-eligible-members`}
+                        className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      >
+                        Members
+                      </h3>
+                      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background">
+                        {ordinary.map((m) => (
+                          <GroupManagementPersonRow
+                            key={m.id}
+                            name={m.display_name ?? m.username}
+                            secondary="Member"
+                            trailing={
+                              (m.can_promote ?? state.role === "owner") ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="compact"
+                                  className="px-2 text-primary"
+                                  disabled={busy}
+                                  onClick={() => beginPromotion(m)}
+                                >
+                                  Promote
+                                </Button>
+                              ) : undefined
+                            }
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  {selected && (
+                    <section aria-labelledby={`${titleId}-admin-rights`}>
+                      <div className="mb-2">
+                        <h3
+                          id={`${titleId}-admin-rights`}
+                          className="text-sm font-semibold"
+                        >
+                          Administrator rights
+                        </h3>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {selected.display_name ?? selected.username}
+                        </p>
+                      </div>
+                      <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
+                        {ADMIN_PERMISSION_KEYS.map((right) => {
+                          const controlId = `${titleId}-admin-${right}`;
+                          const disabled =
+                            busy ||
+                            !(
+                              state.delegable_admin_permissions ??
+                              (state.role === "owner"
+                                ? [...ADMIN_PERMISSION_KEYS]
+                                : [])
+                            ).includes(right);
+                          return (
+                            <GroupManagementControlRow
+                              key={right}
+                              label={groupPermissionLabel(right)}
+                              htmlFor={controlId}
+                              disabled={disabled}
+                              control={
+                                <GroupManagementBooleanControl
+                                  id={controlId}
+                                  disabled={disabled}
+                                  checked={adminRights.includes(right)}
+                                  onChange={() =>
+                                    setAdminRights(toggle(adminRights, right))
+                                  }
+                                />
+                              }
+                            />
+                          );
+                        })}
+                      </div>
+                      {selected.can_edit_tag && (
+                        <div className="mt-3 flex items-end gap-2">
+                          <label className="min-w-0 flex-1 text-xs text-muted-foreground">
+                            Member tag
+                            <TextInput
+                              value={tagDraft}
+                              onChange={(event) =>
+                                setTagDraft(event.target.value)
+                              }
+                              placeholder="Optional member tag"
+                              size="compact"
+                            />
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            disabled={busy}
+                            onClick={() => void saveTag()}
+                          >
+                            Save tag
+                          </Button>
+                        </div>
+                      )}
+                      {selected.role === "admin" && selected.can_manage && (
+                        <div className="mt-4 border-t border-border pt-3">
+                          <h4 className="text-sm font-semibold">
+                            Ordinary-member exception
+                          </h4>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Effective:{" "}
+                            {selected.effective_permissions
+                              ?.map(groupPermissionLabel)
+                              .join(", ") || "none"}
+                          </p>
+                          <div className="mt-2 overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
+                            {MEMBER_PERMISSION_KEYS.map((right) => (
+                              <GroupManagementControlRow
+                                key={right}
+                                label={groupPermissionLabel(right)}
+                                control={
+                                  <select
+                                    className="vt-select !w-28 !py-1 text-sm"
+                                    aria-label={`${groupPermissionLabel(right)} override`}
+                                    value={overrideDraft[right] ?? "inherit"}
+                                    onChange={(event) =>
+                                      setOverrideDraft((current) => ({
+                                        ...current,
+                                        [right]: event.target.value as
+                                          "inherit" | "allow" | "deny",
+                                      }))
+                                    }
+                                  >
+                                    <option value="inherit">Inherit</option>
+                                    <option value="allow">Allow</option>
+                                    <option value="deny">Deny</option>
+                                  </select>
+                                }
+                              />
+                            ))}
+                          </div>
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="compact"
+                              disabled={busy}
+                              onClick={() => void saveOverride()}
+                            >
+                              Save exception
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="compact"
+                              disabled={busy}
+                              onClick={() => void clearSelectedOverride()}
+                            >
+                              Remove exception
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {selected.role === "admin" && selected.can_edit_title && (
+                        <div className="mt-3 flex items-end gap-2">
+                          <label className="min-w-0 flex-1 text-xs text-muted-foreground">
+                            Administrator title
+                            <TextInput
+                              value={titleDraft}
+                              onChange={(event) =>
+                                setTitleDraft(event.target.value)
+                              }
+                              placeholder="Optional public title"
+                              size="compact"
+                            />
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            disabled={busy}
+                            onClick={() => void saveTitle()}
+                          >
+                            Save title
+                          </Button>
+                        </div>
+                      )}
+                      <div className="mt-3 flex justify-end">
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="compact"
+                          disabled={
+                            busy ||
+                            (selected.role === "member"
+                              ? !(
+                                  selected.can_promote ?? state.role === "owner"
+                                )
+                              : !(
+                                  selected.can_edit_admin ??
+                                  state.role === "owner"
+                                ))
+                          }
+                          onClick={() => void saveAdmin()}
+                        >
+                          {selected.role === "member"
+                            ? "Promote"
+                            : "Save rights"}
+                        </Button>
+                      </div>
+                      {selected.can_transfer_ownership && (
+                        <div className="mt-3 border-t border-border pt-3">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            disabled={busy}
+                            onClick={() =>
+                              setConfirmation({
+                                type: "transfer",
+                                member: selected,
+                              })
+                            }
+                          >
+                            Transfer ownership
+                          </Button>
+                        </div>
+                      )}
+                      {selected.can_remove && selected.role === "admin" && (
+                        <div className="mt-3">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            className="text-destructive"
+                            disabled={busy}
+                            onClick={() =>
+                              setConfirmation({
+                                type: "remove",
+                                member: selected,
+                              })
+                            }
+                          >
+                            Remove administrator
+                          </Button>
+                        </div>
+                      )}
+                    </section>
+                  )}
+                </GroupManagementSubpage>
+              )}
+              {view === "members" && (
+                <GroupManagementSubpage data-testid="group-members-subpage">
+                  <label className="block text-sm">
+                    <span className="sr-only">Search members</span>
+                    <TextInput
+                      value={memberQuery}
+                      onChange={(event) => setMemberQuery(event.target.value)}
+                      placeholder="Search members"
+                      size="compact"
+                    />
+                  </label>
+                  <section
+                    className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background"
+                    aria-label="Group members"
+                  >
+                    {state.members.map((m) =>
+                      m.role === "member" ? (
+                        <GroupManagementPersonRow
+                          key={m.id}
+                          name={m.display_name ?? m.username}
+                          secondary={
+                            m.member_tag
+                              ? `${m.member_tag} · ${m.effective_permissions?.length ?? 0} effective permissions`
+                              : `${m.effective_permissions?.length ?? 0} effective permissions`
+                          }
+                          onClick={() => beginMemberEdit(m)}
+                        />
+                      ) : (
+                        <GroupManagementPersonRow
+                          key={m.id}
+                          name={m.display_name ?? m.username}
+                          secondary={
+                            m.admin_title ??
+                            (m.role === "owner" ? "Owner" : "Administrator")
+                          }
+                          onClick={
+                            m.can_edit_tag || m.can_edit_admin
+                              ? () => beginAdminEdit(m)
+                              : undefined
+                          }
+                        />
+                      ),
+                    )}
                   </section>
-                )}
-              </GroupManagementSubpage>
-            )}
-            {view === "members" && (
-              <GroupManagementSubpage data-testid="group-members-subpage">
-                <label className="block text-sm">
-                  <span className="sr-only">Search members</span>
-                  <TextInput
-                    value={memberQuery}
-                    onChange={(event) => setMemberQuery(event.target.value)}
-                    placeholder="Search members"
-                    size="compact"
+                  {selected?.role === "member" && (
+                    <section aria-labelledby={`${titleId}-member-restrictions`}>
+                      <div className="mb-2">
+                        <h3
+                          id={`${titleId}-member-restrictions`}
+                          className="text-sm font-semibold"
+                        >
+                          Member restrictions
+                        </h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Effective:{" "}
+                          {selected.effective_permissions
+                            ?.map(groupPermissionLabel)
+                            .join(", ") || "none"}
+                        </p>
+                      </div>
+                      <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
+                        {MEMBER_PERMISSION_KEYS.map((right) => (
+                          <GroupManagementControlRow
+                            key={right}
+                            label={groupPermissionLabel(right)}
+                            control={
+                              <select
+                                className="vt-select !w-28 !py-1 text-sm"
+                                aria-label={`${groupPermissionLabel(right)} override`}
+                                value={overrideDraft[right] ?? "inherit"}
+                                onChange={(event) =>
+                                  setOverrideDraft((current) => ({
+                                    ...current,
+                                    [right]: event.target.value as
+                                      "inherit" | "allow" | "deny",
+                                  }))
+                                }
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="allow">Allow</option>
+                                <option value="deny">Deny</option>
+                              </select>
+                            }
+                          />
+                        ))}
+                      </div>
+                      {selected.can_edit_tag && (
+                        <div className="mt-3 flex items-end gap-2">
+                          <label className="min-w-0 flex-1 text-xs text-muted-foreground">
+                            Member tag
+                            <TextInput
+                              value={tagDraft}
+                              onChange={(event) =>
+                                setTagDraft(event.target.value)
+                              }
+                              placeholder="Optional member tag"
+                              size="compact"
+                            />
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            disabled={busy}
+                            onClick={() => void saveTag()}
+                          >
+                            Save tag
+                          </Button>
+                        </div>
+                      )}
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="compact"
+                          disabled={busy || !selected.can_manage}
+                          onClick={() => void saveOverride()}
+                        >
+                          Save restrictions
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="compact"
+                          disabled={busy || !selected.can_manage}
+                          onClick={() => void clearSelectedOverride()}
+                        >
+                          Clear override
+                        </Button>
+                      </div>
+                      {selected.can_restrict && (
+                        <div className="mt-4 border-t border-border pt-3">
+                          <h4 className="text-sm font-semibold">
+                            Temporary restriction
+                          </h4>
+                          <div className="mt-2 overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
+                            {MEMBER_PERMISSION_KEYS.map((right) => {
+                              const id = `${titleId}-temporary-${right}`;
+                              return (
+                                <GroupManagementControlRow
+                                  key={right}
+                                  label={groupPermissionLabel(right)}
+                                  htmlFor={id}
+                                  control={
+                                    <GroupManagementBooleanControl
+                                      id={id}
+                                      disabled={busy}
+                                      checked={temporaryDenies.includes(right)}
+                                      onChange={() =>
+                                        setTemporaryDenies(
+                                          toggle(temporaryDenies, right),
+                                        )
+                                      }
+                                    />
+                                  }
+                                />
+                              );
+                            })}
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-end gap-2">
+                            <label className="text-xs text-muted-foreground">
+                              Duration
+                              <select
+                                className="vt-select mt-1 block !w-32 !py-1 text-sm"
+                                value={restrictionDuration}
+                                onChange={(event) =>
+                                  setRestrictionDuration(
+                                    event.target
+                                      .value as typeof restrictionDuration,
+                                  )
+                                }
+                              >
+                                <option value="forever">Forever</option>
+                                <option value="day">1 day</option>
+                                <option value="week">1 week</option>
+                                <option value="custom">Custom</option>
+                              </select>
+                            </label>
+                            {restrictionDuration === "custom" && (
+                              <label className="text-xs text-muted-foreground">
+                                Until
+                                <input
+                                  type="datetime-local"
+                                  className="vt-input mt-1 block"
+                                  value={restrictionExpiresAt}
+                                  onChange={(event) =>
+                                    setRestrictionExpiresAt(event.target.value)
+                                  }
+                                />
+                              </label>
+                            )}
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="compact"
+                              disabled={
+                                busy ||
+                                temporaryDenies.length === 0 ||
+                                (restrictionDuration === "custom" &&
+                                  !restrictionExpiresAt)
+                              }
+                              onClick={() => void saveTemporaryRestriction()}
+                            >
+                              Apply temporary restriction
+                            </Button>
+                            {selected.temporary_restriction?.active && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="compact"
+                                disabled={busy}
+                                onClick={() => void clearTemporaryRestriction()}
+                              >
+                                Clear temporary restriction
+                              </Button>
+                            )}
+                          </div>
+                          {selected.temporary_restriction?.active && (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              Active
+                              {selected.temporary_restriction.expires_at
+                                ? ` until ${new Date(selected.temporary_restriction.expires_at).toLocaleString()}`
+                                : " forever"}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <div className="mt-3 border-t border-border pt-3">
+                        {selected.can_promote && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            disabled={busy}
+                            onClick={() => {
+                              setView("admins");
+                              beginPromotion(selected);
+                            }}
+                          >
+                            Promote to administrator
+                          </Button>
+                        )}
+                        {selected.can_remove && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            className="text-destructive"
+                            disabled={busy}
+                            onClick={() =>
+                              setConfirmation({
+                                type: "remove",
+                                member: selected,
+                              })
+                            }
+                          >
+                            Remove member
+                          </Button>
+                        )}
+                      </div>
+                    </section>
+                  )}
+                </GroupManagementSubpage>
+              )}
+              {view === "permissions" && (
+                <GroupManagementSubpage data-testid="group-permissions-subpage">
+                  <p className="text-sm text-muted-foreground">
+                    Changes affect ordinary members immediately for future
+                    actions.
+                  </p>
+                  <section
+                    className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border"
+                    aria-label="Default member permissions"
+                  >
+                    {MEMBER_PERMISSION_KEYS.map((right) => {
+                      const controlId = `${titleId}-default-${right}`;
+                      return (
+                        <GroupManagementControlRow
+                          key={right}
+                          label={groupPermissionLabel(right)}
+                          htmlFor={controlId}
+                          disabled={busy || !state.can_edit_defaults}
+                          control={
+                            <GroupManagementBooleanControl
+                              id={controlId}
+                              disabled={busy || !state.can_edit_defaults}
+                              checked={defaults.includes(right)}
+                              onChange={() =>
+                                setDefaults(toggle(defaults, right))
+                              }
+                            />
+                          }
+                        />
+                      );
+                    })}
+                  </section>
+                  <GroupManagementControlRow
+                    label="Slow mode"
+                    control={
+                      <select
+                        className="vt-select !w-40 !py-1 text-sm"
+                        aria-label="Slow mode"
+                        value={slowMode}
+                        disabled={busy || !state.can_manage_slow_mode}
+                        onChange={(event) =>
+                          setSlowMode(Number(event.target.value))
+                        }
+                      >
+                        <option value={0}>Off</option>
+                        <option value={5}>5 seconds</option>
+                        <option value={10}>10 seconds</option>
+                        <option value={30}>30 seconds</option>
+                        <option value={60}>1 minute</option>
+                        <option value={300}>5 minutes</option>
+                        <option value={900}>15 minutes</option>
+                        <option value={3600}>1 hour</option>
+                      </select>
+                    }
                   />
-                </label>
-                <section className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background" aria-label="Group members">
-                  {state.members.map((m) => m.role === "member"
-                    ? <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={m.member_tag ? `${m.member_tag} · ${m.effective_permissions?.length ?? 0} effective permissions` : `${m.effective_permissions?.length ?? 0} effective permissions`} onClick={() => beginMemberEdit(m)} />
-                    : <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={m.admin_title ?? (m.role === "owner" ? "Owner" : "Administrator")} onClick={(m.can_edit_tag || m.can_edit_admin) ? () => beginAdminEdit(m) : undefined} />)}
-                </section>
-                {selected?.role === "member" && (
-                  <section aria-labelledby={`${titleId}-member-restrictions`}>
-                    <div className="mb-2">
-                      <h3 id={`${titleId}-member-restrictions`} className="text-sm font-semibold">Member restrictions</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">Effective: {selected.effective_permissions?.map(groupPermissionLabel).join(", ") || "none"}</p>
-                    </div>
-                    <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
-                      {MEMBER_PERMISSION_KEYS.map((right) => (
-                        <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} control={<select className="vt-select !w-28 !py-1 text-sm" aria-label={`${groupPermissionLabel(right)} override`} value={overrideDraft[right] ?? "inherit"} onChange={(event) => setOverrideDraft((current) => ({ ...current, [right]: event.target.value as "inherit" | "allow" | "deny" }))}><option value="inherit">Inherit</option><option value="allow">Allow</option><option value="deny">Deny</option></select>} />
-                      ))}
-                    </div>
-                    {selected.can_edit_tag && <div className="mt-3 flex items-end gap-2"><label className="min-w-0 flex-1 text-xs text-muted-foreground">Member tag<TextInput value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="Optional member tag" size="compact" /></label><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void saveTag()}>Save tag</Button></div>}
-                    <div className="mt-3 flex gap-2">
-                      <Button type="button" variant="primary" size="compact" disabled={busy || !selected.can_manage} onClick={() => void saveOverride()}>Save restrictions</Button>
-                      <Button type="button" variant="ghost" size="compact" disabled={busy || !selected.can_manage} onClick={() => void clearSelectedOverride()}>Clear override</Button>
-                    </div>
-                    {selected.can_restrict && <div className="mt-4 border-t border-border pt-3"><h4 className="text-sm font-semibold">Temporary restriction</h4><div className="mt-2 overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">{MEMBER_PERMISSION_KEYS.map((right) => { const id = `${titleId}-temporary-${right}`; return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={id} control={<GroupManagementBooleanControl id={id} disabled={busy} checked={temporaryDenies.includes(right)} onChange={() => setTemporaryDenies(toggle(temporaryDenies, right))} />} />; })}</div><div className="mt-3 flex flex-wrap items-end gap-2"><label className="text-xs text-muted-foreground">Duration<select className="vt-select mt-1 block !w-32 !py-1 text-sm" value={restrictionDuration} onChange={(event) => setRestrictionDuration(event.target.value as typeof restrictionDuration)}><option value="forever">Forever</option><option value="day">1 day</option><option value="week">1 week</option><option value="custom">Custom</option></select></label>{restrictionDuration === "custom" && <label className="text-xs text-muted-foreground">Until<input type="datetime-local" className="vt-input mt-1 block" value={restrictionExpiresAt} onChange={(event) => setRestrictionExpiresAt(event.target.value)} /></label>}<Button type="button" variant="primary" size="compact" disabled={busy || temporaryDenies.length === 0 || (restrictionDuration === "custom" && !restrictionExpiresAt)} onClick={() => void saveTemporaryRestriction()}>Apply temporary restriction</Button>{selected.temporary_restriction?.active && <Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void clearTemporaryRestriction()}>Clear temporary restriction</Button>}</div>{selected.temporary_restriction?.active && <p className="mt-2 text-xs text-muted-foreground">Active{selected.temporary_restriction.expires_at ? ` until ${new Date(selected.temporary_restriction.expires_at).toLocaleString()}` : " forever"}</p>}</div>}
-                    <div className="mt-3 border-t border-border pt-3">
-                      {selected.can_promote && <Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => { setView("admins"); beginPromotion(selected); }}>Promote to administrator</Button>}
-                      {selected.can_remove && <Button type="button" variant="ghost" size="compact" className="text-destructive" disabled={busy} onClick={() => setConfirmation({ type: "remove", member: selected })}>Remove member</Button>}
-                    </div>
-                  </section>
-                )}
-              </GroupManagementSubpage>
-            )}
-            {view === "permissions" && (
-              <GroupManagementSubpage data-testid="group-permissions-subpage">
-                <p className="text-sm text-muted-foreground">
-                  Changes affect ordinary members immediately for future
-                  actions.
-                </p>
-                <section className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border" aria-label="Default member permissions">
-                  {MEMBER_PERMISSION_KEYS.map((right) => {
-                    const controlId = `${titleId}-default-${right}`;
-                    return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={busy || !state.can_edit_defaults} control={<GroupManagementBooleanControl id={controlId} disabled={busy || !state.can_edit_defaults} checked={defaults.includes(right)} onChange={() => setDefaults(toggle(defaults, right))} />} />;
-                  })}
-                </section>
-                <GroupManagementControlRow
-                  label="Slow mode"
-                  control={<select className="vt-select !w-40 !py-1 text-sm" aria-label="Slow mode" value={slowMode} disabled={busy || !state.can_manage_slow_mode} onChange={(event) => setSlowMode(Number(event.target.value))}>
-                    <option value={0}>Off</option><option value={5}>5 seconds</option><option value={10}>10 seconds</option><option value={30}>30 seconds</option><option value={60}>1 minute</option><option value={300}>5 minutes</option><option value={900}>15 minutes</option><option value={3600}>1 hour</option>
-                  </select>}
-                />
-              </GroupManagementSubpage>
-            )}
-            {view === "access" && (
-              <GroupManagementSubpage data-testid="group-access-subpage">
-                {!access ? <p role="status">Loading access policy…</p> : <>
-                  <section className="space-y-3 rounded-lg border border-border p-3" aria-label="Group access policy">
-                    <label className="block text-sm">Group type<select className="vt-select mt-1 block w-full" disabled={!access.capabilities.manage_access || busy} value={access.visibility} onChange={(event) => setAccess({ ...access, visibility: event.target.value as "private" | "public" })}><option value="private">Private</option><option value="public">Public</option></select></label>
-                    {access.visibility === "public" && <label className="block text-sm">Public username<TextInput value={access.public_username ?? ""} disabled={!access.capabilities.manage_access || busy} onChange={(event) => setAccess({ ...access, public_username: event.target.value.toLowerCase() })} placeholder="group_name" size="compact" /></label>}
-                    <label className="block text-sm">History for new members<select className="vt-select mt-1 block w-full" disabled={!access.capabilities.manage_access || busy} value={access.history_policy} onChange={(event) => setAccess({ ...access, history_policy: event.target.value as "visible" | "hidden" })}><option value="visible">Visible — full history</option><option value="hidden">Hidden — most recent {access.recent_history_count} messages</option></select></label>
-                    <GroupManagementControlRow label="Protect group content" htmlFor={`${titleId}-protect`} control={<GroupManagementBooleanControl id={`${titleId}-protect`} disabled={!access.capabilities.manage_access || busy} checked={access.content_protection_enabled} onChange={() => setAccess({ ...access, content_protection_enabled: !access.content_protection_enabled })} />} />
-                    <p className="text-xs text-muted-foreground">Blocks Vetra forwarding, copying, and explicit downloads. It cannot prevent screenshots or modified clients.</p>
-                    {access.capabilities.manage_access && <Button type="button" variant="primary" size="compact" disabled={busy || (access.visibility === "public" && !access.public_username)} onClick={() => void saveAccess()}>Save access policy</Button>}
-                  </section>
-                  {access.capabilities.manage_invites && <section className="space-y-3" aria-label="Invite links"><h3 className="text-sm font-semibold">Invite links</h3><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={async () => { await roomsApi.primaryInvite(ref); await reloadAccess(); }}>Ensure primary link</Button>{invites.map((invite) => <div key={invite.id} className="rounded-lg border border-border p-3 text-sm"><div className="flex items-center justify-between gap-2"><span><Link className="mr-1 inline h-4 w-4" />{invite.internal_name || (invite.kind === "primary" ? "Primary link" : "Additional link")}</span><span>{invite.state}</span></div><code className="mt-1 block select-all break-all text-xs">{invite.token}</code><p className="mt-1 text-xs text-muted-foreground">Uses {invite.use_count}{invite.max_uses ? ` / ${invite.max_uses}` : ""}{invite.approval_required ? " · approval required" : ""}</p>{invite.state === "active" && <div className="mt-2 flex gap-2"><Button type="button" size="compact" variant="ghost" onClick={() => void navigator.clipboard?.writeText(invite.token)}>Copy</Button>{invite.kind === "primary" ? <Button type="button" size="compact" variant="ghost" disabled={busy} onClick={async () => { await roomsApi.regenerateInvite(ref, invite.id); await reloadAccess(); }}>Regenerate</Button> : <Button type="button" size="compact" variant="ghost" disabled={busy} onClick={async () => { await roomsApi.revokeInvite(ref, invite.id); await reloadAccess(); }}>Revoke</Button>}</div>}</div>)}<div className="space-y-2 rounded-lg border border-border p-3"><TextInput value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Internal name (optional)" size="compact" /><label className="block text-xs">Expiry<input className="vt-input mt-1 block w-full" type="datetime-local" value={inviteExpiry} onChange={(e) => setInviteExpiry(e.target.value)} /></label><TextInput value={inviteLimit} onChange={(e) => setInviteLimit(e.target.value.replace(/\D/g, ""))} placeholder="Usage limit (optional)" size="compact" /><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={inviteApproval} onChange={(e) => setInviteApproval(e.target.checked)} />Require administrator approval</label><Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void createInvite()}>Create additional link</Button></div></section>}
-                  {access.capabilities.moderate_requests && <section className="space-y-2" aria-label="Pending join requests"><h3 className="text-sm font-semibold">Pending requests</h3>{requests.length === 0 ? <p className="text-sm text-muted-foreground">No pending requests.</p> : requests.map((request) => <div key={request.id} className="flex items-center justify-between rounded-lg border border-border p-3"><span>{request.user.display_name ?? request.user.username}</span><div className="flex gap-2"><Button type="button" size="compact" variant="primary" disabled={busy} onClick={async () => { await roomsApi.resolveJoinRequest(ref, request.id, "approve"); await reloadAccess(); }}>Approve</Button><Button type="button" size="compact" variant="ghost" disabled={busy} onClick={async () => { await roomsApi.resolveJoinRequest(ref, request.id, "reject"); await reloadAccess(); }}>Reject</Button></div></div>)}</section>}
-                </>}
-              </GroupManagementSubpage>
-            )}
-          </GroupManagementScrollBody>
-        )}
-        {state && view === "overview" && canChangeGroupInfo && <GroupManagementFooter data-testid="group-settings-footer">
-          <span className="text-xs text-muted-foreground" role="status">{basicInfo.stage === "uploading" ? "Uploading photo…" : basicInfo.stage === "saving" ? "Saving…" : ""}</span>
-          <div className="flex gap-3">
-            <Button type="button" variant="ghost" size="compact" className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm" disabled={basicInfo.saving} onClick={onClose}>Cancel</Button>
-            <Button type="button" variant="ghost" size="compact" className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm text-primary" loading={basicInfo.saving} disabled={basicInfo.saveDisabled} onClick={() => void basicInfo.save()}>Save</Button>
-          </div>
-        </GroupManagementFooter>}
-        {state && view === "permissions" && <GroupManagementFooter data-testid="group-permissions-footer">
-          <Button type="button" variant="primary" size="compact" disabled={busy || !state.can_edit_defaults} onClick={() => void saveDefaults()}>Save defaults</Button>
-        </GroupManagementFooter>}
-      </div>
-    </GroupManagementFrame>
-    {basicInfo.cropSource && <AvatarCropDialog source={basicInfo.cropSource} onCancel={() => basicInfo.setCropSource(null)} onSetPhoto={basicInfo.replacePreview} />}
-    {confirmationCopy && (
-      <ConfirmModal
-        title={confirmationCopy.title}
-        message={confirmationCopy.message}
-        confirmLabel={confirmationCopy.confirmLabel}
-        onCancel={() => setConfirmation(null)}
-        onConfirm={() => void confirmAction()}
-        isLoading={busy}
-        isDanger
-      />
-    )}
+                </GroupManagementSubpage>
+              )}
+              {view === "access" && (
+                <GroupManagementSubpage data-testid="group-access-subpage">
+                  {!access ? (
+                    <p role="status">Loading access policy…</p>
+                  ) : (
+                    <>
+                      <section
+                        className="space-y-3 rounded-lg border border-border p-3"
+                        aria-label="Group access policy"
+                      >
+                        <label className="block text-sm">
+                          Group type
+                          <select
+                            className="vt-select mt-1 block w-full"
+                            disabled={
+                              !access.capabilities.manage_access || busy
+                            }
+                            value={access.visibility}
+                            onChange={(event) =>
+                              setAccess({
+                                ...access,
+                                visibility: event.target.value as
+                                  "private" | "public",
+                              })
+                            }
+                          >
+                            <option value="private">Private</option>
+                            <option value="public">Public</option>
+                          </select>
+                        </label>
+                        {access.visibility === "public" && (
+                          <label className="block text-sm">
+                            Public username
+                            <TextInput
+                              value={access.public_username ?? ""}
+                              disabled={
+                                !access.capabilities.manage_access || busy
+                              }
+                              onChange={(event) =>
+                                setAccess({
+                                  ...access,
+                                  public_username:
+                                    event.target.value.toLowerCase(),
+                                })
+                              }
+                              placeholder="group_name"
+                              size="compact"
+                            />
+                          </label>
+                        )}
+                        <label className="block text-sm">
+                          History for new members
+                          <select
+                            className="vt-select mt-1 block w-full"
+                            disabled={
+                              !access.capabilities.manage_access || busy
+                            }
+                            value={access.history_policy}
+                            onChange={(event) =>
+                              setAccess({
+                                ...access,
+                                history_policy: event.target.value as
+                                  "visible" | "hidden",
+                              })
+                            }
+                          >
+                            <option value="visible">
+                              Visible — full history
+                            </option>
+                            <option value="hidden">
+                              Hidden — most recent {access.recent_history_count}{" "}
+                              messages
+                            </option>
+                          </select>
+                        </label>
+                        <GroupManagementControlRow
+                          label="Protect group content"
+                          htmlFor={`${titleId}-protect`}
+                          control={
+                            <GroupManagementBooleanControl
+                              id={`${titleId}-protect`}
+                              disabled={
+                                !access.capabilities.manage_access || busy
+                              }
+                              checked={access.content_protection_enabled}
+                              onChange={() =>
+                                setAccess({
+                                  ...access,
+                                  content_protection_enabled:
+                                    !access.content_protection_enabled,
+                                })
+                              }
+                            />
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Blocks Vetra forwarding, copying, and explicit
+                          downloads. It cannot prevent screenshots or modified
+                          clients.
+                        </p>
+                        {access.capabilities.manage_access && (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="compact"
+                            disabled={
+                              busy ||
+                              (access.visibility === "public" &&
+                                !access.public_username)
+                            }
+                            onClick={() => void saveAccess()}
+                          >
+                            Save access policy
+                          </Button>
+                        )}
+                      </section>
+                      {access.capabilities.manage_invites && (
+                        <section
+                          className="space-y-3"
+                          aria-label="Invite links"
+                        >
+                          <h3 className="text-sm font-semibold">
+                            Invite links
+                          </h3>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="compact"
+                            disabled={busy}
+                            onClick={async () => {
+                              await roomsApi.primaryInvite(ref);
+                              await reloadAccess();
+                            }}
+                          >
+                            Ensure primary link
+                          </Button>
+                          {invites.map((invite) => (
+                            <div
+                              key={invite.id}
+                              className="rounded-lg border border-border p-3 text-sm"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span>
+                                  <Link className="mr-1 inline h-4 w-4" />
+                                  {invite.internal_name ||
+                                    (invite.kind === "primary"
+                                      ? "Primary link"
+                                      : "Additional link")}
+                                </span>
+                                <span>{invite.state}</span>
+                              </div>
+                              <code className="mt-1 block select-all break-all text-xs">
+                                {invite.token}
+                              </code>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Uses {invite.use_count}
+                                {invite.max_uses ? ` / ${invite.max_uses}` : ""}
+                                {invite.approval_required
+                                  ? " · approval required"
+                                  : ""}
+                              </p>
+                              {invite.state === "active" && (
+                                <div className="mt-2 flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="compact"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      void navigator.clipboard?.writeText(
+                                        invite.token,
+                                      )
+                                    }
+                                  >
+                                    Copy
+                                  </Button>
+                                  {invite.kind === "primary" ? (
+                                    <Button
+                                      type="button"
+                                      size="compact"
+                                      variant="ghost"
+                                      disabled={busy}
+                                      onClick={async () => {
+                                        await roomsApi.regenerateInvite(
+                                          ref,
+                                          invite.id,
+                                        );
+                                        await reloadAccess();
+                                      }}
+                                    >
+                                      Regenerate
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      size="compact"
+                                      variant="ghost"
+                                      disabled={busy}
+                                      onClick={async () => {
+                                        await roomsApi.revokeInvite(
+                                          ref,
+                                          invite.id,
+                                        );
+                                        await reloadAccess();
+                                      }}
+                                    >
+                                      Revoke
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          <div className="space-y-2 rounded-lg border border-border p-3">
+                            <TextInput
+                              value={inviteName}
+                              onChange={(e) => setInviteName(e.target.value)}
+                              placeholder="Internal name (optional)"
+                              size="compact"
+                            />
+                            <label className="block text-xs">
+                              Expiry
+                              <input
+                                className="vt-input mt-1 block w-full"
+                                type="datetime-local"
+                                value={inviteExpiry}
+                                onChange={(e) =>
+                                  setInviteExpiry(e.target.value)
+                                }
+                              />
+                            </label>
+                            <TextInput
+                              value={inviteLimit}
+                              onChange={(e) =>
+                                setInviteLimit(
+                                  e.target.value.replace(/\D/g, ""),
+                                )
+                              }
+                              placeholder="Usage limit (optional)"
+                              size="compact"
+                            />
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={inviteApproval}
+                                onChange={(e) =>
+                                  setInviteApproval(e.target.checked)
+                                }
+                              />
+                              Require administrator approval
+                            </label>
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="compact"
+                              disabled={busy}
+                              onClick={() => void createInvite()}
+                            >
+                              Create additional link
+                            </Button>
+                          </div>
+                        </section>
+                      )}
+                      {access.capabilities.moderate_requests && (
+                        <section
+                          className="space-y-2"
+                          aria-label="Pending join requests"
+                        >
+                          <h3 className="text-sm font-semibold">
+                            Pending requests
+                          </h3>
+                          {requests.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              No pending requests.
+                            </p>
+                          ) : (
+                            requests.map((request) => (
+                              <div
+                                key={request.id}
+                                className="flex items-center justify-between rounded-lg border border-border p-3"
+                              >
+                                <span>
+                                  {request.user.display_name ??
+                                    request.user.username}
+                                </span>
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="compact"
+                                    variant="primary"
+                                    disabled={busy}
+                                    onClick={async () => {
+                                      await roomsApi.resolveJoinRequest(
+                                        ref,
+                                        request.id,
+                                        "approve",
+                                      );
+                                      await reloadAccess();
+                                    }}
+                                  >
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="compact"
+                                    variant="ghost"
+                                    disabled={busy}
+                                    onClick={async () => {
+                                      await roomsApi.resolveJoinRequest(
+                                        ref,
+                                        request.id,
+                                        "reject",
+                                      );
+                                      await reloadAccess();
+                                    }}
+                                  >
+                                    Reject
+                                  </Button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </section>
+                      )}
+                    </>
+                  )}
+                </GroupManagementSubpage>
+              )}
+            </GroupManagementScrollBody>
+          )}
+          {state && view === "overview" && canChangeGroupInfo && (
+            <GroupManagementFooter data-testid="group-settings-footer">
+              <span className="text-xs text-muted-foreground" role="status">
+                {basicInfo.stage === "uploading"
+                  ? "Uploading photo…"
+                  : basicInfo.stage === "saving"
+                    ? "Saving…"
+                    : ""}
+              </span>
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="compact"
+                  className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm"
+                  disabled={basicInfo.saving}
+                  onClick={onClose}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="compact"
+                  className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm text-primary"
+                  loading={basicInfo.saving}
+                  disabled={basicInfo.saveDisabled}
+                  onClick={() => void basicInfo.save()}
+                >
+                  Save
+                </Button>
+              </div>
+            </GroupManagementFooter>
+          )}
+          {state && view === "permissions" && (
+            <GroupManagementFooter data-testid="group-permissions-footer">
+              <Button
+                type="button"
+                variant="primary"
+                size="compact"
+                disabled={busy || !state.can_edit_defaults}
+                onClick={() => void saveDefaults()}
+              >
+                Save defaults
+              </Button>
+            </GroupManagementFooter>
+          )}
+        </div>
+      </GroupManagementFrame>
+      {basicInfo.cropSource && (
+        <AvatarCropDialog
+          source={basicInfo.cropSource}
+          onCancel={() => basicInfo.setCropSource(null)}
+          onSetPhoto={basicInfo.replacePreview}
+        />
+      )}
+      {confirmationCopy && (
+        <ConfirmModal
+          title={confirmationCopy.title}
+          message={confirmationCopy.message}
+          confirmLabel={confirmationCopy.confirmLabel}
+          onCancel={() => setConfirmation(null)}
+          onConfirm={() => void confirmAction()}
+          isLoading={busy}
+          isDanger
+        />
+      )}
     </>
   );
 }
