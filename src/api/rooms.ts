@@ -118,6 +118,41 @@ export const roomsApi = {
       `/rooms/${roomRef}/governance/members/${userRef}/override`,
     );
   },
+  updateMemberTag(roomRef: ResourceRef, userRef: ResourceRef, tag: string) {
+    return put<GovernanceMember>(
+      `/rooms/${roomRef}/governance/members/${userRef}/tag`,
+      { tag },
+    );
+  },
+  updateAdminTitle(roomRef: ResourceRef, userRef: ResourceRef, title: string) {
+    return put<GovernanceMember>(
+      `/rooms/${roomRef}/governance/members/${userRef}/admin-title`,
+      { title },
+    );
+  },
+  updateTemporaryRestriction(
+    roomRef: ResourceRef,
+    userRef: ResourceRef,
+    permissions: string[],
+    duration: "forever" | "day" | "week" | "custom",
+    expiresAt?: string,
+  ) {
+    return put<GovernanceMember>(
+      `/rooms/${roomRef}/governance/members/${userRef}/temporary-restriction`,
+      { permissions, duration, expires_at: expiresAt },
+    );
+  },
+  clearTemporaryRestriction(roomRef: ResourceRef, userRef: ResourceRef) {
+    return del<void>(
+      `/rooms/${roomRef}/governance/members/${userRef}/temporary-restriction`,
+    );
+  },
+  transferOwnership(roomRef: ResourceRef, userRef: ResourceRef) {
+    return post<GovernanceMember>(
+      `/rooms/${roomRef}/governance/members/${userRef}/transfer-ownership`,
+      {},
+    );
+  },
   leave(roomRef: ResourceRef) {
     return post<void>(`/rooms/${roomRef}/leave`, {});
   },
@@ -129,6 +164,8 @@ export interface GovernanceMember {
   username: string;
   display_name: string | null;
   role: "owner" | "admin" | "member";
+  member_tag?: string | null;
+  admin_title?: string | null;
   admin_permissions: string[];
   allow_permissions: string[];
   deny_permissions: string[];
@@ -137,11 +174,24 @@ export interface GovernanceMember {
   can_edit_admin?: boolean;
   can_demote?: boolean;
   can_promote?: boolean;
+  can_edit_tag?: boolean;
+  can_edit_title?: boolean;
+  can_restrict?: boolean;
+  can_remove?: boolean;
+  can_transfer_ownership?: boolean;
+  temporary_restriction?: {
+    deny_permissions: string[];
+    expires_at: string | null;
+    active: boolean;
+  };
 }
 export interface GroupGovernance {
   role: "owner" | "admin" | "member";
   capabilities: string[];
   delegable_admin_permissions?: string[];
   defaults: string[];
+  can_edit_defaults?: boolean;
+  can_leave?: boolean;
+  can_delete_group?: boolean;
   members: GovernanceMember[];
 }

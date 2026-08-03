@@ -12,6 +12,11 @@ const { roomsApiMock, socketHandler } = vi.hoisted(() => ({
     updateDefaults: vi.fn(),
     promote: vi.fn(),
     updateAdminRights: vi.fn(),
+    updateMemberTag: vi.fn(),
+    updateAdminTitle: vi.fn(),
+    updateTemporaryRestriction: vi.fn(),
+    clearTemporaryRestriction: vi.fn(),
+    transferOwnership: vi.fn(),
     demote: vi.fn(),
     leave: vi.fn(),
     delete: vi.fn(),
@@ -51,6 +56,9 @@ const member = {
   effective_permissions: ["send_messages"],
   can_manage: true,
   can_promote: true,
+  can_edit_tag: true,
+  can_restrict: true,
+  can_remove: true,
 };
 
 const admin = {
@@ -64,6 +72,10 @@ const admin = {
   effective_permissions: ["change_group_info"],
   can_edit_admin: true,
   can_demote: true,
+  can_edit_tag: true,
+  can_edit_title: true,
+  can_remove: true,
+  can_transfer_ownership: true,
 };
 
 const governance = () => ({
@@ -80,6 +92,9 @@ const governance = () => ({
     "add_new_admins",
   ],
   defaults: ["send_messages"],
+  can_edit_defaults: true,
+  can_leave: false,
+  can_delete_group: true,
   members: [
     {
       id: 1,
@@ -108,6 +123,11 @@ describe("GroupSettingsModal member governance", () => {
     roomsApiMock.updateDefaults.mockResolvedValue(["send_messages"]);
     roomsApiMock.promote.mockResolvedValue({ ...member, role: "admin" });
     roomsApiMock.updateAdminRights.mockResolvedValue(admin);
+    roomsApiMock.updateMemberTag.mockResolvedValue(member);
+    roomsApiMock.updateAdminTitle.mockResolvedValue(admin);
+    roomsApiMock.updateTemporaryRestriction.mockResolvedValue(member);
+    roomsApiMock.clearTemporaryRestriction.mockResolvedValue(undefined);
+    roomsApiMock.transferOwnership.mockResolvedValue(admin);
     roomsApiMock.demote.mockResolvedValue({ ...admin, role: "member" });
     roomsApiMock.leave.mockResolvedValue(undefined);
     roomsApiMock.delete.mockResolvedValue(undefined);
@@ -322,8 +342,8 @@ describe("GroupSettingsModal member governance", () => {
       defaults: [],
       members: [
         { ...governance().members[0], can_edit_admin: false, can_demote: false },
-        { ...admin, id: 3, display_name: "Descendant", can_edit_admin: true, can_demote: true },
-        { ...admin, id: 4, display_name: "Sibling", can_edit_admin: false, can_demote: false },
+        { ...admin, id: 3, display_name: "Descendant", can_edit_admin: true, can_demote: true, can_edit_title: false, can_transfer_ownership: false },
+        { ...admin, id: 4, display_name: "Sibling", can_edit_admin: false, can_demote: false, can_edit_title: false, can_transfer_ownership: false },
         { ...member, can_promote: true },
       ],
     });
@@ -372,6 +392,33 @@ describe("GroupSettingsModal member governance", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Authorization changed");
   });
 
+  it("uses projected capabilities for tags, temporary restrictions, titles, and ownership transfer", async () => {
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Member 1 effective permissions$/ }));
+    fireEvent.change(screen.getByPlaceholderText("Optional member tag"), { target: { value: "helper" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save tag" }));
+    await waitFor(() => expect(roomsApiMock.updateMemberTag).toHaveBeenCalledWith(7, 2, "helper"));
+
+    fireEvent.click(screen.getByLabelText("Send messages", { selector: "input" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply temporary restriction" }));
+    await waitFor(() => expect(roomsApiMock.updateTemporaryRestriction).toHaveBeenCalledWith(7, 2, ["send_messages"], "forever", undefined));
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Administrators/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit rights" }));
+    fireEvent.change(screen.getByPlaceholderText("Optional public title"), { target: { value: "Lead" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save title" }));
+    await waitFor(() => expect(roomsApiMock.updateAdminTitle).toHaveBeenCalledWith(7, 3, "Lead"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Transfer ownership" }));
+    const dialog = screen.getByRole("dialog", { name: "Transfer ownership?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Transfer" }));
+    await waitFor(() => expect(roomsApiMock.transferOwnership).toHaveBeenCalledTimes(1));
+  });
+
   it("shows an owner-only membership consistently without exposing invalid owner actions", async () => {
     const owner = governance().members[0];
     roomsApiMock.governance.mockResolvedValue({ ...governance(), members: [owner] });
@@ -400,7 +447,8 @@ describe("GroupSettingsModal member governance", () => {
     expect(screen.getByTestId("group-admins-subpage")).toBeInTheDocument();
     const demoteDialog = screen.getByRole("dialog", { name: "Demote administrator?" });
     expect(demoteDialog).toHaveAccessibleDescription("Administrator will become a regular group member.");
-    expect(screen.queryByText(/delete for everyone|transfer ownership/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/delete for everyone/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Transfer ownership", hidden: true })).toBeInTheDocument();
     fireEvent.click(within(demoteDialog).getByRole("button", { name: "Cancel" }));
     expect(roomsApiMock.demote).not.toHaveBeenCalled();
     expect(screen.getByText("Administrator rights")).toBeInTheDocument();
@@ -452,7 +500,7 @@ describe("GroupSettingsModal member governance", () => {
     const nativeConfirm = vi.spyOn(window, "confirm");
     const onClose = vi.fn();
     let resolveLeave!: () => void;
-    roomsApiMock.governance.mockResolvedValue({ ...governance(), role: "member" });
+    roomsApiMock.governance.mockResolvedValue({ ...governance(), role: "member", can_leave: true, can_delete_group: false });
     roomsApiMock.leave.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveLeave = resolve; }));
     render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={onClose} />);
     await screen.findByText("Edit group");

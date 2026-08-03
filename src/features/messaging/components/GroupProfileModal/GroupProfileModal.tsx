@@ -204,7 +204,11 @@ export function GroupProfileModal({
                   <Avatar name={memberName(member)} size="medium" className="h-11 w-11" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{memberName(member)}</p>
-                    <p className="truncate text-xs text-muted-foreground">@{member.username}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      @{member.username}
+                      {member.member_tag ? ` · ${member.member_tag}` : ""}
+                      {member.admin_title ? ` · ${member.admin_title}` : ""}
+                    </p>
                   </div>
                   {member.role !== "member" && (
                     <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium capitalize text-primary" aria-label={`${member.role} role`}>{member.role}</span>

@@ -37,6 +37,7 @@ import {
 type GroupConfirmation =
   | { type: "demote"; member: GovernanceMember }
   | { type: "remove"; member: GovernanceMember }
+  | { type: "transfer"; member: GovernanceMember }
   | { type: "leave" }
   | { type: "delete" };
 
@@ -54,6 +55,11 @@ export function GroupSettingsModal({
   const [selected, setSelected] = useState<GovernanceMember | null>(null);
   const [defaults, setDefaults] = useState<string[]>([]);
   const [adminRights, setAdminRights] = useState<string[]>([]);
+  const [tagDraft, setTagDraft] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+  const [temporaryDenies, setTemporaryDenies] = useState<string[]>([]);
+  const [restrictionDuration, setRestrictionDuration] = useState<"forever" | "day" | "week" | "custom">("forever");
+  const [restrictionExpiresAt, setRestrictionExpiresAt] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const mutationPending = useRef(false);
@@ -130,6 +136,9 @@ export function GroupSettingsModal({
   );
   const beginMemberEdit = (member: GovernanceMember) => {
     setSelected(member);
+    setTagDraft(member.member_tag ?? "");
+    setTitleDraft(member.admin_title ?? "");
+    setTemporaryDenies(member.temporary_restriction?.deny_permissions ?? []);
     setOverrideDraft(
       Object.fromEntries(
         MEMBER_PERMISSION_KEYS.map((right) => [
@@ -155,9 +164,9 @@ export function GroupSettingsModal({
       );
       await reload();
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Member restriction update failed.",
-      );
+      await reload();
+      setSelected(null);
+      setError(e instanceof Error ? e.message : "Member restriction update failed. Group authority was refreshed.");
     } finally {
       setBusy(false);
     }
@@ -169,7 +178,9 @@ export function GroupSettingsModal({
       await roomsApi.clearOverride(ref, selected.id);
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not clear override.");
+      await reload();
+      setSelected(null);
+      setError(e instanceof Error ? e.message : "Could not clear override. Group authority was refreshed.");
     } finally {
       setBusy(false);
     }
@@ -187,8 +198,69 @@ export function GroupSettingsModal({
     }
   };
   const beginPromotion = (member: GovernanceMember) => {
-    setSelected(member);
+    beginMemberEdit(member);
     setAdminRights([]);
+  };
+  const beginAdminEdit = (member: GovernanceMember) => {
+    beginMemberEdit(member);
+    setAdminRights(member.admin_permissions);
+  };
+  const refreshAfterUnsafeError = async (fallback: string, reason: unknown) => {
+    await reload();
+    setSelected(null);
+    setError(reason instanceof Error ? reason.message : fallback);
+  };
+  const saveTag = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    try {
+      await roomsApi.updateMemberTag(ref, selected.id, tagDraft);
+      await reload();
+    } catch (reason) {
+      await refreshAfterUnsafeError("Member tag update failed. Group authority was refreshed.", reason);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveTitle = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    try {
+      await roomsApi.updateAdminTitle(ref, selected.id, titleDraft);
+      await reload();
+    } catch (reason) {
+      await refreshAfterUnsafeError("Administrator title update failed. Group authority was refreshed.", reason);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveTemporaryRestriction = async () => {
+    if (!selected || busy || temporaryDenies.length === 0) return;
+    setBusy(true);
+    try {
+      const expiresAt = restrictionDuration === "custom" && restrictionExpiresAt
+        ? new Date(restrictionExpiresAt).toISOString()
+        : undefined;
+      await roomsApi.updateTemporaryRestriction(ref, selected.id, temporaryDenies, restrictionDuration, expiresAt);
+      await reload();
+    } catch (reason) {
+      await refreshAfterUnsafeError("Temporary restriction update failed. Group authority was refreshed.", reason);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const clearTemporaryRestriction = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    try {
+      await roomsApi.clearTemporaryRestriction(ref, selected.id);
+      setTemporaryDenies([]);
+      await reload();
+    } catch (reason) {
+      await refreshAfterUnsafeError("Could not clear temporary restriction. Group authority was refreshed.", reason);
+    } finally {
+      setBusy(false);
+    }
   };
   const saveAdmin = async () => {
     if (!selected || mutationPending.current) return;
@@ -222,21 +294,20 @@ export function GroupSettingsModal({
     values.includes(value)
       ? values.filter((v) => v !== value)
       : [...values, value];
-  const canManagePermissions = state?.role === "owner" || state?.capabilities.includes("manage_member_permissions");
-  const canRemoveMembers = state?.role === "owner" || state?.capabilities.includes("remove_members");
   const leaveGroup = () => {
-    if (state?.role === "owner") {
+    if (!state?.can_leave) {
       setError("owner_cannot_leave");
       return;
     }
     setConfirmation({ type: "leave" });
   };
   const deleteGroup = () => {
-    if (state?.role !== "owner") return;
+    if (!state?.can_delete_group) return;
     setConfirmation({ type: "delete" });
   };
   const confirmAction = async () => {
-    if (!confirmation || busy) return;
+    if (!confirmation || busy || mutationPending.current) return;
+    mutationPending.current = true;
     setBusy(true);
     try {
       if (confirmation.type === "demote") {
@@ -244,6 +315,10 @@ export function GroupSettingsModal({
         await reload();
       } else if (confirmation.type === "remove") {
         await roomsApi.removeMember(ref, confirmation.member.id);
+        setSelected(null);
+        await reload();
+      } else if (confirmation.type === "transfer") {
+        await roomsApi.transferOwnership(ref, confirmation.member.id);
         setSelected(null);
         await reload();
       } else if (confirmation.type === "leave") {
@@ -256,9 +331,15 @@ export function GroupSettingsModal({
     } catch (e) {
       const fallback = confirmation.type === "remove"
           ? "Member removal failed."
+          : confirmation.type === "transfer"
+            ? "Ownership transfer failed. Group authority was refreshed."
           : confirmation.type === "leave"
             ? "Leave failed."
             : "Delete failed.";
+      if (["demote", "remove", "transfer"].includes(confirmation.type)) {
+        await reload();
+        setSelected(null);
+      }
       setError(
         confirmation.type === "demote"
           ? (e as { message: string }).message
@@ -267,6 +348,7 @@ export function GroupSettingsModal({
             : fallback,
       );
     } finally {
+      mutationPending.current = false;
       setBusy(false);
       setConfirmation(null);
     }
@@ -276,6 +358,8 @@ export function GroupSettingsModal({
       ? { title: "Demote administrator?", message: `${confirmation.member.display_name ?? confirmation.member.username} will become a regular group member.`, confirmLabel: "Demote" }
       : confirmation.type === "remove"
         ? { title: "Remove member?", message: `Remove ${confirmation.member.display_name ?? confirmation.member.username} from this group?`, confirmLabel: "Remove" }
+        : confirmation.type === "transfer"
+          ? { title: "Transfer ownership?", message: `${confirmation.member.display_name ?? confirmation.member.username} will become the owner. You will become an administrator with full rights.`, confirmLabel: "Transfer" }
         : confirmation.type === "leave"
           ? { title: "Leave group?", message: "You will leave this group and lose access to its messages.", confirmLabel: "Leave" }
           : { title: "Delete group?", message: "This group and its messages will be permanently deleted.", confirmLabel: "Delete" }
@@ -324,8 +408,8 @@ export function GroupSettingsModal({
                 </nav>
                 </GroupManagementSection>
                 <GroupManagementSection separated className="p-0" aria-label="Group actions">
-                  {state.role !== "owner" && <GroupManagementRow label="Leave group" leading={<LogOut className="h-4 w-4" />} onClick={leaveGroup} />}
-                  {state.role === "owner" && <GroupManagementRow label="Delete group" leading={<Trash2 className="h-4 w-4" />} tone="destructive" disabled={busy} onClick={deleteGroup} />}
+                  {state.can_leave && <GroupManagementRow label="Leave group" leading={<LogOut className="h-4 w-4" />} onClick={leaveGroup} />}
+                  {state.can_delete_group && <GroupManagementRow label="Delete group" leading={<Trash2 className="h-4 w-4" />} tone="destructive" disabled={busy} onClick={deleteGroup} />}
                 </GroupManagementSection>
               </>
             )}
@@ -334,16 +418,16 @@ export function GroupSettingsModal({
                 <p className="text-xs text-muted-foreground">Manage administrator access and rights.</p>
                 <section className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background" aria-label="Current administrators">
                   {state.members.filter((m) => m.role === "owner").map((m) => (
-                    <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary="Owner" />
+                    <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={m.member_tag ? `Owner · ${m.member_tag}` : "Owner"} trailing={m.can_edit_tag ? <Button type="button" variant="ghost" size="compact" className="px-2" onClick={() => beginAdminEdit(m)}>Edit tag</Button> : undefined} />
                   ))}
                   {admins.map((m) => (
                     <GroupManagementPersonRow
                       key={m.id}
                       name={m.display_name ?? m.username}
-                      secondary="Administrator"
+                      secondary={m.admin_title ? `Administrator · ${m.admin_title}` : "Administrator"}
                       trailing={
                         <>
-                          <Button type="button" variant="ghost" size="compact" className="px-2" disabled={!(m.can_edit_admin ?? state.role === "owner") || busy} onClick={() => { setSelected(m); setAdminRights(m.admin_permissions); }}>Edit rights</Button>
+                          <Button type="button" variant="ghost" size="compact" className="px-2" disabled={!m.can_edit_admin || busy} onClick={() => beginAdminEdit(m)}>Edit rights</Button>
                           <Button type="button" variant="ghost" size="compact" className="px-2 text-destructive" disabled={!(m.can_demote ?? state.role === "owner") || busy} onClick={() => setConfirmation({ type: "demote", member: m })}>Demote</Button>
                         </>
                       }
@@ -373,9 +457,13 @@ export function GroupSettingsModal({
                         return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={disabled} control={<GroupManagementBooleanControl id={controlId} disabled={disabled} checked={adminRights.includes(right)} onChange={() => setAdminRights(toggle(adminRights, right))} />} />;
                       })}
                     </div>
+                    {selected.can_edit_tag && <div className="mt-3 flex items-end gap-2"><label className="min-w-0 flex-1 text-xs text-muted-foreground">Member tag<TextInput value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="Optional member tag" size="compact" /></label><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void saveTag()}>Save tag</Button></div>}
+                    {selected.role === "admin" && selected.can_edit_title && <div className="mt-3 flex items-end gap-2"><label className="min-w-0 flex-1 text-xs text-muted-foreground">Administrator title<TextInput value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} placeholder="Optional public title" size="compact" /></label><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void saveTitle()}>Save title</Button></div>}
                     <div className="mt-3 flex justify-end">
                       <Button type="button" variant="primary" size="compact" disabled={busy || (selected.role === "member" ? !(selected.can_promote ?? state.role === "owner") : !(selected.can_edit_admin ?? state.role === "owner"))} onClick={() => void saveAdmin()}>{selected.role === "member" ? "Promote" : "Save rights"}</Button>
                     </div>
+                    {selected.can_transfer_ownership && <div className="mt-3 border-t border-border pt-3"><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => setConfirmation({ type: "transfer", member: selected })}>Transfer ownership</Button></div>}
+                    {selected.can_remove && selected.role === "admin" && <div className="mt-3"><Button type="button" variant="ghost" size="compact" className="text-destructive" disabled={busy} onClick={() => setConfirmation({ type: "remove", member: selected })}>Remove administrator</Button></div>}
                   </section>
                 )}
               </GroupManagementSubpage>
@@ -393,8 +481,8 @@ export function GroupSettingsModal({
                 </label>
                 <section className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background" aria-label="Group members">
                   {state.members.map((m) => m.role === "member"
-                    ? <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={`${m.effective_permissions?.length ?? 0} effective permissions`} onClick={() => beginMemberEdit(m)} />
-                    : <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={m.role === "owner" ? "Owner" : "Administrator"} />)}
+                    ? <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={m.member_tag ? `${m.member_tag} · ${m.effective_permissions?.length ?? 0} effective permissions` : `${m.effective_permissions?.length ?? 0} effective permissions`} onClick={() => beginMemberEdit(m)} />
+                    : <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={m.admin_title ?? (m.role === "owner" ? "Owner" : "Administrator")} onClick={(m.can_edit_tag || m.can_edit_admin) ? () => beginAdminEdit(m) : undefined} />)}
                 </section>
                 {selected?.role === "member" && (
                   <section aria-labelledby={`${titleId}-member-restrictions`}>
@@ -407,12 +495,15 @@ export function GroupSettingsModal({
                         <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} control={<select className="vt-select !w-28 !py-1 text-sm" aria-label={`${groupPermissionLabel(right)} override`} value={overrideDraft[right] ?? "inherit"} onChange={(event) => setOverrideDraft((current) => ({ ...current, [right]: event.target.value as "inherit" | "allow" | "deny" }))}><option value="inherit">Inherit</option><option value="allow">Allow</option><option value="deny">Deny</option></select>} />
                       ))}
                     </div>
+                    {selected.can_edit_tag && <div className="mt-3 flex items-end gap-2"><label className="min-w-0 flex-1 text-xs text-muted-foreground">Member tag<TextInput value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="Optional member tag" size="compact" /></label><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void saveTag()}>Save tag</Button></div>}
                     <div className="mt-3 flex gap-2">
-                      <Button type="button" variant="primary" size="compact" disabled={busy || !(state.role === "owner" || canManagePermissions)} onClick={() => void saveOverride()}>Save restrictions</Button>
-                      <Button type="button" variant="ghost" size="compact" disabled={busy || !(state.role === "owner" || canManagePermissions)} onClick={() => void clearSelectedOverride()}>Clear override</Button>
+                      <Button type="button" variant="primary" size="compact" disabled={busy || !selected.can_manage} onClick={() => void saveOverride()}>Save restrictions</Button>
+                      <Button type="button" variant="ghost" size="compact" disabled={busy || !selected.can_manage} onClick={() => void clearSelectedOverride()}>Clear override</Button>
                     </div>
+                    {selected.can_restrict && <div className="mt-4 border-t border-border pt-3"><h4 className="text-sm font-semibold">Temporary restriction</h4><div className="mt-2 overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">{MEMBER_PERMISSION_KEYS.map((right) => { const id = `${titleId}-temporary-${right}`; return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={id} control={<GroupManagementBooleanControl id={id} disabled={busy} checked={temporaryDenies.includes(right)} onChange={() => setTemporaryDenies(toggle(temporaryDenies, right))} />} />; })}</div><div className="mt-3 flex flex-wrap items-end gap-2"><label className="text-xs text-muted-foreground">Duration<select className="vt-select mt-1 block !w-32 !py-1 text-sm" value={restrictionDuration} onChange={(event) => setRestrictionDuration(event.target.value as typeof restrictionDuration)}><option value="forever">Forever</option><option value="day">1 day</option><option value="week">1 week</option><option value="custom">Custom</option></select></label>{restrictionDuration === "custom" && <label className="text-xs text-muted-foreground">Until<input type="datetime-local" className="vt-input mt-1 block" value={restrictionExpiresAt} onChange={(event) => setRestrictionExpiresAt(event.target.value)} /></label>}<Button type="button" variant="primary" size="compact" disabled={busy || temporaryDenies.length === 0 || (restrictionDuration === "custom" && !restrictionExpiresAt)} onClick={() => void saveTemporaryRestriction()}>Apply temporary restriction</Button>{selected.temporary_restriction?.active && <Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => void clearTemporaryRestriction()}>Clear temporary restriction</Button>}</div>{selected.temporary_restriction?.active && <p className="mt-2 text-xs text-muted-foreground">Active{selected.temporary_restriction.expires_at ? ` until ${new Date(selected.temporary_restriction.expires_at).toLocaleString()}` : " forever"}</p>}</div>}
                     <div className="mt-3 border-t border-border pt-3">
-                      <Button type="button" variant="ghost" size="compact" className="text-destructive" disabled={busy || !(state.role === "owner" || canRemoveMembers)} onClick={() => setConfirmation({ type: "remove", member: selected })}>Remove member</Button>
+                      {selected.can_promote && <Button type="button" variant="ghost" size="compact" disabled={busy} onClick={() => { setView("admins"); beginPromotion(selected); }}>Promote to administrator</Button>}
+                      {selected.can_remove && <Button type="button" variant="ghost" size="compact" className="text-destructive" disabled={busy} onClick={() => setConfirmation({ type: "remove", member: selected })}>Remove member</Button>}
                     </div>
                   </section>
                 )}
@@ -427,7 +518,7 @@ export function GroupSettingsModal({
                 <section className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border" aria-label="Default member permissions">
                   {MEMBER_PERMISSION_KEYS.map((right) => {
                     const controlId = `${titleId}-default-${right}`;
-                    return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={busy} control={<GroupManagementBooleanControl id={controlId} disabled={busy} checked={defaults.includes(right)} onChange={() => setDefaults(toggle(defaults, right))} />} />;
+                    return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={busy || !state.can_edit_defaults} control={<GroupManagementBooleanControl id={controlId} disabled={busy || !state.can_edit_defaults} checked={defaults.includes(right)} onChange={() => setDefaults(toggle(defaults, right))} />} />;
                   })}
                 </section>
               </GroupManagementSubpage>
@@ -442,7 +533,7 @@ export function GroupSettingsModal({
           </div>
         </GroupManagementFooter>}
         {state && view === "permissions" && <GroupManagementFooter data-testid="group-permissions-footer">
-          <Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void saveDefaults()}>Save defaults</Button>
+          <Button type="button" variant="primary" size="compact" disabled={busy || !state.can_edit_defaults} onClick={() => void saveDefaults()}>Save defaults</Button>
         </GroupManagementFooter>}
       </div>
     </GroupManagementFrame>

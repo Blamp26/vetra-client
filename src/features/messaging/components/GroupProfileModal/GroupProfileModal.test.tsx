@@ -65,6 +65,19 @@ describe("GroupProfileModal", () => {
     expect(screen.queryByText(/description|photos|videos|media/i)).not.toBeInTheDocument();
   });
 
+  it("shows member tags and administrator titles without replacing identity or role", async () => {
+    governanceMembers.mockResolvedValue([
+      members[0],
+      { ...members[1], member_tag: "Helper" },
+      { ...members[2], admin_title: "Lead moderator" },
+    ]);
+    render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
+    expect(await screen.findByText(/@bob · Helper/)).toBeInTheDocument();
+    expect(screen.getByText(/@carol · Lead moderator/)).toBeInTheDocument();
+    expect(screen.getByText("Bob Builder")).toBeInTheDocument();
+    expect(screen.getByLabelText("admin role")).toBeInTheDocument();
+  });
+
   it("filters members case-insensitively, clears, and reports no results", async () => {
     render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
     const input = await screen.findByRole("textbox", { name: "Search group members" });
