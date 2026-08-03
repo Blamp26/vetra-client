@@ -1,9 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ChevronRight, KeyRound, LogOut, Shield, Trash2, Users } from "lucide-react";
+import { ChevronRight, Globe2, KeyRound, Link, LogOut, Shield, Trash2, Users } from "lucide-react";
 import {
   roomsApi,
   type GovernanceMember,
   type GroupGovernance,
+  type GroupAccessSettings,
+  type GroupInvite,
+  type GroupJoinRequest,
 } from "@/api/rooms";
 import { roomRef } from "@/shared/utils/refs";
 import type { RoomPreview } from "@/shared/types";
@@ -69,7 +72,14 @@ export function GroupSettingsModal({
   const [overrideDraft, setOverrideDraft] = useState<
     Record<string, "inherit" | "allow" | "deny">
   >({});
-  const [view, setView] = useState<"overview" | "admins" | "members" | "permissions">("overview");
+  const [view, setView] = useState<"overview" | "admins" | "members" | "permissions" | "access">("overview");
+  const [access, setAccess] = useState<GroupAccessSettings | null>(null);
+  const [invites, setInvites] = useState<GroupInvite[]>([]);
+  const [requests, setRequests] = useState<GroupJoinRequest[]>([]);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteExpiry, setInviteExpiry] = useState("");
+  const [inviteLimit, setInviteLimit] = useState("");
+  const [inviteApproval, setInviteApproval] = useState(false);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
   const currentUser = useAppStore((s: RootState) => s.currentUser);
   const ref = roomRef(room) ?? room.id;
@@ -110,10 +120,30 @@ export function GroupSettingsModal({
         onClose();
         return;
       }
+      if (["group_access_changed", "join_request_created", "join_request_resolved"].includes(event.event) && view === "access") void reloadAccess();
       void reload();
     });
     return unsubscribe;
   }, [room.id, socketManager, currentUser?.id, onClose]);
+  const reloadAccess = async () => {
+    const next = await roomsApi.access(ref);
+    setAccess(next);
+    if (next.capabilities.manage_invites) setInvites(await roomsApi.invites(ref));
+    if (next.capabilities.moderate_requests) setRequests(await roomsApi.joinRequests(ref));
+  };
+  useEffect(() => { if (view === "access") void reloadAccess().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load group access policy.")); }, [view, room.id]);
+  const saveAccess = async () => {
+    if (!access) return; setBusy(true); setError(null);
+    try { setAccess(await roomsApi.updateAccess(ref, access)); await reloadAccess(); }
+    catch (reason) { await reloadAccess().catch(() => undefined); setError(reason instanceof Error ? reason.message : "Access policy update failed. Authority was refreshed."); }
+    finally { setBusy(false); }
+  };
+  const createInvite = async () => {
+    setBusy(true); setError(null);
+    try { await roomsApi.createInvite(ref, { internal_name: inviteName || null, expires_at: inviteExpiry ? new Date(inviteExpiry).toISOString() : null, max_uses: inviteLimit ? Number(inviteLimit) : null, approval_required: inviteApproval }); setInviteName(""); setInviteExpiry(""); setInviteLimit(""); setInviteApproval(false); await reloadAccess(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Invite creation failed."); }
+    finally { setBusy(false); }
+  };
   useEffect(() => {
     if (!memberQuery.trim()) {
       void reload();
@@ -378,7 +408,7 @@ export function GroupSettingsModal({
       ? "Administrators"
       : view === "members"
         ? "Members"
-        : "Member permissions";
+      : view === "permissions" ? "Member permissions" : "Group access";
   const canChangeGroupInfo = state?.role === "owner" || state?.action_capabilities?.change_group_info === true;
   return (
     <>
@@ -414,6 +444,7 @@ export function GroupSettingsModal({
                   <GroupManagementRow label="Administrators" leading={<Shield className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{administrators.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("admins")} />
                   <GroupManagementRow label="Members" leading={<Users className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{state.members.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("members")} />
                   <GroupManagementRow label="Member permissions" leading={<KeyRound className="h-4 w-4 text-muted-foreground" />} trailing={<ChevronRight className="h-4 w-4" aria-hidden="true" />} onClick={() => setView("permissions")} />
+                  <GroupManagementRow label="Type, history and invite links" leading={<Globe2 className="h-4 w-4 text-muted-foreground" />} trailing={<ChevronRight className="h-4 w-4" aria-hidden="true" />} onClick={() => setView("access")} />
                 </nav>
                 </GroupManagementSection>
                 <GroupManagementSection separated className="p-0" aria-label="Group actions">
@@ -537,6 +568,22 @@ export function GroupSettingsModal({
                     <option value={0}>Off</option><option value={5}>5 seconds</option><option value={10}>10 seconds</option><option value={30}>30 seconds</option><option value={60}>1 minute</option><option value={300}>5 minutes</option><option value={900}>15 minutes</option><option value={3600}>1 hour</option>
                   </select>}
                 />
+              </GroupManagementSubpage>
+            )}
+            {view === "access" && (
+              <GroupManagementSubpage data-testid="group-access-subpage">
+                {!access ? <p role="status">Loading access policy…</p> : <>
+                  <section className="space-y-3 rounded-lg border border-border p-3" aria-label="Group access policy">
+                    <label className="block text-sm">Group type<select className="vt-select mt-1 block w-full" disabled={!access.capabilities.manage_access || busy} value={access.visibility} onChange={(event) => setAccess({ ...access, visibility: event.target.value as "private" | "public" })}><option value="private">Private</option><option value="public">Public</option></select></label>
+                    {access.visibility === "public" && <label className="block text-sm">Public username<TextInput value={access.public_username ?? ""} disabled={!access.capabilities.manage_access || busy} onChange={(event) => setAccess({ ...access, public_username: event.target.value.toLowerCase() })} placeholder="group_name" size="compact" /></label>}
+                    <label className="block text-sm">History for new members<select className="vt-select mt-1 block w-full" disabled={!access.capabilities.manage_access || busy} value={access.history_policy} onChange={(event) => setAccess({ ...access, history_policy: event.target.value as "visible" | "hidden" })}><option value="visible">Visible — full history</option><option value="hidden">Hidden — most recent {access.recent_history_count} messages</option></select></label>
+                    <GroupManagementControlRow label="Protect group content" htmlFor={`${titleId}-protect`} control={<GroupManagementBooleanControl id={`${titleId}-protect`} disabled={!access.capabilities.manage_access || busy} checked={access.content_protection_enabled} onChange={() => setAccess({ ...access, content_protection_enabled: !access.content_protection_enabled })} />} />
+                    <p className="text-xs text-muted-foreground">Blocks Vetra forwarding, copying, and explicit downloads. It cannot prevent screenshots or modified clients.</p>
+                    {access.capabilities.manage_access && <Button type="button" variant="primary" size="compact" disabled={busy || (access.visibility === "public" && !access.public_username)} onClick={() => void saveAccess()}>Save access policy</Button>}
+                  </section>
+                  {access.capabilities.manage_invites && <section className="space-y-3" aria-label="Invite links"><h3 className="text-sm font-semibold">Invite links</h3><Button type="button" variant="ghost" size="compact" disabled={busy} onClick={async () => { await roomsApi.primaryInvite(ref); await reloadAccess(); }}>Ensure primary link</Button>{invites.map((invite) => <div key={invite.id} className="rounded-lg border border-border p-3 text-sm"><div className="flex items-center justify-between gap-2"><span><Link className="mr-1 inline h-4 w-4" />{invite.internal_name || (invite.kind === "primary" ? "Primary link" : "Additional link")}</span><span>{invite.state}</span></div><code className="mt-1 block select-all break-all text-xs">{invite.token}</code><p className="mt-1 text-xs text-muted-foreground">Uses {invite.use_count}{invite.max_uses ? ` / ${invite.max_uses}` : ""}{invite.approval_required ? " · approval required" : ""}</p>{invite.state === "active" && <div className="mt-2 flex gap-2"><Button type="button" size="compact" variant="ghost" onClick={() => void navigator.clipboard?.writeText(invite.token)}>Copy</Button>{invite.kind === "primary" ? <Button type="button" size="compact" variant="ghost" disabled={busy} onClick={async () => { await roomsApi.regenerateInvite(ref, invite.id); await reloadAccess(); }}>Regenerate</Button> : <Button type="button" size="compact" variant="ghost" disabled={busy} onClick={async () => { await roomsApi.revokeInvite(ref, invite.id); await reloadAccess(); }}>Revoke</Button>}</div>}</div>)}<div className="space-y-2 rounded-lg border border-border p-3"><TextInput value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Internal name (optional)" size="compact" /><label className="block text-xs">Expiry<input className="vt-input mt-1 block w-full" type="datetime-local" value={inviteExpiry} onChange={(e) => setInviteExpiry(e.target.value)} /></label><TextInput value={inviteLimit} onChange={(e) => setInviteLimit(e.target.value.replace(/\D/g, ""))} placeholder="Usage limit (optional)" size="compact" /><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={inviteApproval} onChange={(e) => setInviteApproval(e.target.checked)} />Require administrator approval</label><Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void createInvite()}>Create additional link</Button></div></section>}
+                  {access.capabilities.moderate_requests && <section className="space-y-2" aria-label="Pending join requests"><h3 className="text-sm font-semibold">Pending requests</h3>{requests.length === 0 ? <p className="text-sm text-muted-foreground">No pending requests.</p> : requests.map((request) => <div key={request.id} className="flex items-center justify-between rounded-lg border border-border p-3"><span>{request.user.display_name ?? request.user.username}</span><div className="flex gap-2"><Button type="button" size="compact" variant="primary" disabled={busy} onClick={async () => { await roomsApi.resolveJoinRequest(ref, request.id, "approve"); await reloadAccess(); }}>Approve</Button><Button type="button" size="compact" variant="ghost" disabled={busy} onClick={async () => { await roomsApi.resolveJoinRequest(ref, request.id, "reject"); await reloadAccess(); }}>Reject</Button></div></div>)}</section>}
+                </>}
               </GroupManagementSubpage>
             )}
           </GroupManagementScrollBody>

@@ -35,6 +35,7 @@ interface MessageContextMenuProps {
   canReact?: boolean;
   onReply: () => void;
   onCopy: () => void;
+  canCopy?: boolean;
   onDownload: () => void;
   onForward: () => void;
   onSelect: () => void;
@@ -324,6 +325,7 @@ export function MessageContextMenu({
   canReact = true,
   onReply,
   onCopy,
+  canCopy = true,
   onDownload,
   onForward,
   onSelect,
@@ -414,7 +416,7 @@ export function MessageContextMenu({
         label: "Copy Text",
         icon: Copy,
         onSelect: data.hasText ? onCopy : undefined,
-        hidden: !data.hasText,
+        hidden: !data.hasText || !canCopy,
       },
       {
         key: "download",

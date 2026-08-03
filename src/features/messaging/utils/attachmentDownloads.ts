@@ -212,6 +212,7 @@ export async function downloadAttachmentWithAuth({
 }: AttachmentDownloadOptions): Promise<void> {
   const attachmentUrl = resolveAttachmentUrl(attachment.url);
   if (!attachmentUrl) throw new Error("Attachment URL is missing");
+  const controlledDownloadUrl = `${attachmentUrl}${attachmentUrl.includes("?") ? "&" : "?"}download=1`;
 
   if (isTauriRuntime()) {
     const [{ exists, writeFile }, { openPath }] = await Promise.all([
@@ -233,7 +234,7 @@ export async function downloadAttachmentWithAuth({
         sanitizeWindowsFileName(getAttachmentDisplayName(attachment)),
         exists,
       ));
-    const blob = await fetchAttachmentBlobInternal(attachmentUrl, authToken, {
+    const blob = await fetchAttachmentBlobInternal(controlledDownloadUrl, authToken, {
       signal,
       onProgress,
     });
@@ -242,7 +243,7 @@ export async function downloadAttachmentWithAuth({
     return;
   }
 
-  const blob = await fetchAttachmentBlobInternal(attachmentUrl, authToken, {
+  const blob = await fetchAttachmentBlobInternal(controlledDownloadUrl, authToken, {
     signal,
     onProgress,
   });

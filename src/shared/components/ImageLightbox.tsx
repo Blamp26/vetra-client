@@ -15,6 +15,7 @@ interface ImageLightboxProps {
   onDelete?: (() => void) | undefined;
   onForward?: (() => void) | undefined;
   onClose: () => void;
+  allowDownload?: boolean;
 }
 
 export const ImageLightbox: React.FC<ImageLightboxProps> = ({
@@ -25,6 +26,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
   onDelete,
   onForward,
   onClose,
+  allowDownload = true,
 }) => {
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -142,7 +144,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
   const handleDownload = async (event: React.MouseEvent) => {
     event.stopPropagation();
     try {
-      const response = await fetch(src, {
+      const response = await fetch(`${src}${src.includes("?") ? "&" : "?"}download=1`, {
         headers: {
           ...clientProtocolHeaders(),
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -207,7 +209,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
             <Forward className="h-5 w-5" />
           </button>
         )}
-        <button
+        {allowDownload && <button
           type="button"
           aria-label={isZoomed ? "Fit image to screen" : "Zoom image"}
           className={actionButtonClassName}
@@ -222,7 +224,7 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
           ) : (
             <ZoomIn className="h-5 w-5" />
           )}
-        </button>
+        </button>}
         <button
           type="button"
           aria-label="Download image"

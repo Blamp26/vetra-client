@@ -247,6 +247,7 @@ export function MessageList({
     upsertRoomPreview,
     setMessageReactions,
     toggleRoomReaction,
+    roomPreviews,
   } = useAppStore(
     (s: RootState) => ({
     selectionMode: s.selectionMode,
@@ -270,9 +271,11 @@ export function MessageList({
     upsertRoomPreview: s.upsertRoomPreview,
     setMessageReactions: s.setMessageReactions,
     toggleRoomReaction: s.toggleRoomReaction,
+    roomPreviews: s.roomPreviews,
     }),
     true,
   );
+  const contentProtected = chatContext.type === "room" && !chatContext.isServerChannel && roomPreviews[chatContext.roomId]?.content_protection_enabled === true;
 
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [msgToDelete, setMsgToDelete] = useState<number | null>(null);
@@ -654,7 +657,7 @@ export function MessageList({
   ]);
 
   const handleCopy = useCallback(async () => {
-    if (!contextMenu || !contextMenu.hasText || !contextMenu.content) return;
+    if (contentProtected || !contextMenu || !contextMenu.hasText || !contextMenu.content) return;
     try {
       await navigator.clipboard.writeText(contextMenu.content);
     } catch (err) {
@@ -662,7 +665,7 @@ export function MessageList({
     } finally {
       setContextMenu(null);
     }
-  }, [contextMenu]);
+  }, [contentProtected, contextMenu]);
 
   const handleReplyClick = useCallback(() => {
     if (!contextMenu || !onReply) return;
@@ -681,15 +684,15 @@ export function MessageList({
   }, [contextMenu, setSelectionMode, toggleMessageSelection]);
 
   const handleForward = useCallback(() => {
-    if (!contextMenu) return;
+    if (contentProtected || !contextMenu) return;
     const msg = messagesById.get(contextMenu.msgId);
     if (!msg || !isMessageForwardable(msg)) return;
     setForwardingMessages([contextMenu.msgId]);
     setContextMenu(null);
-  }, [contextMenu, messagesById, setForwardingMessages]);
+  }, [contentProtected, contextMenu, messagesById, setForwardingMessages]);
 
   const handleDownload = useCallback(async () => {
-    if (!contextMenu) return;
+    if (contentProtected || !contextMenu) return;
     const msg = messagesById.get(contextMenu.msgId);
     if (!msg) return;
 
@@ -703,7 +706,7 @@ export function MessageList({
     } finally {
       setContextMenu(null);
     }
-  }, [authToken, contextMenu, messagesById]);
+  }, [authToken, contentProtected, contextMenu, messagesById]);
 
   const handleLightboxDelete = useCallback(() => {
     if (!lightboxData) return;
@@ -839,7 +842,7 @@ export function MessageList({
     [messagesById, selectedMessageIds],
   );
 
-  const selectedForwardBlocked = selectedMessages.some(
+  const selectedForwardBlocked = contentProtected || selectedMessages.some(
     (message) => !isMessageForwardable(message),
   );
 
@@ -1115,6 +1118,7 @@ export function MessageList({
                       onToggleSelection={toggleMessageSelection}
                       onToggleReaction={toggleReaction}
                       canReact={canReact}
+                      allowDownload={!contentProtected}
                       onLightbox={setLightboxData}
                       onOpenStickerPack={onOpenStickerPack ?? (() => {})}
                       onOpenForwardedSender={handleOpenForwardedSender}
@@ -1206,6 +1210,7 @@ export function MessageList({
           canReact={canReact}
           onReply={handleReplyClick}
           onCopy={handleCopy}
+          canCopy={!contentProtected}
           onDownload={handleDownload}
           onForward={handleForward}
           onSelect={handleSelect}
@@ -1216,13 +1221,13 @@ export function MessageList({
             const contextMessage = messagesById.get(contextMenu.msgId);
             return !!contextMessage && isMessageForwardable(contextMessage);
           })()}
-          canDownload={(() => {
+          canDownload={!contentProtected && (() => {
             const contextMessage = messagesById.get(contextMenu.msgId);
             return (
               !!contextMessage && getMessageAttachment(contextMessage) != null
             );
           })()}
-          canForward={(() => {
+          canForward={!contentProtected && (() => {
             const contextMessage = messagesById.get(contextMenu.msgId);
             return !!contextMessage && isMessageForwardable(contextMessage);
           })()}
@@ -1244,11 +1249,12 @@ export function MessageList({
 
       {lightboxData?.kind === "image" && (
         <ImageLightbox
+          allowDownload={!contentProtected}
           src={lightboxData.src}
           authorName={lightboxData.authorName}
           avatarSrc={lightboxData.avatarSrc}
           createdAt={lightboxData.createdAt}
-          onForward={(() => {
+          onForward={contentProtected ? undefined : (() => {
               const targetMessage = messagesById.get(lightboxData.messageId);
               return targetMessage && isMessageForwardable(targetMessage)
                 ? handleLightboxForward
@@ -1266,11 +1272,12 @@ export function MessageList({
 
       {lightboxData?.kind === "video" && (
         <VideoLightbox
+          allowDownload={!contentProtected}
           src={lightboxData.src}
           authorName={lightboxData.authorName}
           avatarSrc={lightboxData.avatarSrc}
           createdAt={lightboxData.createdAt}
-          onForward={(() => {
+          onForward={contentProtected ? undefined : (() => {
               const targetMessage = messagesById.get(lightboxData.messageId);
               return targetMessage && isMessageForwardable(targetMessage)
                 ? handleLightboxForward

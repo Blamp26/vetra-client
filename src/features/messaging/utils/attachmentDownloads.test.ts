@@ -121,7 +121,7 @@ describe("attachmentDownloads", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringMatching(/\/api\/v1\/media\/media-file-2$/),
+      expect.stringMatching(/\/api\/v1\/media\/media-file-2\?download=1$/),
       {
         headers: {
           Authorization: "Bearer secret-token",

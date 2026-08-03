@@ -27,6 +27,7 @@ import type { ActiveChat } from "@/shared/types";
 import { formatUnreadCount } from "../../utils/unread";
 import { broadcastChannelsApi } from "@/api/broadcastChannels";
 import { CreateBroadcastChannelModal } from "@/features/broadcastChannels/components/CreateBroadcastChannelModal";
+import { GroupDiscoveryModal } from "../GroupDiscoveryModal/GroupDiscoveryModal";
 
 interface SidebarProps {
   isServerMode?: boolean;
@@ -251,8 +252,9 @@ export function Sidebar({
       )}
     >
       {!isCollapsed && (
-        <div className="h-[54px] px-[11px] pt-[9px]">
+        <div className="h-[86px] px-[11px] pt-[9px]">
           <UserSearch />
+          <button type="button" className="mt-1 w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-accent" onClick={() => openModal("DISCOVER_GROUPS")}>Discover public groups</button>
         </div>
       )}
 
@@ -440,6 +442,7 @@ export function Sidebar({
         />
       )}
       {activeModal === "CREATE_BROADCAST_CHANNEL" && <CreateBroadcastChannelModal onClose={closeModal} />}
+      {activeModal === "DISCOVER_GROUPS" && <GroupDiscoveryModal onClose={closeModal} />}
       {showProfile && currentUser && (
         <ProfileModal
           user={currentUser}

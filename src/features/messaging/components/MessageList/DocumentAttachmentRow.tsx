@@ -26,6 +26,7 @@ interface DocumentAttachmentRowProps {
   isCompact: boolean;
   isGrouped: boolean;
   onDownload: DocumentAction;
+  allowDownload?: boolean;
 }
 
 function getAttachmentExtensionBadge(attachment: Attachment | null, lowercase: boolean) {
@@ -151,6 +152,7 @@ export function DocumentAttachmentRow({
   isCompact,
   isGrouped,
   onDownload,
+  allowDownload = true,
 }: DocumentAttachmentRowProps) {
   const [downloadState, setDownloadState] = useState<"not-downloaded" | "downloading" | "downloaded" | "failed">("not-downloaded");
   const [loadedBytes, setLoadedBytes] = useState(0);
@@ -336,14 +338,14 @@ export function DocumentAttachmentRow({
             </span>
           ) : null}
         </div>
-        <button
+        {allowDownload && <button
           type="button"
           aria-label={actionLabel}
           title={actionLabel}
           onClick={handleDownloadClick}
           className="absolute inset-0 z-[1] h-[54px] w-[54px] cursor-pointer rounded-[6px] bg-transparent p-0"
           data-testid="message-file-action"
-        />
+        />}
       </div>
       <div
         className={isCompact

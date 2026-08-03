@@ -14,6 +14,7 @@ interface VideoLightboxProps {
   onDelete?: (() => void) | undefined;
   onForward?: (() => void) | undefined;
   onClose: () => void;
+  allowDownload?: boolean;
 }
 
 export const VideoLightbox: React.FC<VideoLightboxProps> = ({
@@ -24,6 +25,7 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
   onDelete,
   onForward,
   onClose,
+  allowDownload = true,
 }) => {
   const authToken = useAppStore((s) => s.authToken);
   const [viewportSize, setViewportSize] = useState(() => ({
@@ -114,7 +116,7 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
   const handleDownload = async (event: React.MouseEvent) => {
     event.stopPropagation();
     try {
-      const response = await fetch(src, {
+      const response = await fetch(`${src}${src.includes("?") ? "&" : "?"}download=1`, {
         headers: {
           ...clientProtocolHeaders(),
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -176,7 +178,7 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
             <Forward className="h-5 w-5" />
           </button>
         )}
-        <button
+        {allowDownload && <button
           type="button"
           aria-label={isZoomed ? "Fit video to screen" : "Zoom video"}
           className={actionButtonClassName}
@@ -191,7 +193,7 @@ export const VideoLightbox: React.FC<VideoLightboxProps> = ({
           ) : (
             <ZoomIn className="h-5 w-5" />
           )}
-        </button>
+        </button>}
         <button
           type="button"
           aria-label="Download video"

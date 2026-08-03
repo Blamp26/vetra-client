@@ -70,6 +70,7 @@ interface MessageItemProps {
   onToggleSelection: (id: number) => void;
   onToggleReaction: (msgId: number, emoji: string) => void;
   canReact?: boolean;
+  allowDownload?: boolean;
   onLightbox: (
     data:
       | {
@@ -282,6 +283,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   onToggleSelection,
   onToggleReaction,
   canReact = true,
+  allowDownload = true,
   onLightbox,
   onOpenStickerPack,
   onOpenForwardedSender,
@@ -1160,6 +1162,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
                     isOwn={isOwn}
                     isCompact
                     isGrouped
+                    allowDownload={allowDownload}
                       onDownload={(options) =>
                         handleAttachmentAction(
                           currentAttachment.kind === "video"
@@ -1202,6 +1205,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
           isOwn={isOwn}
           isCompact={isSingleDocumentAttachment}
           isGrouped={false}
+          allowDownload={allowDownload}
             onDownload={(options) =>
               handleAttachmentAction(
                 attachment?.kind === "video" ? "open" : "download",

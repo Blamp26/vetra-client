@@ -6,7 +6,7 @@ import { Theme } from "@/themes";
 import { storage, STORAGE_KEYS } from "@/shared/utils/storage";
 import { sameActiveChat } from "@/shared/utils/chatRoutes";
 
-export type ModalType = "CREATE_PICKER" | "CREATE_SERVER" | "CREATE_ROOM" | "CREATE_BROADCAST_CHANNEL";
+export type ModalType = "CREATE_PICKER" | "CREATE_SERVER" | "CREATE_ROOM" | "CREATE_BROADCAST_CHANNEL" | "DISCOVER_GROUPS";
 
 export interface GroupSurfaceState {
   roomId: number;

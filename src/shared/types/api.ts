@@ -270,6 +270,10 @@ export interface RoomPreview {
   avatar_media_file_id?: string | null;
   avatar_url?: string | null;
   kind?: string;
+  public_username?: string | null;
+  visibility?: "private" | "public";
+  history_policy?: "visible" | "hidden";
+  content_protection_enabled?: boolean;
   created_by: number;
   created_by_public_id?: string | null;
   server_id: number | null;
