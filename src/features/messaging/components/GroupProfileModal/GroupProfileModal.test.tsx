@@ -148,10 +148,15 @@ describe("GroupProfileModal", () => {
     governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
     render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Add member" }));
+    const dialogs = screen.getAllByRole("dialog", { hidden: true });
+    expect(dialogs).toHaveLength(2);
+    expect(dialogs.find((dialog) => dialog.getAttribute("aria-hidden") === "true")).toHaveStyle({ pointerEvents: "none" });
+    expect(screen.getByRole("dialog", { name: "Add member" })).not.toHaveAttribute("aria-hidden");
     fireEvent.change(screen.getByRole("textbox", { name: "Search users to add" }), { target: { value: "new" } });
     fireEvent.click(await screen.findByRole("button", { name: /New User/ }));
     await waitFor(() => expect(addMember).toHaveBeenCalledWith("room-seven", 9));
     expect(governanceMembers.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
   });
 
   it("delegates Manage without mounting a second dialog owner", async () => {

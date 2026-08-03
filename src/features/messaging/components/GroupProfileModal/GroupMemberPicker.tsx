@@ -1,12 +1,14 @@
 import { useEffect, useId, useState } from "react";
-import { Search, UserPlus, X } from "lucide-react";
+import { Search, UserPlus } from "lucide-react";
 import { authApi } from "@/api/auth";
 import { roomsApi } from "@/api/rooms";
-import { Avatar } from "@/shared/components/Avatar";
 import { Dialog } from "@/shared/components/Dialog";
-import { IconButton } from "@/shared/components/IconButton";
 import { TextInput } from "@/shared/components/Field";
 import type { ResourceRef } from "@/shared/types";
+import {
+  GroupManagementHeader,
+  GroupManagementPersonRow,
+} from "../GroupManagement/GroupManagementLayout";
 
 interface GroupMemberPickerProps {
   roomRef: ResourceRef;
@@ -64,36 +66,55 @@ export function GroupMemberPicker({ roomRef, existingMemberIds, onAdded, onClose
       setAddingId(null);
     }
   };
+  const availableResults = results.filter((user) => !existingMemberIds.has(user.id));
+  const normalizedQuery = query.trim();
 
   return (
-    <Dialog open onClose={onClose} labelledBy={titleId} className="w-full max-w-[360px] rounded-xl border border-border bg-card p-0 shadow-xl">
-      <div className="flex max-h-[min(560px,calc(100vh-32px))] flex-col">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 id={titleId} className="text-base font-semibold">Add member</h2>
-          <IconButton label="Close add member" size="compact" onClick={onClose}><X className="h-4 w-4" aria-hidden="true" /></IconButton>
-        </div>
-        <div className="p-4">
+    <Dialog
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      className="flex w-full max-w-[360px] max-h-[calc(100dvh-32px)] min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-0 shadow-xl"
+    >
+        <GroupManagementHeader
+          title="Add member"
+          titleId={titleId}
+          closeLabel="Close add member"
+          onClose={onClose}
+        />
+        <div className="shrink-0 border-b border-border px-5 py-3" data-testid="group-member-picker-search">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <TextInput aria-label="Search users to add" placeholder="Search users" value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 w-full pl-9" />
           </div>
-          {loading && <p className="py-5 text-center text-sm text-muted-foreground" role="status">Searching…</p>}
-          {error && <p className="py-3 text-sm text-destructive" role="alert">{error}</p>}
-          {!loading && !error && query.trim().length >= 2 && results.length === 0 && <p className="py-5 text-center text-sm text-muted-foreground" role="status">No users found.</p>}
-          <div className="mt-2 max-h-80 overflow-y-auto">
-            {results.filter((user) => !existingMemberIds.has(user.id)).map((user) => {
+        </div>
+        <div
+          className="min-h-32 flex-1 overflow-x-hidden overflow-y-auto px-5 py-2"
+          data-testid="group-member-picker-results"
+        >
+          {normalizedQuery.length < 2 && <p className="px-3 py-8 text-center text-sm text-muted-foreground" role="status">Enter at least 2 characters to search.</p>}
+          {loading && <p className="px-3 py-8 text-center text-sm text-muted-foreground" role="status">Searching…</p>}
+          {error && <p className="px-3 py-6 text-center text-sm text-destructive" role="alert">{error}</p>}
+          {!loading && !error && normalizedQuery.length >= 2 && availableResults.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground" role="status">No users found.</p>}
+          {!loading && !error && availableResults.length > 0 && (
+            <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background">
+            {availableResults.map((user) => {
               const name = user.display_name || user.username;
               return (
-                <button key={user.id} type="button" className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-accent disabled:opacity-60" disabled={addingId !== null} onClick={() => void addMember(user.id)}>
-                  <Avatar name={name} src={user.avatar_url ?? undefined} size="small" />
-                  <span className="min-w-0 flex-1 truncate text-sm">{name}</span>
-                  <UserPlus className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                </button>
+                <GroupManagementPersonRow
+                  key={user.id}
+                  name={name}
+                  secondary={`@${user.username}`}
+                  avatarSrc={user.avatar_url}
+                  trailing={<UserPlus className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+                  disabled={addingId !== null}
+                  onClick={() => void addMember(user.id)}
+                />
               );
             })}
+            </div>
+          )}
           </div>
-        </div>
-      </div>
     </Dialog>
   );
 }

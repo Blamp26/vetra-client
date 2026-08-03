@@ -171,6 +171,7 @@ export function GroupManagementSubpage({
 interface GroupManagementPersonRowProps {
   name: string;
   secondary: ReactNode;
+  avatarSrc?: string | null;
   trailing?: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
@@ -179,6 +180,7 @@ interface GroupManagementPersonRowProps {
 export function GroupManagementPersonRow({
   name,
   secondary,
+  avatarSrc,
   trailing,
   onClick,
   disabled = false,
@@ -186,7 +188,7 @@ export function GroupManagementPersonRow({
   const content = (
     <>
       <div aria-hidden="true" className="shrink-0">
-        <Avatar name={name} size="large" className="h-10 w-10 rounded-full" />
+        <Avatar name={name} src={avatarSrc} size="large" className="h-10 w-10 rounded-full" />
       </div>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{name}</span>
