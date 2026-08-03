@@ -32,6 +32,7 @@ export function GroupProfileModal({
 }: GroupProfileModalProps) {
   const titleId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
+  const addMemberButtonRef = useRef<HTMLButtonElement>(null);
   const requestVersion = useRef(0);
   const [members, setMembers] = useState<GovernanceMember[]>([]);
   const [query, setQuery] = useState("");
@@ -41,31 +42,37 @@ export function GroupProfileModal({
   const [governanceLoading, setGovernanceLoading] = useState(true);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
 
-  const loadMembers = () => {
+  const closeMemberPicker = () => {
+    setAddMemberOpen(false);
+    window.setTimeout(() => addMemberButtonRef.current?.focus(), 0);
+  };
+
+  const loadMembers = async (): Promise<GovernanceMember[]> => {
     const version = ++requestVersion.current;
     setLoading(true);
     setError(null);
-    void roomsApi
-      .governanceMembers(roomRef(room) ?? room.id)
-      .then((nextMembers) => {
-        if (version !== requestVersion.current) return;
+    try {
+      const nextMembers = await roomsApi.governanceMembers(roomRef(room) ?? room.id);
+      if (version === requestVersion.current) {
         setMembers(nextMembers);
-      })
-      .catch((reason: unknown) => {
-        if (version !== requestVersion.current) return;
+      }
+      return nextMembers;
+    } catch (reason: unknown) {
+      if (version === requestVersion.current) {
         setError(
           reason instanceof Error
             ? reason.message
             : "Could not load group members.",
         );
-      })
-      .finally(() => {
-        if (version === requestVersion.current) setLoading(false);
-      });
+      }
+      throw reason;
+    } finally {
+      if (version === requestVersion.current) setLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadMembers();
+    void loadMembers().catch(() => undefined);
     return () => {
       requestVersion.current += 1;
     };
@@ -155,7 +162,7 @@ export function GroupProfileModal({
           <div className="shrink-0 border-b border-border bg-muted/30">
             <div className="flex min-h-11 items-center justify-between gap-2 px-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <span className="flex items-center gap-2"><Users className="h-4 w-4" aria-hidden="true" /> Members <span className="font-normal normal-case">({memberCount})</span></span>
-              {canAddMember && <IconButton label="Add member" size="compact" onClick={() => setAddMemberOpen(true)}><UserPlus className="h-4 w-4" aria-hidden="true" /></IconButton>}
+              {canAddMember && <IconButton ref={addMemberButtonRef} label="Add member" size="compact" onClick={() => setAddMemberOpen(true)}><UserPlus className="h-4 w-4" aria-hidden="true" /></IconButton>}
             </div>
             <div className="relative px-5 pb-3">
               <Search className="pointer-events-none absolute left-8 top-[18px] h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -180,7 +187,7 @@ export function GroupProfileModal({
             <div className="flex flex-col items-center gap-3 px-5 py-8 text-center" role="alert">
               <AlertCircle className="h-5 w-5 text-destructive" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">{error}</p>
-              <button type="button" className="text-sm font-medium text-primary hover:underline" onClick={loadMembers}>
+              <button type="button" className="text-sm font-medium text-primary hover:underline" onClick={() => void loadMembers().catch(() => undefined)}>
                 Retry
               </button>
             </div>
@@ -209,7 +216,7 @@ export function GroupProfileModal({
           </GroupManagementScrollBody>
         </section>
     </GroupManagementFrame>
-    {addMemberOpen && <GroupMemberPicker roomRef={roomRef(room) ?? room.id} existingMemberIds={new Set(members.map((member) => member.id))} onAdded={loadMembers} onClose={() => setAddMemberOpen(false)} />}
+    {addMemberOpen && <GroupMemberPicker roomRef={roomRef(room) ?? room.id} existingMemberIds={new Set(members.map((member) => member.id))} onMembershipRefresh={loadMembers} onClose={closeMemberPicker} />}
     </>
   );
 }

@@ -143,7 +143,7 @@ describe("GroupProfileModal", () => {
     expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
   });
 
-  it("adds a user through the real search and room member APIs, then refreshes members", async () => {
+  it("opens the nested multi-select picker, keeps the profile mounted and inert, then refreshes after explicit Add", async () => {
     searchUsers.mockResolvedValue({ users: [{ id: 9, username: "new-user", display_name: "New User", avatar_url: null, bio: null, status: "offline", last_seen_at: null }], servers: [] });
     governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
     render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
@@ -151,12 +151,26 @@ describe("GroupProfileModal", () => {
     const dialogs = screen.getAllByRole("dialog", { hidden: true });
     expect(dialogs).toHaveLength(2);
     expect(dialogs.find((dialog) => dialog.getAttribute("aria-hidden") === "true")).toHaveStyle({ pointerEvents: "none" });
-    expect(screen.getByRole("dialog", { name: "Add member" })).not.toHaveAttribute("aria-hidden");
+    expect(screen.getByRole("dialog", { name: "Add members" })).not.toHaveAttribute("aria-hidden");
     fireEvent.change(screen.getByRole("textbox", { name: "Search users to add" }), { target: { value: "new" } });
     fireEvent.click(await screen.findByRole("button", { name: /New User/ }));
+    expect(addMember).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => expect(addMember).toHaveBeenCalledWith("room-seven", 9));
     expect(governanceMembers.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("cancels the nested picker without membership mutation and restores focus to Add member", async () => {
+    governance.mockResolvedValue({ role: "owner", capabilities: [], defaults: [], members: [...members] });
+    render(<GroupProfileModal room={room} onClose={vi.fn()} onSearchMessages={vi.fn()} />);
+    const opener = await screen.findByRole("button", { name: "Add member" });
+    fireEvent.click(opener);
+    expect(screen.getByRole("textbox", { name: "Search users to add" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(opener).toHaveFocus());
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(addMember).not.toHaveBeenCalled();
   });
 
   it("delegates Manage without mounting a second dialog owner", async () => {
