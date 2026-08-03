@@ -4,7 +4,9 @@ export const ADMIN_PERMISSION_KEYS = [
   "remove_members",
   "invite_members",
   "pin_messages",
-  "manage_member_permissions",
+  "manage_group_calls",
+  "edit_member_tags",
+  "add_new_admins",
 ] as const;
 
 export const MEMBER_PERMISSION_KEYS = [
@@ -27,6 +29,9 @@ const PERMISSION_LABELS: Record<string, string> = {
   remove_members: "Remove members",
   invite_members: "Invite members",
   pin_messages: "Pin messages",
+  manage_group_calls: "Manage group calls",
+  edit_member_tags: "Edit member tags",
+  add_new_admins: "Add new administrators",
   manage_member_permissions: "Manage member permissions",
   send_messages: "Send messages",
   send_photos: "Send photos",

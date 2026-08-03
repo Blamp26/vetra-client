@@ -50,6 +50,7 @@ const member = {
   deny_permissions: [],
   effective_permissions: ["send_messages"],
   can_manage: true,
+  can_promote: true,
 };
 
 const admin = {
@@ -61,11 +62,23 @@ const admin = {
   allow_permissions: [],
   deny_permissions: [],
   effective_permissions: ["change_group_info"],
+  can_edit_admin: true,
+  can_demote: true,
 };
 
 const governance = () => ({
   role: "owner" as const,
   capabilities: ["manage_member_permissions", "remove_members"],
+  delegable_admin_permissions: [
+    "change_group_info",
+    "delete_messages",
+    "remove_members",
+    "invite_members",
+    "pin_messages",
+    "manage_group_calls",
+    "edit_member_tags",
+    "add_new_admins",
+  ],
   defaults: ["send_messages"],
   members: [
     {
@@ -254,8 +267,17 @@ describe("GroupSettingsModal member governance", () => {
     fireEvent.click(within(demoteDialog).getByRole("button", { name: "Demote" }));
     await waitFor(() => expect(roomsApiMock.demote).toHaveBeenCalledWith(7, 3));
 
-    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
-    await waitFor(() => expect(roomsApiMock.promote).toHaveBeenCalledWith(7, 2));
+    let promoteButtons = screen.getAllByRole("button", { name: "Promote" });
+    fireEvent.click(promoteButtons[promoteButtons.length - 1]);
+    expect(screen.getByLabelText("Manage group calls")).toBeInTheDocument();
+    expect(screen.getByLabelText("Edit member tags")).toBeInTheDocument();
+    expect(screen.getByLabelText("Add new administrators")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Add new administrators"));
+    promoteButtons = screen.getAllByRole("button", { name: "Promote" });
+    fireEvent.click(promoteButtons[promoteButtons.length - 1]);
+    await waitFor(() =>
+      expect(roomsApiMock.promote).toHaveBeenCalledWith(7, 2, ["add_new_admins"]),
+    );
   });
 
   it("keeps member selection, overrides, removal, and default permissions on the same APIs", async () => {
@@ -290,6 +312,64 @@ describe("GroupSettingsModal member governance", () => {
     const saveDefaults = screen.getByRole("button", { name: "Save defaults" });
     expect(screen.getByTestId("group-permissions-footer")).toContainElement(saveDefaults);
     expect(screen.getByTestId("group-settings-scroll-body")).not.toContainElement(saveDefaults);
+  });
+
+  it("uses server target capabilities for delegated administration", async () => {
+    roomsApiMock.governance.mockResolvedValue({
+      role: "admin",
+      capabilities: ["change_group_info", "add_new_admins"],
+      delegable_admin_permissions: ["change_group_info", "add_new_admins"],
+      defaults: [],
+      members: [
+        { ...governance().members[0], can_edit_admin: false, can_demote: false },
+        { ...admin, id: 3, display_name: "Descendant", can_edit_admin: true, can_demote: true },
+        { ...admin, id: 4, display_name: "Sibling", can_edit_admin: false, can_demote: false },
+        { ...member, can_promote: true },
+      ],
+    });
+
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+    fireEvent.click(screen.getByRole("button", { name: /^Administrators/ }));
+
+    const descendant = screen.getByText("Descendant").closest<HTMLElement>('[data-group-management-person-row]')!;
+    const sibling = screen.getByText("Sibling").closest<HTMLElement>('[data-group-management-person-row]')!;
+    expect(within(descendant).getByRole("button", { name: "Edit rights" })).toBeEnabled();
+    expect(within(sibling).getByRole("button", { name: "Edit rights" })).toBeDisabled();
+    expect(within(sibling).getByRole("button", { name: "Demote" })).toBeDisabled();
+
+    fireEvent.click(within(descendant).getByRole("button", { name: "Edit rights" }));
+    expect(screen.getByLabelText("Change group info")).toBeEnabled();
+    expect(screen.getByLabelText("Add new administrators")).toBeEnabled();
+    expect(screen.getByLabelText("Delete messages")).toBeDisabled();
+    expect(screen.queryByText("Custom title")).toBeNull();
+    expect(screen.queryByText("Transfer ownership")).toBeNull();
+  });
+
+  it("blocks duplicate administrator submissions and reconciles stale failures", async () => {
+    let rejectMutation!: (reason: Error) => void;
+    roomsApiMock.updateAdminRights.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectMutation = reject;
+      }),
+    );
+
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+    fireEvent.click(screen.getByRole("button", { name: /^Administrators/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit rights" }));
+    const save = screen.getByRole("button", { name: "Save rights" });
+    fireEvent.click(save);
+    fireEvent.click(save);
+    expect(roomsApiMock.updateAdminRights).toHaveBeenCalledTimes(1);
+
+    const loadsBeforeFailure = roomsApiMock.governance.mock.calls.length;
+    rejectMutation(new Error("Authorization changed"));
+    await waitFor(() =>
+      expect(roomsApiMock.governance.mock.calls.length).toBeGreaterThan(loadsBeforeFailure),
+    );
+    expect(screen.queryByRole("button", { name: "Save rights" })).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent("Authorization changed");
   });
 
   it("shows an owner-only membership consistently without exposing invalid owner actions", async () => {

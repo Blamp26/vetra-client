@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronRight, KeyRound, LogOut, Shield, Trash2, Users } from "lucide-react";
 import {
   roomsApi,
@@ -56,6 +56,7 @@ export function GroupSettingsModal({
   const [adminRights, setAdminRights] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const mutationPending = useRef(false);
   const [confirmation, setConfirmation] = useState<GroupConfirmation | null>(null);
   const [memberQuery, setMemberQuery] = useState("");
   const [overrideDraft, setOverrideDraft] = useState<
@@ -185,26 +186,35 @@ export function GroupSettingsModal({
       setBusy(false);
     }
   };
-  const promote = async (m: GovernanceMember) => {
-    setBusy(true);
-    try {
-      await roomsApi.promote(ref, m.id);
-      await reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Promotion failed.");
-    } finally {
-      setBusy(false);
-    }
+  const beginPromotion = (member: GovernanceMember) => {
+    setSelected(member);
+    setAdminRights([]);
   };
   const saveAdmin = async () => {
-    if (!selected) return;
+    if (!selected || mutationPending.current) return;
+    mutationPending.current = true;
     setBusy(true);
+    setError(null);
     try {
-      await roomsApi.updateAdminRights(ref, selected.id, adminRights);
+      if (selected.role === "member") {
+        await roomsApi.promote(ref, selected.id, adminRights);
+      } else {
+        await roomsApi.updateAdminRights(ref, selected.id, adminRights);
+      }
       await reload();
+      setSelected(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Administrator update failed.");
+      await reload();
+      setSelected(null);
+      setError(
+        e instanceof Error
+          ? e.message
+          : selected.role === "member"
+            ? "Promotion failed. Group authority was refreshed."
+            : "Administrator update failed. Group authority was refreshed.",
+      );
     } finally {
+      mutationPending.current = false;
       setBusy(false);
     }
   };
@@ -333,8 +343,8 @@ export function GroupSettingsModal({
                       secondary="Administrator"
                       trailing={
                         <>
-                          <Button type="button" variant="ghost" size="compact" className="px-2" disabled={state.role !== "owner" || busy} onClick={() => { setSelected(m); setAdminRights(m.admin_permissions); }}>Edit rights</Button>
-                          <Button type="button" variant="ghost" size="compact" className="px-2 text-destructive" disabled={state.role !== "owner" || busy} onClick={() => setConfirmation({ type: "demote", member: m })}>Demote</Button>
+                          <Button type="button" variant="ghost" size="compact" className="px-2" disabled={!(m.can_edit_admin ?? state.role === "owner") || busy} onClick={() => { setSelected(m); setAdminRights(m.admin_permissions); }}>Edit rights</Button>
+                          <Button type="button" variant="ghost" size="compact" className="px-2 text-destructive" disabled={!(m.can_demote ?? state.role === "owner") || busy} onClick={() => setConfirmation({ type: "demote", member: m })}>Demote</Button>
                         </>
                       }
                     />
@@ -345,7 +355,7 @@ export function GroupSettingsModal({
                     <h3 id={`${titleId}-eligible-members`} className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Members</h3>
                     <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background">
                       {ordinary.map((m) => (
-                        <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary="Member" trailing={<Button type="button" variant="ghost" size="compact" className="px-2 text-primary" disabled={state.role !== "owner" || busy} onClick={() => void promote(m)}>Promote</Button>} />
+                        <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary="Member" trailing={(m.can_promote ?? state.role === "owner") ? <Button type="button" variant="ghost" size="compact" className="px-2 text-primary" disabled={busy} onClick={() => beginPromotion(m)}>Promote</Button> : undefined} />
                       ))}
                     </div>
                   </section>
@@ -359,12 +369,12 @@ export function GroupSettingsModal({
                     <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
                       {ADMIN_PERMISSION_KEYS.map((right) => {
                         const controlId = `${titleId}-admin-${right}`;
-                        const disabled = state.role !== "owner" || busy;
+                        const disabled = busy || !(state.delegable_admin_permissions ?? (state.role === "owner" ? [...ADMIN_PERMISSION_KEYS] : [])).includes(right);
                         return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={disabled} control={<GroupManagementBooleanControl id={controlId} disabled={disabled} checked={adminRights.includes(right)} onChange={() => setAdminRights(toggle(adminRights, right))} />} />;
                       })}
                     </div>
                     <div className="mt-3 flex justify-end">
-                      <Button type="button" variant="primary" size="compact" disabled={busy || state.role !== "owner"} onClick={() => void saveAdmin()}>Save rights</Button>
+                      <Button type="button" variant="primary" size="compact" disabled={busy || (selected.role === "member" ? !(selected.can_promote ?? state.role === "owner") : !(selected.can_edit_admin ?? state.role === "owner"))} onClick={() => void saveAdmin()}>{selected.role === "member" ? "Promote" : "Save rights"}</Button>
                     </div>
                   </section>
                 )}

@@ -76,10 +76,11 @@ export const roomsApi = {
   promote(
     roomRef: ResourceRef,
     userRef: ResourceRef,
+    permissions: string[] = [],
   ): Promise<GovernanceMember> {
     return post<GovernanceMember>(
       `/rooms/${roomRef}/governance/members/${userRef}/promote`,
-      {},
+      { permissions },
     );
   },
   updateAdminRights(
@@ -133,10 +134,14 @@ export interface GovernanceMember {
   deny_permissions: string[];
   effective_permissions?: string[];
   can_manage?: boolean;
+  can_edit_admin?: boolean;
+  can_demote?: boolean;
+  can_promote?: boolean;
 }
 export interface GroupGovernance {
   role: "owner" | "admin" | "member";
   capabilities: string[];
+  delegable_admin_permissions?: string[];
   defaults: string[];
   members: GovernanceMember[];
 }
