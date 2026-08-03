@@ -1,5 +1,5 @@
 import { forwardRef, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, Check, X } from "lucide-react";
 import { Avatar } from "@/shared/components/Avatar";
 import { Dialog } from "@/shared/components/Dialog";
 import { IconButton } from "@/shared/components/IconButton";
@@ -15,6 +15,7 @@ interface GroupManagementFrameProps {
   inert?: boolean;
   initialFocusRef?: RefObject<HTMLElement>;
   overlayStyle?: CSSProperties;
+  contentClassName?: string;
 }
 
 const widthClasses: Record<GroupManagementWidth, string> = {
@@ -30,6 +31,7 @@ export function GroupManagementFrame({
   inert = false,
   initialFocusRef,
   overlayStyle,
+  contentClassName,
 }: GroupManagementFrameProps) {
   return (
     <Dialog
@@ -46,7 +48,10 @@ export function GroupManagementFrame({
       )}
     >
       <div
-        className="flex max-h-[calc(100dvh-96px)] min-h-0 flex-col overflow-hidden"
+        className={cn(
+          "flex max-h-[calc(100dvh-96px)] min-h-0 flex-col overflow-hidden",
+          contentClassName,
+        )}
         data-group-management-frame={width}
         data-testid="group-management-frame"
       >
@@ -260,6 +265,45 @@ export function GroupManagementControlRow({
     <div className={classes} data-group-management-control-row="static">
       {content}
     </div>
+  );
+}
+
+interface GroupManagementBooleanControlProps {
+  id: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: React.ChangeEventHandler<HTMLInputElement>;
+}
+
+export function GroupManagementBooleanControl({
+  id,
+  checked,
+  disabled = false,
+  onChange,
+}: GroupManagementBooleanControlProps) {
+  return (
+    <span className="relative inline-flex h-5 w-5 shrink-0">
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "grid h-5 w-5 place-items-center rounded border border-border bg-background text-primary-foreground transition-colors",
+          "peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background",
+          checked && "border-primary bg-primary",
+          disabled && "opacity-60",
+        )}
+        data-group-management-boolean-control={checked ? "checked" : "unchecked"}
+      >
+        {checked && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+      </span>
+    </span>
   );
 }
 

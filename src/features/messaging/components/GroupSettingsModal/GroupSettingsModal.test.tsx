@@ -162,6 +162,7 @@ describe("GroupSettingsModal member governance", () => {
   it("uses a compact vertical overview and returns from an internal page with Back", async () => {
     render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Edit group")).toBeTruthy());
+    expect(screen.getByRole("heading", { name: "Edit group" })).toBeInTheDocument();
     expect(screen.getByTestId("group-management-frame")).toHaveAttribute("data-group-management-frame", "settings");
     expect(screen.getByTestId("dialog-panel")).toHaveClass("max-w-[366px]", "overflow-hidden");
     expect(screen.getByTestId("group-settings-scroll-body")).toHaveClass("overflow-y-auto", "min-h-0");
@@ -185,9 +186,15 @@ describe("GroupSettingsModal member governance", () => {
     expect(screen.queryByRole("button", { name: "Edit group basic information" })).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
     expect(screen.queryByRole("button", { name: "Add member" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Administrators2$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Leave group" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete group" })).toBeInTheDocument();
     expect(screen.getByTestId("group-settings-footer")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
+    expect(screen.getByRole("heading", { name: "Members" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back to group management" })).toBeTruthy();
+    expect(screen.getByTestId("group-management-frame")).toHaveClass("min-h-[min(520px,calc(100dvh-96px))]");
+    expect(screen.getByTestId("group-management-frame").querySelectorAll(".overflow-y-auto")).toHaveLength(1);
     expect(screen.queryByLabelText("Group name")).toBeNull();
     expect(screen.queryByTestId("group-settings-footer")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
@@ -196,9 +203,12 @@ describe("GroupSettingsModal member governance", () => {
     expect(screen.getByRole("navigation", { name: "Group management sections" })).toBeTruthy();
     expect(screen.getByTestId("group-settings-footer")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Member permissions" }));
+    expect(screen.getByRole("heading", { name: "Member permissions" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Group name")).toBeNull();
     expect(screen.queryByTestId("group-settings-footer")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    const saveDefaults = screen.getByRole("button", { name: "Save defaults" });
+    expect(screen.getByTestId("group-permissions-footer")).toContainElement(saveDefaults);
+    expect(screen.getByTestId("group-settings-scroll-body")).not.toContainElement(saveDefaults);
   });
 
   it("shows centralized permission labels while preserving wire keys in API calls", async () => {
@@ -209,9 +219,10 @@ describe("GroupSettingsModal member governance", () => {
     expect(screen.getByText("Send photos")).toBeTruthy();
     expect(screen.queryByText("send_messages")).toBeNull();
     expect(screen.queryByText("send_photos")).toBeNull();
+    fireEvent.click(screen.getByText("Send photos"));
     fireEvent.click(screen.getByText("Save defaults"));
     await waitFor(() =>
-      expect(roomsApiMock.updateDefaults).toHaveBeenCalledWith(7, ["send_messages"]),
+      expect(roomsApiMock.updateDefaults).toHaveBeenCalledWith(7, ["send_messages", "send_photos"]),
     );
   });
 
@@ -220,6 +231,10 @@ describe("GroupSettingsModal member governance", () => {
     await screen.findByText("Edit group");
 
     fireEvent.click(screen.getByRole("button", { name: /^Administrators/ }));
+    expect(screen.getByRole("heading", { name: "Administrators" })).toBeInTheDocument();
+    expect(screen.getAllByText("Administrators")).toHaveLength(1);
+    expect(screen.getByTestId("group-management-frame")).toHaveClass("min-h-[min(520px,calc(100dvh-96px))]");
+    expect(screen.getByTestId("group-management-frame").querySelectorAll(".overflow-y-auto")).toHaveLength(1);
     expect(screen.getByTestId("group-admins-subpage")).toHaveClass("px-5", "pt-4", "pb-5");
     expect(screen.getByRole("button", { name: "Edit rights" }).closest('[data-group-management-person-row]')).toHaveClass("min-h-14", "gap-3");
     expect(screen.getAllByText("Owner").some((node) => node.closest('[data-group-management-person-row]'))).toBe(true);
@@ -227,6 +242,8 @@ describe("GroupSettingsModal member governance", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Edit rights" }));
     const adminRight = screen.getByLabelText("Change group info");
+    expect(adminRight).toHaveClass("sr-only", "peer");
+    expect(adminRight.parentElement?.querySelector("[data-group-management-boolean-control]")).toBeInTheDocument();
     expect(adminRight.closest('[data-group-management-control-row]')).toHaveClass("min-h-11");
     fireEvent.click(screen.getByRole("button", { name: "Save rights" }));
     await waitFor(() => expect(roomsApiMock.updateAdminRights).toHaveBeenCalledWith(7, 3, ["change_group_info"]));
@@ -246,6 +263,7 @@ describe("GroupSettingsModal member governance", () => {
     await screen.findByText("Edit group");
 
     fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
+    expect(screen.getByRole("region", { name: "Group members" }).querySelector('[data-group-management-person-row="static"]')).toHaveTextContent("Owner");
     expect(screen.getByTestId("group-members-subpage")).toHaveClass("px-5", "pt-4", "pb-5");
     expect(screen.getByPlaceholderText("Search members")).toHaveClass("vt-input", "vt-input--compact");
     const memberRow = screen.getByRole("button", { name: "Member 1 effective permissions" });
@@ -263,9 +281,29 @@ describe("GroupSettingsModal member governance", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
     fireEvent.click(screen.getByRole("button", { name: "Member permissions" }));
     expect(screen.getByTestId("group-permissions-subpage")).toHaveClass("px-5", "pt-4", "pb-5");
-    expect(screen.getByLabelText("Send messages").closest('[data-group-management-control-row]')).toHaveClass("min-h-11");
+    const defaultPermission = screen.getByLabelText("Send messages");
+    expect(defaultPermission).toHaveClass("sr-only", "peer");
+    expect(defaultPermission).toBeChecked();
+    expect(defaultPermission.closest('[data-group-management-control-row]')).toHaveClass("min-h-11");
     expect(screen.queryByText(/Topics|Stories|QR|Slow mode|Auto-delete/i)).not.toBeInTheDocument();
     expect(screen.queryByTestId("group-settings-footer")).not.toBeInTheDocument();
+    const saveDefaults = screen.getByRole("button", { name: "Save defaults" });
+    expect(screen.getByTestId("group-permissions-footer")).toContainElement(saveDefaults);
+    expect(screen.getByTestId("group-settings-scroll-body")).not.toContainElement(saveDefaults);
+  });
+
+  it("shows an owner-only membership consistently without exposing invalid owner actions", async () => {
+    const owner = governance().members[0];
+    roomsApiMock.governance.mockResolvedValue({ ...governance(), members: [owner] });
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+
+    expect(screen.getByRole("button", { name: /^Administrators1$/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Members1$/ }));
+    const ownerRow = screen.getByRole("region", { name: "Group members" }).querySelector('[data-group-management-person-row]');
+    expect(ownerRow).toHaveAttribute("data-group-management-person-row", "static");
+    expect(screen.queryByRole("button", { name: /Owner/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Promote|Remove member|Save restrictions|Clear override/ })).not.toBeInTheDocument();
   });
 
   it("keeps administrator context mounted when demotion is cancelled and prevents duplicate confirmation", async () => {

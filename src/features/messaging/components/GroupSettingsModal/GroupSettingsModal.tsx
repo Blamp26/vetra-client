@@ -23,6 +23,7 @@ import {
 } from "../GroupManagement/permissionLabels";
 import {
   GroupManagementFooter,
+  GroupManagementBooleanControl,
   GroupManagementControlRow,
   GroupManagementFrame,
   GroupManagementHeader,
@@ -116,6 +117,10 @@ export function GroupSettingsModal({
   }, [memberQuery, room.id, ref]);
   const admins = useMemo(
     () => state?.members.filter((m) => m.role === "admin") ?? [],
+    [state],
+  );
+  const administrators = useMemo(
+    () => state?.members.filter((m) => m.role === "owner" || m.role === "admin") ?? [],
     [state],
   );
   const ordinary = useMemo(
@@ -265,12 +270,24 @@ export function GroupSettingsModal({
           ? { title: "Leave group?", message: "You will leave this group and lose access to its messages.", confirmLabel: "Leave" }
           : { title: "Delete group?", message: "This group and its messages will be permanently deleted.", confirmLabel: "Delete" }
     : null;
+  const headerTitle = view === "overview"
+    ? "Edit group"
+    : view === "admins"
+      ? "Administrators"
+      : view === "members"
+        ? "Members"
+        : "Member permissions";
   return (
     <>
-    <GroupManagementFrame width="settings" onClose={onClose} labelledBy={titleId}>
+    <GroupManagementFrame
+      width="settings"
+      onClose={onClose}
+      labelledBy={titleId}
+      contentClassName={view === "overview" ? undefined : "min-h-[min(520px,calc(100dvh-96px))]"}
+    >
       <div className="contents" data-testid="group-management-dialog">
         <GroupManagementHeader
-          title="Edit group"
+          title={headerTitle}
           titleId={titleId}
           closeLabel="Close edit group"
           onClose={onClose}
@@ -291,23 +308,20 @@ export function GroupSettingsModal({
                 <GroupBasicInfoFields room={room} titleId={titleId} descriptionId={descriptionId} controller={basicInfo} />
                 <GroupManagementSection separated className="p-0" aria-label="Group management navigation">
                 <nav aria-label="Group management sections">
-                  <GroupManagementRow label="Administrators" leading={<Shield className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{admins.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("admins")} />
+                  <GroupManagementRow label="Administrators" leading={<Shield className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{administrators.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("admins")} />
                   <GroupManagementRow label="Members" leading={<Users className="h-4 w-4 text-muted-foreground" />} trailing={<><span>{state.members.length}</span><ChevronRight className="h-4 w-4" aria-hidden="true" /></>} onClick={() => setView("members")} />
                   <GroupManagementRow label="Member permissions" leading={<KeyRound className="h-4 w-4 text-muted-foreground" />} trailing={<ChevronRight className="h-4 w-4" aria-hidden="true" />} onClick={() => setView("permissions")} />
                 </nav>
                 </GroupManagementSection>
                 <GroupManagementSection separated className="p-0" aria-label="Group actions">
-                  <GroupManagementRow label="Leave group" leading={<LogOut className="h-4 w-4" />} onClick={leaveGroup} />
+                  {state.role !== "owner" && <GroupManagementRow label="Leave group" leading={<LogOut className="h-4 w-4" />} onClick={leaveGroup} />}
                   {state.role === "owner" && <GroupManagementRow label="Delete group" leading={<Trash2 className="h-4 w-4" />} tone="destructive" disabled={busy} onClick={deleteGroup} />}
                 </GroupManagementSection>
               </>
             )}
             {view === "admins" && (
               <GroupManagementSubpage data-testid="group-admins-subpage">
-                <div>
-                  <h3 className="text-sm font-semibold">Administrators</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">Manage administrator access and rights.</p>
-                </div>
+                <p className="text-xs text-muted-foreground">Manage administrator access and rights.</p>
                 <section className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background" aria-label="Current administrators">
                   {state.members.filter((m) => m.role === "owner").map((m) => (
                     <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary="Owner" />
@@ -346,7 +360,7 @@ export function GroupSettingsModal({
                       {ADMIN_PERMISSION_KEYS.map((right) => {
                         const controlId = `${titleId}-admin-${right}`;
                         const disabled = state.role !== "owner" || busy;
-                        return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={disabled} control={<input id={controlId} type="checkbox" disabled={disabled} checked={adminRights.includes(right)} onChange={() => setAdminRights(toggle(adminRights, right))} />} />;
+                        return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={disabled} control={<GroupManagementBooleanControl id={controlId} disabled={disabled} checked={adminRights.includes(right)} onChange={() => setAdminRights(toggle(adminRights, right))} />} />;
                       })}
                     </div>
                     <div className="mt-3 flex justify-end">
@@ -368,7 +382,9 @@ export function GroupSettingsModal({
                   />
                 </label>
                 <section className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background" aria-label="Group members">
-                  {ordinary.map((m) => <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={`${m.effective_permissions?.length ?? 0} effective permissions`} onClick={() => beginMemberEdit(m)} />)}
+                  {state.members.map((m) => m.role === "member"
+                    ? <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={`${m.effective_permissions?.length ?? 0} effective permissions`} onClick={() => beginMemberEdit(m)} />
+                    : <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={m.role === "owner" ? "Owner" : "Administrator"} />)}
                 </section>
                 {selected?.role === "member" && (
                   <section aria-labelledby={`${titleId}-member-restrictions`}>
@@ -401,12 +417,9 @@ export function GroupSettingsModal({
                 <section className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border" aria-label="Default member permissions">
                   {MEMBER_PERMISSION_KEYS.map((right) => {
                     const controlId = `${titleId}-default-${right}`;
-                    return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={busy} control={<input id={controlId} type="checkbox" disabled={busy} checked={defaults.includes(right)} onChange={() => setDefaults(toggle(defaults, right))} />} />;
+                    return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={busy} control={<GroupManagementBooleanControl id={controlId} disabled={busy} checked={defaults.includes(right)} onChange={() => setDefaults(toggle(defaults, right))} />} />;
                   })}
                 </section>
-                <div className="flex justify-end">
-                  <Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void saveDefaults()}>Save defaults</Button>
-                </div>
               </GroupManagementSubpage>
             )}
           </GroupManagementScrollBody>
@@ -417,6 +430,9 @@ export function GroupSettingsModal({
             <Button type="button" variant="ghost" size="compact" className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm" disabled={basicInfo.saving} onClick={onClose}>Cancel</Button>
             <Button type="button" variant="ghost" size="compact" className="!min-h-8 !rounded-md !border-0 !bg-transparent px-2 text-sm text-primary" loading={basicInfo.saving} disabled={basicInfo.saveDisabled} onClick={() => void basicInfo.save()}>Save</Button>
           </div>
+        </GroupManagementFooter>}
+        {state && view === "permissions" && <GroupManagementFooter data-testid="group-permissions-footer">
+          <Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void saveDefaults()}>Save defaults</Button>
         </GroupManagementFooter>}
       </div>
     </GroupManagementFrame>

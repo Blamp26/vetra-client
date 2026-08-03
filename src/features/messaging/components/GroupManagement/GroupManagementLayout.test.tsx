@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
 import {
   GroupManagementFooter,
+  GroupManagementBooleanControl,
   GroupManagementFrame,
   GroupManagementHeader,
   GroupManagementControlRow,
@@ -56,6 +57,24 @@ describe("GroupManagementLayout", () => {
     );
   });
 
+  it("supports a local viewport-safe frame minimum without changing the shared maximum", () => {
+    render(
+      <GroupManagementFrame
+        width="settings"
+        labelledBy="settings-title"
+        onClose={vi.fn()}
+        contentClassName="min-h-[min(520px,calc(100dvh-96px))]"
+      >
+        <GroupManagementHeader title="Members" titleId="settings-title" closeLabel="Close" onClose={vi.fn()} />
+      </GroupManagementFrame>,
+    );
+
+    expect(screen.getByTestId("group-management-frame")).toHaveClass(
+      "min-h-[min(520px,calc(100dvh-96px))]",
+      "max-h-[calc(100dvh-96px)]",
+    );
+  });
+
   it("provides shared inset, person, and control geometry for governance subpages", () => {
     render(
       <GroupManagementSubpage data-testid="subpage">
@@ -67,7 +86,7 @@ describe("GroupManagementLayout", () => {
         <GroupManagementControlRow
           label="Send messages"
           htmlFor="send-messages"
-          control={<input id="send-messages" type="checkbox" />}
+          control={<GroupManagementBooleanControl id="send-messages" checked={false} onChange={vi.fn()} />}
         />
       </GroupManagementSubpage>,
     );
@@ -80,5 +99,28 @@ describe("GroupManagementLayout", () => {
     );
     expect(screen.getByText("Ada Administrator").closest("button")?.querySelector('[data-slot="avatar"]')).toHaveClass("h-10", "w-10");
     expect(screen.getByText("Send messages").closest("label")).toHaveClass("min-h-11", "px-3");
+    expect(screen.getByRole("checkbox", { name: "Send messages" })).toHaveClass("sr-only", "peer");
+    expect(screen.getByTestId("subpage").querySelector('[data-group-management-boolean-control="unchecked"]')).toHaveClass(
+      "border-border",
+      "bg-background",
+      "peer-focus-visible:ring-2",
+    );
+  });
+
+  it("keeps native checkbox and full-row toggle semantics", () => {
+    const onChange = vi.fn();
+    render(
+      <GroupManagementControlRow
+        label="Delete messages"
+        htmlFor="delete-messages"
+        control={<GroupManagementBooleanControl id="delete-messages" checked disabled={false} onChange={onChange} />}
+      />,
+    );
+
+    const checkbox = screen.getByRole("checkbox", { name: "Delete messages" });
+    expect(checkbox).toBeChecked();
+    expect(screen.getByText("Delete messages").closest("label")).toHaveClass("cursor-pointer");
+    fireEvent.click(screen.getByText("Delete messages"));
+    expect(onChange).toHaveBeenCalledOnce();
   });
 });
