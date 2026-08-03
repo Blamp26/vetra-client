@@ -51,6 +51,17 @@ const member = {
   can_manage: true,
 };
 
+const admin = {
+  id: 3,
+  username: "admin",
+  display_name: "Administrator",
+  role: "admin" as const,
+  admin_permissions: ["change_group_info"],
+  allow_permissions: [],
+  deny_permissions: [],
+  effective_permissions: ["change_group_info"],
+};
+
 const governance = () => ({
   role: "owner" as const,
   capabilities: ["manage_member_permissions", "remove_members"],
@@ -66,6 +77,7 @@ const governance = () => ({
       deny_permissions: [],
       effective_permissions: ["send_messages"],
     },
+    admin,
     member,
   ],
 });
@@ -79,6 +91,10 @@ describe("GroupSettingsModal member governance", () => {
     roomsApiMock.updateOverride.mockResolvedValue(member);
     roomsApiMock.clearOverride.mockResolvedValue(undefined);
     roomsApiMock.removeMember.mockResolvedValue(undefined);
+    roomsApiMock.updateDefaults.mockResolvedValue(["send_messages"]);
+    roomsApiMock.promote.mockResolvedValue({ ...member, role: "admin" });
+    roomsApiMock.updateAdminRights.mockResolvedValue(admin);
+    roomsApiMock.demote.mockResolvedValue({ ...admin, role: "member" });
     roomsApiMock.updateProfile.mockResolvedValue({ id: 7, name: "Updated group" });
   });
 
@@ -194,6 +210,57 @@ describe("GroupSettingsModal member governance", () => {
     await waitFor(() =>
       expect(roomsApiMock.updateDefaults).toHaveBeenCalledWith(7, ["send_messages"]),
     );
+  });
+
+  it("normalizes every governance subpage without changing administrator mutations", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Administrators/ }));
+    expect(screen.getByTestId("group-admins-subpage")).toHaveClass("px-5", "pt-4", "pb-5");
+    expect(screen.getByRole("button", { name: "Edit rights" }).closest('[data-group-management-person-row]')).toHaveClass("min-h-14", "gap-3");
+    expect(screen.getAllByText("Owner").some((node) => node.closest('[data-group-management-person-row]'))).toBe(true);
+    expect(screen.getByRole("button", { name: "Promote" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit rights" }));
+    const adminRight = screen.getByLabelText("Change group info");
+    expect(adminRight.closest('[data-group-management-control-row]')).toHaveClass("min-h-11");
+    fireEvent.click(screen.getByRole("button", { name: "Save rights" }));
+    await waitFor(() => expect(roomsApiMock.updateAdminRights).toHaveBeenCalledWith(7, 3, ["change_group_info"]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Demote" }));
+    await waitFor(() => expect(roomsApiMock.demote).toHaveBeenCalledWith(7, 3));
+    expect(confirm).toHaveBeenCalledWith("Demote this administrator?");
+
+    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
+    await waitFor(() => expect(roomsApiMock.promote).toHaveBeenCalledWith(7, 2));
+  });
+
+  it("keeps member selection, overrides, removal, and default permissions on the same APIs", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<GroupSettingsModal room={{ id: 7, name: "Group" } as any} onClose={vi.fn()} />);
+    await screen.findByText("Edit group");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Members/ }));
+    expect(screen.getByTestId("group-members-subpage")).toHaveClass("px-5", "pt-4", "pb-5");
+    expect(screen.getByPlaceholderText("Search members")).toHaveClass("vt-input", "vt-input--compact");
+    const memberRow = screen.getByRole("button", { name: "Member 1 effective permissions" });
+    expect(memberRow).toHaveClass("min-h-14", "px-3");
+    fireEvent.click(memberRow);
+    expect(screen.getByLabelText("Send messages override").closest('[data-group-management-control-row]')).toHaveClass("min-h-11");
+    fireEvent.change(screen.getByLabelText("Send messages override"), { target: { value: "allow" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save restrictions" }));
+    await waitFor(() => expect(roomsApiMock.updateOverride).toHaveBeenCalledWith(7, 2, ["send_messages"], []));
+    fireEvent.click(screen.getByRole("button", { name: "Remove member" }));
+    await waitFor(() => expect(roomsApiMock.removeMember).toHaveBeenCalledWith(7, 2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to group management" }));
+    fireEvent.click(screen.getByRole("button", { name: "Member permissions" }));
+    expect(screen.getByTestId("group-permissions-subpage")).toHaveClass("px-5", "pt-4", "pb-5");
+    expect(screen.getByLabelText("Send messages").closest('[data-group-management-control-row]')).toHaveClass("min-h-11");
+    expect(screen.queryByText(/Topics|Stories|QR|Slow mode|Auto-delete/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("group-settings-footer")).not.toBeInTheDocument();
   });
 
   it("keeps a valid basic-information draft while visiting governance views", async () => {

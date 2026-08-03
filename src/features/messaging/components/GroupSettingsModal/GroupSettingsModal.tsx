@@ -9,6 +9,7 @@ import { roomRef } from "@/shared/utils/refs";
 import type { RoomPreview } from "@/shared/types";
 import { useAppStore, type RootState } from "@/store";
 import { Button } from "@/shared/components/Button";
+import { TextInput } from "@/shared/components/Field";
 import { AvatarCropDialog } from "../GroupBasicInfoEditor/AvatarCropDialog";
 import {
   GroupBasicInfoFields,
@@ -21,11 +22,14 @@ import {
 } from "../GroupManagement/permissionLabels";
 import {
   GroupManagementFooter,
+  GroupManagementControlRow,
   GroupManagementFrame,
   GroupManagementHeader,
+  GroupManagementPersonRow,
   GroupManagementRow,
   GroupManagementScrollBody,
   GroupManagementSection,
+  GroupManagementSubpage,
 } from "../GroupManagement/GroupManagementLayout";
 
 export function GroupSettingsModal({
@@ -267,192 +271,111 @@ export function GroupSettingsModal({
               </>
             )}
             {view === "admins" && (
-              <div className="space-y-3">
-                <p className="text-sm">
-                  Owner:{" "}
-                  {state.members.find((m) => m.role === "owner")
-                    ?.display_name ??
-                    state.members.find((m) => m.role === "owner")?.username}
-                </p>
-                {admins.map((m) => (
-                  <div key={m.id} className="flex items-center gap-2">
-                    <span className="flex-1">
-                      {m.display_name ?? m.username}
-                    </span>
-                    <button
-                      disabled={state.role !== "owner" || busy}
-                      onClick={() => {
-                        setSelected(m);
-                        setAdminRights(m.admin_permissions);
-                      }}
-                    >
-                      Edit rights
-                    </button>
-                    <button
-                      disabled={state.role !== "owner" || busy}
-                      onClick={() =>
-                        window.confirm("Demote this administrator?") &&
-                        roomsApi
-                          .demote(ref, m.id)
-                          .then(reload)
-                          .catch((e) => setError(e.message))
+              <GroupManagementSubpage data-testid="group-admins-subpage">
+                <div>
+                  <h3 className="text-sm font-semibold">Administrators</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Manage administrator access and rights.</p>
+                </div>
+                <section className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background" aria-label="Current administrators">
+                  {state.members.filter((m) => m.role === "owner").map((m) => (
+                    <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary="Owner" />
+                  ))}
+                  {admins.map((m) => (
+                    <GroupManagementPersonRow
+                      key={m.id}
+                      name={m.display_name ?? m.username}
+                      secondary="Administrator"
+                      trailing={
+                        <>
+                          <Button type="button" variant="ghost" size="compact" className="px-2" disabled={state.role !== "owner" || busy} onClick={() => { setSelected(m); setAdminRights(m.admin_permissions); }}>Edit rights</Button>
+                          <Button type="button" variant="ghost" size="compact" className="px-2 text-destructive" disabled={state.role !== "owner" || busy} onClick={() => window.confirm("Demote this administrator?") && roomsApi.demote(ref, m.id).then(reload).catch((e) => setError(e.message))}>Demote</Button>
+                        </>
                       }
-                    >
-                      Demote
-                    </button>
-                  </div>
-                ))}
-                {ordinary.map((m) => (
-                  <div key={m.id} className="flex items-center gap-2">
-                    <span className="flex-1">
-                      {m.display_name ?? m.username}
-                    </span>
-                    <button
-                      disabled={state.role !== "owner" || busy}
-                      onClick={() => void promote(m)}
-                    >
-                      Promote
-                    </button>
-                  </div>
-                ))}
-                {selected && (
-                  <div className="rounded border p-3">
-                    <h3 className="mb-2 font-medium">Administrator rights</h3>
-                    {ADMIN_PERMISSION_KEYS.map((right) => (
-                      <label key={right} className="block text-sm">
-                        <input
-                          type="checkbox"
-                          checked={adminRights.includes(right)}
-                          onChange={() =>
-                            setAdminRights(toggle(adminRights, right))
-                          }
-                        />{" "}
-                        {groupPermissionLabel(right)}
-                      </label>
-                    ))}
-                    <button disabled={busy} onClick={() => void saveAdmin()}>
-                      Save rights
-                    </button>
-                  </div>
+                    />
+                  ))}
+                </section>
+                {ordinary.length > 0 && (
+                  <section aria-labelledby={`${titleId}-eligible-members`}>
+                    <h3 id={`${titleId}-eligible-members`} className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Members</h3>
+                    <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background">
+                      {ordinary.map((m) => (
+                        <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary="Member" trailing={<Button type="button" variant="ghost" size="compact" className="px-2 text-primary" disabled={state.role !== "owner" || busy} onClick={() => void promote(m)}>Promote</Button>} />
+                      ))}
+                    </div>
+                  </section>
                 )}
-              </div>
+                {selected && (
+                  <section aria-labelledby={`${titleId}-admin-rights`}>
+                    <div className="mb-2">
+                      <h3 id={`${titleId}-admin-rights`} className="text-sm font-semibold">Administrator rights</h3>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">{selected.display_name ?? selected.username}</p>
+                    </div>
+                    <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
+                      {ADMIN_PERMISSION_KEYS.map((right) => {
+                        const controlId = `${titleId}-admin-${right}`;
+                        const disabled = state.role !== "owner" || busy;
+                        return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={disabled} control={<input id={controlId} type="checkbox" disabled={disabled} checked={adminRights.includes(right)} onChange={() => setAdminRights(toggle(adminRights, right))} />} />;
+                      })}
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <Button type="button" variant="primary" size="compact" disabled={busy || state.role !== "owner"} onClick={() => void saveAdmin()}>Save rights</Button>
+                    </div>
+                  </section>
+                )}
+              </GroupManagementSubpage>
             )}
             {view === "members" && (
-              <div className="space-y-2">
+              <GroupManagementSubpage data-testid="group-members-subpage">
                 <label className="block text-sm">
                   <span className="sr-only">Search members</span>
-                  <input
+                  <TextInput
                     value={memberQuery}
                     onChange={(event) => setMemberQuery(event.target.value)}
                     placeholder="Search members"
+                    size="compact"
                   />
                 </label>
-                {ordinary.map((m) => (
-                  <button
-                    key={m.id}
-                    className="block w-full rounded border p-2 text-left"
-                    onClick={() => beginMemberEdit(m)}
-                  >
-                    {m.display_name ?? m.username}{" "}
-                    <span className="text-xs text-muted-foreground">
-                      {m.effective_permissions?.length ?? 0} effective
-                      permissions
-                    </span>
-                  </button>
-                ))}
+                <section className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-background" aria-label="Group members">
+                  {ordinary.map((m) => <GroupManagementPersonRow key={m.id} name={m.display_name ?? m.username} secondary={`${m.effective_permissions?.length ?? 0} effective permissions`} onClick={() => beginMemberEdit(m)} />)}
+                </section>
                 {selected?.role === "member" && (
-                  <div className="rounded border p-3">
-                    <p className="mb-2 text-sm">
-                      Effective:{" "}
-                      {selected.effective_permissions?.map(groupPermissionLabel).join(", ") || "none"}
-                    </p>
-                    {MEMBER_PERMISSION_KEYS.map((right) => (
-                      <label
-                        key={right}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <span>{groupPermissionLabel(right)}</span>
-                        <select
-                          aria-label={`${groupPermissionLabel(right)} override`}
-                          value={overrideDraft[right] ?? "inherit"}
-                          onChange={(event) =>
-                            setOverrideDraft((current) => ({
-                              ...current,
-                              [right]: event.target.value as
-                                | "inherit"
-                                | "allow"
-                                | "deny",
-                            }))
-                          }
-                        >
-                          <option value="inherit">Inherit</option>
-                          <option value="allow">Allow</option>
-                          <option value="deny">Deny</option>
-                        </select>
-                      </label>
-                    ))}
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        disabled={
-                          busy ||
-                          !(
-                            state.role === "owner" ||
-                            canManagePermissions
-                          )
-                        }
-                        onClick={() => void saveOverride()}
-                      >
-                        Save restrictions
-                      </button>
-                      <button
-                        disabled={
-                          busy ||
-                          !(
-                            state.role === "owner" ||
-                            canManagePermissions
-                          )
-                        }
-                        onClick={() => void clearSelectedOverride()}
-                      >
-                        Clear override
-                      </button>
-                      <button
-                        disabled={
-                          busy ||
-                          !(
-                            state.role === "owner" ||
-                            canRemoveMembers
-                          )
-                        }
-                        onClick={() => void removeSelected()}
-                      >
-                        Remove member
-                      </button>
+                  <section aria-labelledby={`${titleId}-member-restrictions`}>
+                    <div className="mb-2">
+                      <h3 id={`${titleId}-member-restrictions`} className="text-sm font-semibold">Member restrictions</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">Effective: {selected.effective_permissions?.map(groupPermissionLabel).join(", ") || "none"}</p>
                     </div>
-                  </div>
+                    <div className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border">
+                      {MEMBER_PERMISSION_KEYS.map((right) => (
+                        <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} control={<select className="vt-select !w-28 !py-1 text-sm" aria-label={`${groupPermissionLabel(right)} override`} value={overrideDraft[right] ?? "inherit"} onChange={(event) => setOverrideDraft((current) => ({ ...current, [right]: event.target.value as "inherit" | "allow" | "deny" }))}><option value="inherit">Inherit</option><option value="allow">Allow</option><option value="deny">Deny</option></select>} />
+                      ))}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button type="button" variant="primary" size="compact" disabled={busy || !(state.role === "owner" || canManagePermissions)} onClick={() => void saveOverride()}>Save restrictions</Button>
+                      <Button type="button" variant="ghost" size="compact" disabled={busy || !(state.role === "owner" || canManagePermissions)} onClick={() => void clearSelectedOverride()}>Clear override</Button>
+                    </div>
+                    <div className="mt-3 border-t border-border pt-3">
+                      <Button type="button" variant="ghost" size="compact" className="text-destructive" disabled={busy || !(state.role === "owner" || canRemoveMembers)} onClick={() => void removeSelected()}>Remove member</Button>
+                    </div>
+                  </section>
                 )}
-              </div>
+              </GroupManagementSubpage>
             )}
             {view === "permissions" && (
-              <div className="space-y-2">
+              <GroupManagementSubpage data-testid="group-permissions-subpage">
                 <p className="text-sm text-muted-foreground">
                   Changes affect ordinary members immediately for future
                   actions.
                 </p>
-                {MEMBER_PERMISSION_KEYS.map((right) => (
-                  <label key={right} className="block text-sm">
-                    <input
-                      type="checkbox"
-                      checked={defaults.includes(right)}
-                      onChange={() => setDefaults(toggle(defaults, right))}
-                    />{" "}
-                    {groupPermissionLabel(right)}
-                  </label>
-                ))}
-                <button disabled={busy} onClick={() => void saveDefaults()}>
-                  Save defaults
-                </button>
-              </div>
+                <section className="overflow-hidden rounded-lg border border-border bg-background divide-y divide-border" aria-label="Default member permissions">
+                  {MEMBER_PERMISSION_KEYS.map((right) => {
+                    const controlId = `${titleId}-default-${right}`;
+                    return <GroupManagementControlRow key={right} label={groupPermissionLabel(right)} htmlFor={controlId} disabled={busy} control={<input id={controlId} type="checkbox" disabled={busy} checked={defaults.includes(right)} onChange={() => setDefaults(toggle(defaults, right))} />} />;
+                  })}
+                </section>
+                <div className="flex justify-end">
+                  <Button type="button" variant="primary" size="compact" disabled={busy} onClick={() => void saveDefaults()}>Save defaults</Button>
+                </div>
+              </GroupManagementSubpage>
             )}
           </GroupManagementScrollBody>
         )}

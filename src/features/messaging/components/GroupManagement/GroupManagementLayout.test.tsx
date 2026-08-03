@@ -5,8 +5,11 @@ import {
   GroupManagementFooter,
   GroupManagementFrame,
   GroupManagementHeader,
+  GroupManagementControlRow,
+  GroupManagementPersonRow,
   GroupManagementRow,
   GroupManagementScrollBody,
+  GroupManagementSubpage,
 } from "./GroupManagementLayout";
 
 describe("GroupManagementLayout", () => {
@@ -51,5 +54,31 @@ describe("GroupManagementLayout", () => {
       "px-5",
       "text-destructive",
     );
+  });
+
+  it("provides shared inset, person, and control geometry for governance subpages", () => {
+    render(
+      <GroupManagementSubpage data-testid="subpage">
+        <GroupManagementPersonRow
+          name="Ada Administrator"
+          secondary="Administrator"
+          onClick={vi.fn()}
+        />
+        <GroupManagementControlRow
+          label="Send messages"
+          htmlFor="send-messages"
+          control={<input id="send-messages" type="checkbox" />}
+        />
+      </GroupManagementSubpage>,
+    );
+
+    expect(screen.getByTestId("subpage")).toHaveClass("px-5", "pt-4", "pb-5", "space-y-3");
+    expect(screen.getByRole("button", { name: "Ada Administrator Administrator" })).toHaveClass(
+      "min-h-14",
+      "gap-3",
+      "px-3",
+    );
+    expect(screen.getByText("Ada Administrator").closest("button")?.querySelector('[data-slot="avatar"]')).toHaveClass("h-10", "w-10");
+    expect(screen.getByText("Send messages").closest("label")).toHaveClass("min-h-11", "px-3");
   });
 });
