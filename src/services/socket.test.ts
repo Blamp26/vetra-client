@@ -84,6 +84,15 @@ import {
   getDefaultSocketUrl,
 } from "./socket";
 
+describe("poll message payload", () => {
+  it("serializes poll creation through the room message protocol", () => {
+    expect(buildSocketMessagePayload({
+      content: "question",
+      poll: { question: "Best?", options: ["A", "B"], settings: { multiple_answers: false } },
+    })).toMatchObject({ poll: true, question: "Best?", options: ["A", "B"], settings: { multiple_answers: false } });
+  });
+});
+
 describe("getDefaultSocketUrl", () => {
   it("uses ws for same-origin HTTP deployments", () => {
     expect(

@@ -47,6 +47,7 @@ import { StickerArtwork } from "../StickerPicker/StickerArtwork";
 import { isValidCustomEmojiDocument } from "@/shared/utils/textEntities";
 import { getCustomEmojiOnlyLayout, getPureCustomEmojiSequence } from "../../utils/customEmojiGeometry";
 import { GifMessageMedia } from "./GifMessageMedia";
+import { PollCard } from "../PollCard";
 
 interface MessageItemProps {
   msg: Message;
@@ -293,6 +294,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
     ref,
   ) => {
   const authToken = useAppStore((s) => s.authToken);
+  const socketManager = useAppStore((s) => s.socketManager);
     const [attachmentActionError, setAttachmentActionError] = React.useState<
       string | null
     >(null);
@@ -310,6 +312,7 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
   const hasText = !!(msg.content && msg.content.trim().length > 0);
   const isSticker = Boolean(msg.sticker);
   const isGif = Boolean(msg.gif);
+  const isPoll = Boolean(msg.poll && socketManager && msg.room_id);
   const stickerDisplaySize = msg.sticker ? getStickerDisplaySize(msg.sticker) : null;
     const isVisualMediaGroup =
       attachments.length > 1 && attachments.every(isVisualAttachment);
@@ -1684,6 +1687,8 @@ export const MessageItem = React.forwardRef<HTMLDivElement, MessageItemProps>(
               </div>
               {renderMetadata("custom-emoji-trailing")}
             </div>
+          ) : isPoll ? (
+            <PollCard poll={msg.poll!} messageId={msg.id} roomId={msg.room_id!} socketManager={socketManager!} />
           ) : isEmojiOnlyMessage ? (
             <div
               className={cn(

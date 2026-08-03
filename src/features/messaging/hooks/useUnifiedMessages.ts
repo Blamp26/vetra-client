@@ -388,6 +388,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
         } | null;
         stickerId?: string | null;
         gif?: import("@/shared/types").GifMessage | null;
+        poll?: import("../components/MessageInput/PollComposer").PollCreationPayload;
       },
       replyToId?: number,
     ) => {
@@ -405,7 +406,8 @@ export function useUnifiedMessages(context: ChatContext | null) {
         !primaryMediaFileId &&
         mediaFileIds.length === 0 &&
         !payload.stickerId &&
-        !payload.gif
+        !payload.gif &&
+        !payload.poll
       )
         return;
 
@@ -435,6 +437,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
           __attachmentDebug: debugMeta,
           stickerId: payload.stickerId,
           gif: payload.gif,
+          poll: payload.poll,
         });
         const normalizedAttachments = getMessageAttachments(message);
         const rawGroupedMediaIdsLength =
@@ -522,6 +525,7 @@ export function useUnifiedMessages(context: ChatContext | null) {
             __attachmentDebug: debugMeta,
             stickerId: payload.stickerId,
             gif: payload.gif,
+            poll: payload.poll,
           },
         );
         const normalizedAttachments = getMessageAttachments(message);

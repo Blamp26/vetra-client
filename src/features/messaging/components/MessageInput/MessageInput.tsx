@@ -51,6 +51,7 @@ import {
 } from "./ComposerContextMenu";
 import { CreateLinkDialog } from "./CreateLinkDialog";
 import { ComposerTextDecoration } from "./ComposerTextDecoration";
+import { PollComposer, type PollCreationPayload } from "./PollComposer";
 import {
   AttachmentUploadError,
   buildAttachmentSendUnits,
@@ -172,6 +173,7 @@ interface Props {
       entities?: MessageTextEntity[];
       __attachmentDebug?: AttachmentDebugMeta | null;
       stickerId?: string | null;
+      poll?: PollCreationPayload;
     },
     replyToId?: number,
   ) => Promise<void>;
@@ -245,6 +247,9 @@ export function MessageInput({
     useState(false);
   const [focusRequest, setFocusRequest] = useState(0);
   const [slowModeRemaining, setSlowModeRemaining] = useState(0);
+  const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const [pollCreationError, setPollCreationError] = useState<string | null>(null);
+  const [isCreatingPoll, setIsCreatingPoll] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -261,6 +266,7 @@ export function MessageInput({
   const voiceStartedAtRef = useRef(0);
   const voiceDiscardRef = useRef(false);
   const voiceSendLockRef = useRef(false);
+  const pendingPollRef = useRef<PollCreationPayload | null>(null);
   const selectionRef = useRef<{
     start: number;
     end: number;
@@ -271,6 +277,7 @@ export function MessageInput({
   const cancelEditing = useAppStore((s: RootState) => s.cancelEditing);
   const socketManager = useAppStore((s: RootState) => s.socketManager);
   const activeChat = useAppStore((s: RootState) => s.activeChat);
+  const canCreatePoll = allowed("send_polls") && activeChat?.type === "room";
   const conversationPreviews = useAppStore(
     (s: RootState) => s.conversationPreviews,
   );
@@ -711,6 +718,24 @@ export function MessageInput({
   const handleSuccessfulSend = () => {
     if (replyTo) onCancelReply?.();
     setFocusRequest((current) => current + 1);
+  };
+
+  const createPoll = async (poll: PollCreationPayload) => {
+    setIsCreatingPoll(true);
+    setPollCreationError(null);
+    try {
+      if (pendingAttachmentsRef.current.length > 0) {
+        pendingPollRef.current = poll;
+        await handleSend();
+      } else {
+        await onSend({ content: poll.question, poll }, replyTo?.id);
+      }
+      setPollComposerOpen(false);
+    } catch (error) {
+      setPollCreationError(error instanceof Error ? error.message : "Poll creation failed");
+    } finally {
+      setIsCreatingPoll(false);
+    }
   };
 
   const releaseVoiceStream = () => {
@@ -1176,6 +1201,7 @@ export function MessageInput({
         setContent("");
         resetUploadState();
       } else if (pendingAttachments.length === 0) {
+        const poll = pendingPollRef.current;
         await onSend(
           {
             content: trimmed || null,
@@ -1183,6 +1209,7 @@ export function MessageInput({
               ? { entities: requestEntities }
               : {}),
             mediaFileId: null,
+            ...(poll ? { poll } : {}),
           },
           replyTo?.id,
         );
@@ -1276,7 +1303,31 @@ export function MessageInput({
           });
         }
 
-        for (const [unitIndex, unit] of sendUnits.entries()) {
+        const poll = pendingPollRef.current;
+        if (poll) {
+          const uploadedMediaFileIds = attachmentsToSend.map((attachment) => {
+            const mediaFileId = uploadedMediaFileIdsRef.current.get(attachment.id);
+            if (!mediaFileId) throw new Error("Missing uploaded attachment");
+            return mediaFileId;
+          });
+          await onSend(
+            {
+              content: poll.question,
+              mediaFileId: uploadedMediaFileIds[0] ?? null,
+              mediaFileIds: uploadedMediaFileIds,
+              poll,
+              __attachmentDebug: {
+                batchId,
+                sendUnitId: `${batchId}:poll`,
+                localAttachmentIds: attachmentsToSend.map((attachment) => attachment.id),
+              },
+            },
+            replyTo?.id,
+          );
+          removeQueuedAttachments(attachmentsToSend.map((attachment) => attachment.id));
+          pendingPollRef.current = null;
+          setContent("");
+        } else for (const [unitIndex, unit] of sendUnits.entries()) {
           const uploadedMediaFileIds = unit.attachments.map((attachment) => {
             const mediaFileId = uploadedMediaFileIdsRef.current.get(
               attachment.id,
@@ -1806,6 +1857,7 @@ export function MessageInput({
         />
       )}
       <ConversationComposerShell>
+        {pollComposerOpen && <PollComposer pending={isCreatingPoll} error={pollCreationError} onSubmit={createPoll} onCancel={() => { setPollComposerOpen(false); setPollCreationError(null); }} />}
         {composerContextMenu && (
           <ComposerContextMenu
             left={composerContextMenu.left}
@@ -2004,6 +2056,15 @@ export function MessageInput({
               />
             )}
           </div>
+          {canCreatePoll && (
+            <button
+              type="button"
+              aria-label="Create poll"
+              onClick={() => setPollComposerOpen((open) => !open)}
+              disabled={disabled || isSending || isUploading || isEditing || slowModeActive}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-60"
+            >?</button>
+          )}
           <input
             type="file"
             ref={mediaInputRef}

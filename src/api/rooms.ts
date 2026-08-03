@@ -1,5 +1,5 @@
 import { get, post, put, del } from "./base";
-import { Message, Room, RoomPreview, ResourceRef } from "@/shared/types";
+import { Message, Room, RoomPreview, ResourceRef, PollProjection } from "@/shared/types";
 import { normalizeMessageAttachments } from "@/features/messaging/utils/attachments";
 
 export const roomsApi = {
@@ -38,6 +38,24 @@ export const roomsApi = {
     return get<Message[]>(`/rooms/${roomRef}/messages?${params}`, {
       signal,
     }).then((messages) => messages.map(normalizeMessageAttachments));
+  },
+
+  createPoll(roomRef: ResourceRef, poll: {
+    question: string;
+    description?: string | null;
+    options: string[];
+    settings: Record<string, boolean | string | null>;
+    correct_positions?: number[];
+    duration?: string;
+    closes_at?: string;
+  }): Promise<Message> {
+    return post<Message>(`/rooms/${roomRef}/polls`, poll);
+  },
+  votePoll(roomRef: ResourceRef, messageId: number, optionIds: number[]): Promise<PollProjection> {
+    return post<PollProjection>(`/rooms/${roomRef}/polls/${messageId}/votes`, { option_ids: optionIds });
+  },
+  addPollOption(roomRef: ResourceRef, messageId: number, label: string): Promise<PollProjection> {
+    return post<PollProjection>(`/rooms/${roomRef}/polls/${messageId}/options`, { label });
   },
 
   getNotifications(

@@ -103,6 +103,27 @@ export interface Message {
   reactions?: MessageReactionGroup[];
   sticker?: StickerMessage | null;
   gif?: GifMessage | null;
+  poll?: PollProjection | null;
+}
+
+export interface PollOptionProjection {
+  id: number;
+  label: string;
+  position: number;
+  votes: number;
+  voter_ids: number[];
+  correct?: boolean | null;
+}
+export interface PollProjection {
+  id: number;
+  question: string;
+  description?: string | null;
+  status: "active" | "closed";
+  closes_at?: string | null;
+  closed_at?: string | null;
+  settings: Record<string, boolean | string | null | undefined>;
+  options: PollOptionProjection[];
+  selected_option_ids: number[];
 }
 
 export interface GifMessage {

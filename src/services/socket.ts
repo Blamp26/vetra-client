@@ -11,6 +11,7 @@ import type {
   MessageDeletedPayload,
   ReactionUpdatedPayload,
   RoomMessageSummary,
+  PollProjection,
   ResourceRef,
   MessageTextEntity,
   RoomPreview,
@@ -68,6 +69,7 @@ export type TypingHandler = (senderId: number) => void;
 export type LastSeenHandler = (userId: number, lastSeenAt: string) => void;
 export type RoomMessageHandler = (message: Message) => void;
 export type RoomMessageSummaryHandler = (summary: RoomMessageSummary) => void;
+export type PollUpdatedHandler = (payload: PollProjection & { message_id: number }) => void;
 export type RoomTypingPayload = {
   sender_id: number;
   sender_username?: string;
@@ -153,6 +155,15 @@ export type OutgoingMessagePayload = {
     sendUnitId?: string | null;
     localAttachmentIds?: string[];
   } | null;
+  poll?: {
+    question: string;
+    description?: string | null;
+    options: string[];
+    settings: Record<string, boolean | string | null>;
+    correct_positions?: number[];
+    duration?: string;
+    closes_at?: string;
+  };
 };
 
 export function buildSocketMessagePayload(
@@ -184,6 +195,7 @@ export function buildSocketMessagePayload(
     ...(payload.forwardedFromMessageId != null
       ? { forwarded_from_message_id: payload.forwardedFromMessageId }
       : {}),
+    ...(payload.poll ? { poll: true, question: payload.poll.question, description: payload.poll.description, options: payload.poll.options, settings: payload.poll.settings, correct_positions: payload.poll.correct_positions, duration: payload.poll.duration, closes_at: payload.poll.closes_at } : {}),
   };
 }
 
@@ -280,6 +292,9 @@ export interface SocketManager {
     roomId: number,
     handler: (payload: { room_id: number }) => void,
   ) => () => void;
+  onPollUpdated: (roomId: number, handler: PollUpdatedHandler) => () => void;
+  votePoll: (roomId: number, messageId: number, optionIds: number[]) => Promise<PollProjection>;
+  addPollOption: (roomId: number, messageId: number, label: string) => Promise<PollProjection>;
   editRoomMessage: (
     roomId: number,
     messageId: number,
@@ -343,6 +358,7 @@ interface RoomBus {
   messageDeleted: ReturnType<typeof makeEventBus<MessageDeletedPayload>>;
   reactionUpdated: ReturnType<typeof makeEventBus<ReactionUpdatedPayload>>;
   unreadInvalidated: ReturnType<typeof makeEventBus<{ room_id: number }>>;
+  pollUpdated: ReturnType<typeof makeEventBus<PollProjection & { message_id: number }>>;
 }
 
 type SocketAuthParams = { socket_ticket: string } | { token: string };
@@ -599,6 +615,7 @@ export async function connectSocket(
         messageDeleted: makeEventBus<MessageDeletedPayload>(),
         reactionUpdated: makeEventBus<ReactionUpdatedPayload>(),
         unreadInvalidated: makeEventBus<{ room_id: number }>(),
+        pollUpdated: makeEventBus<PollProjection & { message_id: number }>(),
       });
     }
     return roomBuses.get(roomId)!;
@@ -633,6 +650,7 @@ export async function connectSocket(
     channel.on("unread_state_invalidated", (p: { room_id: number }) =>
       bus.unreadInvalidated.emit(p),
     );
+    channel.on("poll_updated", (p: PollProjection & { message_id: number }) => bus.pollUpdated.emit(p));
     channel.on(
       "channel_access_revoked",
       (payload: { room_id?: number; reason?: string }) => {
@@ -919,6 +937,27 @@ export async function connectSocket(
       ensureRoomBus(roomId).reactionUpdated.subscribe(h),
     onRoomUnreadInvalidated: (roomId, h) =>
       ensureRoomBus(roomId).unreadInvalidated.subscribe(h),
+    onPollUpdated: (roomId, h) => ensureRoomBus(roomId).pollUpdated.subscribe(h),
+    votePoll(roomId, messageId, optionIds) {
+      return new Promise((resolve, reject) => {
+        const ch = roomChannels.get(roomId);
+        if (!ch) return reject(new Error(`Not joined room ${roomId}`));
+        ch.push("vote_poll", { message_id: messageId, option_ids: optionIds })
+          .receive("ok", (p: PollProjection) => resolve(p))
+          .receive("error", (p: { reason?: string }) => reject(new Error(p?.reason ?? "Poll vote failed")))
+          .receive("timeout", () => reject(new Error("Poll vote timed out")));
+      });
+    },
+    addPollOption(roomId, messageId, label) {
+      return new Promise((resolve, reject) => {
+        const ch = roomChannels.get(roomId);
+        if (!ch) return reject(new Error(`Not joined room ${roomId}`));
+        ch.push("add_poll_option", { message_id: messageId, label })
+          .receive("ok", (p: PollProjection) => resolve(p))
+          .receive("error", (p: { reason?: string }) => reject(new Error(p?.reason ?? "Poll option failed")))
+          .receive("timeout", () => reject(new Error("Poll option timed out")));
+      });
+    },
 
     editRoomMessage(roomId, messageId, content, entities = []) {
       return new Promise((resolve, reject) => {
