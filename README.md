@@ -1,270 +1,172 @@
 <div align="center">
 
-<br/>
+# Vetra
 
-```
-██╗   ██╗███████╗████████╗██████╗  █████╗
-██║   ██║██╔════╝╚══██╔══╝██╔══██╗██╔══██╗
-██║   ██║█████╗     ██║   ██████╔╝███████║
-╚██╗ ██╔╝██╔══╝     ██║   ██╔══██╗██╔══██║
- ╚████╔╝ ███████╗   ██║   ██║  ██║██║  ██║
-  ╚═══╝  ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝
-```
+**A desktop-first messenger for direct chats, groups, servers, files, and calls.**
 
-### **Talk freely. No noise. Just connection.**
-
-<br/>
-
-[![Download](https://img.shields.io/badge/⬇%20Download-Vetra-black?style=for-the-badge)](https://github.com/Blamp26/vetra-client/releases)
-[![Version](https://img.shields.io/badge/version-1.0.0-white?style=for-the-badge)]()
-[![Platform](https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-available-grey?style=for-the-badge)]()
-
-<br/>
+![Status](https://img.shields.io/badge/status-active_development-f0ad4e)
+![Tauri](https://img.shields.io/badge/desktop-Tauri_2-24C8D8?logo=tauri&logoColor=white)
+![React](https://img.shields.io/badge/frontend-React_18-61DAFB?logo=react&logoColor=black)
+![Languages](https://img.shields.io/badge/languages-TypeScript_%2B_Rust-3178C6)
 
 </div>
 
----
+> [!IMPORTANT]
+> Vetra is an active development project, not a public production release. The current client has not been independently security-audited and does **not** provide verified end-to-end encryption. Do not use it for sensitive communications.
 
-<br/>
+## What Vetra is
 
-## ✦ Why Vetra?
+Vetra is a Tauri-first desktop messenger designed for day-long communication on a laptop or desktop. The product direction is intentionally calm and practical: conversations stay central, controls behave like desktop controls, and the interface avoids decorative SaaS-style chrome.
 
-Most messengers are bloated. Ads. Subscriptions. Tracking. Slow.
+This repository contains the **desktop client only**. A compatible Vetra server is required for accounts, persistent data, authorization, realtime events, files, and call coordination.
 
-**Vetra is different.**
+## Current development snapshot
 
-It's fast, private, and built around the way people actually communicate — in real time, with friends, teams, or communities. No distractions. No compromises.
+The table below describes what exists in the current source tree and automated test coverage. It is **not** a claim that every flow has completed release, cross-platform, or independent security validation.
 
-<br/>
+| Area | Current state |
+| --- | --- |
+| Registration, login, session handling, and profile editing | Implemented in the development client |
+| Direct conversations and realtime message updates | Implemented in the development client |
+| Group creation, member management, permissions, and settings | Implemented in the development client |
+| Servers, rooms, channel access, and server settings | Implemented in the development client |
+| Replies, editing, forwarding, search, statuses, unread state, and typing state | Implemented in the development client |
+| Reactions and polls | Implemented in the development client |
+| File, image, video, audio, GIF, and voice-message flows | Implemented in the development client; release hardening is ongoing |
+| Stickers and custom emoji presentation | Implemented in the development client |
+| Appearance, notification, privacy, and device-oriented settings | Implemented in the development client |
+| Persistent one-to-one audio calls and call history | Implemented and tested at source level; runtime and recovery hardening is ongoing |
+| Tauri desktop packaging | Development and release checks exist; no public stable build is published |
+| Video calls and screen sharing | Not part of the current stable call scope |
+| Verified end-to-end encryption | Not implemented or audited |
+| Public stable release | Not available |
 
----
+## Product principles
 
-<br/>
+- **Conversation first.** Navigation and controls should orient the user without dominating the message surface.
+- **Desktop-native feedback.** Hover, focus, loading, error, window, media, and call states should be explicit.
+- **Dense but readable.** Vetra favors an efficient desktop layout over oversized cards and empty space.
+- **No fake security language.** Security properties are documented only after they exist, are tested, and can be verified.
+- **No fake UI.** Product claims should correspond to wired flows rather than disconnected mock controls.
 
-## ✦ What you get
+See [`PRODUCT.md`](PRODUCT.md) for product intent and [`DESIGN.md`](DESIGN.md) for the current visual system.
 
-<br/>
+## Roadmap
 
-### 💬 &nbsp; Instant Messaging
-Send messages that arrive in milliseconds. Edit them, react to them, reply to them, search through them. Everything you'd expect — done right.
+The roadmap is maintained in [`ROADMAP.md`](ROADMAP.md). It intentionally separates current capabilities, active work, and later ideas without invented release dates.
 
-<br/>
+Near-term priorities are:
 
-### 🖥️ &nbsp; Servers & Channels
-Create your own space. Organise conversations into channels by topic. Invite your people. You're in control.
+1. harden persistent one-to-one audio calls, recovery, and device behavior;
+2. complete reproducible Windows/Tauri release validation;
+3. improve messaging, attachment, and media reliability;
+4. publish verified screenshots and release artifacts;
+5. document the privacy and security model before making stronger claims.
 
-<br/>
+## Screenshots
 
-### 📞 &nbsp; Crystal-clear Voice Calls
-One click to call anyone. One click to call anyone. No accounts to link, no call limits, no waiting rooms.
+Verified product screenshots are not yet committed to this repository. They should be added only after they are captured from a reproducible desktop build and match the current source.
 
-<br/>
+## Technology
 
-### 🖼️ &nbsp; Media Sharing
-Drop a photo, a video clip, a file — right into the chat. Instantly previewed, instantly delivered.
+| Layer | Technology |
+| --- | --- |
+| Desktop shell | Tauri 2, Rust |
+| Interface | React 18, TypeScript, Vite |
+| Styling and UI primitives | Tailwind CSS, Radix UI, Phosphor/Lucide icons, Framer Motion |
+| Client state | Zustand |
+| Realtime transport | Phoenix client |
+| Calls | WebRTC with server-authoritative call lifecycle |
+| Tests | Vitest, Testing Library, focused integration and stress tests |
+| Validation | TypeScript/build checks, Tauri release checks, LAN smoke/load scripts |
 
-<br/>
+## Repository layout
 
-### 😄 &nbsp; Reactions
-Say more with less. React to any message with an emoji and keep the conversation flowing without cluttering it.
-
-<br/>
-
-### 🔔 &nbsp; Smart Notifications
-Get notified about what matters. Ignore the rest. Customise notifications per server, per channel, or mute everything when you need focus.
-
-<br/>
-
-### 👤 &nbsp; Profiles & Presence
-See who's online. Set your status. Personalise your profile. Know when your friends are around.
-
-<br/>
-
----
-
-<br/>
-
-## ✦ Built to feel native
-
-Vetra is a **desktop app** — not a browser tab.
-
-It launches instantly, stays in your taskbar, and uses your computer's hardware properly. No memory leaks. No tab juggling. No "is this thing still open?"
-
-Works on **Windows**, **macOS**, and **Linux**.
-
-<br/>
-
----
-
-<br/>
-
-## ✦ Your data. Not ours.
-
-- 🔒 &nbsp; No ads. No tracking. No selling your conversations.
-- 🔐 &nbsp; Voice calls are private — your conversations stay between you.
-- 🚫 &nbsp; We don't read your messages.
-
-<br/>
-
----
-
-<br/>
-
-## ✦ Get Vetra
-
-<div align="center">
-
-<br/>
-
-| Platform | Download |
-|----------|----------|
-| 🪟 Windows | [**Download .exe**](https://github.com/Blamp26/vetra-client/releases) |
-| 🍎 macOS | [**Download .dmg**](https://github.com/Blamp26/vetra-client/releases) |
-| 🐧 Linux | [**Download .AppImage**](https://github.com/Blamp26/vetra-client/releases) |
-
-<br/>
-
-> Or clone the repo and [build it yourself](#) — we respect that.
-
-<br/>
-
-</div>
-
----
-
-<br/>
-
-## ✦ Screenshots
-
-<div align="center">
-
-> *Messaging · Calls · Servers · Profile — all in one window.*
-
-<!-- Add screenshots here -->
-```
-[ screenshot 1 ]   [ screenshot 2 ]   [ screenshot 3 ]
+```text
+vetra-client/
+├── src/                 # React application and product features
+├── src-tauri/           # Tauri 2 desktop shell and Rust integrations
+├── scripts/             # Release, smoke, and load validation helpers
+├── docs/                # Protocol, deployment, and design documentation
+├── test/                # Shared fixtures and supporting test assets
+├── PRODUCT.md           # Product purpose and principles
+├── DESIGN.md            # Visual language and component rules
+└── AGENTS.md            # Repository-specific engineering guidance
 ```
 
-</div>
+## Run locally
 
-<br/>
+### Prerequisites
 
----
+- Node.js and npm
+- Rust `1.77.2` or newer
+- the platform prerequisites required by Tauri 2
+- access to a compatible Vetra server
 
-<br/>
-
-## ✦ Quick start
-
-```
-1. Download Vetra for your platform
-2. Create an account — takes 10 seconds
-3. Make a server, or message someone directly
-4. That's it.
-```
-
-<br/>
-
----
-
-<br/>
-
-<div align="center">
-
-**Vetra** &nbsp;·&nbsp; Fast. Private. Yours.
-
-*Made with care by people who just wanted a better messenger.*
-
-<br/>
-
-[![Star on GitHub](https://img.shields.io/github/stars/Blamp26/vetra-client?style=social)](https://github.com/Blamp26/vetra-client/releases)
-
-</div>
-
----
-
-## Developer Smoke Checks
-
-Copy `.env.smoke.example` to `.env.smoke`, fill in the LAN backend URLs plus `VETRA_SMOKE_USERNAME` and `VETRA_SMOKE_PASSWORD`, and keep `.env.smoke` out of git. The smoke login uses the same `username` field as the app.
-
-Read-only smoke:
+### Install
 
 ```bash
-npm run smoke:lan
+git clone https://github.com/Blamp26/vetra-client.git
+cd vetra-client
+npm ci
 ```
 
-Write smoke with tagged test messages and reaction toggles:
+Copy `.env.example` to `.env.local`, then configure the server endpoints you actually use:
 
-```bash
-npm run smoke:lan:write
+```env
+VITE_API_URL=http://localhost:4000/api/v1
+VITE_SOCKET_URL=ws://localhost:4000/socket
 ```
 
-Release check without Tauri packaging:
+Optional WebRTC, TURN, diagnostics, and GIF-provider variables are documented in [`.env.example`](.env.example).
+
+### Start the desktop client
 
 ```bash
+npm run tauri:dev
+```
+
+For the browser-hosted development UI only:
+
+```bash
+npm run dev
+```
+
+## Validation
+
+Common checks include:
+
+```bash
+npm test -- --run
+npm run build
 npm run check:release
-```
-
-Release check including Tauri packaging:
-
-```bash
 npm run check:release:tauri
 ```
 
-Directed-call release runtime:
+When Rust or Tauri files change:
 
 ```bash
-# Browser or Tauri release: defaults to persistent
-npm run build
-npm run tauri:build
-
-# Explicit persistent mode (PowerShell syntax; missing configuration has the same result)
-$env:VITE_CALL_RUNTIME_MODE = "persistent"
-npm run tauri:build
-Remove-Item Env:VITE_CALL_RUNTIME_MODE -ErrorAction SilentlyContinue
-
-# Development
-$env:VITE_CALL_RUNTIME_MODE = "persistent"
-npm run tauri:dev
-Remove-Item Env:VITE_CALL_RUNTIME_MODE -ErrorAction SilentlyContinue
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-Release builds print the resolved mode. Missing or empty configuration resolves
-to `persistent` in every environment. `persistent` is the only accepted
-runtime value; legacy and other explicit values fail closed in development and
-are rejected by release builds.
+Some LAN smoke, load, call, and Windows-runtime checks require a configured server or manual desktop validation. Passing browser or source-level tests must not be presented as proof of Windows runtime behavior.
 
-The release wrappers reuse `VETRA_SMOKE_API_URL` and `VETRA_SMOKE_SOCKET_URL` as `VITE_API_URL` and `VITE_SOCKET_URL` when those build variables are not already set.
+## Contributing
 
-## Developer Load Checks
+Vetra is still changing quickly. Before a substantial change:
 
-Copy `.env.load.example` to `.env.load`, fill in the LAN backend URLs plus `VETRA_LOAD_USERNAME` and `VETRA_LOAD_PASSWORD`, and keep `.env.load` out of git. The load tool reuses the same username/password login flow and socket-ticket flow as the app and smoke tests. Large VU startups are ramped by `VETRA_LOAD_RAMP_BATCH_SIZE` and `VETRA_LOAD_RAMP_BATCH_DELAY_MS` so socket-ticket requests do not burst all at once.
+1. read [`AGENTS.md`](AGENTS.md);
+2. inspect the existing implementation and focused tests;
+3. keep the change bounded;
+4. distinguish source inspection, automated evidence, and manual runtime verification;
+5. avoid adding UI or security claims that are not backed by working behavior.
 
-Set `VETRA_LOAD_SERVER_MONITOR=1` to sample the Ubuntu backend over SSH during the test. The built-in monitor uses `VETRA_LOAD_SERVER_SSH`, `VETRA_LOAD_SERVER_SERVICE`, `VETRA_LOAD_SERVER_PORT`, and `VETRA_LOAD_SERVER_SAMPLE_INTERVAL_MS` to collect service PID, process CPU/RAM, available RAM, and TCP connection counts. SSH monitor failures are logged as warnings and recorded in the JSON summary without aborting the load run.
+## Security
 
-Use `VETRA_LOAD_STARTUP_TIMEOUT_MS` to cap each VU startup step (`socket-ticket`, socket connect, user-channel join) so ramp-up cannot hang forever. Use `VETRA_LOAD_MONITOR_SSH_TIMEOUT_MS` to cap each SSH sample separately so server monitoring cannot block the main load run.
+Vetra has not completed an independent security audit. The repository must not claim end-to-end encryption, production-grade privacy, or suitability for sensitive communication until those properties are implemented, documented, tested, and reviewed.
 
-Safe connect-only load test:
+## License
 
-```bash
-npm run load:lan
-```
-
-Channel-message load mode:
-
-```bash
-npm run load:lan:messages
-```
-
-Call-signaling load mode:
-
-```bash
-npm run load:lan:calls
-```
-
-Low-rate soak mode:
-
-```bash
-npm run load:lan:soak
-```
-
-Default behavior is non-destructive. Set `VETRA_LOAD_WRITE=1` only when you intentionally want to send tagged `[load-test]` messages or signaling events. Real media load is peer-to-peer/TURN and is not the same as backend signaling load. JSON summaries are written to `load-results/` by default.
+No open-source license has been published for this repository yet. Until a license file is added, do not assume permission to use, modify, or redistribute the code.
