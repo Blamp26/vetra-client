@@ -116,6 +116,7 @@ export interface DirectedCallWebRtcAdapterOptions {
   getAudioConstraints?: () => MediaStreamConstraints;
   onIceCandidate?: (candidate: RTCIceCandidateInit) => void | Promise<void>;
   onRemoteStream?: (stream: DirectedCallMediaStream) => void;
+  onRemoteCameraStream?: (stream: DirectedCallMediaStream | null) => void;
   onRemoteScreenShareChanged?: (stream: DirectedCallMediaStream | null) => void;
   onInitialMediaReadinessChange?: (readiness: DirectedCallInitialMediaReadiness) => void;
   onPeerConnectionState?: (state: RTCPeerConnectionState | "completed") => void;
@@ -333,6 +334,11 @@ export class DirectedCallWebRtcAdapter {
   private peerConnection: PeerConnectionLike | null = null;
   private localStream: DirectedCallMediaStream | null = null;
   private remoteStream: DirectedCallMediaStream | null = null;
+  private remoteCameraStream: DirectedCallMediaStream | null = null;
+  private cameraTransceiver: ScreenShareTransceiverLike | null = null;
+  private localCameraStream: DirectedCallMediaStream | null = null;
+  private localCameraTrack: DirectedCallMediaStreamTrack | null = null;
+  private readonly onRemoteCameraStream?: (stream: DirectedCallMediaStream | null) => void;
   private remoteAudioTrack: DirectedCallMediaStreamTrack | null = null;
   private remoteAudioStreamBound = false;
   private readonly readinessTrackCleanups = new Map<DirectedCallMediaStreamTrack, () => void>();
@@ -378,6 +384,7 @@ export class DirectedCallWebRtcAdapter {
     this.rtcConfigurationSource = options.rtcConfigurationSource ?? createDefaultRtcConfigurationSource();
     this.onIceCandidate = options.onIceCandidate;
     this.onRemoteStream = options.onRemoteStream;
+    this.onRemoteCameraStream = options.onRemoteCameraStream;
     this.onRemoteScreenShareChange = options.onRemoteScreenShareChanged;
     this.onInitialMediaReadinessChange = options.onInitialMediaReadinessChange;
     this.onPeerConnectionState = options.onPeerConnectionState;
@@ -393,6 +400,53 @@ export class DirectedCallWebRtcAdapter {
 
   get remoteMediaStream(): DirectedCallMediaStream | null {
     return this.remoteStream;
+  }
+
+  getLocalCameraStream(): DirectedCallMediaStream | null {
+    return this.localCameraStream;
+  }
+
+  getRemoteCameraStream(): DirectedCallMediaStream | null {
+    return this.remoteCameraStream;
+  }
+
+  async setCameraEnabled(enabled: boolean): Promise<boolean> {
+    if (this.disposed) return false;
+    const epoch = this.epoch;
+    await this.ensureAudioPeer(epoch);
+    if (!this.peerConnection) return false;
+    if (enabled && !this.localCameraTrack) {
+      let stream: DirectedCallMediaStream;
+      try {
+        stream = await this.dependencies.getUserMedia({ video: true, audio: false });
+      } catch {
+        return false;
+      }
+      const track = stream.getTracks().find((candidate) => candidate.kind === "video" && candidate.readyState !== "ended");
+      if (!track) {
+        stream.getTracks().forEach((candidate) => candidate.stop());
+        return false;
+      }
+      const transceiver = this.cameraTransceiver ?? this.peerConnection.addTransceiver?.("video", { direction: "sendrecv" });
+      if (!transceiver) {
+        stream.getTracks().forEach((candidate) => candidate.stop());
+        return false;
+      }
+      this.cameraTransceiver = transceiver;
+      await transceiver.sender.replaceTrack(track);
+      this.localCameraStream = stream;
+      this.localCameraTrack = track;
+      return true;
+    }
+    if (!enabled && this.localCameraTrack) {
+      await this.cameraTransceiver?.sender.replaceTrack(null);
+      this.localCameraTrack.stop();
+      this.localCameraStream?.getTracks().filter((track) => track !== this.localCameraTrack).forEach((track) => track.stop());
+      this.localCameraTrack = null;
+      this.localCameraStream = null;
+      return true;
+    }
+    return !enabled;
   }
 
   get initialMediaReadinessSnapshot(): DirectedCallInitialMediaReadiness {
@@ -1612,6 +1666,12 @@ export class DirectedCallWebRtcAdapter {
       this.peerConnection.onsignalingstatechange = onPeerStateChange;
       this.peerConnection.ontrack = (event) => {
         if (!this.isCurrent(epoch)) return;
+        if (event.track.kind === "video" && this.cameraTransceiver && event.transceiver === this.cameraTransceiver) {
+          this.remoteCameraStream = event.streams[0] ?? this.remoteCameraStream ?? this.dependencies.createRemoteStream?.() ?? null;
+          if (this.remoteCameraStream && !this.remoteCameraStream.getTracks().includes(event.track)) this.remoteCameraStream.addTrack?.(event.track);
+          this.onRemoteCameraStream?.(this.remoteCameraStream);
+          return;
+        }
         if (event.track.kind === "video") {
           const eventTransceiver = event.transceiver as unknown as ScreenShareTransceiverLike | undefined;
           let expectedTransceiver = this.screenShareTransceiver;
@@ -1721,7 +1781,15 @@ export class DirectedCallWebRtcAdapter {
         await screenTransceiver.sender.replaceTrack(this.localScreenShareTrack);
         this.assertCurrent(epoch);
       } else if (this.localScreenShareTrack?.readyState === "ended") {
-        this.clearLocalScreenShare(false);
+    this.clearLocalScreenShare(false);
+    this.cameraTransceiver?.sender.replaceTrack(null).catch(() => undefined);
+    this.localCameraStream?.getTracks().forEach((track) => track.stop());
+    this.remoteCameraStream?.getTracks().forEach((track) => track.stop());
+    this.localCameraStream = null;
+    this.localCameraTrack = null;
+    this.remoteCameraStream = null;
+    this.cameraTransceiver = null;
+    this.onRemoteCameraStream?.(null);
       } else if (this.remoteScreenShareReceptionEnabled) {
         if (!this.ensureScreenShareTransceiver()) throw new DirectedCallWebRtcError("media_binding_failed");
         this.updateScreenShareTransceiverDirection();

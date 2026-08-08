@@ -1,8 +1,26 @@
 import { get, post, put, del } from "./base";
-import { Message, Room, RoomPreview, ResourceRef, PollProjection } from "@/shared/types";
+import { Message, Room, RoomPreview, ResourceRef, PollProjection, GroupCallCapabilities, GroupCallProjection } from "@/shared/types";
 import { normalizeMessageAttachments } from "@/features/messaging/utils/attachments";
 
 export const roomsApi = {
+  getGroupCall(roomRef: ResourceRef): Promise<{ call: GroupCallProjection | null; capabilities: GroupCallCapabilities } | GroupCallProjection> {
+    return get(`/rooms/${roomRef}/group-call`);
+  },
+  startGroupCall(roomRef: ResourceRef): Promise<GroupCallProjection> {
+    return post(`/rooms/${roomRef}/group-call/start`, {});
+  },
+  joinGroupCall(roomRef: ResourceRef, deviceId?: string): Promise<GroupCallProjection> {
+    return post(`/rooms/${roomRef}/group-call/join`, { device_id: deviceId });
+  },
+  leaveGroupCall(roomRef: ResourceRef, callId: string): Promise<void> {
+    return post(`/rooms/${roomRef}/group-call/leave`, { call_id: callId });
+  },
+  endGroupCall(roomRef: ResourceRef, callId: string): Promise<void> {
+    return post(`/rooms/${roomRef}/group-call/end`, { call_id: callId });
+  },
+  updateGroupCallMedia(roomRef: ResourceRef, callId: string, state: { microphone_enabled?: boolean; camera_enabled?: boolean; screen_sharing?: boolean }): Promise<unknown> {
+    return put(`/rooms/${roomRef}/group-call/media`, { call_id: callId, ...state });
+  },
   create(name: string, memberIds: ResourceRef[]): Promise<Room> {
     return post<Room>("/rooms", { name, member_ids: memberIds });
   },

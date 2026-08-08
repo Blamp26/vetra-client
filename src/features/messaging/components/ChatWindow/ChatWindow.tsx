@@ -34,6 +34,7 @@ import {
 import { Search } from "lucide-react";
 import { useDirectedCallHistoryForChat } from "@/features/messaging/hooks/useDirectedCallHistoryForChat";
 import { ConversationHeaderShell } from "../ConversationPresentation/ConversationHeaderShell";
+import { GroupCallPanel } from "@/features/calling/components/GroupCallPanel";
 
 interface Props {
   activeChat: ActiveChat;
@@ -588,6 +589,10 @@ export function ChatWindow({ activeChat, call, persistentCallAffordance }: Props
       )}
       {shouldShowPersistentActiveCallDock && (
         <PersistentActiveCallDock currentUser={currentUser} remoteUser={partner} />
+      )}
+
+      {activeChat.type === "room" && socketManager && (
+        <GroupCallPanel roomRef={activeChat.roomRef ?? activeChat.roomId} currentUserId={currentUser.id} socketManager={socketManager} />
       )}
 
       <div

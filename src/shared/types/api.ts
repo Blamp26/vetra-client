@@ -315,6 +315,43 @@ export interface RoomPreview {
   }>;
 }
 
+export interface GroupCallParticipant {
+  user_id: number;
+  username?: string;
+  display_name?: string | null;
+  public_user_id?: string | null;
+  joined_at: string;
+  microphone_enabled: boolean;
+  camera_enabled: boolean;
+  screen_sharing: boolean;
+}
+
+export interface GroupCallProjection {
+  call_id: string;
+  room_id: number;
+  state: "active" | "ended";
+  state_version: number;
+  started_by_user_id: number;
+  started_at: string;
+  ended_at?: string | null;
+  ended_by_user_id?: number | null;
+  end_reason?: string | null;
+  participants: GroupCallParticipant[];
+  viewer_joined: boolean;
+  can_end_for_everyone: boolean;
+}
+
+export interface GroupCallCapabilities {
+  can_start: boolean;
+  can_join: boolean;
+  can_end_for_everyone: boolean;
+}
+
+export type GroupCallEvent =
+  | { event: "call_started"; room_id: number; call_id: string; started_by_user_id: number; started_at: string; state_version: number }
+  | { event: "call_ended"; room_id: number; call_id: string; ended_at: string; ended_by_user_id?: number | null; end_reason: string; state_version: number }
+  | { event: "participant_joined" | "participant_left" | "media_state_changed"; room_id: number; call_id: string; user_id: number; state_version?: number; [key: string]: unknown };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Servers & Channels (Discord-style)
 // ─────────────────────────────────────────────────────────────────────────────

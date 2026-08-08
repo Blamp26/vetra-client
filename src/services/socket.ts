@@ -15,6 +15,7 @@ import type {
   ResourceRef,
   MessageTextEntity,
   RoomPreview,
+  GroupCallEvent,
 } from "@/shared/types";
 import { callSignalingService } from "@/features/calling/services/callSignalingService";
 import {
@@ -128,6 +129,18 @@ export type GroupGovernanceChangedHandler = (payload: {
   actor_id?: number | null;
   event: string;
 }) => void;
+export type GroupCallEventHandler = (payload: GroupCallEvent) => void;
+export type GroupCallSignal = {
+  room_id: number;
+  call_id: string;
+  from_user_id: number;
+  to_user_id: number;
+  kind: "offer" | "answer" | "ice_candidate" | "renegotiate_offer" | "renegotiate_answer";
+  payload: Record<string, unknown>;
+  signal_id?: string | null;
+  state_version: number;
+};
+export type GroupCallSignalHandler = (payload: GroupCallSignal) => void;
 export type RoomProfileUpdatedHandler = (payload: RoomPreview) => void;
 export type GroupNotificationPreferencesUpdatedHandler = (payload: { room_id: number; muted: boolean; muted_until: string | null; sound_enabled: boolean; tone: string | null }) => void;
 export type ChannelCreatedHandler = (payload: {
@@ -223,6 +236,8 @@ export interface SocketManager {
   onGroupGovernanceChanged: (
     handler: GroupGovernanceChangedHandler,
   ) => () => void;
+  onGroupCallEvent: (handler: GroupCallEventHandler) => () => void;
+  onGroupCallSignal: (handler: GroupCallSignalHandler) => () => void;
   onRoomProfileUpdated: (handler: RoomProfileUpdatedHandler) => () => void;
   onGroupNotificationPreferencesUpdated: (handler: GroupNotificationPreferencesUpdatedHandler) => () => void;
   onRoomDeleted: (handler: RoomDeletedHandler) => () => void;
@@ -273,6 +288,13 @@ export interface SocketManager {
   ) => Promise<Message>;
   sendRoomTypingStart: (roomId: number) => void;
   sendRoomTypingStop: (roomId: number) => void;
+  sendGroupCallSignal: (roomId: number, payload: {
+    call_id: string;
+    to_user_id: number;
+    kind: GroupCallSignal["kind"];
+    payload: Record<string, unknown>;
+    signal_id?: string;
+  }) => Promise<void>;
   onRoomMessage: (roomId: number, handler: RoomMessageHandler) => () => void;
   onRoomTypingStart: (roomId: number, handler: RoomTypingHandler) => () => void;
   onRoomTypingStop: (roomId: number, handler: RoomTypingHandler) => () => void;
@@ -483,6 +505,8 @@ export async function connectSocket(
     actor_id?: number | null;
     event: string;
   }>();
+  const groupCallEventBus = makeEventBus<GroupCallEvent>();
+  const groupCallSignalBus = makeEventBus<GroupCallSignal>();
   const roomProfileUpdatedBus = makeEventBus<RoomPreview>();
   const groupNotificationPreferencesUpdatedBus = makeEventBus<{ room_id: number; muted: boolean; muted_until: string | null; sound_enabled: boolean; tone: string | null }>();
   const channelDeletedBus = makeEventBus<{
@@ -548,6 +572,8 @@ export async function connectSocket(
   userChannel.on("group_governance_changed", (p) =>
     groupGovernanceChangedBus.emit(p),
   );
+  userChannel.on("group_call_event", (p: GroupCallEvent) => groupCallEventBus.emit(p));
+  userChannel.on("group_call_signal", (p: GroupCallSignal) => groupCallSignalBus.emit(p));
   userChannel.on("room_profile_updated", (p: RoomPreview) =>
     roomProfileUpdatedBus.emit(p),
   );
@@ -764,6 +790,8 @@ export async function connectSocket(
     onRoomMemberAdded: (h) => roomMemberAddedBus.subscribe(h),
     onRoomMemberRemoved: (h) => roomMemberRemovedBus.subscribe(h),
     onGroupGovernanceChanged: (h) => groupGovernanceChangedBus.subscribe(h),
+    onGroupCallEvent: (h) => groupCallEventBus.subscribe(h),
+    onGroupCallSignal: (h) => groupCallSignalBus.subscribe(h),
     onRoomProfileUpdated: (h) => roomProfileUpdatedBus.subscribe(h),
     onGroupNotificationPreferencesUpdated: (h) => groupNotificationPreferencesUpdatedBus.subscribe(h),
     onRoomDeleted: (h) => roomDeletedBus.subscribe(h),
@@ -923,6 +951,20 @@ export async function connectSocket(
       roomChannels.get(roomId)?.push("typing_start", {}),
     sendRoomTypingStop: (roomId) =>
       roomChannels.get(roomId)?.push("typing_stop", {}),
+
+    sendGroupCallSignal(roomId, payload) {
+      return new Promise((resolve, reject) => {
+        const ch = roomChannels.get(roomId);
+        if (!ch) {
+          reject(new Error(`Not joined room ${roomId}`));
+          return;
+        }
+        ch.push("group_call_signal", payload)
+          .receive("ok", () => resolve())
+          .receive("error", (response) => reject(new Error(response?.reason ?? "Group call signal rejected")))
+          .receive("timeout", () => reject(new Error("Group call signal timed out")));
+      });
+    },
 
     onRoomMessage: (roomId, h) => ensureRoomBus(roomId).message.subscribe(h),
     onRoomTypingStart: (roomId, h) =>
