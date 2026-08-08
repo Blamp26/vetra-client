@@ -43,4 +43,16 @@ describe("GroupCallPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /^leave$/i }));
     await waitFor(() => expect(roomsApi.leaveGroupCall).toHaveBeenCalledWith(7, "call-1"));
   });
+
+  it("reconciles local media controls from the authoritative participant projection", async () => {
+    vi.mocked(roomsApi.getGroupCall).mockResolvedValue({
+      ...active,
+      viewer_joined: true,
+      participants: [{ user_id: 1, joined_at: active.started_at, microphone_enabled: true, camera_enabled: true, screen_sharing: true }],
+    } as any);
+    render(<GroupCallPanel roomRef={7} currentUserId={1} socketManager={eventSocket()} />);
+    expect(await screen.findByRole("button", { name: "Mute" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Camera off" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Stop sharing" })).toBeTruthy();
+  });
 });

@@ -27,6 +27,12 @@ export function GroupCallPanel({ roomRef, currentUserId, socketManager }: Props)
       const projection = "call" in value ? value.call : value;
       setCall(projection ?? null);
       if ("capabilities" in value) setCapabilities(value.capabilities);
+      const viewer = projection?.participants.find((participant) => participant.user_id === currentUserId);
+      setMedia(viewer ? {
+        microphone_enabled: viewer.microphone_enabled,
+        camera_enabled: viewer.camera_enabled,
+        screen_sharing: viewer.screen_sharing,
+      } : { microphone_enabled: false, camera_enabled: false, screen_sharing: false });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load group call");
     }
@@ -88,9 +94,6 @@ export function GroupCallPanel({ roomRef, currentUserId, socketManager }: Props)
   };
 
   const startScreenShare = async () => {
-    if (!call) return;
-    const next = !media.screen_sharing;
-    await runtimeRef.current?.setScreenSharingEnabled(next);
     toggleMedia("screen_sharing");
   };
 
@@ -117,9 +120,9 @@ export function GroupCallPanel({ roomRef, currentUserId, socketManager }: Props)
           })}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Group call controls">
-          <Button variant="ghost" size="compact" onClick={() => toggleMedia("microphone_enabled")}><>{media.microphone_enabled ? <Mic className="mr-1 h-4 w-4" /> : <MicOff className="mr-1 h-4 w-4" />}{media.microphone_enabled ? "Mute" : "Unmute"}</></Button>
-          <Button variant="ghost" size="compact" onClick={() => toggleMedia("camera_enabled")}><>{media.camera_enabled ? <Camera className="mr-1 h-4 w-4" /> : <CameraOff className="mr-1 h-4 w-4" />}{media.camera_enabled ? "Camera off" : "Camera on"}</></Button>
-          <Button variant="ghost" size="compact" onClick={() => void startScreenShare()}><MonitorUp className="mr-1 h-4 w-4" />{media.screen_sharing ? "Stop sharing" : "Share screen"}</Button>
+          <Button variant="ghost" size="compact" disabled={busy} onClick={() => toggleMedia("microphone_enabled")}><>{media.microphone_enabled ? <Mic className="mr-1 h-4 w-4" /> : <MicOff className="mr-1 h-4 w-4" />}{media.microphone_enabled ? "Mute" : "Unmute"}</></Button>
+          <Button variant="ghost" size="compact" disabled={busy} onClick={() => toggleMedia("camera_enabled")}><>{media.camera_enabled ? <Camera className="mr-1 h-4 w-4" /> : <CameraOff className="mr-1 h-4 w-4" />}{media.camera_enabled ? "Camera off" : "Camera on"}</></Button>
+          <Button variant="ghost" size="compact" disabled={busy} onClick={() => void startScreenShare()}><MonitorUp className="mr-1 h-4 w-4" />{media.screen_sharing ? "Stop sharing" : "Share screen"}</Button>
           <Button variant="ghost" size="compact" onClick={() => void reconcile()}><Settings2 className="mr-1 h-4 w-4" />Refresh state</Button>
         </div>
       </>}
